@@ -34,3 +34,14 @@ Current first device tests use a deterministic command planner to verify a safe 
 Repository visibility is PUBLIC as created by the owner. Never commit API keys,
 private contacts, signing keystores, personal location or raw phone notifications.
 Cloud services require encrypted runtime storage and explicit user consent.
+
+## ADR-008: LangGraph planning server, local execution
+LangGraph.js runs only in the Node backend and returns ONE next-step decision.
+The React Native AgentHarness executes device actions locally after independent
+input, capability and approval gates. A model must not obtain arbitrary device
+control merely by requesting a new tool ID. The backend is planning-only and
+default-bound to loopback with bearer authentication. Remote access requires
+an owner-controlled HTTPS gateway and per-device token, entered at runtime.
+No API token is included in built source, and no raw screen content is sent.
+No in-server durable checkpoint exists yet; encrypted device checkpoints need
+a separate privacy-aware design and acceptance tests.

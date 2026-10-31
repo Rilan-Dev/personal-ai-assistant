@@ -28,6 +28,10 @@ jobs:
           test -n "$sdkmanager_path"
           "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
+      # Generated fresh for each CI job; never commit signing keys.
+      - name: Generate temporary debug signing key
+        run: |
+          keytool -genkeypair -v -keystore apps/mobile/android/app/debug.keystore             -alias androiddebugkey -storepass android -keypass android             -keyalg RSA -keysize 2048 -validity 365             -dname "CN=Android Debug,O=Personal AI Assistant,C=US" -noprompt
       - name: Compile Android app and Kotlin native bridge
         working-directory: apps/mobile/android
         run: ./gradlew :app:assembleDebug --no-daemon

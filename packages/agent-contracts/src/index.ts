@@ -30,3 +30,4 @@ export type AgentTraceEvent =
   | { type: "approval_required"; call: ToolCall }
   | { type: "completed"; message: string }
   | { type: "stopped"; reason: string };
+export { requestAllowsNativeTool } from "./intent-policy.ts";

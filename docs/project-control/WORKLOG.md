@@ -25,3 +25,24 @@
   GitHub Actions log shows obsolete SDK package "tools" unavailable.
 - Replaced that setup action with direct SDK manager installation for API 36 and build-tools 36.0.0.
   Android Kotlin compilation remains unverified until a new workflow run reaches Gradle.
+
+## 2026-10-31 — Phase 2 LangGraph planning adapter
+- Reviewed upstream LangGraph.js main at 959f041dfb8f6bbafa6af3ebb4bc20484a9290da;
+  Deep Agents.js at 26f190d40f44a2bb498db73e9e98b002bb8554fe.
+- Added actual @langchain/langgraph StateGraph runtime for model -> policy steps.
+- Reused @langchain/openai for schema-constrained provider adapters; server model
+  credentials remain in environment (none committed).
+- Added a planning-only bearer-authenticated HTTP API bound to loopback by default.
+- Added strict server tool allowlist, Zod input checks, redacted observations,
+  error sanitization and 32 KB request ceiling.
+- Added mobile createRemotePlanner with HTTPS enforcement, timeout and client
+  response validation; native chat UI requires explicit remote mode and does
+  not persist bearer tokens to disk.
+- Corrected Android CI: create ephemeral debug.keystore with keytool in runner
+  before APK compilation; no key checked into Git.
+- Local npm test: 48/48 passing with real LangGraph graph and simulated
+  end-to-end HTTP model -> tool -> observation loop; npm run typecheck passed.
+- Expo web static export passed. An actual LLM provider and physical-device
+  acceptance remain unverified.
+- Added a server/client action-to-user-intent gate: currently only exact supported single-step commands can trigger native app/camera operations; multi-step or unrelated commands fail closed.
+- Android CI signing fix and GitHub verification pending commit.
