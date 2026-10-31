@@ -6,14 +6,14 @@ set -euo pipefail
 
 readonly REPO="Rilan-Dev/personal-ai-assistant"
 usage() {
-  echo "Usage: scripts/ci/manual-actions.sh <android-debug.yml|android-emulator.yml|android-release-test.yml|core-tests.yml|agent-provider-acceptance.yml> [--dry-run] [--retry-failed]" >&2
+  echo "Usage: scripts/ci/manual-actions.sh <android-debug.yml|android-emulator.yml|android-release-test.yml|android-main-promotion.yml|core-tests.yml|agent-provider-acceptance.yml> [--dry-run] [--retry-failed]" >&2
   exit 2
 }
 
 [[ $# -ge 1 && $# -le 3 ]] || usage
 workflow="$1"; shift
 case "$workflow" in
-  android-debug.yml|android-emulator.yml|android-release-test.yml|core-tests.yml|agent-provider-acceptance.yml) ;;
+  android-debug.yml|android-emulator.yml|android-release-test.yml|android-main-promotion.yml|core-tests.yml|agent-provider-acceptance.yml) ;;
   *) usage ;;
 esac
 dry_run=false
@@ -48,13 +48,13 @@ count_runs() {
   local expression
   case "$type" in
     passed)
-      expression='[.[] | select(.event == "workflow_dispatch" and .status == "completed" and .conclusion == "success")] | length'
+      expression='[.[] | select((.event == "workflow_dispatch" or .event == "push") and .status == "completed" and .conclusion == "success")] | length'
       ;;
     active)
-      expression='[.[] | select(.event == "workflow_dispatch" and .status != "completed")] | length'
+      expression='[.[] | select((.event == "workflow_dispatch" or .event == "push") and .status != "completed")] | length'
       ;;
     failed)
-      expression='[.[] | select(.event == "workflow_dispatch" and .status == "completed" and .conclusion != "success")] | length'
+      expression='[.[] | select((.event == "workflow_dispatch" or .event == "push") and .status == "completed" and .conclusion != "success")] | length'
       ;;
     *) return 2 ;;
   esac

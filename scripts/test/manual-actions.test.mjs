@@ -129,3 +129,13 @@ test("auth failure never dispatches anything",()=>{
   assert.match(result.stderr,/authentication/);
   assert.doesNotMatch(calls,/workflow run/);
 });
+
+
+test("one gated main promotion pipeline can be manually dispatched without individual workflow prerequisites",()=>{
+  const okay=harness("clean",["android-main-promotion.yml"]);
+  assert.equal(okay.result.status,0,okay.result.stderr);
+  assert.match(okay.calls,/workflow run android-main-promotion.yml/);
+  const dry=harness("clean",["android-main-promotion.yml","--dry-run"]);
+  assert.equal(dry.result.status,0,dry.result.stderr);
+  assert.doesNotMatch(dry.calls,/workflow run/);
+});

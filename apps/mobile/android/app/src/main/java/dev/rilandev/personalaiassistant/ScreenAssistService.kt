@@ -58,7 +58,7 @@ internal object ScreenAssistState {
         clear()
         if (expired) null else Triple(current, pkg, true)
     }
-    fun clear() = synchronized(lock) {
+    fun clear(): Unit = synchronized(lock) {
         expiryHandler.removeCallbacks(expire)
         snapshot = null
         sourcePackage = null

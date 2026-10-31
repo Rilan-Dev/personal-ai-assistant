@@ -37,14 +37,22 @@ Before touching any agentic harness / tool-calling / checkpoint / approval featu
 - The owner explicitly authorizes the assistant to MANUALLY dispatch needed
   GitHub Actions jobs when a development milestone or acceptance gate requires
   them. No fresh approval is necessary for each ordinary manual CI/APK build.
-- NEVER add automatic push, pull_request, schedule, workflow_run or other
-  event triggers. All five workflows MUST remain workflow_dispatch-only.
+- Work exclusively on the Development branch during implementation. Do
+  not create automatic push/PR/schedule triggers on Development.
+- Five original workflows MUST remain workflow_dispatch-only. Exactly ONE
+  release pipeline, android-main-promotion.yml, may also trigger for
+  relevant source changes pushed to main after milestone completion.
+  It runs source tests, Android instrumentation and APK signing sequentially
+  on one runner, so native failures cannot produce a misleading release.
+- Promote a completed and locally verified Development milestone to main
+  in ONE fast-forward or merge action, without pushing intermediate fixes
+  directly to main. A main push is an intentional release/CI event.
 - Avoid using GitHub Actions for every commit or small change: run local
   checks first, and then dispatch targeted native build/emulator/release
   verification only after a complete, focused implementation milestone.
 - Do not start a redundant run: verify HEAD SHA and whether the same workflow
-  already passed or is currently running for that commit. Release APK must
-  follow successful Android native compilation and emulator acceptance.
+  already passed or is currently running for that commit. The main release
+  pipeline internally gates APK generation on passing emulator tests.
 - If an authenticated GitHub Actions write channel is available, trigger
   the workflow yourself with scripts/ci/manual-actions.sh and check the
   logs/artifact. Do not repeatedly ask the owner to click Run workflow.

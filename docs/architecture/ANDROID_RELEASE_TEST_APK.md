@@ -90,3 +90,24 @@ An authenticated session is a one-time host/account setup step performed
 through GitHub's own login flow, not by pasting private tokens into chat.
 If no Actions dispatch permission is available, the assistant must explain
 that blocker rather than misrepresent a prior APK as the latest.
+
+## Consolidated main branch release pipeline (2026-11-01)
+
+Source development occurs exclusively on Development. Once a complete
+feature is tested locally, fast-forward its tested commit(s) to main in
+ONE push. That push triggers exactly one GitHub Actions workflow,
+android-main-promotion.yml, if Android, agent, test, or workflow source
+has changed. Documentation-only main commits do not trigger it.
+
+The workflow performs local source checks then Android API 35 emulator
+instrumentation before building an installable, signed release-test APK
+on the SAME GitHub Actions runner. If any earlier gate fails, the
+release build/ARTIFACT WILL NOT run, saving paid Actions minutes.
+SHA/provenance, signer verification and checksum accompany successful
+APK artifacts. The five independent workflows remain manually runnable
+and do not auto-trigger from main or Development.
+
+Manual workflow calls remain available via GitHub Actions or an
+authenticated scripts/ci/manual-actions.sh; no GitHub secrets are
+requested in chat and no workflow_dispatch is emulated by rerunning
+outdated jobs.

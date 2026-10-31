@@ -406,3 +406,36 @@
 - Added mocked no-network regression tests for dispatch, dry-run, dedupe,
   blocked authentication, and release gates. No new GitHub Actions run
   launched, and automatic triggers remain forbidden.
+
+## 2026-11-01 — Failed manual CI diagnosis and consolidated main-only pipeline
+- Reviewed GitHub Actions logs for five owner-launched runs:
+  - release-test 41246429246 and emulator 41246447014: compilation failed
+    at AgentJournalModule.kt lines 127/143 (constructor context reference
+    is not an instance property) and ScreenAssistService.kt line 62
+    (recursive Kotlin type inference for clear callback).
+  - live provider 41246478040: missing provider secret and model;
+    41246896110: secret present, model not configured.
+  - core tests 41246493686 succeeded.
+- Created Development branch from verified main for further development;
+  push commits on Development must never trigger GitHub Actions.
+- Fixed Kotlin: stopService uses inherited reactApplicationContext,
+  preserving voice revocation when keys are updated/deleted. The
+  Accessibility native clear() function explicitly returns Unit, resolving
+  the recursive synchronized/handler callback inference problem. Added
+  source regression tests for both exact root causes.
+- Added android-main-promotion.yml: ONLY this workflow can automatically
+  run on main and only for specified source/workflow paths. It does npm
+  tests/typecheck, boots Android API 35 emulator, executes Android Keystore
+  and replay instrumentation, and ONLY when those pass builds/signs/verifies
+  the release APK. Runs on a single runner; concurrency cancels superseded
+  in-progress release attempts. No automatic triggers on Development.
+- Five original workflows remain workflow_dispatch-only. The
+  scripts/ci/manual-actions.sh wrapper can launch main promotion manually
+  when authenticated. No credentials or sensitive tokens in Git.
+- Provider acceptance now allows owner-specified model via Run workflow,
+  with AGENT_LLM_MODEL environment-variable fallback. Preflight verifies
+  BOTH secret and model before installing dependencies; never invents a
+  static provider model nor logs credentials.
+- Source/tests validated locally; native verification is contingent on the
+  first controlled promotion of this objective to main. A GitHub Actions
+  pass is not physical device or real-provider acceptance.

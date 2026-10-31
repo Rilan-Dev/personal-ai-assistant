@@ -1,0 +1,144 @@
+name: Android main promotion - test and signed APK
+
+# ONE release run when a completed feature set is promoted to main.
+# Development branch pushes never trigger GitHub Actions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'services/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/**'
+      - 'AGENTS.md'
+  workflow_dispatch:
+concurrency:
+  group: android-main-promotion-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+
+jobs:
+  release-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 85
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
+      - run: npm ci
+      - name: Verify application source
+        run: |
+          npm test
+          npm run typecheck
+      # One source revision, one GitHub Actions runner: native tests MUST pass
+      # before spending CPU minutes to build a signed release APK.
+      - name: Prepare temporary Android debug signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          keytool -genkeypair -keystore apps/mobile/android/app/debug.keystore             -alias androiddebugkey -storepass android -keypass android             -keyalg RSA -keysize 2048 -validity 365             -dname "CN=Debug Android Test,O=PAA,C=US" -noprompt
+      - name: Enable hardware accelerated emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Gate release on native Keystore, permission and action-replay tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Upload instrumentation diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-main-promotion-instrumentation-reports
+          path: apps/mobile/android/app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Generate or load dedicated testing-release key
+        shell: bash
+        env:
+          PAA_KEYSTORE_B64: ${{ secrets.PAA_TEST_RELEASE_KEYSTORE_B64 }}
+          PAA_KEYSTORE_STOREPASS: ${{ secrets.PAA_TEST_RELEASE_STORE_PASSWORD }}
+          PAA_KEYSTORE_KEYPASS: ${{ secrets.PAA_TEST_RELEASE_KEY_PASSWORD }}
+          PAA_KEYSTORE_ALIAS: ${{ vars.PAA_TEST_RELEASE_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          umask 077
+          path="apps/mobile/android/app/testing-release.keystore"
+          if [[ -n "$PAA_KEYSTORE_B64" ]]; then
+            test -n "$PAA_KEYSTORE_STOREPASS"
+            test -n "$PAA_KEYSTORE_KEYPASS"
+            test -n "$PAA_KEYSTORE_ALIAS"
+            printf '%s' "$PAA_KEYSTORE_B64" | base64 --decode > "$path"
+            keytool -list -keystore "$path" -storepass "$PAA_KEYSTORE_STOREPASS" -alias "$PAA_KEYSTORE_ALIAS" > /dev/null
+            echo "PAA_TEST_APK_STORE_PASSWORD=$PAA_KEYSTORE_STOREPASS" >> "$GITHUB_ENV"
+            echo "PAA_TEST_APK_KEY_PASSWORD=$PAA_KEYSTORE_KEYPASS" >> "$GITHUB_ENV"
+            echo "PAA_TEST_APK_KEY_ALIAS=$PAA_KEYSTORE_ALIAS" >> "$GITHUB_ENV"
+            echo "Owner-provided testing-release signer. Do not use for Play Store without security review." >> "$GITHUB_STEP_SUMMARY"
+          else
+            keypass="$(openssl rand -hex 24)"
+            echo "::add-mask::$keypass"
+            keytool -genkeypair -keystore "$path" \
+              -alias "paatest" -storepass "$keypass" -keypass "$keypass" \
+              -keyalg RSA -keysize 3072 -validity 365 \
+              -dname "CN=PAA Temporary Release Test,O=Owner Testing,C=US" -noprompt
+            echo "PAA_TEST_APK_STORE_PASSWORD=$keypass" >> "$GITHUB_ENV"
+            echo "PAA_TEST_APK_KEY_PASSWORD=$keypass" >> "$GITHUB_ENV"
+            echo "PAA_TEST_APK_KEY_ALIAS=paatest" >> "$GITHUB_ENV"
+            echo "Temporary test-only release signer. Future CI builds may require uninstall; that wipes encrypted app data." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Assemble optimized signed Android release variant
+        working-directory: apps/mobile/android
+        env:
+          PAA_BUILD_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+      - name: Verify APK signer, release variant and file checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$apk"
+          apksigner_bin="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner_bin" verify --verbose --print-certs "$apk" | tee release-test-verification.txt
+          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' release-test-verification.txt
+          sha256sum "$apk" | tee release-test-sha256.txt
+          echo "$GITHUB_SHA" > release-test-source-sha.txt
+          echo "Build source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Test-release APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "Optimized non-debuggable release variant, signed with a dedicated testing key (not production)." >> "$GITHUB_STEP_SUMMARY"
+          cat release-test-sha256.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload installable release-test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-ai-assistant-release-test-apk
+          path: |
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            release-test-sha256.txt
+            release-test-verification.txt
+            release-test-source-sha.txt
+          if-no-files-found: error
+          retention-days: 14

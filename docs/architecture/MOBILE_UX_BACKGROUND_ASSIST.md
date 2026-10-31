@@ -98,3 +98,11 @@ APK, the emulator workflow runs harness/type checks before starting the
 emulator, and the release artifact includes the exact source Git SHA
 beside APK signature and SHA-256 files. These are verification controls,
 not evidence of native success.
+
+## Main-only workflow promotion
+Five original GitHub workflows remain manual-only. The owner approved one
+ADDITIONAL main-branch promotion pipeline. After a completed Development
+milestone is fast-forwarded to main in one push, source changes to main
+run the sequential source, Android emulator, and signed APK verification.
+Development commits and PRs never auto-trigger GitHub Actions.
+See docs/architecture/ANDROID_RELEASE_TEST_APK.md.

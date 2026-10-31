@@ -27,3 +27,14 @@ prompt. It is not a replacement for a full agent evaluation suite.
 
 The workflow has not been run with a real provider yet. A successful mock
 OpenAI-compatible server test is not equivalent to live provider acceptance.
+
+## Correcting two failed manual runs (2026-11-01)
+Run 41246478040 had neither AGENT_LLM_API_KEY nor AGENT_LLM_MODEL.
+Run 41246896110 had a masked key but still no AGENT_LLM_MODEL.
+No real model request was made by either run. Do not rerun them without
+correcting the model; that wastes quota. The workflow now accepts a model
+Run workflow input, falling back to the GitHub environment variable
+AGENT_LLM_MODEL. It checks credentials and model BEFORE npm ci; both
+must be present. The model ID is not statically pinned, because model
+availability is provider/account-specific and can change. A passing
+Android build is independent of this opt-in paid-provider acceptance.

@@ -1,6 +1,11 @@
 name: Explicit real-model planning acceptance
 on:
   workflow_dispatch:
+    inputs:
+      model:
+        description: "Live API model ID (required when AGENT_LLM_MODEL environment variable is absent)"
+        type: string
+        required: false
 
 jobs:
   provider:
@@ -8,6 +13,22 @@ jobs:
     timeout-minutes: 15
     environment: live-agent-provider-tests
     steps:
+      - name: Check owner-provided model and API key before downloading dependencies
+        shell: bash
+        env:
+          AGENT_LLM_API_KEY: ${{ secrets.AGENT_LLM_API_KEY }}
+          AGENT_LLM_MODEL: ${{ inputs.model || vars.AGENT_LLM_MODEL }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$AGENT_LLM_API_KEY" ]]; then
+            echo "::error::Missing AGENT_LLM_API_KEY secret in the live-agent-provider-tests environment."
+            exit 2
+          fi
+          if [[ -z "$AGENT_LLM_MODEL" ]]; then
+            echo "::error::Enter a model when running the workflow or configure the AGENT_LLM_MODEL environment variable."
+            exit 2
+          fi
+          echo "Provider settings present. No model name or key was logged."
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -17,6 +38,6 @@ jobs:
       - name: Verify real provider planning WITHOUT real device actions
         env:
           AGENT_LLM_API_KEY: ${{ secrets.AGENT_LLM_API_KEY }}
-          AGENT_LLM_MODEL: ${{ vars.AGENT_LLM_MODEL }}
+          AGENT_LLM_MODEL: ${{ inputs.model || vars.AGENT_LLM_MODEL }}
           AGENT_LLM_BASE_URL: ${{ vars.AGENT_LLM_BASE_URL }}
         run: npm run test:provider-live

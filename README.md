@@ -126,3 +126,17 @@ voice and screen reading adapters require a fresh manual CI build and UAT.
 See [full roadmap](docs/project-control/ROADMAP.md),
 [next actions](docs/project-control/NEXT_ACTION.md), and
 [upstream harness research](docs/architecture/HARNESS_UPSTREAM_RESEARCH.md).
+
+## Development branch and release CI quota policy
+
+Contributors build features on the Development branch; commits and pull
+requests to that branch NEVER trigger GitHub Actions. Once a complete
+objective passes local tests, promote the tested changes to main in ONE
+fast-forward push. Android/agent source changes to main start exactly ONE
+consolidated GitHub Actions pipeline: source tests, Android instrumented
+emulator acceptance, then a signed release-test APK only after earlier gates
+succeed. Documentation-only changes do not trigger the pipeline.
+
+The original five workflows remain manual-only. The owner also authorizes
+selective manual runs when authenticated GitHub Actions write access is
+available. See docs/architecture/ANDROID_RELEASE_TEST_APK.md.

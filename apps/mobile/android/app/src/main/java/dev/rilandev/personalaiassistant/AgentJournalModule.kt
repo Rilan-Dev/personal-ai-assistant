@@ -124,7 +124,8 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             }
             // Changes to provider credentials must terminate a session that
             // may still be streaming under the prior configuration.
-            context.stopService(android.content.Intent(context,RealtimeVoiceService::class.java))
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext, RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_SAVE", e) }
     }
@@ -140,7 +141,8 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             }
             // Revoking the selected API key also terminates a voice service
             // that might still be running in the background.
-            context.stopService(android.content.Intent(context,RealtimeVoiceService::class.java))
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext, RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_CLEAR", e) }
     }

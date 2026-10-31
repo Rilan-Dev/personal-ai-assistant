@@ -195,3 +195,29 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Existing runtime GitHub connector exposes read/rerun, not workflow_dispatch.
   The connected BridgeHead host currently lacks an authenticated gh CLI.
   Current redesigned APK has NOT been rebuilt or physically accepted.
+
+## 2026-11-01 — Main-only workflow trigger strategy
+- Development branch is the active implementation branch, starting from
+  main. All feature edits go to Development; no automatic Actions run for
+  Development pushes, even if multiple commits are pushed.
+- A SINGLE source-complete, locally tested release candidate is
+  fast-forward promoted to main; only the new
+  .github/workflows/android-main-promotion.yml automatically fires for
+  source/workflow changes to main.
+- Main promotion job gates signed APK on (1) npm tests + typecheck,
+  (2) Android API35 instrumented tests, (3) optimized release compilation,
+  (4) apksigner and SHA256 verification. If an early gate fails, no release
+  APK is uploaded.
+- Other five workflows stay strictly manual. For an independent manual
+  GitHub dispatch, use authenticated scripts/ci/manual-actions.sh;
+  no automatic runs on Development.
+- Failed builds 41246429246/41246447014: corrected Android Kotlin
+  context stopService and Accessibility clear() type inference. The next
+  pipeline run must confirm Kotlin debug/test/release compilation.
+- Live provider runs 41246478040/41246896110 lacked model configuration.
+  Owner may select the LIVE model ID in manual workflow input or set the
+  AGENT_LLM_MODEL environment variable; AGENT_LLM_API_KEY secret remains
+  in live-agent-provider-tests environment. The workflow now fails fast
+  before npm ci if either missing.
+- Main pipeline runs automatically only ONCE per finished feature-set
+  promotion; avoid incremental main pushes. Keep SHA/provenance matching.
