@@ -93,8 +93,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // CI increments this for installable release-test APK updates.
-        versionCode (System.getenv("PAA_BUILD_VERSION_CODE") ?: "1").toInteger()
-        versionName "0.3." + (System.getenv("PAA_BUILD_VERSION_CODE") ?: "0")
+        versionCode((System.getenv("PAA_BUILD_VERSION_CODE") ?: "1").toInteger())
+        versionName("0.3." + (System.getenv("PAA_BUILD_VERSION_CODE") ?: "0"))
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -122,7 +122,9 @@ android {
         release {
             // Never sign release variants with Android's debug identity.
             // Without a dedicated CI key, assembleRelease stays unsigned.
-            signingConfig file('testing-release.keystore').exists() ? signingConfigs.testRelease : null
+            if (file('testing-release.keystore').exists()) {
+                signingConfig signingConfigs.testRelease
+            }
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

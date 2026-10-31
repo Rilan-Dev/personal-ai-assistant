@@ -34,6 +34,7 @@ test("release workflow produces signed optimized APK with separate test key",()=
   assert.match(workflow,/PAA_TEST_RELEASE_KEYSTORE_B64/);
   assert.match(workflow,/if-no-files-found: error/);
   assert.match(gradle,/testing-release\.keystore/);
-  assert.match(gradle,/signingConfigs\.testRelease : null/);
+  assert.match(gradle,/if \(file\('testing-release\.keystore'\)\.exists\(\)\)/);
+  assert.match(gradle,/signingConfig signingConfigs\.testRelease/);
   assert.doesNotMatch(gradle,/release\s*\{[^}]*signingConfig signingConfigs\.debug/s);
 });

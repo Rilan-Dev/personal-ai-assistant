@@ -272,3 +272,14 @@
   controls reachable while the keyboard is visible.
 - Provider summary now says AI mode rather than suggesting that saving a key
   proves a successful network connection.
+
+## 2026-11-01 — Repair Gradle script evaluation
+- First release-test workflow run 41234974422 and Android debug run
+  41234974572 failed while evaluating app/build.gradle line 96.
+- Root cause: Groovy DSL method invocation precedence around the new
+  versionCode expression; corrected to versionCode((env ?: "1").toInteger()).
+  Made versionName an explicit method call as well.
+- Release signing now uses an if(file.exists()) block; the absent testing
+  keystore does not attempt to pass null as Gradle signing configuration
+  during normal debug builds.
+- CI rerun is required. No release APK was produced by the failed run.
