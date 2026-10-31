@@ -41,7 +41,10 @@ function minimalOutcome(outcome: ToolOutcome): ToolOutcome {
     return { status: "success", data: {
       ...(typeof value.intentDispatched === "boolean" ? {intentDispatched: value.intentDispatched} : {}),
       ...(value.verification === "not_observed" ? {verification: value.verification} : {}),
-      ...(typeof value.platform === "string" ? {platform: value.platform.slice(0, 25)} : {})
+      ...(typeof value.platform === "string" ? {platform: value.platform.slice(0, 25)} : {}),
+      ...(Number.isInteger(value.levelPercent) && Number(value.levelPercent) >= 0 && Number(value.levelPercent) <= 100
+          ? {levelPercent: Number(value.levelPercent)} : {}),
+      ...(typeof value.charging === "boolean" ? {charging: value.charging} : {})
     }};
   }
   return { status: "success", data: {} };
@@ -69,7 +72,7 @@ export function createRemotePlanner(config: RemotePlannerConfig): Planner {
   const origin = validateAgentEndpoint(config.baseUrl);
   if (config.token.length < 32) throw new Error("Agent token must contain at least 32 characters.");
   const ids: string[] = [...new Set(config.availableToolIds)].filter(id =>
-    id === "device.status" || id === "device.open_camera" || id === "device.open_app"
+    id === "device.status" || id === "device.battery_status" || id === "device.open_camera" || id === "device.open_app"
   );
   if (!ids.length) throw new Error("No supported device tools available for remote planning.");
   const allowed = new Set(ids);

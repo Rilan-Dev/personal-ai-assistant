@@ -7,7 +7,7 @@ import { requestAllowsNativeTool } from "../../../packages/agent-contracts/src/i
  * The phone independently validates each call again before any native action.
  * Plugins must be explicitly registered here in a later, reviewed phase.
  */
-export const ToolIdSchema = z.enum(["device.status", "device.open_camera", "device.open_app"]);
+export const ToolIdSchema = z.enum(["device.status", "device.battery_status", "device.open_camera", "device.open_app"]);
 export type AllowedToolId = z.infer<typeof ToolIdSchema>;
 
 const EmptyInput = z.object({}).strict();
@@ -16,6 +16,11 @@ const AppInput = z.object({ app: z.enum(["whatsapp", "whatsapp-business"]) }).st
 export const toolCatalog = Object.freeze({
   "device.status": {
     description: "Return non-sensitive Android bridge diagnostics. Does not grant permissions.",
+    input: EmptyInput,
+    risk: "low"
+  },
+  "device.battery_status": {
+    description: "Read the device battery percentage and charging state, without history.",
     input: EmptyInput,
     risk: "low"
   },
@@ -45,7 +50,7 @@ const ToolCallSchema = z.object({
 
 export const PlanningRequestSchema = z.object({
   request: z.string().trim().min(1).max(2000),
-  availableToolIds: z.array(ToolIdSchema).max(3),
+  availableToolIds: z.array(ToolIdSchema).max(4),
   observations: z.array(z.object({
     call: ToolCallSchema,
     outcome: ToolOutcomeSchema
@@ -80,7 +85,10 @@ function minimalOutcome(outcome: ToolOutcome): ToolOutcome {
     return { status: "success", data: {
       ...(typeof d.intentDispatched === "boolean" ? { intentDispatched: d.intentDispatched } : {}),
       ...(d.verification === "not_observed" ? { verification: "not_observed" } : {}),
-      ...(typeof d.platform === "string" ? { platform: d.platform.slice(0, 25) } : {})
+      ...(typeof d.platform === "string" ? { platform: d.platform.slice(0, 25) } : {}),
+      ...(Number.isInteger(d.levelPercent) && Number(d.levelPercent) >= 0 && Number(d.levelPercent) <= 100
+        ? { levelPercent: Number(d.levelPercent) } : {}),
+      ...(typeof d.charging === "boolean" ? { charging: d.charging } : {})
     }};
   }
   return outcome.status === "blocked"
@@ -108,6 +116,19 @@ export function enforceDecision(raw: unknown, input: PlanningRequest): PlannerDe
   const decision = result.data;
   if (decision.type === "done") {
     const last = input.observations.at(-1);
+    if (last?.call.toolId === "device.battery_status" && last.outcome.status === "success") {
+      const d = last.outcome.data;
+      if (d !== null && typeof d === "object" && !Array.isArray(d)) {
+        const data = d as Record<string, unknown>;
+        if (typeof data.levelPercent === "number" && Number.isInteger(data.levelPercent) &&
+            data.levelPercent >= 0 && data.levelPercent <= 100 &&
+            typeof data.charging === "boolean") {
+          return { type: "done", response: "Android reports battery at " + data.levelPercent +
+            "%; " + (data.charging ? "charging." : "not currently charging.") };
+        }
+      }
+      return { type: "clarify", question: "No validated battery status is available. No action was taken." };
+    }
     if (last?.outcome.status === "success" && typeof last.outcome.data === "object" && last.outcome.data !== null &&
         (last.outcome.data as {verification?:unknown}).verification === "not_observed") {
       return { type: "done", response: "Android accepted the requested launch Intent, but the destination screen has not been verified. No further device action was performed." };

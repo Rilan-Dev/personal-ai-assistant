@@ -94,3 +94,14 @@ denied permissions, cancellations and incomplete observations.
   shell tool, or model-controlled invocation was introduced.
 - Default Android assistant VoiceInteractionService is still a separate
   OEM-/OS-dependent integration and has not been implemented.
+
+## 2026-10-31 — Battery tool grounding and narrow action surface
+- Reused LangGraph.js source at 959f041dfb8f6bbafa6af3ebb4bc20484a9290da
+  and compared Deep Agents.js permissions at
+  26f190d40f44a2bb498db73e9e98b002bb8554fe.
+- Added one pure-read device.battery_status tool, not a generic Android shell
+  or unrestricted device status parser. Empty args, exact owner intent,
+  bounded percent, no permissions, minimal redacted observations.
+- Completion is generated deterministically from validated Android readings.
+  The LLM cannot substitute a fabricated battery value.
+- See docs/architecture/ANDROID_BATTERY_TOOL.md.

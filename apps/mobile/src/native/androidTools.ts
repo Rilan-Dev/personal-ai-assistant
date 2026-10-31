@@ -16,6 +16,7 @@ type LaunchOutcome = {
 };
 interface DeviceControlBridge {
   getStatus(): Promise<NativeStatus>;
+  getBatteryStatus(): Promise<{ levelPercent: number; charging: boolean; source: string }>;
   openSupportedApp(app: string): Promise<LaunchOutcome>;
   openCamera(): Promise<LaunchOutcome>;
 }
@@ -59,6 +60,15 @@ export function createAndroidTools(): Tool[] {
       hasExternalSideEffect: false,
       validateInput: emptyInput,
       execute: async () => ({ status: "success", data: await getBridge().getStatus() })
+    },
+    {
+      id: "device.battery_status",
+      description: "Read the device's current battery charge and charging status; no history",
+      capabilities: [],
+      risk: "low",
+      hasExternalSideEffect: false,
+      validateInput: emptyInput,
+      execute: async () => ({ status: "success", data: await getBridge().getBatteryStatus() })
     },
     {
       id: "device.open_camera",

@@ -43,3 +43,13 @@ test("training approval command plans a safe isolated mock tool", async () => {
   assert.equal(done.type, "done");
   assert.match(done.response,/no device operation/);
 });
+test("deterministic Android battery status reflects observed charge only", async () => {
+  const planned = await androidIntentPlanner.next("Check battery level",[]);
+  assert.deepEqual(planned,{type:"tool",call:{callId:"native-1",toolId:"device.battery_status",input:{}}});
+  const finished=await androidIntentPlanner.next("Check battery level",[
+    {call:planned.call,outcome:{status:"success",data:{levelPercent:37,charging:false}}}
+  ]);
+  assert.equal(finished.type,"done");
+  assert.match(finished.response,/37%/);
+  assert.match(finished.response,/not currently charging\.$/);
+});

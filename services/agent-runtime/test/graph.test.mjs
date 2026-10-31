@@ -78,3 +78,44 @@ test("model cannot execute a valid device tool for unrelated or multi-step user 
     assert.equal(result.type, "clarify", request);
   }
 });
+test("battery status is a single allowlisted readonly action", async () => {
+  const planner = new LangGraphStepPlanner({
+    decide: async () => ({type:"tool",toolId:"device.battery_status",input:{}})
+  });
+  const r = await planner.next(base({ request:"Check battery level", availableToolIds:["device.battery_status"] }));
+  assert.deepEqual(r,{type:"tool",call:{callId:"step-1",toolId:"device.battery_status",input:{}}});
+  const unrelated = await planner.next(base({ request:"Open WhatsApp and check battery",availableToolIds:["device.battery_status"] }));
+  assert.equal(unrelated.type,"clarify");
+});
+test("validated battery reading prevents hallucinated charge levels from model", async () => {
+  const planner = new LangGraphStepPlanner({
+    decide: async () => ({type:"done",response:"Your battery is 100%."})
+  });
+  const input=base({
+    request:"Check battery level",
+    availableToolIds:["device.battery_status"],
+    observations:[{
+      call:{callId:"step-1",toolId:"device.battery_status",input:{}},
+      outcome:{status:"success",data:{levelPercent:44,charging:false}}
+    }]
+  });
+  const result=await planner.next(input);
+  assert.deepEqual(result,{type:"done",response:"Android reports battery at 44%; not currently charging."});
+});
+test("model never receives extraneous native battery data", async () => {
+  let context;
+  const planner = new LangGraphStepPlanner({ decide:async c => {
+    context=c;
+    return {type:"done",response:"done"};
+  }});
+  const r=await planner.next(base({
+    request:"Check battery level",
+    availableToolIds:["device.battery_status"],
+    observations:[{
+      call:{callId:"step-1",toolId:"device.battery_status",input:{}},
+      outcome:{status:"success",data:{levelPercent:78,charging:true,serialNumber:"PRIVATE-SERIAL"}}
+    }]
+  }));
+  assert.equal(r.response,"Android reports battery at 78%; charging.");
+  assert.doesNotMatch(JSON.stringify(context),/PRIVATE-SERIAL/);
+});

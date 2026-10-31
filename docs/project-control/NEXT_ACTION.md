@@ -47,3 +47,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - There are 12 unresolved advisories (two high) predominantly in the Expo
   dependency toolchain. Review docs/security/DEPENDENCY_AUDIT_2026-10-31.md.
   No unsupported major-dependency downgrade was applied.
+
+## Read-only native battery tool
+- Registered device.battery_status (current percentage + charging boolean)
+  with exact user-intent validation and no special Android permissions.
+- Remote LangGraph response is deterministically grounded to observed
+  Android battery data. See docs/architecture/ANDROID_BATTERY_TOOL.md.
+- Complete emulator/physical Android validation for new Kotlin method; do
+  not equate model mock tests with device acceptance.

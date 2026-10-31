@@ -88,3 +88,40 @@ test("compromised planning service cannot translate unrelated user speech into n
     assert.equal(observed,0);
   }finally{globalThis.fetch=original}
 });
+test("LangGraph battery read uses zero Android special permissions and grounded result", async () => {
+  let modelCalls=0;
+  const model={async decide(ctx){
+    modelCalls++;
+    if (!ctx.previousActions.length) {
+      return {type:"tool",toolId:"device.battery_status",input:{}};
+    }
+    assert.equal(ctx.previousActions[0].outcome.data.levelPercent,62);
+    assert.equal(ctx.previousActions[0].outcome.data.charging,true);
+    return {type:"done",response:"Your battery is 100%."};
+  }};
+  await withServer(model,async url=>{
+    const registryBattery=new ToolRegistry();
+    let reads=0;
+    registryBattery.register({
+      id:"device.battery_status",
+      description:"Current battery reading",
+      capabilities:[],
+      risk:"low",
+      hasExternalSideEffect:false,
+      validateInput:v=>!!v && typeof v==="object" && !Array.isArray(v) && Object.keys(v).length===0,
+      execute:async()=>{reads++;return {status:"success",data:{
+        levelPercent:62,charging:true,source:"android-battery-manager",privateToken:"NOT-TRANSMITTED"
+      }}}
+    });
+    const planner=createRemotePlanner({baseUrl:url,token,availableToolIds:["device.battery_status"]});
+    const h=new AgentHarness(registryBattery,planner);
+    const result=await h.run({
+      request:"Check battery level",sessionId:"battery-1",
+      grantedCapabilities:new Set(),maxSteps:3
+    });
+    assert.equal(result.status,"completed");
+    assert.equal(result.response,"Android reports battery at 62%; charging.");
+    assert.equal(reads,1);
+    assert.equal(modelCalls,2);
+  });
+});

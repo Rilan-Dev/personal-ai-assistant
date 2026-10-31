@@ -15,7 +15,7 @@ type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const initialMessages: ChatMessage[] = [
   { id: 1, speaker: 'assistant', text: 'Welcome! This assistant is under active development. Native Android builds can launch the camera or allowlisted apps after you enable app launches; other platforms use clearly marked demo tools.' }
 ];
-const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Test approval'];
+const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Check battery level', 'Test approval'];
 const makeEngine = () => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();

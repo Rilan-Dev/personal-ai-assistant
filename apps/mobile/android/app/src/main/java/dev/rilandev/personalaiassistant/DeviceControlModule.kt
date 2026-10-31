@@ -2,6 +2,8 @@ package dev.rilandev.personalaiassistant
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.Context
+import android.os.BatteryManager
 import android.app.StatusBarManager
 import android.content.ComponentName
 import android.graphics.drawable.Icon
@@ -23,6 +25,33 @@ class DeviceControlModule(
 ) : ReactContextBaseJavaModule(context) {
 
     override fun getName(): String = "PAADeviceControl"
+
+    /**
+     * Android framework BatteryManager is a local read-only API. No phone
+     * identifiers, app usage, location, or history are exposed by this tool.
+     */
+    @ReactMethod
+    fun getBatteryStatus(promise: Promise) {
+        try {
+            val service = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (service == null) {
+                promise.reject("BATTERY_UNAVAILABLE", "Battery service unavailable")
+                return
+            }
+            val percent = service.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            if (percent !in 0..100) {
+                promise.reject("BATTERY_UNAVAILABLE", "Battery capacity not reported")
+                return
+            }
+            val state = Arguments.createMap()
+            state.putInt("levelPercent", percent)
+            state.putBoolean("charging", service.isCharging)
+            state.putString("source", "android-battery-manager")
+            promise.resolve(state)
+        } catch (_: Exception) {
+            promise.reject("BATTERY_UNAVAILABLE", "Could not read battery status")
+        }
+    }
 
     @ReactMethod
     fun getStatus(promise: Promise) {

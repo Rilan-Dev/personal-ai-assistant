@@ -115,3 +115,14 @@ test("Android journal synchronizes claims across bridge instances and atomically
   assert.match(journal, /\.putString\(sessionKey, encrypt\(data\)\)\s*\.putString\(latestKey, encrypt\(s\)\)\s*\.commit\(\)/);
   assert.match(journal, /synchronized\(lock\) \{/);
 });
+test("battery status reads from Android BatteryManager without new permissions", () => {
+  const device=read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlModule.kt");
+  const manifest=read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  const adapter=read("apps/mobile/src/native/androidTools.ts");
+  assert.match(device,/getSystemService\(Context\.BATTERY_SERVICE\)/);
+  assert.match(device,/BATTERY_PROPERTY_CAPACITY/);
+  assert.match(device,/service\.isCharging/);
+  assert.match(device,/percent !in 0\.\.100/);
+  assert.match(adapter,/id: "device\.battery_status"/);
+  assert.doesNotMatch(manifest,/BATTERY_STATS|DUMP|READ_PHONE_STATE/);
+});

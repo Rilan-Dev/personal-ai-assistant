@@ -13,6 +13,9 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - An Android Keystore-backed encrypted checkpoint and at-most-once action ledger:
   the app durably reserves each action before execution and cannot silently
   replay an uncertain action after a crash.
+- **Battery status**: read-only Android BatteryManager tool. "Check battery
+  level" reports current percentage and charging state, with no phone identifiers
+  or privileged permissions.
 - **Quick Settings tile**: an owner-added Android tile opens the chat
   after unlock if locked. No automatic microphone or tool execution.
 - **Tap to talk** in the Android app uses strictly on-device speech recognition

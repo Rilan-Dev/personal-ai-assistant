@@ -15,6 +15,9 @@ export function requestAllowsNativeTool(
   if (toolId === "device.status") {
     return /^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(normalized);
   }
+  if (toolId === "device.battery_status") {
+    return /^(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?battery(?: level| status)?$/.test(normalized);
+  }
   if (toolId === "device.open_camera") {
     return /^(?:please )?(?:open|launch|start|turn on) (?:my |the )?camera(?: please)?$/.test(normalized);
   }

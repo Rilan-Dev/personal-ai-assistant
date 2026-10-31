@@ -153,3 +153,14 @@
   captures this restricted logcat on failure; tests include the safe class.
 - This is diagnostic evidence, not a claim the journal is fixed. Must inspect
   the new emulator run and resolve underlying Keystore/storage error.
+
+## 2026-10-31 — Android read-only battery capability
+- Added Android BatteryManager capacity and charging-state bridge without
+  privileged battery statistics, phone identifiers or runtime permissions.
+- Registered device.battery_status in the native tool registry, deterministic
+  Android command parser, remote LangGraph schema and independent owner-intent
+  policy. A multi-step request cannot silently cause a battery read.
+- Redacted remote observations include only validated battery percent and
+  charging flag; backend done-step overrides hallucinated model percentages.
+- Added direct graph policy and mobile-over-HTTP-agent integration tests.
+- Device Kotlin compile/real battery UAT remain gated on the new CI build.
