@@ -45,3 +45,13 @@ Permissions are checked again. Already-reserved actions are never replayed.
   command exercises the approval UI with a simulated no-op tool only.
 - Local native Android persistence is not the same as LangGraph server-side
   thread checkpointers, which remain a future milestone.
+
+## Android emulator instrumentation
+The `SecureJournalAndroidTest.kt` suite exercises actual Android Keystore
+encryption and SharedPreferences persistence across native module instances,
+one-time approval consumption, rejection of altered fingerprints, and denial
+of claims after an uncertain outcome. A separate opt-in/changed-paths GitHub
+Actions emulator job runs API 35 with `connectedDebugAndroidTest`.
+Source-code and JVM mock tests alone cannot prove native encryption. Emulator
+tests are stronger than static checks but still do not replace a physical
+phone process-death and OS-background acceptance run.

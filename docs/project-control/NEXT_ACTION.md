@@ -27,3 +27,9 @@
 Architecture evidence: docs/architecture/ANDROID_VOICE_PHASE.md and
 docs/architecture/HARNESS_UPSTREAM_RESEARCH.md.
 Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
+
+## Android emulator instrumentation
+- GitHub Actions `android-emulator.yml` runs the new AndroidX instrumented
+  `SecureJournalAndroidTest.kt` Keystore/approval/replay suite on API 35.
+- Fix any CI compilation, runner, keystore or emulator failures before
+  claiming native journal verification. Still need genuine phone testing.

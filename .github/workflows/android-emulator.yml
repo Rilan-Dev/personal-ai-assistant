@@ -1,0 +1,53 @@
+name: Android encrypted-journal emulator acceptance
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'apps/mobile/android/app/src/androidTest/**'
+      - 'apps/mobile/android/app/src/main/java/**'
+      - 'apps/mobile/android/app/build.gradle'
+      - '.github/workflows/android-emulator.yml'
+
+jobs:
+  secure-journal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+      - name: Temporary debug key (never saved to Git)
+        run: |
+          keytool -genkeypair -keystore apps/mobile/android/app/debug.keystore \
+            -alias androiddebugkey -storepass android -keypass android \
+            -keyalg RSA -keysize 2048 -validity 365 \
+            -dname "CN=Debug Android Test,O=PAA,C=US" -noprompt
+      - name: Allow emulator hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run Android Keystore and action-replay tests on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Upload device instrumentation test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-secure-journal-test-reports
+          path: apps/mobile/android/app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
+          retention-days: 7

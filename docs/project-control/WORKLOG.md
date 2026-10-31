@@ -88,3 +88,8 @@
 - 66/66 local automated tests passed; TypeScript verification passed.
 - Native Android compilation for this update and physical speech execution
   are pending verification. No real model provider credentials used.
+- Added AndroidX Test instrumented Kotlin suite for real Android Keystore
+  persistence, ciphertext at rest, one-time claims and unknown outcome
+  replay refusal; added API 35 emulator GitHub Actions workflow.
+- Emulator execution and results are NOT yet verified; it is an independent
+  acceptance path, not proof of device UAT.
