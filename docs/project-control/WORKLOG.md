@@ -73,3 +73,18 @@
 - Added a high-risk, **zero-device-side-effect** Android training tool
   `demo.approval_test` and a "Test approval" prompt, so the owner can verify
   one-shot approval and restart behavior without messaging anybody.
+
+## 2026-10-31 — Foreground Android voice adapter milestone
+- Verified Android debug APK and Core tests SUCCESS on prior HEAD 89f1a23.
+- Reviewed Android SpeechRecognizer/on-device API, RecognizerIntent,
+  TextToSpeech and offline voice requirements; recorded upstream references.
+- Added Kotlin VoiceControlModule: API 31+ on-device recognition only,
+  RECORD_AUDIO check, foreground focus guard, 25-second timeout, stop/cancel
+  and app pause/destruction cleanup; no cloud STT fallback or wake word.
+- Added offline voice playback restricted to installed non-network TTS voices.
+- Added React Native Tap to talk/Stop listening, Read last reply aloud/Stop
+  speaking, device/English/Tamil language selection and explicit transcript
+  review before the user sends a request.
+- 66/66 local automated tests passed; TypeScript verification passed.
+- Native Android compilation for this update and physical speech execution
+  are pending verification. No real model provider credentials used.

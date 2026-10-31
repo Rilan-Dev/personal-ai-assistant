@@ -1,30 +1,29 @@
 # Next authorized implementation actions
 
-## Source implemented
-- React Native/Expo SDK 58 Android/iOS, Web demo, Kotlin Intent bridge.
-- LangGraph.js planning-only Node backend and strictly typed provider adapter.
-- On-device bounded tool loop, independent grants, approval checks.
-- Android Keystore AES-GCM durable session checkpoint and action journal;
-  claims are committed before dispatch and cannot be replayed.
-- Owner-only Approve once / Decline / Resume saved task UI.
-- Safe high-risk “Test approval” demo action for on-device acceptance; no message sent.
-- No automatic outbound communications or background microphone.
+## Implemented in source
+- Expo SDK 58 Android/iOS starter, React Native UI and Web demo.
+- Kotlin Intent launch tools (camera, WhatsApp apps) and explicit grants.
+- LangGraph.js planning-only backend; bounded device-side agent loop.
+- Keystore AES-GCM encrypted local journal, one-time approvals and at-most-once
+  action reservations, owner-initiated task resume.
+- Android on-device foreground push-to-talk (API 31+), explicit RECORD_AUDIO,
+  25-second bound, cancel and lifecycle cleanup. No cloud STT fallback.
+- Opt-in offline TTS selecting installed non-network voices, Stop speaking.
+- Transcript populates editable chat composer, never auto-executes tools.
 
-## Open acceptance gates
-1. GitHub Android CI compiles AgentJournalModule and uploads debug APK;
-   GitHub Core test pipeline passes. Capture exact run evidence.
-2. Physical phone: verify permission-off, camera / WhatsApp launch, cold
-   restart recovery, persistence and keystore loss/corruption behavior.
-3. Android instrumentation: process kill mid-action must not duplicate
-   action. One-shot approval must not be reusable after crash or retry.
-4. Real LLM provider API with owner-provided credentials, no embedded keys.
-5. Push-to-talk speech recognition with explicit mic permission and cancel;
-   then TTS and Android voice assistant invocation feasibility.
-6. Privacy controls and encrypted data retention; preserve action tombstones.
-7. Address 13 npm advisories (2 high); no release until reviewed.
-8. MCP tools, new device operations and messaging behind explicit safe gates.
+## Open gates
+1. Current commit: Core tests, Android Gradle assembleDebug and APK upload.
+2. Physical Android acceptance: mic permission denial/allow, offline packs,
+   cancel/background stop, voice playback, native device tool gates and
+   secure journal recovery after forced process death.
+3. Add Android instrumented tests for encrypted journal and audio lifecycle.
+4. Test a real configured LLM provider with owner's credentials (not in Git).
+5. Explore wake word and Android assistant role with OEM restrictions; do not
+   promise always-on third-party assistant invocation.
+6. Plan user-managed encrypted history retention and voice privacy controls.
+7. Review 13 npm vulnerabilities (2 high), before production distribution.
+8. MCP/agent tools need deny-by-default plugin authorization.
 
-Source analysis: docs/architecture/HARNESS_UPSTREAM_RESEARCH.md.
-Full design: docs/architecture/DURABLE_ACTION_JOURNAL.md.
-Continue source reviews and append worklog evidence; do not mark real-device
-acceptance or WhatsApp message delivery without direct evidence.
+Architecture evidence: docs/architecture/ANDROID_VOICE_PHASE.md and
+docs/architecture/HARNESS_UPSTREAM_RESEARCH.md.
+Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.

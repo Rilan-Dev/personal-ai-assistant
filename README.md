@@ -13,6 +13,12 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - An Android Keystore-backed encrypted checkpoint and at-most-once action ledger:
   the app durably reserves each action before execution and cannot silently
   replay an uncertain action after a crash.
+- **Tap to talk** in the Android app uses strictly on-device speech recognition
+  (Android API 31+ if the service is installed), after a one-time runtime
+  microphone permission. Transcript fills the editor for review and does not
+  execute any tools until **Send** is pressed.
+- Opt-in **Read last reply aloud** uses installed offline TextToSpeech voices
+  only, with explicit playback Stop. No hotword/background listening.
 - Owner-driven **Approve once**, **Decline** and **Resume saved task** controls.
   Use the **Test approval** quick prompt on a native Android build to test
   this workflow safely; it does not perform any real device operation.
@@ -84,7 +90,7 @@ The new journal has not yet passed physical-device process-death testing.
 Before personal APK release, resolve or assess upstream dependency advisories
 and complete a real Android phone acceptance test. Backend LLM provider calls,
 Android physical-device tests, iOS native compilation, wake-word detection,
-voice, accessibility, contacts, and WhatsApp sending are **not yet verified**.
+voice on a real device, accessibility, contacts, and WhatsApp sending are **not yet verified**.
 
 See [full roadmap](docs/project-control/ROADMAP.md),
 [next actions](docs/project-control/NEXT_ACTION.md), and

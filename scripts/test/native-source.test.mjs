@@ -49,3 +49,44 @@ test("Android UI cannot run live tools without the native secure journal", () =>
   assert.match(ui,/journal: engine\.live \? androidActionJournal : undefined/);
   assert.match(ui,/resume: Boolean\(restore\)/);
 });
+test("Android push-to-talk is foreground-only, requires runtime microphone grant and on-device STT", () => {
+  const manifest = read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  const voice = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/VoiceControlModule.kt");
+  const adapters = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlPackage.kt");
+  assert.match(manifest, /android\.permission\.RECORD_AUDIO/);
+  assert.match(manifest, /android\.speech\.RecognitionService/);
+  assert.match(manifest, /android\.intent\.action\.TTS_SERVICE/);
+  assert.doesNotMatch(manifest, /FOREGROUND_SERVICE_MICROPHONE|BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT/);
+  assert.match(adapters, /VoiceControlModule\(reactContext\)/);
+  assert.match(voice, /isOnDeviceRecognitionAvailable\(context\)/);
+  assert.match(voice, /createOnDeviceSpeechRecognizer\(context\)/);
+  assert.doesNotMatch(voice, /createSpeechRecognizer\(context\)/);
+  assert.match(voice, /checkSelfPermission\(Manifest\.permission\.RECORD_AUDIO\)/);
+  assert.match(voice, /currentActivity\?\.hasWindowFocus\(\) != true/);
+  assert.match(voice, /private fun releaseRecognizer\(\)/);
+  assert.match(voice, /recognizer\?\.cancel\(\); recognizer\?\.destroy\(\)/);
+  assert.match(voice, /onHostPause\(\)/);
+  assert.match(voice, /onHostDestroy\(\)/);
+});
+test("TTS is explicitly offline and shutdown on lifecycle stop", () => {
+  const voice = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/VoiceControlModule.kt");
+  assert.match(voice, /!it\.isNetworkConnectionRequired/);
+  assert.match(voice, /KEY_FEATURE_NOT_INSTALLED/);
+  assert.match(voice, /OFFLINE_TTS_UNAVAILABLE/);
+  assert.match(voice, /override fun onHostDestroy/);
+  assert.match(voice, /tts\?\.shutdown\(\)/);
+  assert.match(voice, /@ReactMethod fun stopSpeaking/);
+});
+test("speech controls never automatically send a transcribed command", () => {
+  const ui = read("apps/mobile/App.tsx");
+  const bridge = read("apps/mobile/src/native/androidVoice.ts");
+  assert.match(ui, /const transcript = await transcribeOnDevice\(voiceLanguage\)/);
+  assert.match(ui, /setInput\(transcript\)/);
+  assert.doesNotMatch(ui, /send\(transcript/);
+  assert.match(ui, /Review or edit it, then press Send/);
+  assert.match(ui, /onPress=\{listening \? cancelListening : listenForCommand\}/);
+  assert.match(ui, /onPress=\{speaking \? cancelSpeaking : readLastReply\}/);
+  assert.match(bridge, /PermissionsAndroid\.request\(permission/);
+  assert.match(bridge, /return answer === PermissionsAndroid\.RESULTS\.GRANTED/);
+  assert.match(bridge, /Platform\.OS === "android"/);
+});

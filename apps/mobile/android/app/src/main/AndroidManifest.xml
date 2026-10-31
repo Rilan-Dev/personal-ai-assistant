@@ -2,7 +2,11 @@
   xmlns:tools="http://schemas.android.com/tools">
 
   <uses-permission android:name="android.permission.INTERNET"/>
+  <!-- Runtime permission is requested only upon explicit microphone tap. -->
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
   <queries>
+    <intent><action android:name="android.speech.RecognitionService"/></intent>
+    <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
     <package android:name="com.whatsapp"/>
     <package android:name="com.whatsapp.w4b"/>
     <intent><action android:name="android.media.action.STILL_IMAGE_CAMERA"/></intent>

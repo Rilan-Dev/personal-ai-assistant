@@ -76,3 +76,11 @@ denied permissions, cancellations and incomplete observations.
 - No deepagents filesystem/shell autonomy adopted. Phone policies remain
   explicit allowlist, fail-closed.
 - Details: docs/architecture/DURABLE_ACTION_JOURNAL.md.
+
+## 2026-10-31 — Android voice adapter source boundary
+- Reviewed official SpeechRecognizer, RecognizerIntent, TextToSpeech and Voice
+  APIs and prior LangGraph/DeepAgents reference source.
+- Reused existing LangGraph planning and local approval/tool loop. STT fills
+  editable composer only; new audio never bypasses device capability policy.
+- No new autonomous agent harness, generic shell tool, or MCP microphone
+  access introduced. Full design in docs/architecture/ANDROID_VOICE_PHASE.md.

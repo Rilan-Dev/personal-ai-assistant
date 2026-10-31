@@ -7,6 +7,7 @@ import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntent
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint } from '@paa/agent-core';
+import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
@@ -43,6 +44,12 @@ export default function App() {
     sessionId: string; request: string; callId: string;
     fingerprint: string; toolId: string; args: Record<string, unknown>
   } | null>(null);
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [voiceLanguage, setVoiceLanguage] = useState('');
+  const [voiceNotice, setVoiceNotice] = useState('');
+  const voiceInProgress = useRef(false);
+  const voiceEnabled = engine.live && voiceBridgeAvailable();
   const counter = useRef(2);
   const activeAbort = useRef<AbortController | null>(null);
 
@@ -91,7 +98,7 @@ export default function App() {
   };
   const send = async (value: string = input, restore?: SessionCheckpoint) => {
     const request = value.trim();
-    if (!request || running || activeAbort.current) return;
+    if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
     setInput(''); setEvents([]); append('user', request);
     const controller = new AbortController(); activeAbort.current = controller;
     setRunning(true);
@@ -131,6 +138,52 @@ export default function App() {
     } finally { setRunning(false); activeAbort.current = null; }
   };
   const stop = () => activeAbort.current?.abort();
+  const listenForCommand = async () => {
+    if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current) return;
+    voiceInProgress.current = true;
+    setVoiceNotice('');
+    try {
+      const available = await getVoiceCapabilities();
+      if (!available.onDeviceRecognition || !available.offlineOnly) {
+        setVoiceNotice('On-device speech recognition is not installed. No cloud fallback is used.');
+        return;
+      }
+      if (!await requestMicrophoneForTap()) {
+        setVoiceNotice('Microphone permission denied. Typed commands are still available.');
+        return;
+      }
+      setListening(true);
+      const transcript = await transcribeOnDevice(voiceLanguage);
+      setInput(transcript);
+      setVoiceNotice('Transcribed on your device. Review or edit it, then press Send. No tool executed.');
+    } catch {
+      setVoiceNotice('Listening stopped or failed. No command was sent.');
+    } finally {
+      setListening(false);
+      voiceInProgress.current = false;
+    }
+  };
+  const cancelListening = async () => {
+    try { await cancelOnDeviceTranscription(); }
+    catch { setVoiceNotice('Unable to cancel input. Leaving the app stops the microphone.'); }
+  };
+  const readLastReply = async () => {
+    if (!voiceEnabled || speaking || listening || voiceInProgress.current || running) return;
+    const last = [...messages].reverse().find(item => item.speaker === 'assistant')?.text ?? '';
+    if (!last) return;
+    setSpeaking(true);
+    setVoiceNotice('');
+    try {
+      await speakOffline(last.slice(0, 1000), voiceLanguage);
+      setVoiceNotice('Voice playback finished using an installed offline voice.');
+    } catch {
+      setVoiceNotice('Speech stopped or an offline voice is unavailable for this language.');
+    } finally { setSpeaking(false); }
+  };
+  const cancelSpeaking = async () => {
+    try { await stopOfflineSpeech(); }
+    catch { setVoiceNotice('Unable to stop speech playback.'); }
+  };
   const approvePending = async () => {
     if (!pendingApproval || running || !engine.live) return;
     const pending = pendingApproval;
@@ -172,7 +225,7 @@ export default function App() {
       </View>
       <View style={styles.infoBanner}>
         <Text style={styles.bannerTitle}>{engine.live ? 'Native Android intents available' : 'Simulation mode enabled'}</Text>
-        <Text style={styles.bannerText}>{engine.live ? 'This build may launch the camera and WhatsApp using Android intents. No microphone, accessibility, message sending, location or screen verification is connected yet.' : 'This platform has no Android native bridge. Device actions are simulated and nothing is sent.'}</Text>
+        <Text style={styles.bannerText}>{engine.live ? 'This build supports camera and allowlisted app launching plus opt-in push-to-talk and offline speech playback. No wake word, background microphone, accessibility, message sending, location or screen verification yet.' : 'This platform has no Android native bridge. Device actions are simulated and nothing is sent.'}</Text>
       </View>
       {engine.live && <View style={styles.backendBox}>
         <Pressable accessibilityRole="button" disabled={running} onPress={() => setShowBackend(previous => !previous)}>
@@ -257,15 +310,45 @@ export default function App() {
         </View>}
       </ScrollView>
       <View style={styles.footer}>
+        {voiceEnabled && <View style={styles.voicePanel}>
+          <View style={styles.controlsRow}>
+            {([
+              { tag: '', label: 'Device language' },
+              { tag: 'en-IN', label: 'English (India)' },
+              { tag: 'ta-IN', label: 'Tamil (India)' }
+            ] as const).map(choice => <Pressable key={choice.tag || 'system'}
+              accessibilityRole="button" accessibilityState={{selected: voiceLanguage === choice.tag}}
+              disabled={listening || speaking || voiceInProgress.current}
+              onPress={() => setVoiceLanguage(choice.tag)}
+              style={[styles.languageChip, voiceLanguage === choice.tag && styles.chipActive]}>
+              <Text style={styles.chipText}>{choice.label}</Text>
+            </Pressable>)}
+          </View>
+          <View style={styles.controlsRow}>
+            <Pressable accessibilityRole="button"
+              disabled={running || speaking || (voiceInProgress.current && !listening)}
+              onPress={listening ? cancelListening : listenForCommand}
+              style={[styles.voiceButton, listening && styles.stopButton]}>
+              <Text style={styles.buttonText}>{listening ? 'Stop listening' : 'Tap to talk'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={running || listening}
+              onPress={speaking ? cancelSpeaking : readLastReply}
+              style={[styles.voiceButton, speaking && styles.stopButton]}>
+              <Text style={styles.buttonText}>{speaking ? 'Stop speaking' : 'Read last reply aloud'}</Text>
+            </Pressable>
+          </View>
+          {voiceNotice !== '' && <Text style={styles.voiceNotice}>{voiceNotice}</Text>}
+          <Text style={styles.note}>On-device recognition only. Transcript fills the editor; no action executes until you press Send.</Text>
+        </View>}
         <ScrollView horizontal keyboardShouldPersistTaps="always" showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 10 }}>
           {quickPrompts.map(prompt => <Pressable key={prompt} onPress={() => send(prompt)} disabled={running} style={styles.prompt}><Text style={styles.promptText}>{prompt}</Text></Pressable>)}
         </ScrollView>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={styles.inputRow}>
-            <TextInput style={styles.input} value={input} onChangeText={setInput} placeholder="Ask your assistant…" placeholderTextColor="#9ca3af" onSubmitEditing={() => send()} returnKeyType="send" accessibilityLabel="Assistant command" />
+            <TextInput style={styles.input} value={input} onChangeText={setInput} editable={!running && !listening} placeholder="Ask your assistant…" placeholderTextColor="#9ca3af" onSubmitEditing={() => send()} returnKeyType="send" accessibilityLabel="Assistant command" />
             {running ? <Pressable accessibilityRole="button" style={styles.stopButton} onPress={stop}><Text style={styles.buttonText}>Stop</Text></Pressable> : <Pressable accessibilityRole="button" style={styles.sendButton} onPress={() => send()}><Text style={styles.buttonText}>Send</Text></Pressable>}
           </View>
-          <Text style={styles.note}>{engine.live ? 'Android Intent tools active. Voice, accessibility and messaging are not implemented.' : 'Android native module not available; tools are demo-only.'} {engine.toolCount} tools registered.</Text>
+          <Text style={styles.note}>{engine.live ? 'Android Intent tools and optional on-device voice available. No wake word, accessibility or messaging yet.' : 'Android native module not available; tools are demo-only.'} {engine.toolCount} tools registered.</Text>
         </KeyboardAvoidingView>
       </View>
     </SafeAreaView>
@@ -304,6 +387,10 @@ const styles = StyleSheet.create({
   traceCard: { borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#374151' },
   traceLine: { fontSize: 12, color: '#9ca3af', paddingVertical: 2 },
   footer: { borderTopWidth: 1, borderTopColor: '#1f2937', paddingHorizontal: 14, paddingVertical: 10 },
+  voicePanel: { borderBottomWidth: 1, borderBottomColor: '#374151', paddingBottom: 9, marginBottom: 9, gap: 8 },
+  voiceButton: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#334155' },
+  languageChip: { borderColor: '#475569', borderWidth: 1, borderRadius: 9, paddingVertical: 5, paddingHorizontal: 9 },
+  voiceNotice: { color: '#c7d2fe', fontSize: 11 },
   prompt: { borderRadius: 9, borderColor: '#374151', backgroundColor: '#1f2937', paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1 },
   promptText: { fontSize: 12, color: '#c7d2fe' },
   inputRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
