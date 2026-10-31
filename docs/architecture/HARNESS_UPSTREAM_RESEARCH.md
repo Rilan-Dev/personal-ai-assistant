@@ -84,3 +84,13 @@ denied permissions, cancellations and incomplete observations.
   editable composer only; new audio never bypasses device capability policy.
 - No new autonomous agent harness, generic shell tool, or MCP microphone
   access introduced. Full design in docs/architecture/ANDROID_VOICE_PHASE.md.
+
+## 2026-10-31 — Quick Settings invocation (no new agent loop)
+- Reviewed Android TileService / StatusBarManager APIs, Android 14
+  PendingIntent requirement, Android 13 user-requested tile API and
+  lock-screen unlockAndRun. See docs/architecture/ASSISTANT_INVOCATION.md.
+- Reused the existing MainActivity and React Native chat interface.
+  No autonomous agent runtime, microphone permission escalation, filesystem
+  shell tool, or model-controlled invocation was introduced.
+- Default Android assistant VoiceInteractionService is still a separate
+  OEM-/OS-dependent integration and has not been implemented.

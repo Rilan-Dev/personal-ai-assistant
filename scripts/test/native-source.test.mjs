@@ -90,3 +90,20 @@ test("speech controls never automatically send a transcribed command", () => {
   assert.match(bridge, /return answer === PermissionsAndroid\.RESULTS\.GRANTED/);
   assert.match(bridge, /Platform\.OS === "android"/);
 });
+test("Quick Settings tile can only open foreground chat after unlock", () => {
+  const source = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AssistantTileService.kt");
+  const manifest = read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  const device = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlModule.kt");
+  const ui = read("apps/mobile/App.tsx");
+  assert.match(manifest, /android:permission="android\.permission\.BIND_QUICK_SETTINGS_TILE"/);
+  assert.match(manifest, /android\.service\.quicksettings\.action\.QS_TILE/);
+  assert.match(manifest, /android:name="\.AssistantTileService"/);
+  assert.match(source, /isLocked\) unlockAndRun\(openChat\)/);
+  assert.match(source, /PendingIntent\.FLAG_IMMUTABLE/);
+  assert.match(source, /Build\.VERSION_CODES\.UPSIDE_DOWN_CAKE/);
+  assert.match(source, /MainActivity::class\.java/);
+  assert.doesNotMatch(source, /SpeechRecognizer|listenOnce|RECORD_AUDIO|\.openSupportedApp\(/);
+  assert.match(device, /requestAddTileService\(/);
+  assert.match(ui, /requestAssistantQuickTile\(\)/);
+  assert.match(ui, /never starts the microphone or performs actions automatically/);
+});

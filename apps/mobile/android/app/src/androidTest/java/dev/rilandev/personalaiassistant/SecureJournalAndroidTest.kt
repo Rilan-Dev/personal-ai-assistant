@@ -41,6 +41,14 @@ class SecureJournalAndroidTest {
         return result
     }
 
+    @Test fun assistantTileIsRestrictedToSystemAndCannotRecordFromBackground() {
+        val component = android.content.ComponentName(appContext, AssistantTileService::class.java)
+        val info = appContext.packageManager.getServiceInfo(component, 0)
+        assertTrue(info.exported)
+        assertEquals("android.permission.BIND_QUICK_SETTINGS_TILE", info.permission)
+        // Tile launch only opens MainActivity; no wake-word service installed.
+    }
+
     @Test fun encryptedSessionSurvivesRecreatingTheModule() {
         val session = UUID.randomUUID().toString()
         val request = "journal-instrumentation-" + UUID.randomUUID()

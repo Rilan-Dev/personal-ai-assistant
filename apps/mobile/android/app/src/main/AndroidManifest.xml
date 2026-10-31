@@ -25,5 +25,15 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
+    <!-- System-owned Quick Settings tile: launches chat; never starts audio. -->
+    <service android:name=".AssistantTileService"
+        android:label="@string/assistant_tile_label"
+        android:icon="@drawable/ic_assistant_tile"
+        android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="android.service.quicksettings.action.QS_TILE"/>
+      </intent-filter>
+    </service>
   </application>
 </manifest>

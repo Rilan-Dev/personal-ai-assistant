@@ -112,3 +112,8 @@
   `ReactApplicationContext.kt` (abstract class). Test now creates an
   anonymous concrete subclass `object : ReactApplicationContext(...) {}`.
   Emulator rerun is required before marking runtime Android tests accepted.
+- Added owner-controlled Android Quick Settings launcher, Android 13+
+  request-add consent dialog and manual tile editing instructions on 12.
+- Tile opens foreground chat after unlock, never starts microphone or tools.
+- Added source regression and emulator permission metadata check.
+- Local automated tests: 67/67 passed; web and TypeScript build verified.

@@ -11,9 +11,14 @@
 - Opt-in offline TTS selecting installed non-network voices, Stop speaking.
 - Transcript populates editable chat composer, never auto-executes tools.
 
+- User-controlled Android Quick Settings tile and optional system add
+  dialog (Android 13+), with manual addition available on Android 12.
+
 ## Open gates
-1. Current commit: Core tests, Android Gradle assembleDebug and APK upload.
-2. Physical Android acceptance: mic permission denial/allow, offline packs,
+1. Current commit: Core tests, Android APK and emulator instrumentation;
+   rerun emulator with fixed abstract ReactApplicationContext test setup.
+2. Physical Android acceptance: Quick Settings tile from locked/unlocked,
+   mic permission denial/allow, offline packs,
    cancel/background stop, voice playback, native device tool gates and
    secure journal recovery after forced process death.
 3. Add Android instrumented tests for encrypted journal and audio lifecycle.
@@ -24,7 +29,8 @@
 7. Review 13 npm vulnerabilities (2 high), before production distribution.
 8. MCP/agent tools need deny-by-default plugin authorization.
 
-Architecture evidence: docs/architecture/ANDROID_VOICE_PHASE.md and
+Architecture evidence: docs/architecture/ASSISTANT_INVOCATION.md,
+ docs/architecture/ANDROID_VOICE_PHASE.md and
 docs/architecture/HARNESS_UPSTREAM_RESEARCH.md.
 Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 

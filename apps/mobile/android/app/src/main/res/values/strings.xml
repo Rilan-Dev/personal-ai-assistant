@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Personal AI Assistant</string>
+    <string name="assistant_tile_label">AI Assistant</string>
 </resources>

@@ -2,6 +2,11 @@ package dev.rilandev.personalaiassistant
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.app.StatusBarManager
+import android.content.ComponentName
+import android.graphics.drawable.Icon
+import android.os.Build
+import java.util.function.Consumer
 import android.provider.MediaStore
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -28,6 +33,46 @@ class DeviceControlModule(
         status.putBoolean("accessibilityEnabled", false)
         status.putBoolean("voiceWakeWordSupported", false)
         promise.resolve(status)
+    }
+
+    /**
+     * User-initiated OS prompt. It only adds a launcher tile, not a microphone
+     * or privileged assistant service. Android 12 users can add it manually.
+     */
+    @ReactMethod
+    fun requestAssistantTile(promise: Promise) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            promise.resolve("manual_add_required")
+            return
+        }
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            promise.reject("NOT_FOREGROUND", "Open the assistant before adding its tile")
+            return
+        }
+        val manager = context.getSystemService(StatusBarManager::class.java)
+        if (manager == null) {
+            promise.reject("TILE_UNAVAILABLE", "Quick Settings tile management is unavailable")
+            return
+        }
+        try {
+            manager.requestAddTileService(
+                ComponentName(context, AssistantTileService::class.java),
+                context.getString(R.string.assistant_tile_label),
+                Icon.createWithResource(context, R.drawable.ic_assistant_tile),
+                context.mainExecutor,
+                Consumer { code: Int ->
+                    val result = when (code) {
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ADDED -> "added"
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_ALREADY_ADDED -> "already_added"
+                        StatusBarManager.TILE_ADD_REQUEST_RESULT_TILE_NOT_ADDED -> "declined"
+                        else -> "unavailable"
+                    }
+                    promise.resolve(result)
+                }
+            )
+        } catch (_: Exception) {
+            promise.reject("TILE_UNAVAILABLE", "System could not request Quick Settings tile")
+        }
     }
 
     @ReactMethod

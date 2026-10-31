@@ -8,6 +8,7 @@ import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidT
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
+import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
@@ -35,6 +36,9 @@ export default function App() {
   const [events, setEvents] = useState<AgentTraceEvent[]>([]);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [showBackend, setShowBackend] = useState(false);
+  const [showLaunchOptions, setShowLaunchOptions] = useState(false);
+  const [tileBusy, setTileBusy] = useState(false);
+  const [tileNotice, setTileNotice] = useState('');
   const [backendUrl, setBackendUrl] = useState('');
   const [backendToken, setBackendToken] = useState('');
   const [remoteActive, setRemoteActive] = useState(false);
@@ -75,6 +79,26 @@ export default function App() {
   };
   const toggle = (cap: Capability) => {
     setCapabilities(prev => prev.includes(cap) ? prev.filter(c => c !== cap) : [...prev, cap]);
+  };
+  const installLaunchTile = async () => {
+    if (!engine.live || !tileInstallationAvailable() || tileBusy || running) return;
+    setTileBusy(true);
+    setTileNotice('');
+    try {
+      const result = await requestAssistantQuickTile();
+      const notices = {
+        added: 'Tile added. Open Quick Settings and tap AI Assistant to launch chat.',
+        already_added: 'The AI Assistant Quick Settings tile is already installed.',
+        declined: 'Tile was not added. You can still use the app normally.',
+        manual_add_required: 'Open Android Quick Settings, choose Edit tiles, then add AI Assistant manually.',
+        unavailable: 'This Android system cannot add the tile automatically. You can try Edit tiles.'
+      };
+      setTileNotice(notices[result]);
+    } catch {
+      setTileNotice('Unable to request a tile. Open Android Quick Settings and add AI Assistant using Edit tiles.');
+    } finally {
+      setTileBusy(false);
+    }
   };
   const enableBackend = () => {
     try {
@@ -227,6 +251,20 @@ export default function App() {
         <Text style={styles.bannerTitle}>{engine.live ? 'Native Android intents available' : 'Simulation mode enabled'}</Text>
         <Text style={styles.bannerText}>{engine.live ? 'This build supports camera and allowlisted app launching plus opt-in push-to-talk and offline speech playback. No wake word, background microphone, accessibility, message sending, location or screen verification yet.' : 'This platform has no Android native bridge. Device actions are simulated and nothing is sent.'}</Text>
       </View>
+      {engine.live && <View style={styles.backendBox}>
+        <Pressable accessibilityRole="button" disabled={running}
+          onPress={() => setShowLaunchOptions(prev => !prev)}>
+          <Text style={styles.bannerTitle}>Open assistant from Quick Settings {showLaunchOptions ? '▲' : '▼'}</Text>
+        </Pressable>
+        {showLaunchOptions && <View style={{gap: 9, paddingTop: 9}}>
+          <Text style={styles.bannerText}>Add a system Quick Settings tile, then tap it to open the assistant. It never starts the microphone or performs actions automatically. If your phone is locked, Android requires you to unlock it.</Text>
+          <Pressable accessibilityRole="button" disabled={running || tileBusy}
+            style={styles.capabilityChip} onPress={installLaunchTile}>
+            <Text style={styles.chipText}>{tileBusy ? 'Requesting…' : 'Add Quick Settings tile'}</Text>
+          </Pressable>
+          {tileNotice !== '' && <Text style={styles.voiceNotice}>{tileNotice}</Text>}
+        </View>}
+      </View>}
       {engine.live && <View style={styles.backendBox}>
         <Pressable accessibilityRole="button" disabled={running} onPress={() => setShowBackend(previous => !previous)}>
           <Text style={styles.bannerTitle}>Agent backend: {remoteActive ? 'LangGraph (remote)' : 'Local deterministic planner'}  {showBackend ? '▲' : '▼'}</Text>
