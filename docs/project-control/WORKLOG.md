@@ -101,3 +101,14 @@
   its API explicitly directs modules to reactApplicationContext.currentActivity.
 - Corrected both foreground checks to context.currentActivity; kept permission
   and no-background policy unchanged. New CI compile required for verification.
+
+## 2026-10-31 — Emulator CI RED/repair
+- Confirmed native Android APK **compiled and uploaded successfully** for
+  commit 8aae81c (GitHub workflow 41207954456); Core tests passed.
+- Emulator job 41207954334 booted API 35 and compiled app code, but
+  `:app:compileDebugAndroidTestKotlin` failed at SecureJournalAndroidTest.kt:19:
+  cannot directly instantiate abstract ReactApplicationContext.
+- Inspected installed React Native 0.88
+  `ReactApplicationContext.kt` (abstract class). Test now creates an
+  anonymous concrete subclass `object : ReactApplicationContext(...) {}`.
+  Emulator rerun is required before marking runtime Android tests accepted.

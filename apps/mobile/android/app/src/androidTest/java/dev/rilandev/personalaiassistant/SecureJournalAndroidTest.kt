@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class SecureJournalAndroidTest {
     private val appContext: Context get() = ApplicationProvider.getApplicationContext()
-    private fun journal() = AgentJournalModule(ReactApplicationContext(appContext))
+    private fun journal() = AgentJournalModule(object : ReactApplicationContext(appContext) {})
 
     private fun invoke(block: (Promise) -> Unit): Any? {
         var result: Any? = null
