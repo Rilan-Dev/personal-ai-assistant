@@ -266,3 +266,9 @@
   acceptance require actual CI / owner test evidence; none claimed here.
 - Upstream npm audit advisories remain open, and the artifact is intended
   only for controlled physical-device testing, not public distribution.
+
+- Made the AI settings panel independently scrollable for smaller physical
+  Android screens, keeping API key field, Test connection, Save and Remove
+  controls reachable while the keyboard is visible.
+- Provider summary now says AI mode rather than suggesting that saving a key
+  proves a successful network connection.

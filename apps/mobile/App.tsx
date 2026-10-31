@@ -376,10 +376,13 @@ export default function App() {
         </Pressable>
         <Text style={styles.bannerText}>
           {activeProvider && !remoteActive
-            ? 'Connected mode: ' + PROVIDERS[activeProvider.provider].label + ' / ' + activeProvider.model
+            ? 'AI mode: ' + PROVIDERS[activeProvider.provider].label + ' / ' + activeProvider.model
             : 'Choose your AI provider to enable intelligent chat without running a separate backend.'}
         </Text>
-        {showProvider && <View style={{gap: 10, paddingTop: 10}}>
+        {showProvider && <ScrollView
+          style={{maxHeight: 315}}
+          contentContainerStyle={{gap: 10, paddingTop: 10}}
+          keyboardShouldPersistTaps="always">
           <Text style={styles.sectionLabel}>Select AI provider</Text>
           <View style={styles.controlsRow}>
             {(['openai', 'gemini', 'groq', 'openrouter'] as DirectProviderId[]).map(id =>
@@ -427,7 +430,7 @@ export default function App() {
           {providerNotice !== '' && <Text style={styles.voiceNotice}>{providerNotice}</Text>}
           <Text style={styles.note}>Only a saved, valid key enables AI mode.
             For local-only use, remove the key. Existing LangGraph backend remains optional.</Text>
-        </View>}
+        </ScrollView>}
       </View>}
       {engine.live && <View style={styles.backendBox}>
         <Pressable accessibilityRole="button" disabled={running}
