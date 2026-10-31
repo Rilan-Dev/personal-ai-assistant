@@ -51,3 +51,15 @@ Not implemented: default assistant role, custom wake word, unattended recording,
 7. Enable screen accessibility via Android Settings; arm, switch apps, return and review; validate no unintended sharing or gestures.
 
 No microphone samples, screen text or provider keys were accessed during source implementation. The new services are not accepted as working on a real phone without a physical test.
+
+## Native verification constraints recorded November 1, 2026
+
+The isolated remote-host Android SDK/JDK setup succeeded; Gradle began
+building Expo and React Native Gradle plugins, but the production-shared host
+was under severe memory/disk pressure and native compilation was cancelled
+before compiling new Kotlin source. No emulator is available on that host.
+No native CI, realtime provider or screen reader acceptance is claimed
+for the latest commit. The new android_build_preflight.py performs a
+non-mutating resource check. The GitHub Actions connector cannot start
+workflow_dispatch runs and the available browser was not signed in. The
+GitHub Actions manual-only policy is unchanged. See project-control/NEXT_ACTION.md.

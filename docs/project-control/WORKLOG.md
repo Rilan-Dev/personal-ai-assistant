@@ -328,3 +328,33 @@
 - Local clean npm ci succeeded; 115/115 source/contract tests passed,
   typecheck passed and Web export succeeded. No new Github Action run was
   automatically started; all five workflows still manual-only.
+
+## 2026-11-01 — Native verification attempt on constrained remote host
+- Verified main HEAD 7b9307e and all five workflows remain
+  workflow_dispatch-only. The GitHub connector exposes workflow log/artifact
+  reads and reruns but NOT workflow_dispatch; an unauthenticated GitHub
+  browser session also cannot manually start new runs. No CI event was
+  triggered and no previous run was mistaken for the latest revision.
+- Installed isolated Microsoft OpenJDK 21 and official Android command-line
+  SDK with platform 36/build-tools 36 outside the checked-out repo, in
+  /home/techadmin/workspaces/personal-ai-assistant/android-test-toolchain.
+  The Android CLI download was verified against the official SHA-256.
+- Attempted local Android native build and instrumentation compilation.
+  Gradle 9.4.1 started and compiled some Expo/React Native Gradle plugins.
+  It did NOT reach :app:compileDebugKotlin or Android test compilation.
+  The shared host has 7.5 GiB RAM, no swap, approximately 5 GiB free disk
+  after toolchain setup and no /dev/kvm. MemAvailable fell below 0.5 GiB
+  during the Gradle run. Stopped the workload and its spawned JVMs to avoid
+  affecting active unrelated production services; available memory returned
+  above 3 GiB. No passing native build or emulator result is claimed.
+- Added a read-only scripts/acceptance/android_build_preflight.py to check
+  memory, disk, JDK, SDK platform and KVM before attempting a native build,
+  plus automated tests. This prevents using resource-starved shared
+  production hosts as Android CI machines in the future.
+- Current release-test APK artifact from 7b8787a predates the new Android
+  UI and native service changes; do NOT offer it as a validated new build.
+- Required next step: authenticated owner manual workflow_dispatch on main
+  for Android debug compile, Android emulator acceptance and only after
+  success the Android release-test APK. Fetch job logs, fix actual Kotlin
+  failures and verify artifact signature. Physical device/STT/Accessibility
+  acceptance remains owner-dependent.

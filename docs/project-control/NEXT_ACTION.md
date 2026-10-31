@@ -140,3 +140,22 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - For screen UAT: enable Accessibility from Tools; arm, switch to an outside app, return, review/discard; verify no password/edit text, no auto model upload and no gestures.
 - Before implementing always-on assistants, contacts, camera analysis and location, define OS-permission-specific owner controls, privacy, Google Play policy and test gates. No hidden surveillance or unrestricted auto actions.
 - Real provider integration, physical phone acceptance, dependency audit and Play release remain open. Do not claim Gemini-level OS privileges without corresponding Android role/OEM tests.
+
+## 2026-11-01 native acceptance blocker / manual CI instructions
+- Remote shared host cannot safely compile the new native app: 7.5 GiB
+  total RAM, no swap, ~5 GiB free disk and no /dev/kvm. Two constrained
+  Gradle attempts were stopped after memory fell below a safe threshold.
+  Do not retry Android compilation on live production servers.
+- Before any host-side build, run:
+  python3 scripts/acceptance/android_build_preflight.py --mode compile
+  python3 scripts/acceptance/android_build_preflight.py --mode emulator
+- GitHub has suitable hosted Android runners, but current GitHub connection
+  does not expose workflow_dispatch; browser does not have authenticated
+  GitHub identity. Preserve manual-only triggers on ALL five workflows.
+- Owner action: GitHub > Actions > Android debug compile > Run workflow
+  (main); then Android encrypted-journal emulator acceptance > Run workflow
+  (main); then Android installable release-test APK > Run workflow (main).
+- Inspect latest run's actual HEAD SHA, compile Kotlin/test code, verify
+  emulator tests, build release and apksigner. Do not reuse previous APKs.
+- After passing Actions, perform physical phone live-provider audio and
+  outside-app one-time accessibility observations under owner consent.
