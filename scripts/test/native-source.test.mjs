@@ -150,3 +150,14 @@ test("flashlight requires CAMERA runtime grant, foreground user presence and ver
   assert.match(ui,/onPress=\{grantFlashlightAccess\}/);
   assert.match(ui,/pendingApproval\.toolId === 'device\.set_flashlight'/);
 });
+
+
+test("Android Keystore GCM uses provider-generated IV for encryption and authenticates it during decryption", () => {
+  const source = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt");
+  assert.match(source,/cipher\.init\(Cipher\.ENCRYPT_MODE, secret\(\)\)/);
+  assert.match(source,/val iv = cipher\.iv/);
+  assert.match(source,/check\(iv\.size == 12\)/);
+  assert.match(source,/GCMParameterSpec\(128, data\.copyOfRange\(0, 12\)\)/);
+  assert.doesNotMatch(source,/init\(Cipher\.ENCRYPT_MODE, secret\(\), GCMParameterSpec/);
+  assert.doesNotMatch(source,/setRandomizedEncryptionRequired\(false\)/);
+});

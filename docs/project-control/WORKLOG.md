@@ -192,3 +192,17 @@
 - GitHub workflow is manual and uses an environment-scoped secret.
   No real model credential provided or used, so provider acceptance
   remains unverified. See docs/architecture/REAL_LLM_ACCEPTANCE.md.
+
+## 2026-10-31 — Android Keystore emulator root-cause correction
+- GitHub emulator run 41216055475 executed eight instrumentation tests; four
+  failed journal writes/claims with InvalidAlgorithmParameterException.
+- Root cause: Android Keystore AES-GCM uses randomized-encryption-required
+  by default. Passing a caller-created 96-bit IV to
+  Cipher.init(ENCRYPT_MODE, key, GCMParameterSpec(...)) was rejected.
+- Fixed encryption to Cipher.init(ENCRYPT_MODE, key) and used its generated
+  96-bit cipher.iv; kept encrypted data format IV + ciphertext/tag and
+  authenticated decryption with GCMParameterSpec. Did NOT disable
+  Keystore's IV safety property or bypass encryption.
+- Added regression guarding no caller-IV encryption / no weakened key spec.
+- The next emulator CI run must validate this exact change before claiming
+  Android Keystore acceptance. No phone test has been run.

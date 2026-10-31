@@ -12,7 +12,6 @@ import com.facebook.react.bridge.ReactMethod
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
 import java.security.MessageDigest
-import java.security.SecureRandom
 import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -56,11 +55,15 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         return Base64.encodeToString(digest, Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
     }
     private fun encrypt(text: String): String {
-        val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
-        val c = Cipher.getInstance("AES/GCM/NoPadding")
-        c.init(Cipher.ENCRYPT_MODE, secret(), GCMParameterSpec(128, iv))
-        return Base64.encodeToString(iv + c.doFinal(text.toByteArray(StandardCharsets.UTF_8)),
-            Base64.NO_WRAP)
+        // Android Keystore AES-GCM defaults to randomized-encryption-required.
+        // It REJECTS a caller-supplied IV for encryption. Let the provider
+        // generate the IV and store it alongside the authenticated ciphertext.
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, secret())
+        val iv = cipher.iv
+        check(iv.size == 12) { "Unexpected AES-GCM IV size" }
+        val ciphertext = cipher.doFinal(text.toByteArray(StandardCharsets.UTF_8))
+        return Base64.encodeToString(iv + ciphertext, Base64.NO_WRAP)
     }
     private fun decrypt(text: String): String {
         val data = Base64.decode(text, Base64.DEFAULT)
