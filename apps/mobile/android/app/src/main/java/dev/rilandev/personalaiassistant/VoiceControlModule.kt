@@ -86,7 +86,7 @@ class VoiceControlModule(private val context: ReactApplicationContext) :
                 promise.reject("VOICE_BUSY", "Speech recognition is already active")
                 return@post
             }
-            if (currentActivity?.hasWindowFocus() != true) {
+            if (context.currentActivity?.hasWindowFocus() != true) {
                 promise.reject("NOT_FOREGROUND", "Open this app to use the microphone")
                 return@post
             }
@@ -213,7 +213,7 @@ class VoiceControlModule(private val context: ReactApplicationContext) :
                 promise.reject("TTS_BUSY", "Speech playback already active")
                 return@post
             }
-            if (currentActivity?.hasWindowFocus() != true) {
+            if (context.currentActivity?.hasWindowFocus() != true) {
                 promise.reject("NOT_FOREGROUND", "Speech playback is available in the open app only")
                 return@post
             }

@@ -93,3 +93,11 @@
   replay refusal; added API 35 emulator GitHub Actions workflow.
 - Emulator execution and results are NOT yet verified; it is an independent
   acceptance path, not proof of device UAT.
+
+## 2026-10-31 — Fix Kotlin React Native voice bridge compile
+- Android debug workflow for 980f501 failed in :app:compileDebugKotlin:
+  unresolved currentActivity in VoiceControlModule.kt lines 89 and 216.
+- Inspected installed React Native 0.88 ReactContextBaseJavaModule.kt;
+  its API explicitly directs modules to reactApplicationContext.currentActivity.
+- Corrected both foreground checks to context.currentActivity; kept permission
+  and no-background policy unchanged. New CI compile required for verification.
