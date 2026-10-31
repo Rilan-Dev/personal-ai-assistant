@@ -206,3 +206,8 @@
 - Added regression guarding no caller-IV encryption / no weakened key spec.
 - The next emulator CI run must validate this exact change before claiming
   Android Keystore acceptance. No phone test has been run.
+
+- Added Android instrumentation proving AES-GCM rejects a one-bit tamper to
+  ciphertext/tag (JOURNAL_READ), and successfully restores the original
+  encrypted record. This is test-only manipulation of a synthetic session,
+  not a production journaling bypass.

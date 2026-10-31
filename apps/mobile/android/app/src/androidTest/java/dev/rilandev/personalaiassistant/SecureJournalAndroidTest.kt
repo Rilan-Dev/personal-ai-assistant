@@ -6,6 +6,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.BridgeReactContext
 import java.lang.reflect.Proxy
+import android.util.Base64
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -45,6 +48,58 @@ class SecureJournalAndroidTest {
         block(callback)
         assertTrue("Native Promise did not resolve", didResolve)
         return result
+    }
+
+    private fun rejectedCode(block: (Promise) -> Unit): String {
+        var code: String? = null
+        var received = false
+        val callback = Proxy.newProxyInstance(
+            Promise::class.java.classLoader, arrayOf(Promise::class.java)
+        ) { _, method, args ->
+            when (method.name) {
+                "resolve" -> fail("Expected secure journal rejection, but it returned success")
+                "reject" -> {
+                    received = true
+                    code = args?.firstOrNull()?.toString()
+                }
+            }
+            null
+        } as Promise
+        block(callback)
+        assertTrue("Expected reject callback", received)
+        return code ?: "MISSING_ERROR_CODE"
+    }
+
+    @Test fun tamperedCiphertextFailsAuthenticationWithoutReturningSession() {
+        val session = UUID.randomUUID().toString()
+        val unique = "secret-session-" + UUID.randomUUID().toString()
+        val snapshot = JSONObject().put("version",1)
+            .put("sessionId",session)
+            .put("request",unique)
+            .put("status","running")
+            .put("observations",org.json.JSONArray())
+            .put("updatedAt",System.currentTimeMillis()).toString()
+        val module = journal()
+        assertEquals(true, invoke { module.saveSession(session,snapshot,it) })
+        val pref = appContext.getSharedPreferences("paa_secure_journal_v1",Context.MODE_PRIVATE)
+        val keyData = ("session:" + session + ":").toByteArray(StandardCharsets.UTF_8)
+        val digest = MessageDigest.getInstance("SHA-256").digest(keyData)
+        val entry = Base64.encodeToString(digest,Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
+        val original = pref.getString(entry,null)
+        assertNotNull(original)
+        try {
+            val encoded = Base64.decode(original, Base64.DEFAULT)
+            assertTrue(encoded.size > 28)
+            // Flip a bit of ciphertext/tag, not the IV. AES-GCM must reject it.
+            encoded[encoded.lastIndex] = (encoded.last().toInt() xor 1).toByte()
+            assertTrue(pref.edit().putString(entry,
+                Base64.encodeToString(encoded,Base64.NO_WRAP)).commit())
+            assertEquals("JOURNAL_READ", rejectedCode { journal().loadSession(session,it) })
+        } finally {
+            assertTrue(pref.edit().putString(entry, original).commit())
+        }
+        assertEquals(unique,JSONObject(invoke { journal().loadSession(session,it) } as String)
+            .getString("request"))
     }
 
     @Test fun assistantTileIsRestrictedToSystemAndCannotRecordFromBackground() {
