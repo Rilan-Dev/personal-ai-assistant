@@ -1,0 +1,28 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { ToolRegistry, AgentHarness, approvalFingerprint } from "../src/runtime.ts";
+import { createDemoTools, demoPlanner } from "../src/demo.ts";
+const tool = (overrides = {}) => ({ id: "demo.tool", description: "test", risk: "low", capabilities: [], hasExternalSideEffect: false, validateInput: v => !!v && typeof v === "object", execute: async () => ({ status: "success", data: { ok: true } }), ...overrides });
+const build = (aTool, planner) => {const r=new ToolRegistry();r.register(aTool);return new AgentHarness(r,planner)};
+const run = (a, overrides={}) => a.run({request:"test",sessionId:"test",grantedCapabilities:new Set(),...overrides});
+const plan = (call={callId:"1",toolId:"demo.tool",input:{}}) => ({next:async (_,observations)=>observations.length?{type:"done",response:"Done"}:{type:"tool",call}});
+test("registry rejects duplicate ids",()=>{const r=new ToolRegistry();r.register(tool());assert.throws(()=>r.register(tool()),/already registered/)});
+test("registry rejects invalid ids",()=>assert.throws(()=>new ToolRegistry().register(tool({id:"../bad"})),/Invalid/));
+test("simple bounded tool finishes",async()=>{const result=await run(build(tool(),plan()));assert.equal(result.status,"completed");assert.equal(result.trace.filter(e=>e.type==="tool_result").length,1)});
+test("unknown tool blocked",async()=>{const result=await run(build(tool(),plan({callId:"1",toolId:"unknown",input:{}})));assert.equal(result.status,"blocked")});
+test("invalid input blocked",async()=>{const result=await run(build(tool({validateInput:()=>false}),plan()));assert.equal(result.status,"blocked")});
+test("capability denial prevents execution",async()=>{let executed=false;const result=await run(build(tool({capabilities:["contacts.read"],execute:async()=>{executed=true;return {status:"success",data:1}}}),plan()));assert.equal(result.status,"blocked");assert.equal(executed,false)});
+test("external side effects always require approval",async()=>{let executed=false;const result=await run(build(tool({hasExternalSideEffect:true,execute:async()=>{executed=true;return {status:"success",data:1}}}),plan()));assert.equal(result.status,"awaiting_approval");assert.equal(executed,false)});
+test("matching approval executes exact call",async()=>{const call={callId:"1",toolId:"demo.tool",input:{name:"ROM"}};const result=await run(build(tool({hasExternalSideEffect:true}),plan(call)),{approvedFingerprints:new Set([approvalFingerprint(call,"test")])});assert.equal(result.status,"completed")});
+test("approval cannot be reused with altered input",async()=>{const first={callId:"1",toolId:"demo.tool",input:{name:"ROM"}};const second={callId:"1",toolId:"demo.tool",input:{name:"Other"}};const result=await run(build(tool({hasExternalSideEffect:true}),plan(second)),{approvedFingerprints:new Set([approvalFingerprint(first,"test")])});assert.equal(result.status,"awaiting_approval")});
+test("approval canonicalizes input property order",()=>assert.equal(approvalFingerprint({callId:"1",toolId:"t",input:{b:1,a:2}},"test"), approvalFingerprint({callId:"1",toolId:"t",input:{a:2,b:1}},"test")));
+test("cancellation stops before plan",async()=>{const c=new AbortController();c.abort();assert.equal((await run(build(tool(),plan()),{signal:c.signal})).status,"cancelled")});
+test("tool failures reported",async()=>{const result=await run(build(tool({execute:async()=>{throw Error("secret")}}),plan()));assert.equal(result.status,"failed");assert.ok(!JSON.stringify(result).includes("secret"))});
+test("step budget terminates loop",async()=>{let n=0;const endless={next:async()=>({type:"tool",call:{callId:String(++n),toolId:"demo.tool",input:{}}})};const result=await run(build(tool(),endless),{maxSteps:2});assert.equal(result.status,"failed");assert.match(result.reason,/budget/)});
+test("demo executes no real device actions",async()=>{const registry=new ToolRegistry();for(const t of createDemoTools())registry.register(t);const result=await run(new AgentHarness(registry,demoPlanner),{request:"open camera",grantedCapabilities:new Set(["apps.launch"])});assert.equal(result.status,"completed");assert.match(result.response,/simulated/)});
+
+test("approval cannot cross a session",async()=>{const call={callId:"1",toolId:"demo.tool",input:{name:"ROM"}};const result=await run(build(tool({hasExternalSideEffect:true}),plan(call)),{sessionId:"different",approvedFingerprints:new Set([approvalFingerprint(call,"test")])});assert.equal(result.status,"awaiting_approval")});
+test("duplicate tool calls blocked",async()=>{let n=0;const dup={next:async()=>({type:"tool",call:{callId:"dup",toolId:"demo.tool",input:{}}})};const result=await run(build(tool({execute:async()=>{n++;return {status:"success",data:true}}}),dup));assert.equal(result.status,"blocked");assert.equal(n,1)});
+test("tool blocked result stops execution",async()=>{const result=await run(build(tool({execute:async()=>({status:"blocked",reason:"Not available"})}),plan()));assert.equal(result.status,"blocked")});
+test("planner failures do not expose exception messages",async()=>{const result=await run(build(tool(),{next:async()=>{throw Error("private-data")}}));assert.equal(result.status,"failed");assert.ok(!JSON.stringify(result).includes("private-data"))});
+test("high risk action requires approval",async()=>{const result=await run(build(tool({risk:"high"}),plan()));assert.equal(result.status,"awaiting_approval")});

@@ -1,0 +1,17 @@
+{
+  "name": "personal-ai-assistant",
+  "version": "0.2.0",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": {"node": ">=22.13.0"},
+  "scripts": {
+    "test": "node --experimental-strip-types --test packages/agent-core/test/*.test.mjs scripts/test/*.test.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspace @paa/mobile",
+    "start:mobile": "npm run start --workspace @paa/mobile",
+    "android": "npm run android --workspace @paa/mobile",
+    "ios": "npm run ios --workspace @paa/mobile",
+    "web": "npm run web --workspace @paa/mobile",
+    "web:export": "npm run web:export --workspace @paa/mobile"
+  },
+  "devDependencies": {"typescript": "~5.9.2"}
+}
