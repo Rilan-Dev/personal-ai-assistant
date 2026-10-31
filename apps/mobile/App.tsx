@@ -16,6 +16,8 @@ import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, stopOwnerLiveVoice } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
+import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig } from './src/native/sarvamVoiceConfig';
+import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
@@ -80,6 +82,12 @@ export default function App() {
   const [speaking, setSpeaking] = useState(false);
   const [voiceLanguage, setVoiceLanguage] = useState('');
   const [voiceNotice, setVoiceNotice] = useState('');
+  const [sarvamOrgId,setSarvamOrgId]=useState('');
+  const [sarvamWorkspaceId,setSarvamWorkspaceId]=useState('');
+  const [sarvamAppId,setSarvamAppId]=useState('');
+  const [sarvamVoiceSaved,setSarvamVoiceSaved]=useState(false);
+  const [sarvamVoiceBusy,setSarvamVoiceBusy]=useState(false);
+  const [sarvamVoiceNotice,setSarvamVoiceNotice]=useState('');
   const [liveVoiceStatus,setLiveVoiceStatus] = useState<LiveVoiceStatus>({
     state:'stopped',message:'No live conversation',microphoneActive:false
   });
@@ -95,7 +103,7 @@ export default function App() {
   },[screenSnapshot]);
 
   const voiceInProgress = useRef(false);
-  const voiceEnabled = engine.live && voiceBridgeAvailable();
+  const voiceEnabled = engine.live && (voiceBridgeAvailable() || sarvamSpeechAvailable());
   const counter = useRef(2);
   const activeAbort = useRef<AbortController | null>(null);
 
@@ -150,10 +158,49 @@ export default function App() {
     });
     return ()=>{enabled=false;appState.remove();};
   },[engine.live,tab]);
+  useEffect(()=>{
+    if(!engine.live||!sarvamVoiceConfigAvailable())return;
+    let mounted=true;
+    readSarvamVoiceConfig().then(saved=>{
+      if(!mounted||!saved)return;
+      setSarvamOrgId(saved.orgId);
+      setSarvamWorkspaceId(saved.workspaceId);
+      setSarvamAppId(saved.appId);
+      setSarvamVoiceSaved(true);
+    }).catch(()=>{});
+    return ()=>{mounted=false;};
+  },[engine.live]);
+  const saveSarvamAgent=async()=>{
+    if(!engine.live||sarvamVoiceBusy)return;
+    setSarvamVoiceBusy(true);setSarvamVoiceNotice('');
+    try {
+      await saveSarvamVoiceConfig({
+        orgId:sarvamOrgId.trim(),workspaceId:sarvamWorkspaceId.trim(),appId:sarvamAppId.trim()
+      });
+      setSarvamVoiceSaved(true);
+      setSarvamVoiceNotice('Voice Agent IDs securely saved. Select Sarvam AI and save its API key above.');
+    } catch {
+      setSarvamVoiceNotice('Invalid Sarvam Voice Agent IDs or encrypted storage unavailable. Use IDs shown in your Sarvam dashboard.');
+    } finally{setSarvamVoiceBusy(false);}
+  };
+  const removeSarvamAgent=async()=>{
+    if(sarvamVoiceBusy)return;
+    setSarvamVoiceBusy(true);
+    try {
+      await deleteSarvamVoiceConfig();
+      setSarvamOrgId('');setSarvamWorkspaceId('');setSarvamAppId('');
+      setSarvamVoiceSaved(false);setSarvamVoiceNotice('Voice Agent configuration erased.');
+    }catch{setSarvamVoiceNotice('Unable to erase Voice Agent configuration.');}
+    finally{setSarvamVoiceBusy(false);}
+  };
   const startLiveVoice=async()=>{
     if(!engine.live||liveVoiceBusy||running)return;
-    if(!activeProvider||activeProvider.provider!=='openai'){
-      setVoiceNotice('For live speech, first save an OpenAI provider key in Settings. The chat model and realtime voice model are separate.');
+    if(!activeProvider||!['openai','sarvam'].includes(activeProvider.provider)){
+      setVoiceNotice('For live speech, select Sarvam AI or OpenAI and save its API key in Settings.');
+      return;
+    }
+    if(activeProvider.provider==='sarvam'&&!sarvamVoiceSaved){
+      setVoiceNotice('For Sarvam live voice, save organization, workspace and committed Voice Agent IDs in Settings.');
       return;
     }
     setLiveVoiceBusy(true);setVoiceNotice('');
@@ -381,6 +428,21 @@ export default function App() {
     voiceInProgress.current = true;
     setVoiceNotice('');
     try {
+      if(activeProvider?.provider==='sarvam'){
+        if(!sarvamSpeechAvailable()){
+          setVoiceNotice('Sarvam speech recognition is not available in this Android build.');
+          return;
+        }
+        if(!await requestMicForSarvamDictation()){
+          setVoiceNotice('Microphone permission declined. No audio was uploaded.');
+          return;
+        }
+        setListening(true);
+        const dictated=await dictateSarvamOnce();
+        setInput(dictated);
+        setVoiceNotice('Sarvam Saaras v4 recognized one spoken command. Review it in Chat before sending. Live conversations never show transcripts.');
+        return;
+      }
       const available = await getVoiceCapabilities();
       if (!available.onDeviceRecognition || !available.offlineOnly) {
         setVoiceNotice('On-device speech recognition is not installed. No cloud fallback is used.');
@@ -402,7 +464,10 @@ export default function App() {
     }
   };
   const cancelListening = async () => {
-    try { await cancelOnDeviceTranscription(); }
+    try {
+      if(activeProvider?.provider==='sarvam')await cancelSarvamDictation();
+      else await cancelOnDeviceTranscription();
+    }
     catch { setVoiceNotice('Unable to cancel input. Leaving the app stops the microphone.'); }
   };
   const readLastReply = async () => {
@@ -415,14 +480,22 @@ export default function App() {
     setSpeaking(true);
     setVoiceNotice('');
     try {
-      await speakOffline(last.slice(0, 1000), voiceLanguage);
-      setVoiceNotice('Voice playback finished using an installed offline voice.');
+      if(activeProvider?.provider==='sarvam'){
+        await speakSarvamOnce(last.slice(0,1000),voiceLanguage||'en-IN');
+        setVoiceNotice('Sarvam Bulbul v4 Flash voice response completed. No audio was stored.');
+      } else {
+        await speakOffline(last.slice(0, 1000), voiceLanguage);
+        setVoiceNotice('Voice playback finished using an installed offline voice.');
+      }
     } catch {
       setVoiceNotice('Speech stopped or an offline voice is unavailable for this language.');
     } finally { setSpeaking(false); }
   };
   const cancelSpeaking = async () => {
-    try { await stopOfflineSpeech(); }
+    try {
+      if(activeProvider?.provider==='sarvam')await stopSarvamSpeech();
+      else await stopOfflineSpeech();
+    }
     catch { setVoiceNotice('Unable to stop speech playback.'); }
   };
   const approvePending = async () => {
@@ -576,7 +649,7 @@ export default function App() {
           <Text style={styles.eyebrow}>VOICE ASSISTANT</Text>
           <View style={[styles.voiceOrb,listening && styles.voiceOrbActive]}><Text style={styles.voiceOrbGlyph}>{listening ? '◉' : '✦'}</Text></View>
           <Text style={styles.voiceHeadline}>{listening?'Listening…':speaking?'Speaking…':'Speak naturally'}</Text>
-          <Text style={styles.voiceSubline}>Tap to speak using Android's on-device speech recognizer. Review the transcript before sending.</Text>
+          <Text style={styles.voiceSubline}>{activeProvider?.provider==='sarvam'?'Tap to dictate with Sarvam Saaras v4, or start a live audio conversation without on-screen transcripts.':'Tap to speak using Android on-device recognition. Review the result before sending.'}</Text>
           <Pressable accessibilityRole="button" disabled={running || speaking || (voiceInProgress.current && !listening)}
             onPress={listening?cancelListening:listenForCommand}
             style={[styles.voiceBigButton,listening&&styles.voiceStopButton]}>
@@ -611,8 +684,12 @@ export default function App() {
               {liveVoiceStatus.state==='listening'?'LIVE':liveVoiceStatus.state}
             </Text>
           </View>
-          <Text style={styles.cardText}>Owner-started OpenAI Realtime audio session. Your microphone audio is sent to OpenAI over encrypted WebSocket until you stop it. A visible Android notification also has Stop. Live mode has no device-control tools.</Text>
-          <Text style={styles.settingHelp}>Voice model: gpt-realtime-2.1-mini · OpenAI API usage charges may apply.</Text>
+          <Text style={styles.cardText}>{activeProvider?.provider==='sarvam'
+            ? 'Sarvam managed Voice Agents: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
+            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Neither voice mode can execute device tools.'}</Text>
+          <Text style={styles.settingHelp}>{activeProvider?.provider==='sarvam'
+            ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
+            : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
           <Pressable accessibilityRole="button" disabled={running||liveVoiceBusy||!engine.live}
             style={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?styles.outlineAction:styles.primaryInline}
@@ -624,7 +701,7 @@ export default function App() {
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Live session limitations</Text>
-          <Text style={styles.cardText}>Realtime streaming is experimental and depends on OpenAI network access, subscription credits, device audio routing and Android background restrictions. It must be started from this visible screen. Never starts at boot or from an AI instruction.</Text>
+          <Text style={styles.cardText}>Realtime streaming requires an authorized Sarvam managed Voice Agent or OpenAI realtime account. Native microphone recording only starts from a visible user action and may continue through an Android foreground notification while other apps are visible. Network interruptions and platform audio policies can stop the session. No wake-word or unattended recording.</Text>
         </View>
         <Text style={styles.mutedSmall}>No wake word or unattended recording. A user-started live voice service may continue while you use another app, with Android's microphone indicator and Stop notification.</Text>
       </ScrollView>}
@@ -726,7 +803,7 @@ export default function App() {
           {showProvider&&<View style={styles.configContents}>
             <Text style={styles.fieldLabel}>PROVIDER</Text>
             <View style={styles.buttonRow}>
-              {(['openai','gemini','groq','openrouter'] as DirectProviderId[]).map(id=>
+              {(['sarvam','openai','gemini','groq','openrouter'] as DirectProviderId[]).map(id=>
                 <Pressable key={id} disabled={running||providerBusy}
                   accessibilityRole="button" accessibilityState={{selected:providerChoice===id}}
                   style={[styles.choicePill,providerChoice===id&&styles.choiceActive]}
@@ -745,7 +822,7 @@ export default function App() {
               autoCorrect={false} autoComplete="off" secureTextEntry editable={!running&&!providerBusy}
               placeholder={activeProvider?.provider===providerChoice?'Key saved securely · enter a replacement':'Paste your API key'}
               placeholderTextColor="#8190a8"/>
-            <Text style={styles.settingHelp}>Stored using Android Keystore. Your prompts are sent directly to your chosen provider over HTTPS. Provider usage may cost money.</Text>
+            <Text style={styles.settingHelp}>Stored using Android Keystore. Chat requests are sent to your chosen provider over HTTPS. Sarvam uses sarvam-105b for chat; Saaras v4 for one-shot dictation; Bulbul v4 Flash for speech playback. Live audio uses a separately configured Sarvam Voice Agent. Usage may be billed.</Text>
             <View style={styles.buttonRow}>
               <Pressable accessibilityRole="button" disabled={running||providerBusy}
                 onPress={testAiConnection} style={styles.outlineInline}>
@@ -763,6 +840,42 @@ export default function App() {
             {providerNotice!==''&&<Text style={styles.feedback}>{providerNotice}</Text>}
           </View>}
         </View>
+        {engine.live&&<View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardHeading}>Sarvam Voice Agent (live STS)</Text>
+            <Text style={[styles.sectionTag,sarvamVoiceSaved&&styles.sectionTagActive]}>
+              {sarvamVoiceSaved?'Saved':'Not configured'}
+            </Text>
+          </View>
+          <Text style={styles.cardText}>For direct audio-to-audio live conversations with Sarvam, create and commit a Voice Agent in the Sarvam dashboard. Enter its organization, workspace and application IDs. These are encrypted on-device; the Sarvam API key is saved in AI Configuration above.</Text>
+          <Text style={styles.settingHelp}>The live session sends PCM16 microphone audio over a signed Sarvam WebSocket and plays returned PCM audio. No transcript is displayed, sent to Chat, or saved locally. Sarvam performs recognition and reasoning on its servers and may retain call records under your Sarvam account policy.</Text>
+          <Text style={styles.fieldLabel}>SARVAM ORGANIZATION ID</Text>
+          <TextInput accessibilityLabel="Sarvam organization ID" style={styles.settingInput}
+            value={sarvamOrgId} onChangeText={v=>{setSarvamOrgId(v);setSarvamVoiceSaved(false);}}
+            placeholder="Organization ID" placeholderTextColor="#8190a8"
+            autoCapitalize="none" autoCorrect={false}/>
+          <Text style={styles.fieldLabel}>WORKSPACE ID</Text>
+          <TextInput accessibilityLabel="Sarvam workspace ID" style={styles.settingInput}
+            value={sarvamWorkspaceId} onChangeText={v=>{setSarvamWorkspaceId(v);setSarvamVoiceSaved(false);}}
+            placeholder="Workspace ID" placeholderTextColor="#8190a8"
+            autoCapitalize="none" autoCorrect={false}/>
+          <Text style={styles.fieldLabel}>VOICE AGENT APP ID</Text>
+          <TextInput accessibilityLabel="Sarvam Voice Agent app ID" style={styles.settingInput}
+            value={sarvamAppId} onChangeText={v=>{setSarvamAppId(v);setSarvamVoiceSaved(false);}}
+            placeholder="App ID (committed voice agent)" placeholderTextColor="#8190a8"
+            autoCapitalize="none" autoCorrect={false}/>
+          <View style={styles.buttonRow}>
+            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||running}
+              style={styles.primaryInline} onPress={saveSarvamAgent}>
+              <Text style={styles.primaryInlineText}>{sarvamVoiceBusy?'Working…':'Save Sarvam Voice Agent'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||running}
+              style={styles.outlineInline} onPress={removeSarvamAgent}>
+              <Text style={styles.outlineInlineText}>Clear</Text>
+            </Pressable>
+          </View>
+          {sarvamVoiceNotice!==''&&<Text style={styles.feedback}>{sarvamVoiceNotice}</Text>}
+        </View>}
         {engine.live&&<View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Advanced agent backend</Text>
           <Text style={styles.cardText}>Optional LangGraph planner using your HTTPS endpoint and token. Only bounded tool outcomes are sent.</Text>

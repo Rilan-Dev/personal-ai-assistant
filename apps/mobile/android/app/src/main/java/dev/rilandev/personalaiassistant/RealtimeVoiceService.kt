@@ -59,6 +59,9 @@ class RealtimeVoiceService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private val active = AtomicBoolean(false)
     private var socket: WebSocket? = null
+    private var sarvamTransport: SarvamAudioTransport? = null
+    private var selectedProvider = "openai"
+    private var activeRate = RATE
     private var client: OkHttpClient? = null
     private var recorder: AudioRecord? = null
     private var player: AudioTrack? = null
@@ -112,17 +115,49 @@ class RealtimeVoiceService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        val key = try { AgentJournalModule.openAiVoiceKey(applicationContext) } catch (_: Exception) { null }
-        if (key.isNullOrBlank()) {
-            stopWithStatus("error","Configure your OpenAI API key in Settings first")
+        val credentials=try {
+            AgentJournalModule.openVoiceCredentials(applicationContext)
+        } catch (_: Exception) { null }
+        if (credentials == null) {
+            stopWithStatus("error","Configure a supported voice provider and Voice Agent IDs")
             return START_NOT_STICKY
         }
+        selectedProvider=credentials.provider
+        activeRate=if(selectedProvider=="sarvam")16000 else RATE
         active.set(true)
-        status = "connecting"
-        message = "Connecting to live voice provider"
-        main.postDelayed(maxSession, 15*60*1000L)
-        main.postDelayed(handshakeTimeout, 15_000L)
-        connect(key)
+        status="connecting"
+        message="Connecting to "+(if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
+        main.postDelayed(maxSession,15*60*1000L)
+        main.postDelayed(handshakeTimeout,25_000L)
+        if(selectedProvider=="sarvam") {
+            val transport=SarvamAudioTransport(object:SarvamAudioTransport.Callbacks{
+                override fun connected() {
+                    main.post {if(active.get() && status=="connecting")startAudio()}
+                }
+                override fun audio(bytes:ByteArray) {
+                    if(!audioQueue.offer(bytes))
+                        main.post {if(active.get())stopWithStatus("error","Voice playback buffer overloaded")}
+                }
+                override fun interrupted(){
+                    main.post {
+                        audioQueue.clear()
+                        try {
+                            player?.pause()
+                            player?.flush()
+                            if(active.get())player?.play()
+                        }catch(_:Exception){}
+                    }
+                }
+                override fun failed(reason:String){
+                    main.post {if(active.get())stopWithStatus("error",reason)}
+                }
+                override fun ended(){
+                    main.post {if(active.get())stopWithStatus("stopped","Sarvam ended voice session")}
+                }
+            })
+            sarvamTransport=transport
+            transport.connect(credentials)
+        } else connect(credentials.apiKey)
         return START_NOT_STICKY
     }
 
@@ -243,12 +278,12 @@ class RealtimeVoiceService : Service() {
             if (focus != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                 throw IllegalStateException("Audio focus unavailable")
             }
-            val inputSize = maxOf(AudioRecord.getMinBufferSize(RATE,
+            val inputSize = maxOf(AudioRecord.getMinBufferSize(activeRate,
                 AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT),4096)
-            val outputSize = maxOf(AudioTrack.getMinBufferSize(RATE,
+            val outputSize = maxOf(AudioTrack.getMinBufferSize(activeRate,
                 AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT),4096)
             val record = AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                RATE,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,inputSize*2)
+                activeRate,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,inputSize*2)
             if (record.state!=AudioRecord.STATE_INITIALIZED) {
                 record.release()
                 throw IllegalStateException("Audio recorder unavailable")
@@ -264,7 +299,7 @@ class RealtimeVoiceService : Service() {
                 noiseSuppressor = NoiseSuppressor.create(record.audioSessionId)
                 try { noiseSuppressor?.enabled = true } catch (_: Exception) {}
             }
-            val playback = AudioTrack(AudioManager.STREAM_MUSIC,RATE,
+            val playback = AudioTrack(AudioManager.STREAM_MUSIC,activeRate,
                 AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,
                 outputSize*2,AudioTrack.MODE_STREAM)
             if (playback.state!=AudioTrack.STATE_INITIALIZED) {
@@ -293,18 +328,23 @@ class RealtimeVoiceService : Service() {
                 }
             },"paa-voice-playback").also { it.start() }
             captureThread = Thread({
-                val data = ByteArray(1920) // 40ms of 24kHz, mono PCM16
+                val data = ByteArray(activeRate*2/25) // 40ms PCM16 mono
                 while (active.get()) {
                     val got = try { recorder?.read(data,0,data.size) ?: break }
                         catch (_: Exception) { break }
                     if (got>0) {
-                        val encoded = Base64.encodeToString(data.copyOf(got),Base64.NO_WRAP)
-                        val payload = JSONObject()
-                            .put("type","input_audio_buffer.append")
-                            .put("audio",encoded).toString()
-                        val ws = socket ?: break
-                        if (ws.queueSize()>256*1024 || !ws.send(payload)) {
-                            main.post { stopWithStatus("error","Voice network too slow") }
+                        val bytes=data.copyOf(got)
+                        val sent=if(selectedProvider=="sarvam"){
+                            sarvamTransport?.sendAudio(bytes) ?: false
+                        }else{
+                            val encoded=Base64.encodeToString(bytes,Base64.NO_WRAP)
+                            val ws=socket
+                            ws!=null && ws.queueSize()<=256*1024 && ws.send(JSONObject()
+                                .put("type","input_audio_buffer.append")
+                                .put("audio",encoded).toString())
+                        }
+                        if(!sent){
+                            main.post {if(active.get())stopWithStatus("error","Voice network too slow")}
                             break
                         }
                     }
@@ -337,6 +377,8 @@ class RealtimeVoiceService : Service() {
         audioManager = null
         try { player?.pause(); player?.flush(); player?.release() } catch (_: Exception) {}
         player = null
+        sarvamTransport?.close()
+        sarvamTransport=null
         try { socket?.close(1000,"owner-stop") } catch (_: Exception) {}
         socket = null
         client?.dispatcher?.executorService?.shutdown()

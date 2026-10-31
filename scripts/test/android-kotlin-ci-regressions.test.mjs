@@ -10,8 +10,8 @@ const source = name=>readFileSync(
 test("Android secure journal revokes voice service through ReactApplicationContext",()=>{
   const text=source("AgentJournalModule.kt");
   const revocations=text.match(/reactApplicationContext\.stopService\(/g)||[];
-  assert.equal(revocations.length,2,
-    "both provider key replacement and deletion must stop live voice");
+  assert.equal(revocations.length,4,
+    "provider and Sarvam agent updates and deletions must stop live voice");
   assert.doesNotMatch(text,/(?<!\w)context\.stopService\(/,
     "Kotlin primary constructor argument is not an instance property");
   assert.match(text,/android\.content\.Intent\(reactApplicationContext, RealtimeVoiceService::class\.java\)/);

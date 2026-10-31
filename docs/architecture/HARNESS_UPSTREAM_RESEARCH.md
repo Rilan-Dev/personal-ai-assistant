@@ -134,3 +134,33 @@ denied permissions, cancellations and incomplete observations.
   must be explicitly reviewed in the editable chat composer before Send.
 - Official Android microphone FGS/Accessibility and OpenAI realtime API
   contracts: docs/architecture/MOBILE_UX_BACKGROUND_ASSIST.md.
+
+## 2026-11-01 — Sarvam managed Voice Agents protocol and direct provider
+Upstream implementation reviewed: npm sarvam-conv-ai-sdk@0.0.42,
+MIT license, downloaded using npm pack and read actual
+dist/modules/socket-manager.js, voice-agent.js, utils/message.js,
+types/types.js and interfaces/react-native.js. Official reference:
+https://docs.sarvam.ai/voice-agents/deploy/sdks/react-native
+
+The native Android implementation reuses verified signed-URL,
+PCM16, client.media.audio_chunk, server.media.audio_chunk,
+interaction_connected and interruption message contracts.
+The SDK's RN audio interface is JavaScript-mediated and has a
+react-native-audio-api native peer; a native Android foreground
+service was chosen instead so the user-started microphone is
+managed by Android independently of the React Native screen.
+The app does not install the upstream SDK or assume its
+transcript/telemetry callback is privacy-safe: inspected upstream
+sources show raw message logging on some parse errors. The native
+integration intentionally excludes transcript and text handlers.
+
+Other official model documents:
+https://docs.sarvam.ai/api/token-factory/chat-completions
+https://docs.sarvam.ai/api-reference/speech-to-text/transcribe
+https://docs.sarvam.ai/api-reference/text-to-speech/convert
+
+Chat uses Sarvam-105B JSON-mode completions through the existing
+exact-intent Android AgentHarness and approval journal. Speech
+dictation/TTS are separate explicitly user-invoked utilities,
+not a new autonomous planner. The full-duplex Voice Agent does
+not receive Android app or private-device tool capabilities.

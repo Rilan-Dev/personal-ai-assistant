@@ -140,3 +140,22 @@ succeed. Documentation-only changes do not trigger the pipeline.
 The original five workflows remain manual-only. The owner also authorizes
 selective manual runs when authenticated GitHub Actions write access is
 available. See docs/architecture/ANDROID_RELEASE_TEST_APK.md.
+
+## Sarvam AI chat, dictation, speech synthesis, live audio
+
+The Android application now offers Sarvam AI as a BYOK provider under
+Settings > AI Configuration. The default chat model is sarvam-105b,
+authenticated with api-subscription-key over the official HTTPS API.
+
+The separate Voice tab uses Sarvam Saaras v4 for explicit one-shot
+dictation, Bulbul v4 Flash for optional read-aloud, and a native
+Android WebSocket for owner-started full-duplex managed Sarvam Voice
+Agents. Configure a **committed** Sarvam agent's org, workspace and
+app IDs under Settings > Sarvam Voice Agent. Android Keystore encrypts
+the account key and agent settings. Live audio travels directly to
+Sarvam and returns directly to the speaker; the app **does not
+display, persist or forward live voice transcripts**. Sarvam itself
+may perform speech recognition and retain call data on its servers.
+
+For provider setup, protocol, source validation and acceptance
+limitations, see docs/architecture/SARVAM_AI_INTEGRATION.md.

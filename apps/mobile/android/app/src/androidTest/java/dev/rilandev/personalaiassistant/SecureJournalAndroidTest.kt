@@ -128,6 +128,47 @@ class SecureJournalAndroidTest {
         assertNull(AgentJournalModule.openAiVoiceKey(appContext))
     }
 
+    @Test fun sarvamVoiceAgentIdsAndKeyRemainEncryptedAndSeparated() {
+        val uniqueKey="synthetic-sarvam-"+UUID.randomUUID().toString()
+        val saved=JSONObject().put("version",1).put("provider","sarvam")
+            .put("model","sarvam-105b").put("apiKey",uniqueKey).toString()
+        val org="org_"+UUID.randomUUID().toString()
+        val work="ws_"+UUID.randomUUID().toString()
+        val app="app_"+UUID.randomUUID().toString()
+        val first=journal()
+        try {
+            assertEquals(true,invoke { first.saveProviderSettings(saved,it) })
+            assertNull("Sarvam key must not be used as OpenAI",AgentJournalModule.openAiVoiceKey(appContext))
+            assertNull("Voice without owner-saved IDs must fail closed",
+                AgentJournalModule.openVoiceCredentials(appContext))
+            assertEquals(true,invoke { first.saveSarvamVoiceAgent(org,work,app,it) })
+            val loaded=JSONObject(invoke { journal().loadSarvamVoiceAgent(it) } as String)
+            assertEquals(org,loaded.getString("orgId"))
+            assertEquals(work,loaded.getString("workspaceId"))
+            assertEquals(app,loaded.getString("appId"))
+            assertFalse("Do not expose user identifier to JS",loaded.has("userId"))
+            val credentials=AgentJournalModule.openVoiceCredentials(appContext)
+            assertNotNull(credentials)
+            assertEquals("sarvam",credentials!!.provider)
+            assertEquals(uniqueKey,credentials.apiKey)
+            assertEquals(org,credentials.orgId)
+            assertEquals(work,credentials.workspaceId)
+            assertEquals(app,credentials.appId)
+            assertTrue(credentials.userId.length>=4)
+            val prefs=appContext.getSharedPreferences("paa_secure_journal_v1",Context.MODE_PRIVATE)
+            assertFalse("Sarvam secrets/IDs should not be plaintext",prefs.all.values.any{
+                val raw=it.toString()
+                raw.contains(uniqueKey)||raw.contains(org)||raw.contains(work)||raw.contains(app)
+            })
+            assertEquals(true,invoke { journal().clearSarvamVoiceAgent(it) })
+            assertNull(AgentJournalModule.openVoiceCredentials(appContext))
+        } finally {
+            assertEquals(true,invoke { journal().clearSarvamVoiceAgent(it) })
+            assertEquals(true,invoke { journal().clearProviderSettings(it) })
+        }
+        assertNull(AgentJournalModule.openSarvamApiKey(appContext))
+    }
+
     @Test fun providerKeyIsEncryptedAndCanBeClearedAcrossModuleRecreation() {
         val unique = "not-a-real-api-key-" + UUID.randomUUID()
         val saved = JSONObject()

@@ -27,7 +27,8 @@ test("provider presets have fixed HTTPS endpoints and no arbitrary URL",()=>{
     assert.match(x.endpoint,/^https:\/\//);
     assert.match(x.endpoint,/\/chat\/completions$/);
   }
-  assert.equal(Object.keys(PROVIDERS).length,4);
+  assert.equal(Object.keys(PROVIDERS).length,5);
+  assert.equal(PROVIDERS.sarvam.defaultModel,"sarvam-105b");
 });
 test("validates owner model and key, rejects malformed/extra fields",()=>{
   assert.deepEqual(validateProviderSettings(settings),settings);
@@ -162,4 +163,25 @@ test("supports a single JSON code fence for compatible providers without looseni
     }),{status:200})
   });
   assert.deepEqual(await planner.next("What is AI?",[]),result);
+});
+
+
+test("Sarvam uses an official API subscription key and no cross-provider bearer header",async()=>{
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  let requests=0;
+  const planner=createDirectProviderPlanner({
+    settings:sarvam,availableToolIds:allowed,
+    fetchImpl:fakeDecision({type:"done",response:"Namaste!"},(url,opts)=>{
+      requests++;
+      assert.equal(url,"https://api.sarvam.ai/v1/chat/completions");
+      assert.equal(opts.headers["api-subscription-key"],sarvam.apiKey);
+      assert.equal(opts.headers.Authorization,undefined);
+      assert.equal(JSON.parse(opts.body).model,"sarvam-105b");
+      assert.deepEqual(JSON.parse(opts.body).response_format,{type:"json_object"});
+      assert.equal(JSON.parse(opts.body).max_tokens,2048);
+      assert.doesNotMatch(opts.body,/test-secret-key-not-real/);
+    })
+  });
+  assert.deepEqual(await planner.next("Say hello",[]),{type:"done",response:"Namaste!"});
+  assert.equal(requests,1);
 });

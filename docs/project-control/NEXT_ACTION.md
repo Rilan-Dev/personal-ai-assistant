@@ -221,3 +221,29 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   before npm ci if either missing.
 - Main pipeline runs automatically only ONCE per finished feature-set
   promotion; avoid incremental main pushes. Keep SHA/provenance matching.
+
+## Sarvam AI: release/acceptance gate
+- The source now supports Sarvam chat (sarvam-105b),
+  explicit dictation (saaras:v4), read-aloud (bulbul:v4-flash),
+  and audio-to-audio managed Voice Agent signed WebSocket in
+  Android microphone FGS. User configures API key and committed
+  Voice Agent org/workspace/app IDs in encrypted Settings.
+- Live app does NOT store/display transcripts. The managed
+  Sarvam backend MAY internally generate/store call data;
+  verify dashboard retention and user consent separately.
+- Before release, run npm ci/tests/typecheck/web export,
+  one main promotion with native Kotlin, 21+ instrumentation
+  tests and signed release APK. Fix native build/test errors
+  on Development first, push a new main promotion only after
+  a complete focused correction.
+- Owner physical UAT with Sarvam key and committed Voice Agent:
+  chat, read-aloud en-IN/ta-IN, STT editable one-turn,
+  speaker playback/echo, interruption/barge-in, audio focus
+  loss, Stop notification, 15m cutoff, background app
+  switching and network errors. Never capture real personal
+  speech in automated tests or logs.
+- Existing permission and approval policies remain; no
+  live Voice Agent tools can call Android contacts, apps,
+  messages or accessibility controls.
+- Full native integration and live-provider activation remain
+  conditional until evidence from manual physical phone test.

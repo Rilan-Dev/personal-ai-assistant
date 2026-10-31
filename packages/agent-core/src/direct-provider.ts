@@ -12,7 +12,8 @@ export const PROVIDERS = Object.freeze({
   openai: { label: "OpenAI", endpoint: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4.1-mini" },
   gemini: { label: "Google Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-3.8-flash" },
   groq: { label: "Groq", endpoint: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "openai/gpt-oss-120b" },
-  openrouter: { label: "OpenRouter", endpoint: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "openai/gpt-4.1-mini" }
+  openrouter: { label: "OpenRouter", endpoint: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "openai/gpt-4.1-mini" },
+  sarvam: { label: "Sarvam AI", endpoint: "https://api.sarvam.ai/v1/chat/completions", defaultModel: "sarvam-105b" }
 });
 export type DirectProviderId = keyof typeof PROVIDERS;
 export type DirectProviderSettings = {
@@ -120,9 +121,17 @@ export function createDirectProviderPlanner(options: DirectProviderOptions): Pla
         const response = await fetcher(provider.endpoint,{
           method:"POST",
           redirect:"error",
-          headers:{"content-type":"application/json",Authorization:"Bearer "+cfg.apiKey},
+          headers:cfg.provider === "sarvam"
+            ? {"content-type":"application/json","api-subscription-key":cfg.apiKey}
+            : {"content-type":"application/json",Authorization:"Bearer "+cfg.apiKey},
           body:JSON.stringify({
             model:cfg.model,
+            // Sarvam V1 supports JSON mode, useful for explicit bounded
+            // tool proposals. The native Android policy still validates
+            // the output and never trusts LLM-generated calls directly.
+            ...(cfg.provider==="sarvam"
+              ? {response_format:{type:"json_object"},max_tokens:2048}
+              : {}),
             messages:[
               {role:"system",content:INSTRUCTIONS + "\nAvailable tools on this phone: " + ids.join(", ")},
               {role:"user",content:request}

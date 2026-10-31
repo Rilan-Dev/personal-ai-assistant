@@ -19,7 +19,7 @@ test("background microphone only runs as owner-started notification foreground s
   assert.match(code,/Notification\.Action\.Builder/);
   assert.match(code,/Stop voice/);
   assert.match(code,/START_NOT_STICKY/);
-  assert.match(code,/main\.postDelayed\(maxSession, 15\*60\*1000L\)/);
+  assert.match(code,/main\.postDelayed\(maxSession,\s*15\*60\*1000L\)/);
   assert.match(code,/STOP_FOREGROUND_REMOVE/);
   assert.match(js,/PermissionsAndroid\.PERMISSIONS\.RECORD_AUDIO/);
   assert.match(js,/PermissionsAndroid\.PERMISSIONS\.POST_NOTIFICATIONS/);
@@ -30,7 +30,7 @@ test("live speech-to-speech uses authenticated fixed provider and no tool calls"
   const code=read(path+"RealtimeVoiceService.kt");
   assert.match(code,/wss:\/\/api\.openai\.com\/v1\/realtime\?model/);
   assert.match(code,/gpt-realtime-2\.1-mini/);
-  assert.match(code,/AgentJournalModule\.openAiVoiceKey/);
+  assert.match(code,/AgentJournalModule\.openVoiceCredentials/);
   assert.match(code,/Authorization","Bearer \$key/);
   assert.match(code,/RATE = 24000/);
   assert.match(code,/input_audio_buffer\.append/);

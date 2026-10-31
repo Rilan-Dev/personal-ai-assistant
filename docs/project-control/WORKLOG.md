@@ -439,3 +439,35 @@
 - Source/tests validated locally; native verification is contingent on the
   first controlled promotion of this objective to main. A GitHub Actions
   pass is not physical device or real-provider acceptance.
+
+## 2026-11-01 — Sarvam AI modalities implementation milestone
+- Inspected official Sarvam API documentation for sarvam-105b
+  (HTTPS chat), saaras:v4 (one-shot STT), bulbul:v4-flash (WAV TTS),
+  and Sarvam managed Samvaad Voice Agent signed WebSocket. Reviewed
+  sarvam-conv-ai-sdk@0.0.42 MIT source to map native wire messages.
+- Added Sarvam to DirectProvider planner and Android Keystore
+  validated provider allowlist, with api-subscription-key header,
+  JSON-mode response enforcement and Android exact-intent policy.
+- Added encrypted Sarvam Voice Agent org/workspace/app IDs and stable
+  pseudonymous user ID in Android journal. Saving or deleting provider
+  and Voice Agent config stops any live microphone session.
+- Added SarvamAudioTransport native OkHttp signed-URL handshake,
+  restricted *.sarvam.ai WSS trust boundary, PCM16 16k chunks,
+  ping/pong, audio playback, interruption and Stop paths. Live
+  voice events have NO transcript/text listeners or device tools.
+- Reused existing Android microphone foreground service, permission,
+  visible notification Stop, audio focus and 15m hard limit. Kept
+  separate OpenAI voice mode available.
+- Added Sarvam one-shot, foreground-checked SaaRAS v4 dictation
+  (memory-only WAV, owner-reviewed editable result) and Bulbul v4
+  read-last-response WAV playback with cancellation.
+- Extended Voice and Settings UI with Sarvam Voice Agent IDs, explicit
+  no-local-transcript disclosure, chat provider key/model selection,
+  session state and clear actions. Added source contract/security
+  regressions and Android Keystore instrumented synthetic-ID tests.
+- Live provider calls and real-device microphone/audio routing cannot
+  be tested without owner-configured Sarvam API credentials and a
+  committed Voice Agent. Automated tests do NOT prove live STS audio.
+- Development branch used; do not trigger any CI for incremental
+  commits. Promote only the tested entire milestone to main once,
+  then inspect consolidated native emulator and signed release outcome.

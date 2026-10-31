@@ -26,27 +26,57 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
     // Multi-process mode is intentionally not supported.
     internal companion object {
         val lock = Any()
-        /** Keystore-only access for an owner-started native Realtime session. */
-        fun openAiVoiceKey(ctx: Context): String? = synchronized(lock) {
+        /** Keystore-only access to the owner-selected chat provider for live voice. */
+        internal data class VoiceCredentials(
+            val provider: String, val apiKey: String, val orgId: String = "",
+            val workspaceId: String = "", val appId: String = "",
+            val userId: String = ""
+        )
+        private fun privateName(prefix: String): String {
             val digest=MessageDigest.getInstance("SHA-256").digest(
-                "private:provider-config:".toByteArray(StandardCharsets.UTF_8))
-            val name=Base64.encodeToString(digest,
+                "private:$prefix:".toByteArray(StandardCharsets.UTF_8))
+            return Base64.encodeToString(digest,
                 Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
+        }
+        private fun readEncrypted(ctx: Context, key: String): String? {
             val encrypted=ctx.getSharedPreferences("paa_secure_journal_v1",
-                Context.MODE_PRIVATE).getString(name,null) ?: return@synchronized null
+                Context.MODE_PRIVATE).getString(privateName(key),null) ?: return null
             val all=Base64.decode(encrypted,Base64.DEFAULT)
             require(all.size>28)
             val ks=KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-            val key=ks.getKey("PAA_Journal_v1",null) as? SecretKey ?: return@synchronized null
+            val secret=ks.getKey("PAA_Journal_v1",null) as? SecretKey ?: return null
             val cipher=Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE,key,
+            cipher.init(Cipher.DECRYPT_MODE,secret,
                 GCMParameterSpec(128,all.copyOfRange(0,12)))
-            val decoded=String(cipher.doFinal(all.copyOfRange(12,all.size)),
-                StandardCharsets.UTF_8)
-            val data=JSONObject(decoded)
-            if (data.optString("provider")!="openai") return@synchronized null
-            data.optString("apiKey").takeIf { it.length in 12..512 }
+            return String(cipher.doFinal(all.copyOfRange(12,all.size)),StandardCharsets.UTF_8)
         }
+        fun openSarvamApiKey(ctx: Context): String? = synchronized(lock) {
+            val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
+            val data=JSONObject(raw)
+            val key=data.optString("apiKey")
+            if(data.optString("provider")!="sarvam" || key.length !in 12..512)
+                null else key
+        }
+        fun openVoiceCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
+            val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
+            val data=JSONObject(raw)
+            val provider=data.optString("provider")
+            if (provider != "openai" && provider != "sarvam") return@synchronized null
+            val key=data.optString("apiKey")
+            if (key.length !in 12..512) return@synchronized null
+            if (provider=="openai") return@synchronized VoiceCredentials(provider,key)
+            val voiceRaw=readEncrypted(ctx,"sarvam-voice") ?: return@synchronized null
+            val voice=JSONObject(voiceRaw)
+            val org=voice.optString("orgId")
+            val work=voice.optString("workspaceId")
+            val app=voice.optString("appId")
+            val user=voice.optString("userId")
+            if (listOf(org,work,app,user).any { !it.matches(Regex("[A-Za-z0-9_-]{4,128}")) })
+                return@synchronized null
+            VoiceCredentials(provider,key,org,work,app,user)
+        }
+        fun openAiVoiceKey(ctx: Context): String? =
+            openVoiceCredentials(ctx)?.takeIf { it.provider=="openai" }?.apiKey
     }
     override fun getName() = "PAAAgentJournal"
     private fun rejectSafe(p: Promise, code: String, e: Exception) {
@@ -114,7 +144,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             val obj = JSONObject(data)
             require(obj.optInt("version") == 1)
             require(obj.length() == 4)
-            require(obj.optString("provider") in listOf("openai", "gemini", "groq", "openrouter"))
+            require(obj.optString("provider") in listOf("openai", "gemini", "groq", "openrouter", "sarvam"))
             val model = obj.getString("model")
             require(model.matches(Regex("[A-Za-z0-9._:/-]{2,96}")))
             val key = obj.getString("apiKey")
@@ -145,6 +175,54 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                 android.content.Intent(reactApplicationContext, RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_CLEAR", e) }
+    }
+
+    /** Sarvam managed Voice Agent IDs are kept AES-GCM encrypted, separate
+     * from the provider key. No transcripts or audio are stored here. */
+    @ReactMethod fun saveSarvamVoiceAgent(orgId: String, workspaceId: String,
+                                          appId: String, p: Promise) {
+        try {
+            require(listOf(orgId,workspaceId,appId).all {
+                it.matches(Regex("[A-Za-z0-9_-]{4,128}"))
+            })
+            synchronized(lock) {
+                val old=read(name("private","sarvam-voice"))
+                val existing=old?.let { JSONObject(it).optString("userId") }
+                val userId=existing?.takeIf { it.matches(Regex("[A-Za-z0-9_-]{4,128}")) }
+                    ?: UUID.randomUUID().toString()
+                val data=JSONObject().put("orgId",orgId)
+                    .put("workspaceId",workspaceId).put("appId",appId)
+                    .put("userId",userId).toString()
+                write(name("private","sarvam-voice"),data)
+            }
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p,"SARVAM_VOICE_CONFIG",e) }
+    }
+    @ReactMethod fun loadSarvamVoiceAgent(p: Promise) {
+        try {
+            synchronized(lock) {
+                val saved=read(name("private","sarvam-voice"))
+                val result=saved?.let {
+                    val parsed=JSONObject(it)
+                    JSONObject().put("orgId",parsed.getString("orgId"))
+                        .put("workspaceId",parsed.getString("workspaceId"))
+                        .put("appId",parsed.getString("appId")).toString()
+                }
+                p.resolve(result)
+            }
+        } catch (e: Exception) { rejectSafe(p,"SARVAM_VOICE_READ",e) }
+    }
+    @ReactMethod fun clearSarvamVoiceAgent(p: Promise) {
+        try {
+            synchronized(lock) {
+                check(prefs.edit().remove(name("private","sarvam-voice")).commit())
+            }
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p,"SARVAM_VOICE_CLEAR",e) }
     }
 
     @ReactMethod fun newSessionId(p: Promise) { p.resolve(UUID.randomUUID().toString()) }
