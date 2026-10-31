@@ -28,6 +28,8 @@ test("Android debug APK can use a stable owner-held signing secret without publi
   const workflow=readFileSync(".github/workflows/android-debug.yml","utf8");
   const ignore=readFileSync(".gitignore","utf8");
   assert.match(workflow,/secrets\.PAA_DEBUG_KEYSTORE_B64/);
+  assert.match(workflow,/github\.event_name == 'push'/);
+  assert.match(workflow,/github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow,/base64 --decode > "\$path"/);
   assert.match(workflow,/keytool -list -keystore "\$path"/);
   assert.match(workflow,/if \[\[ -n "\$PAA_DEBUG_KEYSTORE_B64" \]\]/);

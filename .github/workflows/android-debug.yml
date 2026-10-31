@@ -33,7 +33,8 @@ jobs:
       - name: Prepare optional stable debug signing key
         shell: bash
         env:
-          PAA_DEBUG_KEYSTORE_B64: ${{ secrets.PAA_DEBUG_KEYSTORE_B64 }}
+          # Never expose a repository signing secret to pull-request builds.
+          PAA_DEBUG_KEYSTORE_B64: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.PAA_DEBUG_KEYSTORE_B64 || '' }}
         run: |
           set -euo pipefail
           umask 077

@@ -30,3 +30,8 @@ with a different key that would break data continuity.
 This is NOT a release signing workflow and is not proof of production
 security. Production release must use a distinct appropriately protected
 release key and explicitly audited Gradle configuration.
+
+## PR isolation
+The stable signer secret is referenced only on push events targeting main.
+All pull-request builds use fresh temporary debug keys, so untrusted PR code
+does not get the owner's persistent device-testing signing credential.
