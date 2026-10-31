@@ -68,3 +68,25 @@ sha256sum and signing verification. Confirm the SHA is the desired main
 commit before installing; older signed release-test APKs (for example,
 the 7b8787a build) do not contain the new mobile UX and live voice code.
 The release-test APK is NOT production signed.
+
+
+## Assistant-operated manual launch (GitHub Actions minutes conservation)
+The owner explicitly permits the assistant to start manual workflows when a
+development milestone is ready. Automatic push/PR triggers stay disabled.
+When the execution environment has an authenticated GitHub CLI session with
+Actions write permission, the assistant uses the quota-safe wrapper:
+
+    scripts/ci/manual-actions.sh android-debug.yml
+    scripts/ci/manual-actions.sh android-emulator.yml
+    scripts/ci/manual-actions.sh android-release-test.yml
+
+The wrapper checks the exact main source SHA, skips already successful or
+running same-commit workflows, stops duplicate failures unless explicitly
+retried, and refuses expensive release builds until native and emulator
+checks have passed for that SHA. This tool is invoked by the assistant when
+needed; it is NOT installed as any automatic Git/CI hook.
+
+An authenticated session is a one-time host/account setup step performed
+through GitHub's own login flow, not by pasting private tokens into chat.
+If no Actions dispatch permission is available, the assistant must explain
+that blocker rather than misrepresent a prior APK as the latest.

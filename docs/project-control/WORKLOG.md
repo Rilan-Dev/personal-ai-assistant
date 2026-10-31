@@ -389,3 +389,20 @@
 - Expanded policy/contract tests. 123/123 local tests and TypeScript
   checks pass; source alone is NOT proof of working Android voice,
   physical Accessibility capture, or a signed new APK.
+
+
+## 2026-11-01 — Manual CI launch authorization and duplicate-safe dispatcher
+- Owner clarified that GitHub Actions should be triggerable manually by
+  the assistant WHEN a milestone requires it; only automatic push/PR
+  triggers must remain disabled to protect account quotas.
+- Inspected GitHub connector action surface: read workflow status/logs,
+  rerun old runs, but no workflow_dispatch tool for latest source.
+  BridgeHead server has no gh binary and no owner-authenticated gh session.
+- Added scripts/ci/manual-actions.sh to dispatch allowlisted workflows
+  via authenticated GitHub CLI on main, after verifying HEAD SHA and
+  skipping successful/active same-commit runs. Manual release requires
+  BOTH Android native compile and emulator success for the exact commit.
+  Explicit retry flag is required for failed same-SHA run.
+- Added mocked no-network regression tests for dispatch, dry-run, dedupe,
+  blocked authentication, and release gates. No new GitHub Actions run
+  launched, and automatic triggers remain forbidden.

@@ -175,3 +175,23 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Do not present passing local Node tests as Android Kotlin compilation.
   The GitHub connector still cannot call workflow_dispatch and the
   browser does not have a signed-in owner session.
+
+
+## Owner approval for selective GitHub Actions dispatch (2026-11-01)
+- Owner clarified: only automatic on-push/PR triggers are prohibited. The
+  assistant IS authorized to manually launch needed GitHub Actions workflows
+  after a completed objective, and may do so without asking permission for
+  each ordinary build. Do not treat manual-only as disabled CI.
+- Five workflows remain workflow_dispatch-only: Core, Android debug,
+  Android emulator, Android release-test and real-provider acceptance.
+- Preferred authenticated CLI: scripts/ci/manual-actions.sh WORKFLOW_NAME,
+  requiring GitHub Actions write access through gh auth. Its checks prevent
+  same-commit duplicate runs and require passing native/debug + emulator
+  gates before spending release-test APK minutes.
+- If GitHub CLI or its authenticated session is unavailable, state this
+  as an access limitation, not as a user requirement to manually launch
+  every run. No extra credentials should be checked into source or pasted
+  into chat. Work/browser mode with authenticated GitHub is another option.
+- Existing runtime GitHub connector exposes read/rerun, not workflow_dispatch.
+  The connected BridgeHead host currently lacks an authenticated gh CLI.
+  Current redesigned APK has NOT been rebuilt or physically accepted.

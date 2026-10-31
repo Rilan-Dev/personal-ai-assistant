@@ -33,6 +33,29 @@ Before touching any agentic harness / tool-calling / checkpoint / approval featu
   content. Redact tool observations sent to cloud.
 - Abort stops queued actions but cannot reverse an already dispatched Intent.
 
+## GitHub Actions execution policy (owner authorized; quota protection)
+- The owner explicitly authorizes the assistant to MANUALLY dispatch needed
+  GitHub Actions jobs when a development milestone or acceptance gate requires
+  them. No fresh approval is necessary for each ordinary manual CI/APK build.
+- NEVER add automatic push, pull_request, schedule, workflow_run or other
+  event triggers. All five workflows MUST remain workflow_dispatch-only.
+- Avoid using GitHub Actions for every commit or small change: run local
+  checks first, and then dispatch targeted native build/emulator/release
+  verification only after a complete, focused implementation milestone.
+- Do not start a redundant run: verify HEAD SHA and whether the same workflow
+  already passed or is currently running for that commit. Release APK must
+  follow successful Android native compilation and emulator acceptance.
+- If an authenticated GitHub Actions write channel is available, trigger
+  the workflow yourself with scripts/ci/manual-actions.sh and check the
+  logs/artifact. Do not repeatedly ask the owner to click Run workflow.
+- GitHub's connected app may read logs/rerun old jobs WITHOUT allowing
+  workflow_dispatch on the current source. Never rerun an outdated commit
+  to pretend the new APK was built. If an authenticated dispatch channel
+  is unavailable, report that precise limitation and provide a one-time
+  account-connection path (never request credentials in chat).
+- Manual runs consume GitHub Actions quotas; do not spam, retry blindly or
+  claim completed native builds from Node tests alone.
+
 ## Acceptance and worklog
 - Execute focused automated RED/GREEN tests and relevant core test suites.
 - Run npm ci, npm test, npm run typecheck, npm run web:export.
