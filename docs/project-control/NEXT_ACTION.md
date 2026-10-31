@@ -64,3 +64,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - See docs/architecture/ANDROID_FLASHLIGHT_TOOL.md.
 - Prioritize unresolved encrypted-journal emulator failure before any
   signed production release. Diagnostic error-class logs added to CI.
+
+## Real LLM acceptance infrastructure
+- Manual workflow agent-provider-acceptance.yml and local
+  npm run test:provider-live use AGENT_LLM_API_KEY/AGENT_LLM_MODEL.
+- Configure secrets under the protected GitHub environment to run the
+  five synthetic planning cases; no real device action or messaging.
+- No real provider test has been executed. See
+  docs/architecture/REAL_LLM_ACCEPTANCE.md.

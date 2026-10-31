@@ -185,3 +185,10 @@
   React Native Activity, and optional CAMERA hardware/permission metadata.
   These tests do not turn on a real LED or grant permissions. Runtime emulator
   results and physical hardware verification remain pending CI.
+- Added opt-in real-model acceptance harness, using the actual LangGraph
+  graph and a configured OpenAI-compatible provider but zero real device
+  tools. Five synthetic cases cover positive tool selection, rejection
+  of unsupported message/contact actions, and basic response latency.
+- GitHub workflow is manual and uses an environment-scoped secret.
+  No real model credential provided or used, so provider acceptance
+  remains unverified. See docs/architecture/REAL_LLM_ACCEPTANCE.md.

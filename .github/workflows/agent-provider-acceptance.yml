@@ -1,0 +1,22 @@
+name: Explicit real-model planning acceptance
+on:
+  workflow_dispatch:
+
+jobs:
+  provider:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: live-agent-provider-tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Verify real provider planning WITHOUT real device actions
+        env:
+          AGENT_LLM_API_KEY: ${{ secrets.AGENT_LLM_API_KEY }}
+          AGENT_LLM_MODEL: ${{ vars.AGENT_LLM_MODEL }}
+          AGENT_LLM_BASE_URL: ${{ vars.AGENT_LLM_BASE_URL }}
+        run: npm run test:provider-live
