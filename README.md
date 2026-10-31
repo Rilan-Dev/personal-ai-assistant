@@ -20,6 +20,16 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - **Battery status**: read-only Android BatteryManager tool. "Check battery
   level" reports current percentage and charging state, with no phone identifiers
   or privileged permissions.
+- **Mobile UI**: four bottom tabs (Chat, Voice, Tools, Settings), modern
+  midnight-dark layout, safe-area support for display cutouts/status bar,
+  readable system type and conversational tool approvals.
+- **Experimental live voice**: explicitly owner-started Android microphone
+  foreground service with Stop notification and OpenAI Realtime audio
+  streaming. Can continue while other apps are visible when Android permits;
+  not an unattended wake-word listener. Real-device testing pending.
+- **One-time screen text assist**: optional owner-enabled Android Accessibility
+  service; arm for 20 seconds, inspect a single bounded text snapshot from
+  another app, review/discard or explicitly send to AI. Never auto-acts.
 - **In-app AI Configuration**: choose OpenAI, Gemini, Groq or OpenRouter,
   select model, enter a masked API key, test the connection and save encrypted
   settings on Android using Android Keystore. Direct BYOK AI chat works
@@ -35,7 +45,9 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
   microphone permission. Transcript fills the editor for review and does not
   execute any tools until **Send** is pressed.
 - Opt-in **Read last reply aloud** uses installed offline TextToSpeech voices
-  only, with explicit playback Stop. No hotword/background listening.
+  only, with explicit playback Stop. The separate live-voice mode is
+  user-started with an Android microphone foreground service and notification;
+  there is no wake-word or unattended recording.
 - Owner-driven **Approve once**, **Decline** and **Resume saved task** controls.
   Use the **Test approval** quick prompt on a native Android build to test
   this workflow safely; it does not perform any real device operation.
@@ -107,7 +119,9 @@ The new journal has not yet passed physical-device process-death testing.
 Before personal APK release, resolve or assess upstream dependency advisories
 and complete a real Android phone acceptance test. Backend LLM provider calls,
 Android physical-device tests, iOS native compilation, wake-word detection,
-voice on a real device, accessibility, contacts, and WhatsApp sending are **not yet verified**.
+live speech on a real device, Accessibility service behavior across other apps,
+contacts and WhatsApp sending are **not yet verified**. The new Android live
+voice and screen reading adapters require a fresh manual CI build and UAT.
 
 See [full roadmap](docs/project-control/ROADMAP.md),
 [next actions](docs/project-control/NEXT_ACTION.md), and

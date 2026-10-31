@@ -305,3 +305,26 @@
   any push, PR, schedule, workflow_run, or repository_dispatch trigger.
 - No GitHub Actions jobs were manually started for this change. Run them
   only as needed via Actions > workflow > Run workflow.
+
+## 2026-11-01 — Mobile-first UX, assistive screen reader and realtime voice foundation
+- Reviewed the owner's physical Android screenshot: header collided with the status bar, a large stack of provider settings and permission cards occupied the chat, voice controls were permanently pinned above the composer, and there was no proper navigation.
+- Rebuilt the app with Chat, Voice, Tools and Settings bottom tabs, compact chat composer, dedicated voice studio, separate AI/provider configuration, action approvals in chat and clean permissions controls in Tools.
+- Installed Expo-compatible react-native-safe-area-context (~5.10.1), added SafeAreaProvider in app entry and safe-area-aware root for status bar/gesture navigation. Native Android system sans-serif text and improved spacing/touch targets.
+- Added owner-triggered Android RealtimeVoiceService using a microphone foreground service and Stop notification. It reads OpenAI BYOK key from Android Keystore natively, uses authenticated WSS to a dedicated realtime voice model, streams 24kHz PCM frames, receives audio response chunks, and has 15-second handshake and 15-minute session time limits. No automatic start or device tools are reachable from speech.
+- Added owner-enabled Accessibility ScreenAssistService and bridge: screen-text capture only when explicitly armed for 20 seconds, one snapshot max 2KB, no gestures, no password/editable fields, no disk storage, clear/review and manual-to-chat transfer. Android Accessibility Settings still require owner consent.
+- Added native AndroidX instrumentation cases for foreground microphone denial, accessibility service permission metadata and no hidden auto-start. These native cases have not yet been executed by an emulator for the new commit.
+- Added source regression for mandatory notification, token isolation, no boot start/gestures, read-once screen limits, safe area, separate tabs. Existing agent permission and journal code kept intact.
+- Followed official Android foreground microphone restrictions, AccessibilityService APIs and current OpenAI realtime event contracts. Source architecture: docs/architecture/MOBILE_UX_BACKGROUND_ASSIST.md.
+- Automated local unit/static/typecheck/web tests pass. New Kotlin code, OpenAI live audio, Android OEM background continuation and physical-screen accessibility are not independently verified yet. Do not call this production-ready.
+- All GitHub Actions remain manual-only; no automatic jobs have been triggered.
+- Added Android BackHandler navigation to Chat and keyboard dismissal on
+  tab switches; capability settings remain separate from chat composer.
+- Expanded AndroidX tests: owner-openAI-key-only native voice access and
+  a synthetic one-shot in-memory screen snapshot, without querying any
+  real outside app or enabling a microphone.
+- Updated ADB UAT checklist for bottom navigation, narrow screens, live
+  mic/notification, Accessibility arming, safe return/discard and refusal
+  to share text automatically.
+- Local clean npm ci succeeded; 115/115 source/contract tests passed,
+  typecheck passed and Web export succeeded. No new Github Action run was
+  automatically started; all five workflows still manual-only.

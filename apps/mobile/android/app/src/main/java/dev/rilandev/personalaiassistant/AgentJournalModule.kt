@@ -24,8 +24,29 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
     private val prefs = context.getSharedPreferences("paa_secure_journal_v1", Context.MODE_PRIVATE)
     // Shared across React Native bridge re-instantiations inside this process.
     // Multi-process mode is intentionally not supported.
-    private companion object {
+    internal companion object {
         val lock = Any()
+        /** Keystore-only access for an owner-started native Realtime session. */
+        fun openAiVoiceKey(ctx: Context): String? = synchronized(lock) {
+            val digest=MessageDigest.getInstance("SHA-256").digest(
+                "private:provider-config:".toByteArray(StandardCharsets.UTF_8))
+            val name=Base64.encodeToString(digest,
+                Base64.NO_WRAP or Base64.NO_PADDING or Base64.URL_SAFE)
+            val encrypted=ctx.getSharedPreferences("paa_secure_journal_v1",
+                Context.MODE_PRIVATE).getString(name,null) ?: return@synchronized null
+            val all=Base64.decode(encrypted,Base64.DEFAULT)
+            require(all.size>28)
+            val ks=KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+            val key=ks.getKey("PAA_Journal_v1",null) as? SecretKey ?: return@synchronized null
+            val cipher=Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE,key,
+                GCMParameterSpec(128,all.copyOfRange(0,12)))
+            val decoded=String(cipher.doFinal(all.copyOfRange(12,all.size)),
+                StandardCharsets.UTF_8)
+            val data=JSONObject(decoded)
+            if (data.optString("provider")!="openai") return@synchronized null
+            data.optString("apiKey").takeIf { it.length in 12..512 }
+        }
     }
     override fun getName() = "PAAAgentJournal"
     private fun rejectSafe(p: Promise, code: String, e: Exception) {
@@ -101,6 +122,9 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             synchronized(lock) {
                 write(name("private", "provider-config"), data)
             }
+            // Changes to provider credentials must terminate a session that
+            // may still be streaming under the prior configuration.
+            context.stopService(android.content.Intent(context,RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_SAVE", e) }
     }
@@ -114,6 +138,9 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             synchronized(lock) {
                 check(prefs.edit().remove(name("private", "provider-config")).commit())
             }
+            // Revoking the selected API key also terminates a voice service
+            // that might still be running in the background.
+            context.stopService(android.content.Intent(context,RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_CLEAR", e) }
     }

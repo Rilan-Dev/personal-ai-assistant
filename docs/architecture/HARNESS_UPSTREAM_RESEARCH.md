@@ -118,3 +118,19 @@ denied permissions, cancellations and incomplete observations.
   Required Android CAMERA permission + in-app hardware grant + one-shot
   approval + verified Camera2 callback before claiming success.
 - Details / limitation: docs/architecture/ANDROID_FLASHLIGHT_TOOL.md.
+
+## 2026-11-01 — Mobile UX and Android background-assist layer
+- Preserved the already reviewed pinned LangGraph.js state-machine planning
+  architecture from 959f041dfb8f6bbafa6af3ebb4bc20484a9290da;
+  existing policy, permission checks, exact approval fingerprints and device
+  journal remain the only path for any native tool execution.
+- Rechecked Deep Agents.js's permission design at
+  26f190d40f44a2bb498db73e9e98b002bb8554fe. No permissive
+  filesystem shell or default allowlist was imported into Android.
+- Added only platform integration adapters, not a competing autonomous
+  planner: owner-started microphone Foreground Service and user-armed
+  one-time Accessibility screen text capture. Live voice never invokes
+  arbitrary Android device tools. Screen text is treated as untrusted and
+  must be explicitly reviewed in the editable chat composer before Send.
+- Official Android microphone FGS/Accessibility and OpenAI realtime API
+  contracts: docs/architecture/MOBILE_UX_BACKGROUND_ASSIST.md.

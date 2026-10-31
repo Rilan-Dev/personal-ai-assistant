@@ -56,7 +56,7 @@ test("Android push-to-talk is foreground-only, requires runtime microphone grant
   assert.match(manifest, /android\.permission\.RECORD_AUDIO/);
   assert.match(manifest, /android\.speech\.RecognitionService/);
   assert.match(manifest, /android\.intent\.action\.TTS_SERVICE/);
-  assert.doesNotMatch(manifest, /FOREGROUND_SERVICE_MICROPHONE|BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT/);
+  assert.doesNotMatch(manifest, /BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT|RECEIVE_BOOT_COMPLETED/);
   assert.match(adapters, /VoiceControlModule\(reactContext\)/);
   assert.match(voice, /isOnDeviceRecognitionAvailable\(context\)/);
   assert.match(voice, /createOnDeviceSpeechRecognizer\(context\)/);
@@ -84,8 +84,8 @@ test("speech controls never automatically send a transcribed command", () => {
   assert.match(ui, /setInput\(transcript\)/);
   assert.doesNotMatch(ui, /send\(transcript/);
   assert.match(ui, /Review or edit it, then press Send/);
-  assert.match(ui, /onPress=\{listening \? cancelListening : listenForCommand\}/);
-  assert.match(ui, /onPress=\{speaking \? cancelSpeaking : readLastReply\}/);
+  assert.match(ui, /onPress=\{listening\s*\?\s*cancelListening\s*:\s*listenForCommand\}/);
+  assert.match(ui, /onPress=\{speaking\s*\?\s*cancelSpeaking\s*:\s*readLastReply\}/);
   assert.match(bridge, /PermissionsAndroid\.request\(permission/);
   assert.match(bridge, /return answer === PermissionsAndroid\.RESULTS\.GRANTED/);
   assert.match(bridge, /Platform\.OS === "android"/);
@@ -105,11 +105,11 @@ test("Quick Settings tile can only open foreground chat after unlock", () => {
   assert.doesNotMatch(source, /SpeechRecognizer|listenOnce|RECORD_AUDIO|\.openSupportedApp\(/);
   assert.match(device, /requestAddTileService\(/);
   assert.match(ui, /requestAssistantQuickTile\(\)/);
-  assert.match(ui, /never starts the microphone or performs actions automatically/);
+  assert.match(ui, /does not start listening or run tools/);
 });
 test("Android journal synchronizes claims across bridge instances and atomically checkpoints", () => {
   const journal = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt");
-  assert.match(journal, /private companion object \{\s*val lock = Any\(\)/);
+  assert.match(journal, /internal companion object \{\s*val lock = Any\(\)/);
   assert.match(journal, /val sessionKey = name\("session", s\)/);
   assert.match(journal, /val latestKey = name\("latest", "device"\)/);
   assert.match(journal, /\.putString\(sessionKey, encrypt\(data\)\)\s*\.putString\(latestKey, encrypt\(s\)\)\s*\.commit\(\)/);

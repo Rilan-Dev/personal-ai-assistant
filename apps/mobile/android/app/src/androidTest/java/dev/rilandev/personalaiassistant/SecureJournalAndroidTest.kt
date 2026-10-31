@@ -110,6 +110,24 @@ class SecureJournalAndroidTest {
         // Tile launch only opens MainActivity; no wake-word service installed.
     }
 
+    @Test fun realtimeVoiceCanDecryptOnlyOwnerConfiguredOpenAiKey() {
+        val apiKey = "synthetic-openai-only-" + UUID.randomUUID()
+        val openAi = JSONObject().put("version",1).put("provider","openai")
+            .put("model","gpt-4.1-mini").put("apiKey",apiKey).toString()
+        val gemini = JSONObject().put("version",1).put("provider","gemini")
+            .put("model","gemini-3.8-flash").put("apiKey",apiKey).toString()
+        val module=journal()
+        try {
+            assertEquals(true,invoke { module.saveProviderSettings(openAi,it) })
+            assertEquals(apiKey,AgentJournalModule.openAiVoiceKey(appContext))
+            assertEquals(true,invoke { module.saveProviderSettings(gemini,it) })
+            assertNull("Never use a Gemini key against OpenAI",AgentJournalModule.openAiVoiceKey(appContext))
+        } finally {
+            assertEquals(true,invoke { module.clearProviderSettings(it) })
+        }
+        assertNull(AgentJournalModule.openAiVoiceKey(appContext))
+    }
+
     @Test fun providerKeyIsEncryptedAndCanBeClearedAcrossModuleRecreation() {
         val unique = "not-a-real-api-key-" + UUID.randomUUID()
         val saved = JSONObject()

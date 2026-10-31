@@ -14,6 +14,9 @@ import sys
 
 PACKAGE = "dev.rilandev.personalaiassistant"
 CASES = [
+    ("navigation", "Open Chat, Voice, Tools and Settings bottom tabs. Each occupies its own scrollable screen; no overlapping status bar, tab bar or buttons."),
+    ("mobile_keyboard", "On Chat and Settings, open the keyboard, type text, rotate if supported, use Android Back. Verify composer and API fields remain usable."),
+    ("settings_key", "In Settings > AI Configuration, verify masked API key, provider/model choices and optional Test connection with your own key."),
     ("permissions_deny", "With CAMERA and RECORD_AUDIO denied, flashlight and voice requests must be blocked."),
     ("permission_grant", "Use in-app buttons to grant CAMERA and RECORD_AUDIO. No automatic OS consent dialog."),
     ("voice_transcript", "Tap to talk; speak harmless phrase. Verify editable input changes; no automatic Send or tools."),
@@ -24,7 +27,14 @@ CASES = [
     ("flash_denial", "Without in-app flashlight grant, Turn flashlight on must not execute."),
     ("flash_approval", "Grant flashlight, approve once, resume, verify LED. Skip if phone has no flash."),
     ("flash_replay", "Force stop/reopen after accepted action. Confirm no automatic torch action, and completed task has no Resume control."),
-    ("journal_training", "Test approval command. Approve once and Resume: no device action, no replay.")
+    ("journal_training", "Test approval command. Approve once and Resume: no device action, no replay."),
+    ("live_voice_denied", "Voice tab: deny mic/notification access. Live session must fail closed and never start without your explicit Start."),
+    ("live_voice_session", "If you have an OpenAI API key, explicitly start live voice. Verify system microphone indicator, audible response and Stop notification. Mark SKIP if no compatible provider."),
+    ("live_voice_background", "While user-started live voice is active, switch apps; verify indicator and visible Stop notification, then Stop. Do not expect hidden always-on recording."),
+    ("screen_access_off", "Tools > Screen assistant: without Android Accessibility permission, Arm one screen read must be denied."),
+    ("screen_capture_once", "Enable screen Accessibility; arm one read, switch to a harmless app, return, review one bounded text snapshot and discard. Never automatically share it."),
+    ("screen_sensitive", "Verify password/editable field contents are not captured; if uncertain mark FAIL and report without sharing private screen text.")
+
 ]
 
 def adb(*args, timeout=12):
@@ -66,7 +76,7 @@ def main():
         return 0
     if int(api) < 31:
         print("Android below API 31: strict on-device STT is unavailable.")
-    print("Use a DEBUG APK. Never uninstall it between journal/replay tests.")
+    print("Use the newest signed RELEASE-TEST or DEBUG APK. Never uninstall between encrypted journal tests.")
     if input("Open assistant foreground app? [yes/no]: ").strip().lower() != "yes":
         print("Cancelled.")
         return 2

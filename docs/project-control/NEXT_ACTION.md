@@ -130,3 +130,13 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   queued by earlier commits are not automatically cancelled by the change.
 - Keep the regression test scripts/test/workflow-manual-only.test.mjs green
   whenever adding or changing workflows.
+
+## 2026-11-01 mobile UX / background assist next acceptance gates
+- Mobile UI migrated to Chat / Voice / Tools / Settings bottom tabs with safe-area margins and dedicated controls. See docs/architecture/MOBILE_UX_BACKGROUND_ASSIST.md.
+- New Android realtime voice FGS and owner-armed one-time Accessibility screen text observer exist in source; they are experimental and NOT independently native compiled or physically accepted yet.
+- Run LOCAL npm ci, npm test, npm run typecheck, npm run web:export and verify no regression. Then manually run GitHub Actions Android debug compile and emulator instrumentation; workflows must stay workflow_dispatch only.
+- Fix new native compile errors and rerun emulator only when necessary. Then manually build release-test APK and test on Android owner device.
+- For voice UAT: configure owner's OpenAI key in Settings; verify microphone and notification prompts, WSS session, speaker, network denial, Stop from notification, timeout and background/lockscreen behavior. No recording without Start.
+- For screen UAT: enable Accessibility from Tools; arm, switch to an outside app, return, review/discard; verify no password/edit text, no auto model upload and no gestures.
+- Before implementing always-on assistants, contacts, camera analysis and location, define OS-permission-specific owner controls, privacy, Google Play policy and test gates. No hidden surveillance or unrestricted auto actions.
+- Real provider integration, physical phone acceptance, dependency audit and Play release remain open. Do not claim Gemini-level OS privileges without corresponding Android role/OEM tests.

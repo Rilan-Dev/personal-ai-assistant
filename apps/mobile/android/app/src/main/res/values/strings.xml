@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Personal AI Assistant</string>
     <string name="assistant_tile_label">AI Assistant</string>
+    <string name="screen_assist_description">Screen Assist only reads visible text once after you arm it in the app. It excludes password and edit fields, stores text temporarily in memory, and never acts on the screen automatically.</string>
 </resources>

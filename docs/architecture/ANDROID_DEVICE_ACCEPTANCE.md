@@ -45,3 +45,12 @@ Resume button for the completed task. To evaluate a truly interrupted claim,
 use the emulator action-ledger instrumentation tests, or a controlled custom
 debug test harness; do not try to race a subsecond flashlight operation by
 force-stopping a production device at random.
+
+## Mobile UX, live voice and screen-read acceptance
+The owner test kit now includes all four bottom tabs, keyboard-safe composer,
+AI provider Settings, Android back navigation, Live Voice opt-in/denial,
+system notification Stop and user-armed screen reading. Never run a live
+microphone test in an environment where bystanders expect privacy. The live
+stream goes to the owner's OpenAI API and may incur usage fees. During screen
+tests choose a harmless public app and do not upload account, OTP or
+personal message text to a model or bug report.
