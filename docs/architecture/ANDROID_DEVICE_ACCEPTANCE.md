@@ -37,3 +37,11 @@ data and are excluded from Git by .gitignore.
 - A skipped or failed case is not accepted as a passing release gate.
 - Live provider model acceptance is independently gated on user-authorized
   credentials. Emulator/mock checks do not substitute for real model calls.
+
+## Important on-device replay distinction
+The UI intentionally does not expose Resume for a fully completed task. After
+force-stop and reopening, confirm there is no automatic torch control and no
+Resume button for the completed task. To evaluate a truly interrupted claim,
+use the emulator action-ledger instrumentation tests, or a controlled custom
+debug test harness; do not try to race a subsecond flashlight operation by
+force-stopping a production device at random.

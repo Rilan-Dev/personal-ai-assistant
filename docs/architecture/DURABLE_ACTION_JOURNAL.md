@@ -64,3 +64,28 @@ the same encrypted SharedPreferences commit. Emulator instrumentation races
 12 module instances to assert only one claim is granted. This is still NOT
 cross-process/distributed transaction support; the Android manifest does not
 start a separate process for this module.
+
+## 2026-10-31 — Android Keystore AES-GCM root cause and verified results
+The original emulator failure was InvalidAlgorithmParameterException from
+supplying a caller-defined IV for AES-GCM encryption under Android Keystore.
+Android Keystore enforces randomized encryption by default and rejects
+caller-supplied encryption IVs. The fixed code initializes Cipher in
+ENCRYPT_MODE with only the Keystore SecretKey, gets Cipher.iv from the
+provider and stores IV + ciphertext/tag; decryption validates that IV through
+GCMParameterSpec. Keystore's randomness requirement remains enabled.
+
+Android official reference:
+https://developer.android.com/reference/android/security/keystore/KeyGenParameterSpec.Builder#setRandomizedEncryptionRequired(boolean)
+
+Verified GitHub Actions evidence:
+- Run 41228192986: native Android API 35 emulator, 8/8 instrumentation
+  tests succeeded including encrypted persistence and action-claim replay.
+- Run 41228313667: native Android API 35 emulator, 9/9 tests succeeded,
+  adding one-bit ciphertext tampering detection (authenticated failure).
+- Run 41228773858: native Android API 35 emulator, 13/13 tests PASSED,
+  adding foreground-only voice-module checks and safe cancellation tests.
+  The full expanded native emulator suite is green on e48ae7a.
+- A physical Android phone was not connected to this workspace.
+
+This is verified emulator behavior, NOT a claim of independent security audit
+or real phone hardware acceptance.

@@ -44,3 +44,13 @@ OS keystore checkpoint retention is separate from speech audio handling.
 6. Read reply, stop playback, missing offline voice -> controlled error.
 7. Re-run journal recovery, one-time approval and side-effect replay checks.
 Device test unavailable during source implementation; CI compilation is not UAT.
+
+## 2026-10-31 emulator evidence
+GitHub Actions run 41228773858 passed 13/13 Android API 35
+instrumentation tests on commit e48ae7a, including four VoiceControlAndroidTest
+checks: no wake word/offline-only advertised, foreground gate for microphone,
+foreground gate for speech output, and idle cancellation cleanup.
+
+These tests intentionally do not activate actual speech recognition or play
+audio. A real Android phone with installed speech/voice packs is required for
+those features, separate from emulator acceptance.

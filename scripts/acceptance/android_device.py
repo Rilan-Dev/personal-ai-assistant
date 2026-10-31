@@ -23,7 +23,7 @@ CASES = [
     ("battery", "Check battery level; compare result against Android battery status."),
     ("flash_denial", "Without in-app flashlight grant, Turn flashlight on must not execute."),
     ("flash_approval", "Grant flashlight, approve once, resume, verify LED. Skip if phone has no flash."),
-    ("flash_replay", "Force stop/reopen and resume same accepted task. Confirm no duplicate torch action."),
+    ("flash_replay", "Force stop/reopen after accepted action. Confirm no automatic torch action, and completed task has no Resume control."),
     ("journal_training", "Test approval command. Approve once and Resume: no device action, no replay.")
 ]
 

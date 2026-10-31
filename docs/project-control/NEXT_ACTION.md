@@ -87,3 +87,19 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - This permits in-place upgrade and crash/replay acceptance without wiping
   the Android Keystore journal. See docs/architecture/DEBUG_APK_SIGNING.md.
 - Debug signing is NOT production release signing.
+
+## Confirmed Android Keystore emulator acceptance
+- Root fix 483f5d1: provider-generated AES-GCM encryption IV.
+- 8/8 instrumented tests PASSED (run 41228192986).
+- 9/9 including ciphertext tamper PASSED (run 41228313667).
+- Core journal emulator gate is closed. Confirm the separate extended
+  voice instrumentation workflow before claiming full native CI green.
+- A real phone, a real LLM provider, and release-security gates remain open.
+
+## Native emulator sign-off
+- 8/8 PASSED in run 41228192986 (baseline secure journal).
+- 9/9 PASSED in run 41228313667 (AES-GCM tamper case).
+- 13/13 PASSED in run 41228773858 (voice foreground safety).
+- Native emulator automated gate is closed for the source on e48ae7a.
+- Physical Android acceptance and real-provider acceptance are still open.
+- User-run physical test kit: scripts/acceptance/android_device.py.

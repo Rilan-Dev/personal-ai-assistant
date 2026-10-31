@@ -230,3 +230,14 @@
   logged or committed; absent secret retains temporary debug signer.
 - Added owner setup instructions in docs/architecture/DEBUG_APK_SIGNING.md.
   The secret has NOT been configured or verified in the user's repository.
+
+## 2026-10-31 — Encrypted Android journal acceptance evidence
+- GitHub Actions run 41228192986 succeeded on Android API 35 emulator:
+  8/8 instrumented tests, BUILD SUCCESSFUL, 7m32s Gradle verification.
+- GitHub Actions run 41228313667 succeeded on Android API 35 emulator:
+  9/9 instrumented tests including GCM tamper rejection, BUILD SUCCESSFUL.
+- Native Keystore root-cause fix in commit 483f5d1 is now confirmed.
+  These results close the *core emulator encrypted-journal* blocker.
+- Remaining independent gates: newer voice safety instrumentation,
+  actual Android phone, owner-provided real LLM provider and production
+  dependency/release-signing review.
