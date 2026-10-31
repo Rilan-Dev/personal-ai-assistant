@@ -18,6 +18,10 @@ function fakeDecision(decision, onCall=()=>{}) {
 }
 const allowed=["device.status","device.battery_status","device.open_camera","device.open_app","device.set_flashlight"];
 
+test("2026 Gemini and Groq defaults avoid discontinued model IDs",()=>{
+  assert.equal(PROVIDERS.gemini.defaultModel,"gemini-3.8-flash");
+  assert.equal(PROVIDERS.groq.defaultModel,"openai/gpt-oss-120b");
+});
 test("provider presets have fixed HTTPS endpoints and no arbitrary URL",()=>{
   for(const x of Object.values(PROVIDERS)) {
     assert.match(x.endpoint,/^https:\/\//);

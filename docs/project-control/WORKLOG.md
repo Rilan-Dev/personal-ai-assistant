@@ -283,3 +283,8 @@
   keystore does not attempt to pass null as Gradle signing configuration
   during normal debug builds.
 - CI rerun is required. No release APK was produced by the failed run.
+- Checked current official Gemini and Groq OpenAI-compatibility docs.
+  Updated Gemini default to gemini-3.8-flash; updated Groq default to
+  openai/gpt-oss-120b because llama-3.3-70b-versatile was deprecated
+  for free/developer tiers in August 2026.
+- Owner can still edit any provider model name in AI Configuration.

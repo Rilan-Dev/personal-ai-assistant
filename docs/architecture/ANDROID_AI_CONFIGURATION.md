@@ -86,3 +86,12 @@ the other in the current running session.
 A real key was **not supplied to development or CI**. Mock tests verify the
 protocol, tool policy and redaction; a successful real-provider call requires
 the owner's configured API key and mobile network connection.
+
+## Verified 2026 provider model defaults
+- Gemini OpenAI compatibility official documentation (October 2026)
+  illustrates gemini-3.8-flash:
+  https://ai.google.dev/gemini-api/docs/openai/
+- Groq announced that llama-3.3-70b-versatile was retired for free/developer
+  tiers on August 16, 2026; use openai/gpt-oss-120b by default:
+  https://console.groq.com/docs/deprecations
+- Model names remain editable because availability varies by account.

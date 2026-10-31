@@ -10,8 +10,8 @@ import { requestAllowsNativeTool } from "../../agent-contracts/src/intent-policy
  */
 export const PROVIDERS = Object.freeze({
   openai: { label: "OpenAI", endpoint: "https://api.openai.com/v1/chat/completions", defaultModel: "gpt-4.1-mini" },
-  gemini: { label: "Google Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-2.5-flash" },
-  groq: { label: "Groq", endpoint: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "llama-3.3-70b-versatile" },
+  gemini: { label: "Google Gemini", endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", defaultModel: "gemini-3.8-flash" },
+  groq: { label: "Groq", endpoint: "https://api.groq.com/openai/v1/chat/completions", defaultModel: "openai/gpt-oss-120b" },
   openrouter: { label: "OpenRouter", endpoint: "https://openrouter.ai/api/v1/chat/completions", defaultModel: "openai/gpt-4.1-mini" }
 });
 export type DirectProviderId = keyof typeof PROVIDERS;
