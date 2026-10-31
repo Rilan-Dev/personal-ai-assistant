@@ -46,9 +46,9 @@ jobs:
             keytool -genkeypair -keystore "$path" -alias androiddebugkey               -storepass android -keypass android               -keyalg RSA -keysize 2048 -validity 365               -dname "CN=Android Debug,O=Personal AI Assistant,C=US" -noprompt
             echo "Temporary DEBUG signer used. This APK may not upgrade prior CI builds in place." >> "$GITHUB_STEP_SUMMARY"
           fi
-      - name: Compile Android app and Kotlin native bridge
+      - name: Compile Android app, Kotlin native bridge and instrumentation tests
         working-directory: apps/mobile/android
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: ./gradlew :app:assembleDebug :app:assembleAndroidTest --no-daemon
       # Debug-only, ephemeral signing. This is NOT a release APK.
       - name: Attach debug APK for owner device testing
         uses: actions/upload-artifact@v4

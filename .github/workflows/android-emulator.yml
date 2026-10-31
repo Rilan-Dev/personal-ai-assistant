@@ -16,6 +16,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - run: npm ci
+      - name: Verify agent harness, UI policies and Android source contracts
+        run: |
+          npm test
+          npm run typecheck
       - name: Temporary debug key (never saved to Git)
         run: |
           keytool -genkeypair -keystore apps/mobile/android/app/debug.keystore \

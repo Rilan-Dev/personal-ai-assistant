@@ -59,3 +59,12 @@ phone is still necessary for speech recognition, TTS, flashlight, battery,
 Quick Settings and encrypted restore. Actual LLM provider responses require
 the owner's configured API key. Existing dependency advisories must be
 reviewed before public production distribution.
+
+## Source provenance included in newer artifacts
+
+Current manual Android release workflow writes
+release-test-source-sha.txt containing GITHUB_SHA, alongside the APK,
+sha256sum and signing verification. Confirm the SHA is the desired main
+commit before installing; older signed release-test APKs (for example,
+the 7b8787a build) do not contain the new mobile UX and live voice code.
+The release-test APK is NOT production signed.

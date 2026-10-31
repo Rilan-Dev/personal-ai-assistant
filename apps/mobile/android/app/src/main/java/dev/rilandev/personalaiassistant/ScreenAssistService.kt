@@ -3,6 +3,8 @@ package dev.rilandev.personalaiassistant
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -19,6 +21,10 @@ import com.facebook.react.bridge.ReactMethod
  */
 internal object ScreenAssistState {
     private val lock = Any()
+    private val expiryHandler = Handler(Looper.getMainLooper())
+    // No context reference: the one-shot capture is purged even if the
+    // owner never returns to the application after changing screens.
+    private val expire = Runnable { clear() }
     @Volatile var connected: Boolean = false
     private var armedUntil: Long = 0
     private var snapshot: String? = null
@@ -31,6 +37,8 @@ internal object ScreenAssistState {
         sourcePackage = null
         capturedAt = 0
         armedUntil = android.os.SystemClock.elapsedRealtime() + 20_000
+        expiryHandler.removeCallbacks(expire)
+        expiryHandler.postDelayed(expire,20_000L)
         true
     }
     fun capture(packageName: String, text: String) = synchronized(lock) {
@@ -40,6 +48,8 @@ internal object ScreenAssistState {
         sourcePackage = packageName.take(100)
         capturedAt = android.os.SystemClock.elapsedRealtime()
         armedUntil = 0
+        expiryHandler.removeCallbacks(expire)
+        expiryHandler.postDelayed(expire,60_000L)
     }
     fun consume(): Triple<String,String,Boolean>? = synchronized(lock) {
         val current = snapshot ?: return@synchronized null
@@ -49,6 +59,7 @@ internal object ScreenAssistState {
         if (expired) null else Triple(current, pkg, true)
     }
     fun clear() = synchronized(lock) {
+        expiryHandler.removeCallbacks(expire)
         snapshot = null
         sourcePackage = null
         capturedAt = 0

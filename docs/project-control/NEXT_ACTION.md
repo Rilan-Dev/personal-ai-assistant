@@ -159,3 +159,19 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   emulator tests, build release and apksigner. Do not reuse previous APKs.
 - After passing Actions, perform physical phone live-provider audio and
   outside-app one-time accessibility observations under owner consent.
+
+## Android hardened implementation acceptance — 2026-11-01
+- Current source has additional VAD interruption, AEC, noise suppression,
+  native audio-focus and proactive screen-text TTL improvements. Commit
+  must be validated using an authenticated manual GitHub Actions run.
+- Native debug workflow now runs :app:assembleDebug and
+  :app:assembleAndroidTest; emulator workflow runs npm tests and typecheck.
+- Release-test artifact will include release-test-source-sha.txt,
+  release-test-sha256.txt and release-test-verification.txt.
+- Verify current source SHA in the artifact equals the intended commit.
+- Physical acceptance must check Android calls/audio focus, spontaneous
+  interruption, echo/feedback, low-bandwidth network, Notification Stop,
+  and screen text expiring without returning to the app.
+- Do not present passing local Node tests as Android Kotlin compilation.
+  The GitHub connector still cannot call workflow_dispatch and the
+  browser does not have a signed-in owner session.

@@ -20,3 +20,22 @@ test("Debug signing secret is gated to manual main-branch runs",()=>{
   assert.match(file,/github\.ref == 'refs\/heads\/main'/);
   assert.doesNotMatch(file,/github\.event_name == 'push'/);
 });
+test("manual Android debug compile builds native Android instrumentation tests too",()=>{
+  const yml=readFileSync(".github/workflows/android-debug.yml","utf8");
+  assert.match(yml,/:app:assembleDebug :app:assembleAndroidTest --no-daemon/);
+  assert.match(yml,/workflow_dispatch:/);
+});
+test("manual emulator acceptance validates harness before starting emulator",()=>{
+  const yml=readFileSync(".github/workflows/android-emulator.yml","utf8");
+  assert.match(yml,/npm test/);
+  assert.match(yml,/npm run typecheck/);
+  assert.match(yml,/:app:connectedDebugAndroidTest/);
+});
+test("manual release APK contains source-commit provenance and signer verification",()=>{
+  const yml=readFileSync(".github/workflows/android-release-test.yml","utf8");
+  assert.match(yml,/\$GITHUB_SHA.*release-test-source-sha\.txt/);
+  assert.match(yml,/release-test-sha256\.txt/);
+  assert.match(yml,/release-test-verification\.txt/);
+  assert.match(yml,/apksigner_bin.*verify/);
+  assert.match(yml,/if-no-files-found: error/);
+});

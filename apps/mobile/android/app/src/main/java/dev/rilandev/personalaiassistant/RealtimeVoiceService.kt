@@ -10,10 +10,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.media.audiofx.AcousticEchoCanceler
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
+import android.media.audiofx.NoiseSuppressor
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Handler
@@ -60,10 +62,23 @@ class RealtimeVoiceService : Service() {
     private var client: OkHttpClient? = null
     private var recorder: AudioRecord? = null
     private var player: AudioTrack? = null
+    private var echoCanceler: AcousticEchoCanceler? = null
+    private var noiseSuppressor: NoiseSuppressor? = null
+    private var audioManager: AudioManager? = null
+    private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
+        if (change == AudioManager.AUDIOFOCUS_LOSS ||
+            change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+            main.post {
+                if (active.get()) stopWithStatus("stopped", "Android audio focus interrupted")
+            }
+        }
+    }
     private var captureThread: Thread? = null
     private var playbackThread: Thread? = null
     private val audioQueue = ArrayBlockingQueue<ByteArray>(32)
-    @Volatile private var outputSpeaking = false
+    // Keep sending AEC-filtered mic input while the model speaks; otherwise
+    // the server VAD never hears the owner interrupting (broken barge-in).
+    @Volatile private var interruptedResponse = false
     private val maxSession = Runnable { stopWithStatus("stopped","15-minute session limit reached") }
     private val handshakeTimeout = Runnable {
         if (active.get() && status=="connecting")
@@ -172,13 +187,34 @@ class RealtimeVoiceService : Service() {
                 val json = try { JSONObject(text) } catch (_: Exception) { return }
                 when (json.optString("type")) {
                     "session.updated" -> main.post { if (active.get() && status=="connecting") startAudio() }
-                    "response.created" -> outputSpeaking = true
-                    "response.done" -> outputSpeaking = false
+                    "response.created" -> interruptedResponse = false
+                    "input_audio_buffer.speech_started" -> {
+                        // The owner interrupted playback. Clear stale output
+                        // immediately; never play responses after a VAD cancel.
+                        interruptedResponse = true
+                        audioQueue.clear()
+                        main.post {
+                            try {
+                                player?.pause()
+                                player?.flush()
+                                if (active.get()) player?.play()
+                            } catch (_: Exception) {}
+                        }
+                    }
                     "response.output_audio.delta" -> {
-                        val delta = json.optString("delta")
-                        if (delta.length <= 160000) {
-                            try { audioQueue.offer(Base64.decode(delta,Base64.DEFAULT)) }
-                            catch (_: Exception) {}
+                        if (!interruptedResponse) {
+                            val delta = json.optString("delta")
+                            if (delta.length <= 160000) {
+                                try {
+                                    if (!audioQueue.offer(Base64.decode(delta,Base64.DEFAULT))) {
+                                        main.post {
+                                            if (active.get()) stopWithStatus(
+                                                "error", "Audio playback buffer overloaded"
+                                            )
+                                        }
+                                    }
+                                } catch (_: Exception) {}
+                            }
                         }
                     }
                     "error" -> main.post { stopWithStatus("error","Live provider rejected the session or audio") }
@@ -197,6 +233,16 @@ class RealtimeVoiceService : Service() {
         if (!active.get() || status!="connecting") return
         main.removeCallbacks(handshakeTimeout)
         try {
+            val manager = getSystemService(AUDIO_SERVICE) as AudioManager
+            audioManager = manager
+            @Suppress("DEPRECATION")
+            val focus = manager.requestAudioFocus(
+                audioFocusListener, AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+            )
+            if (focus != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
+                throw IllegalStateException("Audio focus unavailable")
+            }
             val inputSize = maxOf(AudioRecord.getMinBufferSize(RATE,
                 AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT),4096)
             val outputSize = maxOf(AudioTrack.getMinBufferSize(RATE,
@@ -208,6 +254,16 @@ class RealtimeVoiceService : Service() {
                 throw IllegalStateException("Audio recorder unavailable")
             }
             recorder = record
+            // Android DSP cancellation suppresses the assistant's own speaker
+            // sound returning through the microphone on supported devices.
+            if (AcousticEchoCanceler.isAvailable()) {
+                echoCanceler = AcousticEchoCanceler.create(record.audioSessionId)
+                try { echoCanceler?.enabled = true } catch (_: Exception) {}
+            }
+            if (NoiseSuppressor.isAvailable()) {
+                noiseSuppressor = NoiseSuppressor.create(record.audioSessionId)
+                try { noiseSuppressor?.enabled = true } catch (_: Exception) {}
+            }
             val playback = AudioTrack(AudioManager.STREAM_MUSIC,RATE,
                 AudioFormat.CHANNEL_OUT_MONO,AudioFormat.ENCODING_PCM_16BIT,
                 outputSize*2,AudioTrack.MODE_STREAM)
@@ -241,7 +297,7 @@ class RealtimeVoiceService : Service() {
                 while (active.get()) {
                     val got = try { recorder?.read(data,0,data.size) ?: break }
                         catch (_: Exception) { break }
-                    if (got>0 && !outputSpeaking) {
+                    if (got>0) {
                         val encoded = Base64.encodeToString(data.copyOf(got),Base64.NO_WRAP)
                         val payload = JSONObject()
                             .put("type","input_audio_buffer.append")
@@ -273,6 +329,12 @@ class RealtimeVoiceService : Service() {
         playbackThread?.interrupt()
         playbackThread = null
         audioQueue.clear()
+        try { echoCanceler?.release() } catch (_: Exception) {}
+        echoCanceler = null
+        try { noiseSuppressor?.release() } catch (_: Exception) {}
+        noiseSuppressor = null
+        try { audioManager?.abandonAudioFocus(audioFocusListener) } catch (_: Exception) {}
+        audioManager = null
         try { player?.pause(); player?.flush(); player?.release() } catch (_: Exception) {}
         player = null
         try { socket?.close(1000,"owner-stop") } catch (_: Exception) {}

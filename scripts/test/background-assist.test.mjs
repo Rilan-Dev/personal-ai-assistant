@@ -95,3 +95,36 @@ test("returning from Android Accessibility Settings refreshes actual service sta
   assert.match(ui,/AppState\.addEventListener\('change'/);
   assert.match(ui,/if\(next==='active'\)refresh\(\)/);
 });
+
+test("live audio remains interruptible with VAD and stops on audio focus loss",()=>{
+  const code=read(path+"RealtimeVoiceService.kt");
+  // Prior prototype silenced the mic whenever the model was speaking,
+  // preventing the server from detecting a natural interruption.
+  assert.doesNotMatch(code,/if \(got>0 && !outputSpeaking\)/);
+  assert.match(code,/if \(got>0\)/);
+  assert.match(code,/"input_audio_buffer\.speech_started"/);
+  assert.match(code,/interruptedResponse = true/);
+  assert.match(code,/audioQueue\.clear\(\)/);
+  assert.match(code,/player\?\.pause\(\)/);
+  assert.match(code,/player\?\.flush\(\)/);
+  assert.match(code,/AudioManager\.OnAudioFocusChangeListener/);
+  assert.match(code,/AudioManager\.AUDIOFOCUS_LOSS_TRANSIENT/);
+  assert.match(code,/requestAudioFocus\(/);
+  assert.match(code,/abandonAudioFocus\(/);
+  assert.match(code,/import android\.media\.audiofx\.AcousticEchoCanceler/);
+  assert.match(code,/import android\.media\.audiofx\.NoiseSuppressor/);
+  assert.match(code,/AcousticEchoCanceler\.create\(record\.audioSessionId\)/);
+  assert.match(code,/NoiseSuppressor\.create\(record\.audioSessionId\)/);
+  assert.match(code,/echoCanceler\?\.release\(\)/);
+  assert.match(code,/noiseSuppressor\?\.release\(\)/);
+});
+
+test("one-time Accessibility snapshot and 20-second arming state expire without re-opening app",()=>{
+  const code=read(path+"ScreenAssistService.kt");
+  assert.match(code,/Handler\(Looper\.getMainLooper\(\)\)/);
+  assert.match(code,/private val expire = Runnable \{ clear\(\) \}/);
+  assert.match(code,/expiryHandler\.postDelayed\(expire,20_000L\)/);
+  assert.match(code,/expiryHandler\.postDelayed\(expire,60_000L\)/);
+  assert.match(code,/expiryHandler\.removeCallbacks\(expire\)/);
+  assert.match(code,/val expired = android\.os\.SystemClock\.elapsedRealtime\(\) - capturedAt > 60_000/);
+});

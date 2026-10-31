@@ -365,3 +365,27 @@
   preflight correctly identifies OpenJDK 21 and Android platform 36 but
   rejects local build due inadequate available RAM/disk.
 - Latest full local test suite: 118/118 PASS; TypeScript typecheck PASS.
+
+## 2026-11-01 — Pre-native-CI stability and safety corrections
+- Compared current OpenAI Realtime client/server event contracts and
+  Android microphone foreground-service requirements against app source.
+  Confirmed gpt-realtime-2.1-mini model and 24 kHz mono PCM protocol.
+- Fixed real-time interruption bug: mic no longer stops sending while
+  model is speaking, allowing server VAD to hear owner interruptions.
+  Speech-start events now purge buffered output; Android AEC and noise
+  suppression are enabled where supported.
+- Added audio-focus management: focus loss or interruption stops
+  microphone/speaker and releases audio resources.
+- Fixed potential native import error by using
+  android.media.audiofx.AcousticEchoCanceler and NoiseSuppressor.
+- Added native handler-driven expiry of screen-text snapshots even
+  if the user does not reopen the application; no lingering sensitive
+  text held indefinitely after the TTL.
+- Expanded instrumentation tests for bounded screen snapshots,
+  owner discard, and existing denial/metadata cases.
+- Strengthened manual-only GitHub workflows: debug native
+  instrumentation compilation, source validation before emulator run,
+  and source SHA in signed release-test artifact.
+- Expanded policy/contract tests. 123/123 local tests and TypeScript
+  checks pass; source alone is NOT proof of working Android voice,
+  physical Accessibility capture, or a signed new APK.

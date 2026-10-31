@@ -92,6 +92,26 @@ class BackgroundAssistSafetyAndroidTest {
         }
     }
 
+    @Test fun screenSnapshotIsBoundedAndOwnerCanDiscardWithoutReading() {
+        try {
+            ScreenAssistState.clear()
+            ScreenAssistState.connected = true
+            assertTrue(ScreenAssistState.arm())
+            ScreenAssistState.capture("com.example.public", "A".repeat(3000))
+            val result=ScreenAssistState.consume()
+            assertNotNull(result)
+            assertEquals(2000,result!!.first.length)
+            assertTrue(ScreenAssistState.arm())
+            ScreenAssistState.capture("com.example.public", "Synthetic private text")
+            ScreenAssistState.clear()
+            assertNull("Owner discard must purge memory",ScreenAssistState.consume())
+            assertFalse(ScreenAssistState.isArmed())
+        } finally {
+            ScreenAssistState.connected = false
+            ScreenAssistState.clear()
+        }
+    }
+
     @Test fun screenTextCannotBeReadOrArmedWithoutForegroundConsent() {
         val module=ScreenAssistModule(reactContext())
         val status=invoke { module.getStatus(it) }

@@ -79,6 +79,8 @@ jobs:
           "$apksigner_bin" verify --verbose --print-certs "$apk" | tee release-test-verification.txt
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' release-test-verification.txt
           sha256sum "$apk" | tee release-test-sha256.txt
+          echo "$GITHUB_SHA" > release-test-source-sha.txt
+          echo "Build source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "### Test-release APK" >> "$GITHUB_STEP_SUMMARY"
           echo "Optimized non-debuggable release variant, signed with a dedicated testing key (not production)." >> "$GITHUB_STEP_SUMMARY"
           cat release-test-sha256.txt >> "$GITHUB_STEP_SUMMARY"
@@ -90,5 +92,6 @@ jobs:
             apps/mobile/android/app/build/outputs/apk/release/app-release.apk
             release-test-sha256.txt
             release-test-verification.txt
+            release-test-source-sha.txt
           if-no-files-found: error
           retention-days: 14

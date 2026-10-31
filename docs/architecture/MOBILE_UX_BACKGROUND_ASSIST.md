@@ -63,3 +63,38 @@ for the latest commit. The new android_build_preflight.py performs a
 non-mutating resource check. The GitHub Actions connector cannot start
 workflow_dispatch runs and the available browser was not signed in. The
 GitHub Actions manual-only policy is unchanged. See project-control/NEXT_ACTION.md.
+
+## 2026-11-01 — Follow-up real-time audio and privacy hardening
+
+Before the first owner-run native acceptance, a source review found two
+behavioral defects in the experimental implementation.
+
+1. The audio capture loop previously paused microphone streaming while
+   a model response was being generated. That prevented server-side VAD
+   from hearing the owner's interruption. The mic now streams continuously
+   during a user-started session, and a speech_started event discards
+   interrupted playback buffers. Android's hardware audio-processing
+   effects (AcousticEchoCanceler / NoiseSuppressor) are enabled when
+   available; unsupported devices continue without those effects.
+   Audio-focus loss (including phone calls or transient interruptions)
+   ends the live conversation and releases audio capture resources.
+   Native build and phone validation are still required for this change.
+   The WebSocket prototype does not yet perform conversation.item.truncate
+   with actual playback timestamps; fully synchronized interruption
+   context needs additional acceptance.
+
+2. The previous one-shot Accessibility snapshot was rejected after a
+   60-second read deadline but could remain in process memory until
+   someone asked to read it. The native state now schedules proactive
+   memory cleanup: an armed request expires after 20 seconds; a captured
+   snapshot is erased 60 seconds after capture even if the user never
+   returns. Owner discard also clears the scheduled callback and snapshot.
+   It still never writes captured text to disk or transmits to any model
+   without user review.
+
+All five GitHub workflows remain strictly workflow_dispatch-only.
+The Android debug workflow now compiles both the app and instrumentation
+APK, the emulator workflow runs harness/type checks before starting the
+emulator, and the release artifact includes the exact source Git SHA
+beside APK signature and SHA-256 files. These are verification controls,
+not evidence of native success.
