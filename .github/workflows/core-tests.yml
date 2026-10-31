@@ -21,10 +21,7 @@ jobs:
           if node scripts/security/audit-summary.mjs npm-audit.json dependency-audit-summary.md; then
             cat dependency-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
           else
-            printf '## Dependency audit could not be completed
-
-A manual security review is required; this is not a security approval.
-' | tee dependency-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
+            echo "Dependency audit unavailable. Manual review required; this is NOT a security approval." | tee dependency-audit-summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload audit evidence
         if: always()
