@@ -471,3 +471,10 @@
 - Development branch used; do not trigger any CI for incremental
   commits. Promote only the tested entire milestone to main once,
   then inspect consolidated native emulator and signed release outcome.
+- Privacy/transport post-review correction: Android microphone consent now
+  names the ACTUAL selected realtime provider, not always OpenAI. The
+  Sarvam signed-URL HTTP request forbids cross-domain HTTP redirects and
+  requires reference_id as documented by the vendor SDK. Sarvam one-turn
+  TTS UI does not claim playback completed when cancelled. Added source
+  regressions. Promoted together so a superseded main pipeline can be
+  cancelled by concurrency, avoiding duplicate completed APK builds.

@@ -20,13 +20,15 @@ export const liveVoiceAvailable=()=>Platform.OS==='android' &&
   typeof NativeModules.PAARealtimeVoice?.startVoiceSession==='function';
 export const getLiveVoiceStatus=()=>module().getVoiceSessionStatus();
 
-export async function startOwnerLiveVoice():Promise<boolean> {
+export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
   if(!liveVoiceAvailable())return false;
   const mic=PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
   const granted=await PermissionsAndroid.check(mic) ||
     await PermissionsAndroid.request(mic,{
       title:'Live voice microphone access',
-      message:'Starting voice streams microphone audio to your OpenAI realtime provider, even while another app is visible. A persistent notification lets you stop it. Only start when you want a live conversation.',
+      message:'Starting voice streams microphone audio to '+(provider==='sarvam'
+        ? 'your Sarvam managed Voice Agent'
+        : 'your OpenAI realtime provider')+', even while another app is visible. A persistent notification lets you stop it. Only start when you want a live conversation.',
       buttonPositive:'Start with microphone',
       buttonNegative:'Cancel'
     })===PermissionsAndroid.RESULTS.GRANTED;

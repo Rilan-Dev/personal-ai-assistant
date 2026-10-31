@@ -205,7 +205,7 @@ export default function App() {
     }
     setLiveVoiceBusy(true);setVoiceNotice('');
     try {
-      const success=await startOwnerLiveVoice();
+      const success=await startOwnerLiveVoice(activeProvider.provider==='sarvam'?'sarvam':'openai');
       if(!success)setVoiceNotice('Live microphone permission was declined. No session started.');
       else setVoiceNotice('Session requested. Check connection status below; Android notification has Stop.');
     } catch {
@@ -481,8 +481,10 @@ export default function App() {
     setVoiceNotice('');
     try {
       if(activeProvider?.provider==='sarvam'){
-        await speakSarvamOnce(last.slice(0,1000),voiceLanguage||'en-IN');
-        setVoiceNotice('Sarvam Bulbul v4 Flash voice response completed. No audio was stored.');
+        const finished=await speakSarvamOnce(last.slice(0,1000),voiceLanguage||'en-IN');
+        setVoiceNotice(finished
+          ? 'Sarvam Bulbul v4 Flash voice response completed. No audio was stored.'
+          : 'Sarvam voice playback stopped before completion.');
       } else {
         await speakOffline(last.slice(0, 1000), voiceLanguage);
         setVoiceNotice('Voice playback finished using an installed offline voice.');

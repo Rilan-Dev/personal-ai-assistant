@@ -31,6 +31,8 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
 
     private val http=OkHttpClient.Builder()
         .connectTimeout(12,TimeUnit.SECONDS)
+        .followRedirects(false)
+        .followSslRedirects(false)
         .pingInterval(15,TimeUnit.SECONDS)
         .build()
     @Volatile private var running=true
@@ -65,6 +67,11 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                         if(body.length>8192)null else JSONObject(body)
                     }catch(_:Exception){null}
                     val signed=data?.optString("url").orEmpty()
+                    val referenceId=data?.optString("reference_id").orEmpty()
+                    if(referenceId.isBlank() || referenceId.length>128){
+                        callbacks.failed("Sarvam did not return a valid interaction reference")
+                        return
+                    }
                     val endpoint=try{Uri.parse(signed)}catch(_:Exception){null}
                     val host=endpoint?.host.orEmpty().lowercase()
                     // Protect owner credentials and prevent SSRF via untrusted

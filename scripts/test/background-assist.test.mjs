@@ -65,7 +65,7 @@ test("Accessibility reads only one explicitly armed bounded text snapshot",()=>{
 });
 test("UI provides live voice controls and explicit screen-read review",()=>{
   const code=read("apps/mobile/App.tsx");
-  assert.match(code,/startOwnerLiveVoice\(\)/);
+  assert.match(code,/startOwnerLiveVoice\(/);
   assert.match(code,/stopOwnerLiveVoice\(\)/);
   assert.match(code,/liveVoiceStatus\.state==='listening'/);
   assert.match(code,/Open Android Accessibility Settings/);

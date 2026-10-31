@@ -34,6 +34,9 @@ test("Sarvam voice agent credentials and stable pseudonymous user ID are encrypt
 test("Sarvam STS uses exact managed Voice Agent audio WebSocket protocol",()=>{
   assert.match(audio,/https:\/\/apps\.sarvam\.ai\/api\/app-runtime\//);
   assert.match(audio,/header\("X-API-Key",cfg\.apiKey\)/);
+  assert.match(audio,/followRedirects\(false\)/);
+  assert.match(audio,/followSslRedirects\(false\)/);
+  assert.match(audio,/reference_id/);
   assert.match(audio,/interaction_type","call"/);
   assert.match(audio,/endpoint\.scheme!="wss"/);
   assert.match(audio,/host\.endsWith\("\.sarvam\.ai"\)/);
@@ -94,7 +97,7 @@ test("Chat/Voice/Settings support Sarvam user configuration without automatic se
   assert.match(ui,/Sarvam Voice Agent \(live STS\)/);
   assert.match(ui,/dictateSarvamOnce\(\)/);
   assert.match(ui,/speakSarvamOnce\(/);
-  assert.match(ui,/startOwnerLiveVoice\(\)/);
+  assert.match(ui,/startOwnerLiveVoice\(/);
   assert.match(ui,/No transcript is displayed, sent to Chat, or saved locally/);
   assert.match(ui,/server-side Sarvam may retain call records|Sarvam performs recognition and reasoning on its servers/i);
   assert.doesNotMatch(ui,/send\(dictated\)/);
@@ -107,4 +110,14 @@ test("Native Sarvam service declares no new background location/contacts or hotw
   assert.match(manifest,/android:exported="false"/);
   assert.doesNotMatch(manifest,/READ_CONTACTS|ACCESS_BACKGROUND_LOCATION|RECEIVE_BOOT_COMPLETED/);
   assert.match(read(native+"DeviceControlPackage.kt"),/SarvamSpeechModule\(reactContext\)/);
+});
+
+
+test("Android microphone consent identifies the actual selected voice provider",()=>{
+  const controls=read("apps/mobile/src/native/liveVoice.ts");
+  assert.match(controls,/startOwnerLiveVoice\(provider:'sarvam'\|'openai'/);
+  assert.match(controls,/provider==='sarvam'/);
+  assert.match(controls,/your Sarvam managed Voice Agent/);
+  assert.match(controls,/your OpenAI realtime provider/);
+  assert.match(ui,/startOwnerLiveVoice\(activeProvider\.provider==='sarvam'\?'sarvam':'openai'\)/);
 });
