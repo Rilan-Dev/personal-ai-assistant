@@ -105,3 +105,16 @@ denied permissions, cancellations and incomplete observations.
 - Completion is generated deterministically from validated Android readings.
   The LLM cannot substitute a fabricated battery value.
 - See docs/architecture/ANDROID_BATTERY_TOOL.md.
+
+## 2026-10-31 — Android Camera2 physical-world tool
+- Reviewed Android CameraManager.setTorchMode / TorchCallback API contracts,
+  especially unreliable availability, external app preemption, state events,
+  and mandatory listener teardown.
+- Reused LangGraph.js 959f041dfb8f6bbafa6af3ebb4bc20484a9290da's
+  policy-controlled graph boundary and the existing device-side durable
+  AgentHarness/Journal; compared Deep Agents.js permissions at
+  26f190d40f44a2bb498db73e9e98b002bb8554fe.
+- Added a narrowly typed device.set_flashlight command, no new agent loop.
+  Required Android CAMERA permission + in-app hardware grant + one-shot
+  approval + verified Camera2 callback before claiming success.
+- Details / limitation: docs/architecture/ANDROID_FLASHLIGHT_TOOL.md.

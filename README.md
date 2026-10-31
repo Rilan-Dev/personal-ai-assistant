@@ -13,6 +13,10 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - An Android Keystore-backed encrypted checkpoint and at-most-once action ledger:
   the app durably reserves each action before execution and cannot silently
   replay an uncertain action after a crash.
+- **Flashlight**: Android Camera2 on/off requests gated by explicit OS
+  CAMERA consent, a separate in-app hardware grant and one-time approval.
+  A TorchCallback must observe the changed state before success; no camera
+  images or video are read by this tool. Physical phone UAT pending.
 - **Battery status**: read-only Android BatteryManager tool. "Check battery
   level" reports current percentage and charging state, with no phone identifiers
   or privileged permissions.

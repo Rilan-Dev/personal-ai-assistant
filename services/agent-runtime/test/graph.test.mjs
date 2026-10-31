@@ -119,3 +119,33 @@ test("model never receives extraneous native battery data", async () => {
   assert.equal(r.response,"Android reports battery at 78%; charging.");
   assert.doesNotMatch(JSON.stringify(context),/PRIVATE-SERIAL/);
 });
+test("flashlight physical-world actions require exact owner intent and boolean schema", async()=>{
+  const planner = new LangGraphStepPlanner({
+    decide: async()=>({type:"tool",toolId:"device.set_flashlight",input:{enabled:true}})
+  });
+  const input = base({request:"Turn flashlight on",availableToolIds:["device.set_flashlight"]});
+  const approved = await planner.next(input);
+  assert.deepEqual(approved,{type:"tool",call:{callId:"step-1",toolId:"device.set_flashlight",input:{enabled:true}}});
+  for(const request of ["Turn flashlight off","Send a WhatsApp message and turn flashlight on","Turn camera on"]) {
+    const r=await planner.next({...input,request});
+    assert.equal(r.type,"clarify",request);
+  }
+  const invalid=new LangGraphStepPlanner({
+    decide:async()=>({type:"tool",toolId:"device.set_flashlight",input:{enabled:"true"}})
+  });
+  assert.equal((await invalid.next(input)).type,"clarify");
+});
+test("torch completion is grounded in observed hardware callback instead of model claim", async()=>{
+  const planner=new LangGraphStepPlanner({decide:async()=>({type:"done",response:"The flashlight is ON"})});
+  const call={callId:"step-1",toolId:"device.set_flashlight",input:{enabled:false}};
+  const baseInput=base({request:"Turn flashlight off",availableToolIds:["device.set_flashlight"],
+    observations:[{call,outcome:{status:"success",data:{verification:"observed",enabled:false,privateCameraId:"sensitive"}}}]
+  });
+  const done=await planner.next(baseInput);
+  assert.equal(done.type,"done");
+  assert.match(done.response,/confirmed flashlight OFF/);
+  const uncertain=await planner.next({...baseInput,
+    observations:[{call,outcome:{status:"success",data:{verification:"not_observed",enabled:false}}}]
+  });
+  assert.equal(uncertain.type,"clarify");
+});

@@ -7,11 +7,12 @@ import { requestAllowsNativeTool } from "../../../packages/agent-contracts/src/i
  * The phone independently validates each call again before any native action.
  * Plugins must be explicitly registered here in a later, reviewed phase.
  */
-export const ToolIdSchema = z.enum(["device.status", "device.battery_status", "device.open_camera", "device.open_app"]);
+export const ToolIdSchema = z.enum(["device.status", "device.battery_status", "device.set_flashlight", "device.open_camera", "device.open_app"]);
 export type AllowedToolId = z.infer<typeof ToolIdSchema>;
 
 const EmptyInput = z.object({}).strict();
 const AppInput = z.object({ app: z.enum(["whatsapp", "whatsapp-business"]) }).strict();
+const FlashlightInput = z.object({enabled: z.boolean()}).strict();
 
 export const toolCatalog = Object.freeze({
   "device.status": {
@@ -23,6 +24,11 @@ export const toolCatalog = Object.freeze({
     description: "Read the device battery percentage and charging state, without history.",
     input: EmptyInput,
     risk: "low"
+  },
+  "device.set_flashlight": {
+    description: "Set the phone flashlight ON or OFF. Requires camera OS permission, in-app grant, and one-time approval. Only executed on phone.",
+    input: FlashlightInput,
+    risk: "medium"
   },
   "device.open_camera": {
     description: "Request opening the camera app. Does NOT capture or record anything.",
@@ -50,7 +56,7 @@ const ToolCallSchema = z.object({
 
 export const PlanningRequestSchema = z.object({
   request: z.string().trim().min(1).max(2000),
-  availableToolIds: z.array(ToolIdSchema).max(4),
+  availableToolIds: z.array(ToolIdSchema).max(5),
   observations: z.array(z.object({
     call: ToolCallSchema,
     outcome: ToolOutcomeSchema
@@ -88,7 +94,9 @@ function minimalOutcome(outcome: ToolOutcome): ToolOutcome {
       ...(typeof d.platform === "string" ? { platform: d.platform.slice(0, 25) } : {}),
       ...(Number.isInteger(d.levelPercent) && Number(d.levelPercent) >= 0 && Number(d.levelPercent) <= 100
         ? { levelPercent: Number(d.levelPercent) } : {}),
-      ...(typeof d.charging === "boolean" ? { charging: d.charging } : {})
+      ...(typeof d.charging === "boolean" ? { charging: d.charging } : {}),
+      ...(typeof d.enabled === "boolean" && d.verification === "observed"
+          ? { enabled: d.enabled, verification: "observed" } : {})
     }};
   }
   return outcome.status === "blocked"
@@ -116,6 +124,17 @@ export function enforceDecision(raw: unknown, input: PlanningRequest): PlannerDe
   const decision = result.data;
   if (decision.type === "done") {
     const last = input.observations.at(-1);
+    if (last?.call.toolId === "device.set_flashlight" && last.outcome.status === "success") {
+      const observed = last.outcome.data;
+      if (observed && typeof observed === "object" && !Array.isArray(observed)) {
+        const data = observed as Record<string, unknown>;
+        if (data.verification === "observed" && typeof data.enabled === "boolean") {
+          return { type: "done", response: "Android confirmed flashlight " +
+            (data.enabled ? "ON" : "OFF") + ". Other apps can change its state afterward." };
+        }
+      }
+      return { type: "clarify", question: "The flashlight state was not confirmed; do not repeat this action automatically." };
+    }
     if (last?.call.toolId === "device.battery_status" && last.outcome.status === "success") {
       const d = last.outcome.data;
       if (d !== null && typeof d === "object" && !Array.isArray(d)) {

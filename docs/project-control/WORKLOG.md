@@ -164,3 +164,19 @@
   charging flag; backend done-step overrides hallucinated model percentages.
 - Added direct graph policy and mobile-over-HTTP-agent integration tests.
 - Device Kotlin compile/real battery UAT remain gated on the new CI build.
+
+## 2026-10-31 — Guarded Android flashlight control
+- Added Android Camera2 native flashlight module and Flutter-free
+  React Native bridge (no camera image/video capture).
+- Separate explicit CAMERA runtime permission prompt, in-app hardware
+  capability, and exact journal-backed one-shot approval required.
+- Added user-intent grammar supporting "Turn flashlight on/off" and
+  "Turn on/off flashlight"; multi-action commands are rejected.
+- Native CameraManager TorchCallback must confirm the requested state;
+  callbacks are removed on success/failure/timeout, and backgrounding
+  interrupts unconfirmed actions without automatic retries.
+- Added LangGraph server schema, opt-in remote planning adapter,
+  observed-data redaction and deterministic grounded completion.
+- Automated graph, model-hallucination, device grant/replay and
+  native-source tests added. Android compilation and phone hardware
+  acceptance are NOT yet verified for this addition.

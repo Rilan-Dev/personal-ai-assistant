@@ -126,3 +126,27 @@ test("battery status reads from Android BatteryManager without new permissions",
   assert.match(adapter,/id: "device\.battery_status"/);
   assert.doesNotMatch(manifest,/BATTERY_STATS|DUMP|READ_PHONE_STATE/);
 });
+test("flashlight requires CAMERA runtime grant, foreground user presence and verified camera2 callback",()=>{
+  const manifest=read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  const kotlin=read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/FlashlightControlModule.kt");
+  const bridge=read("apps/mobile/src/native/androidFlashlight.ts");
+  const pkg=read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlPackage.kt");
+  const ui=read("apps/mobile/App.tsx");
+  assert.match(manifest,/android\.permission\.CAMERA/);
+  assert.match(manifest,/android\.hardware\.camera\.flash" android:required="false"/);
+  assert.match(pkg,/FlashlightControlModule\(reactContext\)/);
+  assert.match(kotlin,/context\.currentActivity\?\.hasWindowFocus\(\) != true/);
+  assert.match(kotlin,/checkSelfPermission\(Manifest\.permission\.CAMERA\)/);
+  assert.match(kotlin,/CameraCharacteristics\.FLASH_INFO_AVAILABLE/);
+  assert.match(kotlin,/manager\.registerTorchCallback\(callback, main\)/);
+  assert.match(kotlin,/manager\.setTorchMode\(id, enabled\)/);
+  assert.match(kotlin,/manager\.unregisterTorchCallback/);
+  assert.match(kotlin,/onTorchModeChanged/);
+  assert.match(kotlin,/result\.putString\("verification", "observed"\)/);
+  assert.doesNotMatch(kotlin,/openCamera\(|ImageReader|takePicture|ACTION_CALL|sendTextMessage/);
+  assert.match(bridge,/PermissionsAndroid\.request\(permission/);
+  assert.match(bridge,/result\?\.verification !== "observed"/);
+  assert.match(ui,/toggle\('hardware\.flashlight'\)/);
+  assert.match(ui,/onPress=\{grantFlashlightAccess\}/);
+  assert.match(ui,/pendingApproval\.toolId === 'device\.set_flashlight'/);
+});

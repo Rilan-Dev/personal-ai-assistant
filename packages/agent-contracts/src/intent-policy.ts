@@ -4,6 +4,14 @@
  * A model suggesting a syntactically valid but unrelated tool is NOT enough
  * to prove user intent. Expand via dedicated, evaluated multi-step policies.
  */
+/** Intentionally tiny grammar: no multi-step or ambiguous hardware commands. */
+export function parseFlashlightIntent(normalized: string): boolean | null {
+  const prefix = normalized.match(/^(?:turn|switch) (on|off) (?:my |the )?(?:phone )?(?:flashlight|torch)$/);
+  if (prefix) return prefix[1] === "on";
+  const suffix = normalized.match(/^(?:turn|switch) (?:my |the )?(?:phone )?(?:flashlight|torch) (on|off)$/);
+  return suffix ? suffix[1] === "on" : null;
+}
+
 export function requestAllowsNativeTool(
   request: string,
   toolId: string,
@@ -17,6 +25,10 @@ export function requestAllowsNativeTool(
   }
   if (toolId === "device.battery_status") {
     return /^(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?battery(?: level| status)?$/.test(normalized);
+  }
+  if (toolId === "device.set_flashlight") {
+    const desired = parseFlashlightIntent(normalized);
+    return desired !== null && input.enabled === desired && Object.keys(input).length === 1;
   }
   if (toolId === "device.open_camera") {
     return /^(?:please )?(?:open|launch|start|turn on) (?:my |the )?camera(?: please)?$/.test(normalized);

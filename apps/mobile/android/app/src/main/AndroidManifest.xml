@@ -4,6 +4,10 @@
   <uses-permission android:name="android.permission.INTERNET"/>
   <!-- Runtime permission is requested only upon explicit microphone tap. -->
   <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <!-- Flashlight only: user must separately approve CAMERA at runtime. -->
+  <uses-permission android:name="android.permission.CAMERA"/>
+  <uses-feature android:name="android.hardware.camera" android:required="false"/>
+  <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
   <queries>
     <intent><action android:name="android.speech.RecognitionService"/></intent>
     <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>

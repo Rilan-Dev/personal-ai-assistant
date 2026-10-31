@@ -55,3 +55,12 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   Android battery data. See docs/architecture/ANDROID_BATTERY_TOOL.md.
 - Complete emulator/physical Android validation for new Kotlin method; do
   not equate model mock tests with device acceptance.
+
+## New guarded flashlight capability
+- Android native device.set_flashlight supports on/off with separate OS
+  CAMERA consent, in-app hardware grant, one-time approved session, and
+  observed Camera2 TorchCallback before confirming success.
+- Real Android device test is required; emulator may lack a flash.
+- See docs/architecture/ANDROID_FLASHLIGHT_TOOL.md.
+- Prioritize unresolved encrypted-journal emulator failure before any
+  signed production release. Diagnostic error-class logs added to CI.

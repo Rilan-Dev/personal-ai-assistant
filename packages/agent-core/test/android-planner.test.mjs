@@ -53,3 +53,18 @@ test("deterministic Android battery status reflects observed charge only", async
   assert.match(finished.response,/37%/);
   assert.match(finished.response,/not currently charging\.$/);
 });
+test("deterministic flashlight planner only accepts one exact on/off command",async()=>{
+  const on=await androidIntentPlanner.next("Turn flashlight on",[]);
+  assert.deepEqual(on,{type:"tool",call:{callId:"native-1",toolId:"device.set_flashlight",input:{enabled:true}}});
+  const alternate=await androidIntentPlanner.next("Turn on the flashlight",[]);
+  assert.deepEqual(alternate.call.input,{enabled:true});
+  const off=await androidIntentPlanner.next("Switch off my torch",[]);
+  assert.deepEqual(off.call.input,{enabled:false});
+  const unsupported=await androidIntentPlanner.next("Turn flashlight on and send a text",[]);
+  assert.equal(unsupported.type,"clarify");
+  const result=await androidIntentPlanner.next("Turn flashlight on",[
+    {call:on.call,outcome:{status:"success",data:{enabled:true,verification:"observed"}}}
+  ]);
+  assert.equal(result.type,"done");
+  assert.match(result.response,/confirmed flashlight ON/);
+});

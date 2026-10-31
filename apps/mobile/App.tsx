@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid
 } from 'react-native';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint } from '@paa/agent-core';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
@@ -9,13 +9,14 @@ import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, rea
 import type { SessionCheckpoint } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
+import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const initialMessages: ChatMessage[] = [
-  { id: 1, speaker: 'assistant', text: 'Welcome! This assistant is under active development. Native Android builds can launch the camera or allowlisted apps after you enable app launches; other platforms use clearly marked demo tools.' }
+  { id: 1, speaker: 'assistant', text: 'Welcome! This assistant is under active development. Android supports approved app launching, read-only battery status, and one-time-approved flashlight changes where hardware is available. Other platforms use marked demo tools.' }
 ];
-const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Check battery level', 'Test approval'];
+const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Check battery level', 'Turn flashlight on', 'Turn flashlight off', 'Test approval'];
 const makeEngine = () => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
@@ -39,6 +40,8 @@ export default function App() {
   const [showLaunchOptions, setShowLaunchOptions] = useState(false);
   const [tileBusy, setTileBusy] = useState(false);
   const [tileNotice, setTileNotice] = useState('');
+  const [flashNotice, setFlashNotice] = useState('');
+  const [flashBusy, setFlashBusy] = useState(false);
   const [backendUrl, setBackendUrl] = useState('');
   const [backendToken, setBackendToken] = useState('');
   const [remoteActive, setRemoteActive] = useState(false);
@@ -99,6 +102,24 @@ export default function App() {
     } finally {
       setTileBusy(false);
     }
+  };
+  const grantFlashlightAccess = async () => {
+    if (!engine.live || !nativeFlashlightAvailable() || flashBusy || running) return;
+    setFlashBusy(true);
+    setFlashNotice('');
+    try {
+      if (!await hasHardwareFlashlight()) {
+        setFlashNotice('No camera flashlight was reported by Android. The assistant will not attempt to control one.');
+        return;
+      }
+      if (await requestCameraForFlashlight()) {
+        setFlashNotice('Android CAMERA permission granted. Also enable the in-app flashlight grant and approve each flashlight change once.');
+      } else {
+        setFlashNotice('Android CAMERA permission is not granted. Flashlight controls remain unavailable.');
+      }
+    } catch {
+      setFlashNotice('Could not request flashlight hardware permission. No hardware action occurred.');
+    } finally { setFlashBusy(false); }
   };
   const enableBackend = () => {
     try {
@@ -210,6 +231,19 @@ export default function App() {
   };
   const approvePending = async () => {
     if (!pendingApproval || running || !engine.live) return;
+    if (pendingApproval.toolId === 'device.set_flashlight') {
+      // Permission is requested only by the separate explicit UI button.
+      // Never use a model-initiated approval to trigger an OS consent dialog.
+      try {
+        if (!await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA)) {
+          append('assistant', 'Grant Android CAMERA permission using the flashlight settings below before approving. No flashlight action was executed.');
+          return;
+        }
+      } catch {
+        append('assistant', 'Could not verify flashlight permission. Nothing executed.');
+        return;
+      }
+    }
     const pending = pendingApproval;
     setRunning(true);
     try {
@@ -331,10 +365,22 @@ export default function App() {
           <Pressable accessibilityRole="button" onPress={() => toggle('apps.launch')} style={[styles.capabilityChip, capabilities.includes('apps.launch') && styles.chipActive]}>
             <Text style={styles.chipText}>{capabilities.includes('apps.launch') ? '✓ ' : '+ '}{engine.live ? 'Allow app launches' : 'App launch demo'}</Text>
           </Pressable>
+          {engine.live && nativeFlashlightAvailable() && <Pressable accessibilityRole="button"
+            disabled={running || flashBusy}
+            onPress={() => toggle('hardware.flashlight')}
+            style={[styles.capabilityChip, capabilities.includes('hardware.flashlight') && styles.chipActive]}>
+            <Text style={styles.chipText}>{capabilities.includes('hardware.flashlight') ? '✓ ' : '+ '}Allow flashlight changes</Text>
+          </Pressable>}
+          {engine.live && nativeFlashlightAvailable() && <Pressable accessibilityRole="button"
+            disabled={running || flashBusy} onPress={grantFlashlightAccess}
+            style={styles.capabilityChip}>
+            <Text style={styles.chipText}>{flashBusy ? 'Checking flashlight…' : 'Grant Android flashlight permission'}</Text>
+          </Pressable>}
           {!engine.live && <Pressable accessibilityRole="button" onPress={() => toggle('messaging.compose')} style={[styles.capabilityChip, capabilities.includes('messaging.compose') && styles.chipActive]}>
             <Text style={styles.chipText}>{capabilities.includes('messaging.compose') ? '✓ ' : '+ '}Message draft demo</Text>
           </Pressable>}
         </View>
+        {flashNotice !== '' && <Text style={styles.voiceNotice}>{flashNotice}</Text>}
       </View>
       <ScrollView style={styles.chat} contentContainerStyle={{ padding: 18, gap: 14 }}>
         {messages.map(message => <View key={message.id} style={[styles.bubble, message.speaker === 'user' ? styles.userBubble : styles.assistantBubble]}>

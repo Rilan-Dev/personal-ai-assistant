@@ -122,3 +122,39 @@ test("an unknown or already finalized session cannot be resumed",async()=>{
  assert.equal((await h.run(options(journal,{resume:true}))).status,"blocked");
  assert.equal((await h.run(options(journal))).status,"blocked");
 });
+test("external flashlight toggle uses grant AND one-time human approval, preventing duplicate attempts",async()=>{
+  const journal=new InMemoryActionJournal();
+  const torches=[];
+  const tool=new ToolRegistry();
+  tool.register({
+    id:"device.set_flashlight",
+    description:"Change owner phone flashlight",
+    capabilities:["hardware.flashlight"],
+    risk:"medium",
+    hasExternalSideEffect:true,
+    validateInput:v=>!!v && typeof v==="object" && v.enabled===true && Object.keys(v).length===1,
+    execute:async input=>{torches.push(input.enabled);return {status:"success",data:{enabled:true,verification:"observed"}}}
+  });
+  const act={callId:"torch-one",toolId:"device.set_flashlight",input:{enabled:true}};
+  const planner={next:async(_request,observations)=>observations.length
+    ? {type:"done",response:"Flashlight verified ON"}
+    : {type:"tool",call:act}};
+  const runner=new AgentHarness(tool,planner);
+  const base={request:"Turn flashlight on",sessionId:"torch-owner",
+    grantedCapabilities:new Set(["hardware.flashlight"]),journal};
+  const first=await runner.run({...base,grantedCapabilities:new Set()});
+  assert.equal(first.status,"blocked");
+  assert.equal(torches.length,0);
+  // New task required after an explicit grant.
+  const allowed={...base,sessionId:"torch-owner-approved"};
+  const waiting=await runner.run(allowed);
+  assert.equal(waiting.status,"awaiting_approval");
+  assert.equal(torches.length,0);
+  assert.equal(await journal.approveAction(allowed.sessionId,act.callId,waiting.fingerprint),true);
+  const accepted=await runner.run({...allowed,resume:true});
+  assert.equal(accepted.status,"completed");
+  assert.deepEqual(torches,[true]);
+  const again=await runner.run({...allowed,resume:true});
+  assert.equal(again.status,"blocked");
+  assert.deepEqual(torches,[true]);
+});

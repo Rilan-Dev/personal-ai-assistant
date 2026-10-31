@@ -2,7 +2,8 @@
 export type Capability =
   | "apps.launch" | "device.observe" | "device.interact"
   | "contacts.read" | "location.read" | "notifications.read"
-  | "messaging.compose" | "messaging.send" | "calls.place";
+  | "messaging.compose" | "messaging.send" | "calls.place"
+  | "hardware.flashlight";
 
 export type RiskLevel = "low" | "medium" | "high";
 export type ToolInput = Record<string, unknown>;

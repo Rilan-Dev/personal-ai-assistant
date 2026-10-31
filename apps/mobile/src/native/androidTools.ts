@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from "react-native";
+import { setVerifiedFlashlight } from "./androidFlashlight";
 import type { Tool } from "@paa/agent-core";
 
 type NativeStatus = {
@@ -69,6 +70,19 @@ export function createAndroidTools(): Tool[] {
       hasExternalSideEffect: false,
       validateInput: emptyInput,
       execute: async () => ({ status: "success", data: await getBridge().getBatteryStatus() })
+    },
+    {
+      id: "device.set_flashlight",
+      description: "Turn Android flashlight on or off after a separate OS camera grant and one-time approval",
+      capabilities: ["hardware.flashlight"],
+      risk: "medium",
+      hasExternalSideEffect: true,
+      validateInput: (input): input is Record<string, unknown> =>
+        plainObject(input) && Object.keys(input).length === 1 && typeof input.enabled === "boolean",
+      execute: async ({enabled}) => ({
+        status: "success",
+        data: await setVerifiedFlashlight(Boolean(enabled))
+      })
     },
     {
       id: "device.open_camera",
