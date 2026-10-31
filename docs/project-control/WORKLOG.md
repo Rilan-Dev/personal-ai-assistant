@@ -224,3 +224,9 @@
   Activity, speech playback denial without foreground, and safe idle stop.
   These DO NOT record audio or test actual speech engines and have not yet
   executed on an emulator for this commit.
+- Android APK workflow now accepts an optional repository-secret-provided
+  PAA_DEBUG_KEYSTORE_B64 owner-owned debug key to allow in-place updates
+  without wiping encrypted task journal. Secret is checked via keytool, never
+  logged or committed; absent secret retains temporary debug signer.
+- Added owner setup instructions in docs/architecture/DEBUG_APK_SIGNING.md.
+  The secret has NOT been configured or verified in the user's repository.

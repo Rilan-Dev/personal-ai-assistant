@@ -28,10 +28,24 @@ jobs:
           test -n "$sdkmanager_path"
           "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
-      # Generated fresh for each CI job; never commit signing keys.
-      - name: Generate temporary debug signing key
+      # A stable owner-owned debug signer permits in-place APK upgrades without
+      # deleting the encrypted journal. Never put keystore bytes in Git.
+      - name: Prepare optional stable debug signing key
+        shell: bash
+        env:
+          PAA_DEBUG_KEYSTORE_B64: ${{ secrets.PAA_DEBUG_KEYSTORE_B64 }}
         run: |
-          keytool -genkeypair -v -keystore apps/mobile/android/app/debug.keystore             -alias androiddebugkey -storepass android -keypass android             -keyalg RSA -keysize 2048 -validity 365             -dname "CN=Android Debug,O=Personal AI Assistant,C=US" -noprompt
+          set -euo pipefail
+          umask 077
+          path="apps/mobile/android/app/debug.keystore"
+          if [[ -n "$PAA_DEBUG_KEYSTORE_B64" ]]; then
+            printf '%s' "$PAA_DEBUG_KEYSTORE_B64" | base64 --decode > "$path"
+            keytool -list -keystore "$path" -storepass android -alias androiddebugkey >/dev/null
+            echo "Stable owner-configured DEBUG signer used. No release signing." >> "$GITHUB_STEP_SUMMARY"
+          else
+            keytool -genkeypair -keystore "$path" -alias androiddebugkey               -storepass android -keypass android               -keyalg RSA -keysize 2048 -validity 365               -dname "CN=Android Debug,O=Personal AI Assistant,C=US" -noprompt
+            echo "Temporary DEBUG signer used. This APK may not upgrade prior CI builds in place." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Compile Android app and Kotlin native bridge
         working-directory: apps/mobile/android
         run: ./gradlew :app:assembleDebug --no-daemon

@@ -24,3 +24,14 @@ test("owner acceptance kit fails closed when no ADB/phone is connected", () => {
   assert.equal(result.status,2);
   assert.match(result.stderr,/ADB missing|Connect exactly one|ADB could not discover devices|App not installed/);
 });
+test("Android debug APK can use a stable owner-held signing secret without publishing key bytes", () => {
+  const workflow=readFileSync(".github/workflows/android-debug.yml","utf8");
+  const ignore=readFileSync(".gitignore","utf8");
+  assert.match(workflow,/secrets\.PAA_DEBUG_KEYSTORE_B64/);
+  assert.match(workflow,/base64 --decode > "\$path"/);
+  assert.match(workflow,/keytool -list -keystore "\$path"/);
+  assert.match(workflow,/if \[\[ -n "\$PAA_DEBUG_KEYSTORE_B64" \]\]/);
+  assert.match(workflow,/Temporary DEBUG signer used/);
+  assert.doesNotMatch(workflow,/echo "\$PAA_DEBUG_KEYSTORE_B64"/);
+  assert.match(ignore,/\*\.keystore/);
+});

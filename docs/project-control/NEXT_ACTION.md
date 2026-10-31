@@ -80,3 +80,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Only owner-entered results are recorded; no automatic message sending
   or unprompted microphone/camera access.
 - Details: docs/architecture/ANDROID_DEVICE_ACCEPTANCE.md.
+
+## Stable Android debug app signing
+- Owner may configure PAA_DEBUG_KEYSTORE_B64 as a GitHub Actions repository
+  secret. Without it, CI debug APKs are signed by different temporary keys.
+- This permits in-place upgrade and crash/replay acceptance without wiping
+  the Android Keystore journal. See docs/architecture/DEBUG_APK_SIGNING.md.
+- Debug signing is NOT production release signing.
