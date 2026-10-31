@@ -219,3 +219,8 @@
   kit is not a substitute for actually executing those hardware checks.
 - Recorded device-specific acceptance procedure in
   docs/architecture/ANDROID_DEVICE_ACCEPTANCE.md. Reports are gitignored.
+- Added four emulator instrumentation tests for native voice: offline-only
+  capability reporting, no wake word, microphone denial without a foreground
+  Activity, speech playback denial without foreground, and safe idle stop.
+  These DO NOT record audio or test actual speech engines and have not yet
+  executed on an emulator for this commit.
