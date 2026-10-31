@@ -69,7 +69,9 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
       d.response.length <= 1500 && Object.keys(d).length === 2) {
     // A model must never falsely claim it executed a native action,
     // sent a message or read private data merely by answering in prose.
-    if (/^(?:please\s+)?(?:open|launch|start|turn|switch|send|text|call|dial|read|delete|toggle)\b/i.test(request.trim()))
+    const exactDeviceRead = requestAllowsNativeTool(request,"device.status",{}) ||
+      requestAllowsNativeTool(request,"device.battery_status",{});
+    if (exactDeviceRead || /^(?:please\s+)?(?:open|launch|start|turn|switch|send|text|call|dial|read|delete|toggle)\b/i.test(request.trim()))
       return {type:"clarify",question:"No device action was executed. Use a single supported command and confirm permissions."};
     return {type:"done",response:d.response.trim()};
   }

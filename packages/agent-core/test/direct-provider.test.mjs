@@ -146,7 +146,7 @@ test("provider prose cannot claim that it executed a hardware or messaging actio
   const planner=createDirectProviderPlanner({settings,availableToolIds:allowed,
     fetchImpl:fakeDecision({type:"done",response:"I sent your WhatsApp message and opened camera."})
   });
-  for(const question of ["Send a WhatsApp message","Open camera","Turn flashlight on"]) {
+  for(const question of ["Send a WhatsApp message","Open camera","Turn flashlight on","Check battery level","Check device status"]) {
     const r=await planner.next(question,[]);
     assert.equal(r.type,"clarify");
     assert.match(r.question,/No device action was executed/);

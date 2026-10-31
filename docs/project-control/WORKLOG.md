@@ -288,3 +288,7 @@
   openai/gpt-oss-120b because llama-3.3-70b-versatile was deprecated
   for free/developer tiers in August 2026.
 - Owner can still edit any provider model name in AI Configuration.
+- Direct-model output policy strengthened: a model-only done answer can
+  never claim success for an exact supported read-only device request such
+  as Check battery level/Check device status. It must propose a native tool,
+  then the app reports the locally observed state. Added regression cases.
