@@ -47,7 +47,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          adb logcat -d -s PAAAgentJournal:E > android-journal-errors.log 2>/dev/null || true
+          timeout 10s adb logcat -d -s PAAAgentJournal:E > android-journal-errors.log 2>/dev/null || true
           echo "Note: only sanitized exception class names, no secrets."
           cat android-journal-errors.log || true
       - name: Upload device instrumentation test reports

@@ -180,3 +180,8 @@
 - Automated graph, model-hallucination, device grant/replay and
   native-source tests added. Android compilation and phone hardware
   acceptance are NOT yet verified for this addition.
+- Added AndroidX instrumentation tests for flashlight native bridge: local
+  hardware-support query, refusal of hardware access without a foreground
+  React Native Activity, and optional CAMERA hardware/permission metadata.
+  These tests do not turn on a real LED or grant permissions. Runtime emulator
+  results and physical hardware verification remain pending CI.
