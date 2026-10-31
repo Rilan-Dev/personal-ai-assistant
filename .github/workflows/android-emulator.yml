@@ -1,13 +1,6 @@
 name: Android encrypted-journal emulator acceptance
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'apps/mobile/android/app/src/androidTest/**'
-      - 'apps/mobile/android/app/src/main/java/**'
-      - 'apps/mobile/android/app/build.gradle'
-      - '.github/workflows/android-emulator.yml'
-
 jobs:
   secure-journal:
     runs-on: ubuntu-latest

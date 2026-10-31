@@ -1,7 +1,6 @@
 name: Android debug compile
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -33,8 +32,8 @@ jobs:
       - name: Prepare optional stable debug signing key
         shell: bash
         env:
-          # Never expose a repository signing secret to pull-request builds.
-          PAA_DEBUG_KEYSTORE_B64: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.PAA_DEBUG_KEYSTORE_B64 || '' }}
+          # Only manual runs on main can access the owner-provided debug signer.
+          PAA_DEBUG_KEYSTORE_B64: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && secrets.PAA_DEBUG_KEYSTORE_B64 || '' }}
         run: |
           set -euo pipefail
           umask 077

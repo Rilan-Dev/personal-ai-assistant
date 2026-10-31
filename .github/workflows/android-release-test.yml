@@ -1,10 +1,7 @@
 name: Android installable release-test APK
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
 

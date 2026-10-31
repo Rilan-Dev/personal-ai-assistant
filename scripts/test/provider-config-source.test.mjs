@@ -25,7 +25,7 @@ test("release workflow produces signed optimized APK with separate test key",()=
   const workflow=read(".github/workflows/android-release-test.yml");
   const gradle=read("apps/mobile/android/app/build.gradle");
   assert.match(workflow,/workflow_dispatch:/);
-  assert.match(workflow,/branches: \[main\]/);
+  assert.doesNotMatch(workflow,/branches: \[main\]/);
   assert.match(workflow,/npm test/);
   assert.match(workflow,/npm run typecheck/);
   assert.match(workflow,/:app:assembleRelease/);

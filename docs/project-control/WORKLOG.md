@@ -292,3 +292,16 @@
   never claim success for an exact supported read-only device request such
   as Check battery level/Check device status. It must propose a native tool,
   then the app reports the locally observed state. Added regression cases.
+
+## 2026-11-01 — All GitHub Actions now manual only
+- Removed automatic push and pull_request triggers from Core tests and
+  Android debug compile; removed filtered push from Android Keystore emulator
+  and main-branch push from release-test APK builder.
+- Kept workflow_dispatch only for all five workflows, including already
+  manual real-model acceptance.
+- Updated optional persistent debug signing condition for explicitly
+  dispatched runs on main, preserving private-keystore restrictions.
+- Added a regression test enumerating every GitHub workflow and refusing
+  any push, PR, schedule, workflow_run, or repository_dispatch trigger.
+- No GitHub Actions jobs were manually started for this change. Run them
+  only as needed via Actions > workflow > Run workflow.

@@ -121,3 +121,12 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   dependency advisories and real provider/physical phone acceptance remain.
 - Design: docs/architecture/ANDROID_AI_CONFIGURATION.md and
   docs/architecture/ANDROID_RELEASE_TEST_APK.md.
+
+## GitHub Actions execution policy — manual-only
+- ALL five GitHub Actions workflows now have ONLY workflow_dispatch.
+- Git commits, PR creation and branch updates do not launch CI jobs.
+- Launch one workflow explicitly from GitHub Actions > select workflow >
+  Run workflow when testing/building is needed. Existing runs previously
+  queued by earlier commits are not automatically cancelled by the change.
+- Keep the regression test scripts/test/workflow-manual-only.test.mjs green
+  whenever adding or changing workflows.
