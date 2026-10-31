@@ -1,6 +1,7 @@
 import type {
   Capability, ToolCall, ToolMetadata, ToolOutcome, PlannerDecision, AgentTraceEvent, ToolInput
 } from "../../agent-contracts/src/index.ts";
+import type { DurableActionJournal, SessionCheckpoint, SessionStatus, ObservedAction } from "./journal.ts";
 
 export interface ToolExecutionContext {
   readonly signal?: AbortSignal;
@@ -17,7 +18,11 @@ export interface RunOptions {
   request: string;
   sessionId: string;
   grantedCapabilities: ReadonlySet<Capability>;
+  /** @deprecated Bare fingerprints cannot authorize execution. */
   approvedFingerprints?: ReadonlySet<string>;
+  journal?: DurableActionJournal;
+  /** Resume only after explicit owner choice; never automatically on boot. */
+  resume?: boolean;
   signal?: AbortSignal;
   onEvent?: (event: AgentTraceEvent) => void;
   maxSteps?: number;
@@ -63,13 +68,46 @@ export class AgentHarness {
   async run(options: RunOptions): Promise<AgentRunResult> {
     const trace: AgentTraceEvent[] = [];
     const emit = (ev: AgentTraceEvent) => { trace.push(ev); options.onEvent?.(ev); };
-    const observations: { call: ToolCall; outcome: ToolOutcome }[] = [];
+    let observations: ObservedAction[] = [];
     const maxSteps = Math.min(Math.max(options.maxSteps ?? 8, 1), 32);
     const processedCalls = new Set<string>();
-    const failed = (status: "blocked" | "cancelled" | "failed", reason: string): AgentRunResult => {
-      emit({ type: "stopped", reason }); return { status, reason, trace };
+    const journal = options.journal;
+    let checkpoint: SessionCheckpoint = {
+      version: 1, sessionId: options.sessionId, request: options.request,
+      observations: [], status: "running", updatedAt: Date.now()
     };
-    for (let iteration = 0; iteration < maxSteps; iteration++) {
+    const save = async (status: SessionStatus, pendingCall?: ToolCall) => {
+      if (!journal) return;
+      checkpoint = { ...checkpoint, observations: [...observations], status,
+        updatedAt: Date.now(), pendingCall };
+      await journal.saveSession(checkpoint);
+    };
+    const failed = async (status: "blocked" | "cancelled" | "failed", reason: string): Promise<AgentRunResult> => {
+      emit({ type: "stopped", reason });
+      try { await save(status); } catch { /* Never retry an already claimed action. */ }
+      return { status, reason, trace };
+    };
+    try {
+      if (journal && options.resume) {
+        const previous = await journal.loadSession(options.sessionId);
+        if (!previous || previous.version !== 1 || previous.request !== options.request)
+          return { status: "blocked", reason: "No matching resumable session", trace };
+        if (!["running", "awaiting_approval"].includes(previous.status))
+          return { status: "blocked", reason: "Session already finalized", trace };
+        if (!Array.isArray(previous.observations) || previous.observations.length > 32)
+          return { status: "blocked", reason: "Invalid session history", trace };
+        checkpoint = previous;
+        observations = [...previous.observations];
+        observations.forEach(o => processedCalls.add(o.call.callId));
+      } else if (journal) {
+        if (await journal.loadSession(options.sessionId))
+          return { status: "blocked", reason: "Session ID already used", trace };
+        await save("running");
+      }
+    } catch {
+      return { status: "blocked", reason: "Secure journal unavailable; no actions executed", trace };
+    }
+    for (let iteration = observations.length; iteration < maxSteps; iteration++) {
       if (options.signal?.aborted) return failed("cancelled", "Cancelled by user");
       emit({ type: "planning", iteration });
       let decision: PlannerDecision;
@@ -78,6 +116,8 @@ export class AgentHarness {
       if (options.signal?.aborted) return failed("cancelled", "Cancelled by user");
       if (decision.type === "done" || decision.type === "clarify") {
         const response = decision.type === "done" ? decision.response : decision.question;
+        try { await save("completed"); }
+        catch { return failed("failed", "Could not persist completed session"); }
         emit({ type: "completed", message: response });
         return { status: "completed", response, trace };
       }
@@ -89,20 +129,45 @@ export class AgentHarness {
       if (!tool.validateInput(call.input)) return failed("blocked", `Invalid input for ${call.toolId}`);
       const missing = tool.capabilities.filter(cap => !options.grantedCapabilities.has(cap));
       if (missing.length) return failed("blocked", `Permission required: ${missing.join(", ")}`);
-      // Side effects always require approval, regardless of model-supplied risk classification.
+      // Side effects always require durable one-time approval, regardless of model claims.
       const requiresApproval = tool.hasExternalSideEffect || tool.risk === "high";
       const fingerprint = approvalFingerprint(call, options.sessionId);
-      if (requiresApproval && !options.approvedFingerprints?.has(fingerprint)) {
+      if (requiresApproval && !journal) {
         emit({ type: "approval_required", call });
         return { status: "awaiting_approval", call, fingerprint, trace };
+      }
+      if (journal) {
+        try {
+          if (requiresApproval) {
+            if (!await journal.prepareApproval(options.sessionId, call.callId, fingerprint))
+              return failed("blocked", "Action already claimed or approval changed");
+            await save("awaiting_approval", call);
+          }
+          // Atomically journal BEFORE dispatch. False means unapproved or already attempted.
+          if (!await journal.claimAction(options.sessionId, call.callId, fingerprint, requiresApproval)) {
+            if (requiresApproval) {
+              emit({ type: "approval_required", call });
+              return { status: "awaiting_approval", call, fingerprint, trace };
+            }
+            return failed("blocked", "Action already reserved or outcome uncertain; replay forbidden");
+          }
+          await save("running");
+        } catch { return failed("blocked", "Could not reserve action securely; no replay allowed"); }
       }
       emit({ type: "executing", call });
       let outcome: ToolOutcome;
       try { outcome = await tool.execute(call.input, { signal: options.signal, sessionId: options.sessionId }); }
       catch { outcome = { status: "error", message: "Tool execution failed" }; }
-      if (options.signal?.aborted) return failed("cancelled", "Cancelled by user");
+      if (journal) {
+        try { await journal.finishAction(options.sessionId, call.callId,
+          options.signal?.aborted === true || outcome.status === "error"); }
+        catch { return failed("failed", "Action outcome uncertain; replay forbidden"); }
+      }
+      if (options.signal?.aborted) return failed("cancelled", "Cancelled; action outcome may be uncertain");
       emit({ type: "tool_result", callId: call.callId, outcome });
       observations.push({ call, outcome });
+      try { await save("running"); }
+      catch { return failed("failed", "Could not persist observation; replay forbidden"); }
       if (outcome.status === "blocked") return failed("blocked", outcome.reason);
       if (outcome.status === "error") return failed("failed", outcome.message);
     }

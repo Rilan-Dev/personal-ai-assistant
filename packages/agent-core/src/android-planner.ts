@@ -20,6 +20,9 @@ export const androidIntentPlanner: Planner = {
           response: "Android accepted the launch request. This version cannot independently verify the destination screen."
         };
       }
+      if (last.call.toolId === "demo.approval_test") {
+        return { type: "done", response: "The one-time approval was consumed. This was a safe training action; no device operation occurred." };
+      }
       if (last.call.toolId === "device.status") {
         return { type: "done", response: "The Android native device bridge responded successfully. Voice and accessibility are not active." };
       }
@@ -29,7 +32,9 @@ export const androidIntentPlanner: Planner = {
       .replace(/^hey\s+(nexa|assistant)[,!]?\s+/, "")
       .replace(/[.!?]+$/, "").trim();
     let call: ToolCall | null = null;
-    if (/^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(input)) {
+    if (input === "test approval") {
+      call = { callId: "native-1", toolId: "demo.approval_test", input: {} };
+    } else if (/^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(input)) {
       call = { callId: "native-1", toolId: "device.status", input: {} };
     } else {
       const match = input.match(/^(?:please )?(?:open|launch|start) (?:my |the )?(camera|whatsapp business|whatsapp)(?: please)?$/);
@@ -43,7 +48,7 @@ export const androidIntentPlanner: Planner = {
     if (call) return { type: "tool", call };
     return {
       type: "clarify",
-      question: "Native controls currently support: Open camera, Open WhatsApp, Open WhatsApp Business, and Check device status. Multi-step actions and messaging are not enabled yet."
+      question: "Native controls currently support: Open camera, Open WhatsApp, Open WhatsApp Business, Check device status, and Test approval. Multi-step actions and messaging are not enabled yet."
     };
   }
 };

@@ -43,6 +43,15 @@ const appInput = (value: unknown): value is Record<string, unknown> =>
 export function createAndroidTools(): Tool[] {
   return [
     {
+      id: "demo.approval_test",
+      description: "Exercise one-time approval safely without touching the device",
+      capabilities: [],
+      risk: "high",
+      hasExternalSideEffect: false,
+      validateInput: emptyInput,
+      execute: async () => ({ status: "success", data: { training: true, noDeviceAction: true } })
+    },
+    {
       id: "device.status",
       description: "Read non-sensitive bridge diagnostic status",
       capabilities: [],

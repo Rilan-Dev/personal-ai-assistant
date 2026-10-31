@@ -1,32 +1,30 @@
 # Next authorized implementation actions
 
-## Completed source milestones
-- Expo bare Android/iOS source and React Native assistant UI committed.
-- Native Kotlin allowlisted app-launch and camera bridge implemented.
-- LangGraph.js imported as real server-side agent orchestration dependency.
-- Planning-only authenticated HTTP endpoint with strict JSON/input allowlist.
-- Model-planning provider via @langchain/openai; user-entered model credentials
-  belong only to the server environment.
-- Mobile-side HTTPS planner adapter; user opt-in backend settings kept in memory.
-- Integration tests cover LangGraph graph, HTTP bearer, input validation,
-  disallowed tool calls, redaction, permission denial, and complete simulated
-  model/tool/observation loop.
+## Source implemented
+- React Native/Expo SDK 58 Android/iOS, Web demo, Kotlin Intent bridge.
+- LangGraph.js planning-only Node backend and strictly typed provider adapter.
+- On-device bounded tool loop, independent grants, approval checks.
+- Android Keystore AES-GCM durable session checkpoint and action journal;
+  claims are committed before dispatch and cannot be replayed.
+- Owner-only Approve once / Decline / Resume saved task UI.
+- Safe high-risk “Test approval” demo action for on-device acceptance; no message sent.
+- No automatic outbound communications or background microphone.
 
-## Open acceptance gates / next sprint
-1. Build a signed DEBUG Android APK from GitHub Actions (artifact is uploaded on successful build). Debug key must be created
-   fresh during CI and must NOT be committed. Diagnose Kotlin/API build failures.
-2. Physical Android test: native bridge available, permission-off blocks actions,
-   WhatsApp/camera Intent launch observed, unsupported/not-installed apps fail.
-3. Run at least one REAL configured LLM provider test of graph structured output
-   via owner-provided secret; never use service credentials from app code.
-4. Add encrypted ON-DEVICE task checkpoints and one-shot side-effect approval
-   ledger; prove no replay on restart, cancellation or connection loss.
-5. Implement provider-neutral streaming/voice orchestration after the checkpoint
-   contract stabilizes.
-6. Review 13 dependency advisories (including 2 high) before private APK release.
-7. Stage MCP plugin registry behind a deny-by-default capability boundary.
-8. Preserve provider/GitHub upstream source, commit, licenses and tests in
-   docs/architecture/HARNESS_UPSTREAM_RESEARCH.md for all future integrations.
+## Open acceptance gates
+1. GitHub Android CI compiles AgentJournalModule and uploads debug APK;
+   GitHub Core test pipeline passes. Capture exact run evidence.
+2. Physical phone: verify permission-off, camera / WhatsApp launch, cold
+   restart recovery, persistence and keystore loss/corruption behavior.
+3. Android instrumentation: process kill mid-action must not duplicate
+   action. One-shot approval must not be reusable after crash or retry.
+4. Real LLM provider API with owner-provided credentials, no embedded keys.
+5. Push-to-talk speech recognition with explicit mic permission and cancel;
+   then TTS and Android voice assistant invocation feasibility.
+6. Privacy controls and encrypted data retention; preserve action tombstones.
+7. Address 13 npm advisories (2 high); no release until reviewed.
+8. MCP tools, new device operations and messaging behind explicit safe gates.
 
-Do not mark iOS, real LLM provider, accessibility control, wake word or WhatsApp
-message delivery as verified without genuine evidence.
+Source analysis: docs/architecture/HARNESS_UPSTREAM_RESEARCH.md.
+Full design: docs/architecture/DURABLE_ACTION_JOURNAL.md.
+Continue source reviews and append worklog evidence; do not mark real-device
+acceptance or WhatsApp message delivery without direct evidence.

@@ -53,3 +53,23 @@
 - No live LLM API credential was used, and no provider model quality was tested.
 - Android CI now uploads a short-lived debug APK artifact AFTER a successful
   Gradle compile, enabling actual phone testing; this is not a release APK.
+
+## 2026-10-31 — Durable task checkpoint and one-time approval implementation
+- Confirmed GitHub Core tests AND Android debug APK compilation passed on
+  commit 97f01a2; debug APK artifact available through the Actions workflow.
+- Inspected upstream LangGraph checkpoint base, MemorySaver and replay
+  idempotency guidance, plus Deep Agents filesystem permission code.
+- Added `DurableActionJournal` TypeScript contract and test-only memory store.
+- AgentHarness now stores checkpoints before execution and reserves action IDs
+  before dispatch; grants are exact-session, one-shot and cannot be replayed.
+- Added Android Keystore AES-256-GCM encrypted session and action journal
+  with synchronous preference commits; no plaintext saved to SharedPreferences.
+- React Native UI now has Approve once, Decline and owner-initiated Resume
+  saved task controls. No automatic execution on cold restart.
+- Added concurrency, denial, restart, cancellation and persistence failure
+  regression tests; local suite: 62/62 passed.
+- New native journal Kotlin compilation and device-process-death testing
+  remain pending CI and physical Android acceptance evidence.
+- Added a high-risk, **zero-device-side-effect** Android training tool
+  `demo.approval_test` and a "Test approval" prompt, so the owner can verify
+  one-shot approval and restart behavior without messaging anybody.

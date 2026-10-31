@@ -10,6 +10,12 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - Android Kotlin bridge for allowlisted WhatsApp/WhatsApp Business and camera
   **Intent launch requests**, not clicks, screenshots, message delivery or calls.
 - The `@paa/agent-core` bounded tool-execution engine with local capability gates.
+- An Android Keystore-backed encrypted checkpoint and at-most-once action ledger:
+  the app durably reserves each action before execution and cannot silently
+  replay an uncertain action after a crash.
+- Owner-driven **Approve once**, **Decline** and **Resume saved task** controls.
+  Use the **Test approval** quick prompt on a native Android build to test
+  this workflow safely; it does not perform any real device operation.
 - **Real LangGraph.js StateGraph** in the Node-only `services/agent-runtime` service
   for one-step model planning and validation, using the LangChain OpenAI-compatible
   model adapter. Model calls run on the server; mobile executes authorized tools.
@@ -69,6 +75,11 @@ The code is under development; do not use it for emergency communication,
 live messaging, or private-device data without reviewing permissions.
 
 After a successful Android debug build, a seven-day GitHub Actions artifact can be downloaded for owner device testing. It is NOT a signed production release.
+
+A debug APK produced in a different CI run uses a fresh temporary signing key;
+it may require uninstalling the previous debug build, which clears its local
+journal. Process-restart acceptance tests should use the SAME installed APK.
+The new journal has not yet passed physical-device process-death testing.
 
 Before personal APK release, resolve or assess upstream dependency advisories
 and complete a real Android phone acceptance test. Backend LLM provider calls,

@@ -60,3 +60,19 @@ boundary, tests, and rollback plan. Favor maintained packages over
 copy-pasted mutable framework internals. Always test tool hallucinations,
 prompt injection in tool results, output validation, duplicate side-effects,
 denied permissions, cancellations and incomplete observations.
+
+## 2026-10-31 — Checkpoint replay and durable local action claims
+- Reviewed upstream LangGraph checkpoint `base.ts`, `memory.ts`, and
+  functional API idempotency guidance. A side effect that starts but has not
+  been checkpointed can execute again on resume unless independently guarded.
+- Reused existing LangGraph planning SDK, but implemented Android-specific
+  encrypted reservation because a server graph checkpoint cannot atomically
+  reserve a private device action.
+- `packages/agent-core/src/journal.ts` defines the interface and a test-only
+  in-memory implementation. `AgentJournalModule.kt` provides Android
+  Keystore AES-GCM and synchronous commit of one-shot action reservations.
+- Cross-platform support does not grant external side effects to the Web/iOS
+  demo. Android native execution requires its secure journal.
+- No deepagents filesystem/shell autonomy adopted. Phone policies remain
+  explicit allowlist, fail-closed.
+- Details: docs/architecture/DURABLE_ACTION_JOURNAL.md.

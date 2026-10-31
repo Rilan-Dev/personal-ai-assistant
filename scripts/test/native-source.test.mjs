@@ -32,3 +32,20 @@ test("iOS bundle ID aligns with Expo config", () => {
   assert.match(ios, /PRODUCT_BUNDLE_IDENTIFIER = dev\.rilandev\.personalaiassistant;/);
   assert.equal(JSON.parse(app).expo.ios.bundleIdentifier, "dev.rilandev.personalaiassistant");
 });
+test("Android secure journal uses Keystore AES-GCM and synchronous claims", () => {
+  const journal = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt");
+  const nativePackage = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlPackage.kt");
+  assert.match(nativePackage,/AgentJournalModule\(reactContext\)/);
+  assert.match(journal,/AndroidKeyStore/);
+  assert.match(journal,/AES\/GCM\/NoPadding/);
+  assert.match(journal,/setKeySize\(256\)/);
+  assert.match(journal,/putString\(k, encrypt\(v\)\)\.commit\(\)/);
+  assert.match(journal,/write\(k, record\("claimed", fp\)\); p\.resolve\(true\)/);
+  assert.doesNotMatch(journal,/MODE_WORLD_READABLE|allowBackup="true"/);
+});
+test("Android UI cannot run live tools without the native secure journal", () => {
+  const ui = read("apps/mobile/App.tsx");
+  assert.match(ui,/nativeDeviceAvailable\(\) && androidJournalAvailable\(\)/);
+  assert.match(ui,/journal: engine\.live \? androidActionJournal : undefined/);
+  assert.match(ui,/resume: Boolean\(restore\)/);
+});

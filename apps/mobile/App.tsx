@@ -1,20 +1,22 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View
 } from 'react-native';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint } from '@paa/agent-core';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
+import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
+import type { SessionCheckpoint } from '@paa/agent-core';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const initialMessages: ChatMessage[] = [
   { id: 1, speaker: 'assistant', text: 'Welcome! This assistant is under active development. Native Android builds can launch the camera or allowlisted apps after you enable app launches; other platforms use clearly marked demo tools.' }
 ];
-const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status'];
+const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Test approval'];
 const makeEngine = () => {
   const registry = new ToolRegistry();
-  const live = nativeDeviceAvailable();
+  const live = nativeDeviceAvailable() && androidJournalAvailable();
   (live ? createAndroidTools() : createDemoTools()).forEach(tool => registry.register(tool));
   return {
     registry,
@@ -36,9 +38,31 @@ export default function App() {
   const [backendToken, setBackendToken] = useState('');
   const [remoteActive, setRemoteActive] = useState(false);
   const [backendError, setBackendError] = useState('');
+  const [recovered, setRecovered] = useState<SessionCheckpoint | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<{
+    sessionId: string; request: string; callId: string;
+    fingerprint: string; toolId: string; args: Record<string, unknown>
+  } | null>(null);
   const counter = useRef(2);
   const activeAbort = useRef<AbortController | null>(null);
 
+  useEffect(() => {
+    if (!engine.live) return;
+    let active = true;
+    readLastAndroidSession().then(last => {
+      if (!active || !last || !['running', 'awaiting_approval'].includes(last.status)) return;
+      setRecovered(last);
+      if (last.status === 'awaiting_approval' && last.pendingCall) {
+        setPendingApproval({
+          sessionId: last.sessionId, request: last.request,
+          callId: last.pendingCall.callId,
+          fingerprint: approvalFingerprint(last.pendingCall, last.sessionId),
+          toolId: last.pendingCall.toolId, args: last.pendingCall.input
+        });
+      }
+    }).catch(() => { /* secure journal failures block tool execution later */ });
+    return () => { active = false; };
+  }, [engine.live]);
   const append = (speaker: ChatMessage['speaker'], text: string) => {
     setMessages(prev => [...prev, { id: counter.current++, speaker, text }]);
   };
@@ -65,13 +89,16 @@ export default function App() {
     setBackendToken('');
     setBackendError('');
   };
-  const send = async (value: string = input) => {
+  const send = async (value: string = input, restore?: SessionCheckpoint) => {
     const request = value.trim();
-    if (!request || running) return;
+    if (!request || running || activeAbort.current) return;
     setInput(''); setEvents([]); append('user', request);
     const controller = new AbortController(); activeAbort.current = controller;
     setRunning(true);
     try {
+      const sessionId = engine.live
+        ? (restore?.sessionId ?? await newAndroidSessionId())
+        : 'local-demo';
       const harness = remoteActive && engine.live
         ? new AgentHarness(engine.registry, createRemotePlanner({
             baseUrl: backendUrl,
@@ -81,18 +108,60 @@ export default function App() {
         : engine.harness;
       const result = await harness.run({
         request,
-        sessionId: engine.live ? 'local-android' : 'local-demo',
+        sessionId,
+        journal: engine.live ? androidActionJournal : undefined,
+        resume: Boolean(restore),
         grantedCapabilities: new Set(capabilities),
         signal: controller.signal,
         maxSteps: 6,
         onEvent: event => setEvents(prev => [...prev, event])
       });
+      setRecovered(null);
       if (result.status === 'completed') append('assistant', result.response);
-      else if (result.status === 'awaiting_approval') append('assistant', 'Approval required. No action was executed. The approval UI will be implemented in a later phase.');
-      else append('assistant', `Task ${result.status}: ${result.reason}`);
+      else if (result.status === 'awaiting_approval') {
+        setPendingApproval({
+          sessionId, request, callId: result.call.callId,
+          fingerprint: result.fingerprint, toolId: result.call.toolId,
+          args: result.call.input
+        });
+        append('assistant', 'Approval required. No action was executed. Review the exact tool request below.');
+      } else append('assistant', `Task ${result.status}: ${result.reason}`);
+    } catch {
+      append('assistant', 'Secure task initialization failed; no device action was executed.');
     } finally { setRunning(false); activeAbort.current = null; }
   };
   const stop = () => activeAbort.current?.abort();
+  const approvePending = async () => {
+    if (!pendingApproval || running || !engine.live) return;
+    const pending = pendingApproval;
+    setRunning(true);
+    try {
+      const accepted = await androidActionJournal.approveAction(
+        pending.sessionId, pending.callId, pending.fingerprint);
+      if (!accepted) {
+        append('assistant', 'Approval was already used or expired. No action executed.');
+        setPendingApproval(null);
+        return;
+      }
+      const saved = await androidActionJournal.loadSession(pending.sessionId);
+      setPendingApproval(null);
+      if (saved) setRecovered(saved);
+      append('assistant', 'Approved once. Use Resume to continue the exact task with your currently granted permissions.');
+    } catch { append('assistant', 'Unable to securely record approval; no action executed.'); }
+    finally { setRunning(false); }
+  };
+  const rejectPending = async () => {
+    if (!pendingApproval || running || !engine.live) return;
+    const pending = pendingApproval;
+    try {
+      const saved = await androidActionJournal.loadSession(pending.sessionId);
+      if (saved) await androidActionJournal.saveSession({
+        ...saved, status: 'cancelled', pendingCall: undefined, updatedAt: Date.now()
+      });
+      setPendingApproval(null); setRecovered(null);
+      append('assistant', 'Approval declined. Task cancelled without execution.');
+    } catch { append('assistant', 'Could not persist cancellation; action remains unapproved.'); }
+  };
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" />
@@ -139,6 +208,31 @@ export default function App() {
             <Text style={styles.chipText}>{remoteActive ? 'Disconnect backend and clear token' : 'Enable remote LangGraph planning'}</Text>
           </Pressable>
         </View>}
+      </View>}
+      {engine.live && recovered && <View style={styles.backendBox}>
+        <Text style={styles.bannerTitle}>Saved task: {recovered.status === 'awaiting_approval' ? 'Approval pending' : 'Interrupted'}</Text>
+        <Text style={styles.bannerText} numberOfLines={2}>{recovered.request}</Text>
+        <Text style={styles.bannerText}>Never automatically replaying a claimed action. Review permissions before resuming.</Text>
+        {!pendingApproval && <Pressable accessibilityRole="button" disabled={running}
+          style={styles.capabilityChip} onPress={() => send(recovered.request, recovered)}>
+          <Text style={styles.chipText}>Resume this saved task</Text>
+        </Pressable>}
+      </View>}
+      {engine.live && pendingApproval && <View style={styles.approvalBox}>
+        <Text style={styles.bannerTitle}>One-time action approval</Text>
+        <Text style={styles.bannerText}>Tool: {pendingApproval.toolId}</Text>
+        <Text style={styles.bannerText}>Arguments: {JSON.stringify(pendingApproval.args)}</Text>
+        <Text style={styles.bannerText}>This approval is bound to the exact saved session and tool arguments. It is not yet executed.</Text>
+        <View style={styles.controlsRow}>
+          <Pressable accessibilityRole="button" disabled={running} style={styles.capabilityChip}
+            onPress={approvePending}>
+            <Text style={styles.chipText}>Approve once</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" disabled={running} style={styles.capabilityChip}
+            onPress={rejectPending}>
+            <Text style={styles.chipText}>Decline</Text>
+          </Pressable>
+        </View>
       </View>}
       <View style={styles.capabilityBar}>
         <Text style={styles.sectionLabel}>{engine.live ? 'Owner-controlled tool access (in-app)' : 'Simulated capability grants'}</Text>
@@ -192,6 +286,7 @@ const styles = StyleSheet.create({
   bannerText: { color: '#c4b5fd', marginTop: 5, fontSize: 12, lineHeight: 17 },
   capabilityBar: { paddingHorizontal: 16, paddingBottom: 12 },
   backendBox: { marginHorizontal: 14, marginBottom: 14, padding: 12, backgroundColor: '#111827', borderColor: '#374151', borderWidth: 1, borderRadius: 12 },
+  approvalBox: { marginHorizontal: 14, marginBottom: 14, padding: 12, gap: 8, backgroundColor: '#292047', borderColor: '#59418a', borderWidth: 1, borderRadius: 12 },
   warning: { color: '#fecaca', fontSize: 12 },
   sectionLabel: { color: '#9ca3af', fontSize: 11, fontWeight: '700', letterSpacing: 0.6, marginBottom: 7 },
   controlsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

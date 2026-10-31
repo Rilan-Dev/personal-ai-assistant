@@ -33,3 +33,13 @@ test("does not invent screen verification after an intent", async () => {
   assert.equal(r.type, "done");
   assert.match(r.response, /cannot independently verify/);
 });
+test("training approval command plans a safe isolated mock tool", async () => {
+  const call = await androidIntentPlanner.next("Test approval", []);
+  assert.equal(call.type, "tool");
+  assert.deepEqual(call.call, {callId:"native-1",toolId:"demo.approval_test",input:{}});
+  const done = await androidIntentPlanner.next("Test approval", [
+    {call:call.call,outcome:{status:"success",data:{training:true,noDeviceAction:true}}}
+  ]);
+  assert.equal(done.type, "done");
+  assert.match(done.response,/no device operation/);
+});
