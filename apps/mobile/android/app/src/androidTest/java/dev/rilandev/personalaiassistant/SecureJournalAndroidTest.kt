@@ -110,6 +110,31 @@ class SecureJournalAndroidTest {
         // Tile launch only opens MainActivity; no wake-word service installed.
     }
 
+    @Test fun providerKeyIsEncryptedAndCanBeClearedAcrossModuleRecreation() {
+        val unique = "not-a-real-api-key-" + UUID.randomUUID()
+        val saved = JSONObject()
+            .put("version", 1).put("provider", "openai")
+            .put("model", "gpt-4.1-mini").put("apiKey", unique).toString()
+        val first = journal()
+        try {
+            assertEquals(true, invoke { first.saveProviderSettings(saved, it) })
+            val restored = invoke { journal().loadProviderSettings(it) } as String
+            assertEquals(unique, JSONObject(restored).getString("apiKey"))
+            val prefs = appContext.getSharedPreferences("paa_secure_journal_v1", Context.MODE_PRIVATE)
+            assertFalse("API key must never be stored as plaintext", prefs.all.values.any {
+                it.toString().contains(unique)
+            })
+            val invalid = JSONObject(saved).put("model","bad model name").toString()
+            assertEquals("PROVIDER_SETTINGS_SAVE",
+                rejectedCode { first.saveProviderSettings(invalid, it) })
+            val previous = invoke { journal().loadProviderSettings(it) } as String
+            assertEquals(unique,JSONObject(previous).getString("apiKey"))
+        } finally {
+            assertEquals(true, invoke { journal().clearProviderSettings(it) })
+        }
+        assertNull(invoke { journal().loadProviderSettings(it) })
+    }
+
     @Test fun encryptedSessionSurvivesRecreatingTheModule() {
         val session = UUID.randomUUID().toString()
         val request = "journal-instrumentation-" + UUID.randomUUID()

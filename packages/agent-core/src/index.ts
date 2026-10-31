@@ -7,3 +7,6 @@ export type { RemotePlannerConfig } from "./remote-planner.ts";
 
 export { InMemoryActionJournal } from "./journal.ts";
 export type { DurableActionJournal, SessionCheckpoint, SessionStatus } from "./journal.ts";
+
+export { PROVIDERS, DIRECT_TOOL_IDS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from "./direct-provider.ts";
+export type { DirectProviderId, DirectProviderSettings, DirectProviderOptions } from "./direct-provider.ts";

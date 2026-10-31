@@ -92,8 +92,9 @@ android {
         applicationId "dev.rilandev.personalaiassistant"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // CI increments this for installable release-test APK updates.
+        versionCode (System.getenv("PAA_BUILD_VERSION_CODE") ?: "1").toInteger()
+        versionName "0.3." + (System.getenv("PAA_BUILD_VERSION_CODE") ?: "0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
@@ -105,15 +106,23 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Dedicated testing-release certificate. NEVER debug or store keys in Git.
+        // GitHub CI provides this keystore and passwords only during build.
+        testRelease {
+            storeFile file('testing-release.keystore')
+            storePassword (System.getenv("PAA_TEST_APK_STORE_PASSWORD") ?: "unset")
+            keyAlias (System.getenv("PAA_TEST_APK_KEY_ALIAS") ?: "paatest")
+            keyPassword (System.getenv("PAA_TEST_APK_KEY_PASSWORD") ?: "unset")
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Never sign release variants with Android's debug identity.
+            // Without a dedicated CI key, assembleRelease stays unsigned.
+            signingConfig file('testing-release.keystore').exists() ? signingConfigs.testRelease : null
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds

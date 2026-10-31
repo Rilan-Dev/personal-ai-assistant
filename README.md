@@ -20,6 +20,14 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - **Battery status**: read-only Android BatteryManager tool. "Check battery
   level" reports current percentage and charging state, with no phone identifiers
   or privileged permissions.
+- **In-app AI Configuration**: choose OpenAI, Gemini, Groq or OpenRouter,
+  select model, enter a masked API key, test the connection and save encrypted
+  settings on Android using Android Keystore. Direct BYOK AI chat works
+  without a separate LangGraph backend. API provider costs may apply.
+- **Installable release-test APK**: GitHub Actions builds the optimized
+  Android release variant signed with a dedicated testing certificate,
+  verifies its signature and publishes an APK artifact plus SHA-256.
+  This is for private testing, not a public production release.
 - **Quick Settings tile**: an owner-added Android tile opens the chat
   after unlock if locked. No automatic microphone or tool execution.
 - **Tap to talk** in the Android app uses strictly on-device speech recognition

@@ -81,6 +81,43 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         JSONObject().put("status", status).put("fingerprint", fp).toString()
     private fun existing(k: String): JSONObject? = read(k)?.let { JSONObject(it) }
 
+    /**
+     * Owner-entered BYOK model configuration lives only in Android Keystore
+     * AES-GCM encrypted private preferences. No OS cloud backup or plaintext
+     * AsyncStorage, logging, crash analytics or source control copies.
+     * React Native receives the key only for direct, owner-initiated HTTPS API calls.
+     */
+    @ReactMethod fun saveProviderSettings(data: String, p: Promise) {
+        try {
+            require(data.toByteArray(StandardCharsets.UTF_8).size <= 2048)
+            val obj = JSONObject(data)
+            require(obj.optInt("version") == 1)
+            require(obj.length() == 4)
+            require(obj.optString("provider") in listOf("openai", "gemini", "groq", "openrouter"))
+            val model = obj.getString("model")
+            require(model.matches(Regex("[A-Za-z0-9._:/-]{2,96}")))
+            val key = obj.getString("apiKey")
+            require(key.length in 12..512 && key == key.trim())
+            synchronized(lock) {
+                write(name("private", "provider-config"), data)
+            }
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_SAVE", e) }
+    }
+    @ReactMethod fun loadProviderSettings(p: Promise) {
+        try {
+            synchronized(lock) { p.resolve(read(name("private", "provider-config"))) }
+        } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_READ", e) }
+    }
+    @ReactMethod fun clearProviderSettings(p: Promise) {
+        try {
+            synchronized(lock) {
+                check(prefs.edit().remove(name("private", "provider-config")).commit())
+            }
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_CLEAR", e) }
+    }
+
     @ReactMethod fun newSessionId(p: Promise) { p.resolve(UUID.randomUUID().toString()) }
 
     @ReactMethod fun loadSession(s: String, p: Promise) {

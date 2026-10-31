@@ -103,3 +103,21 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Native emulator automated gate is closed for the source on e48ae7a.
 - Physical Android acceptance and real-provider acceptance are still open.
 - User-run physical test kit: scripts/acceptance/android_device.py.
+
+## New Android release-test and direct AI provider support (2026-11-01)
+- GitHub Actions workflow: Android installable release-test APK. Confirm
+  assembleRelease, minification and apksigner PASS before sharing artifact.
+- Under Artifacts, download personal-ai-assistant-release-test-apk, unzip and
+  install app-release.apk on the owner's phone. Check SHA-256.
+- In app: AI Configuration & API Key > provider/model/key > Test connection >
+  Save & Enable AI. Key is encrypted with Android Keystore and never
+  included in source or APK.
+- Test provider live on phone (not performed without owner's API credential).
+- Android emulator: verify new encrypted provider vault save/load/remove.
+- Physical testing: verify chat, native tool approvals, battery, flashlight,
+  speech and crash recovery. Owner may configure stable test-release signing
+  secrets for in-place upgrades.
+- Do not describe this signed TEST-release APK as production ready. Open
+  dependency advisories and real provider/physical phone acceptance remain.
+- Design: docs/architecture/ANDROID_AI_CONFIGURATION.md and
+  docs/architecture/ANDROID_RELEASE_TEST_APK.md.

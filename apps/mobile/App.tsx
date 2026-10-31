@@ -3,13 +3,14 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid
 } from 'react-native';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from '@paa/agent-core';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
-import type { SessionCheckpoint } from '@paa/agent-core';
+import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
+import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
@@ -36,6 +37,13 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<AgentTraceEvent[]>([]);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
+  const [showProvider, setShowProvider] = useState(false);
+  const [providerChoice, setProviderChoice] = useState<DirectProviderId>('openai');
+  const [providerModel, setProviderModel] = useState(PROVIDERS.openai.defaultModel);
+  const [providerKeyInput, setProviderKeyInput] = useState('');
+  const [activeProvider, setActiveProvider] = useState<DirectProviderSettings | null>(null);
+  const [providerBusy, setProviderBusy] = useState(false);
+  const [providerNotice, setProviderNotice] = useState('');
   const [showBackend, setShowBackend] = useState(false);
   const [showLaunchOptions, setShowLaunchOptions] = useState(false);
   const [tileBusy, setTileBusy] = useState(false);
@@ -75,6 +83,20 @@ export default function App() {
         });
       }
     }).catch(() => { /* secure journal failures block tool execution later */ });
+    return () => { active = false; };
+  }, [engine.live]);
+  useEffect(() => {
+    if (!engine.live || !providerVaultAvailable()) return;
+    let active = true;
+    loadProviderFromVault().then(saved => {
+      if (!active || !saved) return;
+      setProviderChoice(saved.provider);
+      setProviderModel(saved.model);
+      setActiveProvider(saved);
+      setProviderNotice('Saved AI provider restored from encrypted Android storage.');
+    }).catch(() => {
+      if (active) setProviderNotice('Unable to read encrypted AI settings. Key access disabled.');
+    });
     return () => { active = false; };
   }, [engine.live]);
   const append = (speaker: ChatMessage['speaker'], text: string) => {
@@ -121,6 +143,61 @@ export default function App() {
       setFlashNotice('Could not request flashlight hardware permission. No hardware action occurred.');
     } finally { setFlashBusy(false); }
   };
+  const buildProviderConfig = (): DirectProviderSettings => {
+    const typed = providerKeyInput.trim();
+    const savedKey = activeProvider?.provider === providerChoice ? activeProvider.apiKey : '';
+    return validateProviderSettings({
+      version: 1, provider: providerChoice, model: providerModel.trim(),
+      apiKey: typed || savedKey
+    });
+  };
+  const saveAiSettings = async () => {
+    if (!engine.live || !providerVaultAvailable() || running || providerBusy) return;
+    setProviderBusy(true); setProviderNotice('');
+    try {
+      const config = buildProviderConfig();
+      await saveProviderToVault(config);
+      setActiveProvider(config);
+      setRemoteActive(false);
+      setBackendToken('');
+      setProviderKeyInput('');
+      setProviderNotice('AI provider saved securely and enabled. Ask a question below to use it.');
+    } catch {
+      setProviderNotice('Could not save AI settings. Check provider, model and key (12+ characters). No key was saved.');
+    } finally { setProviderBusy(false); }
+  };
+  const testAiConnection = async () => {
+    if (!engine.live || running || providerBusy) return;
+    setProviderBusy(true); setProviderNotice('');
+    try {
+      const config = buildProviderConfig();
+      await testDirectProvider(config);
+      setProviderNotice('Connection successful. The provider returned valid AI output. Save settings to enable chat.');
+    } catch (error) {
+      const code = error instanceof Error ? error.message : '';
+      const explanation: Record<string,string> = {
+        AUTH_FAILED: 'The provider rejected the API key or account access (401/403).',
+        RATE_LIMIT: 'Provider quota or rate limit reached (429).',
+        MODEL_NOT_FOUND: 'The selected model or API endpoint was not found (404).',
+        PROVIDER_UNAVAILABLE: 'The provider service is temporarily unavailable.',
+        INVALID_RESPONSE: 'Provider responded but not in the supported AI format.',
+        NETWORK_OR_TIMEOUT: 'Could not connect. Check internet, provider and connection.'
+      };
+      setProviderNotice(explanation[code] ?? 'Connection test failed. Verify model name, provider and API key.');
+    } finally { setProviderBusy(false); }
+  };
+  const clearAiSettings = async () => {
+    if (!engine.live || running || providerBusy) return;
+    setProviderBusy(true); setProviderNotice('');
+    try {
+      await clearProviderFromVault();
+      setActiveProvider(null);
+      setProviderKeyInput('');
+      setProviderNotice('AI provider credentials deleted from device storage. Local planner is active.');
+    } catch {
+      setProviderNotice('Could not securely clear credentials. The saved configuration has not been changed.');
+    } finally { setProviderBusy(false); }
+  };
   const enableBackend = () => {
     try {
       validateAgentEndpoint(backendUrl);
@@ -131,6 +208,7 @@ export default function App() {
       });
       setBackendError('');
       setRemoteActive(true);
+      setActiveProvider(null);
     } catch {
       setBackendError('Enter a valid HTTPS agent URL and a token containing at least 32 characters.');
       setRemoteActive(false);
@@ -151,7 +229,12 @@ export default function App() {
       const sessionId = engine.live
         ? (restore?.sessionId ?? await newAndroidSessionId())
         : 'local-demo';
-      const harness = remoteActive && engine.live
+      const harness = activeProvider && engine.live && !remoteActive
+        ? new AgentHarness(engine.registry, createDirectProviderPlanner({
+            settings: activeProvider,
+            availableToolIds: engine.registry.describe().map(tool => tool.id)
+          }))
+        : remoteActive && engine.live
         ? new AgentHarness(engine.registry, createRemotePlanner({
             baseUrl: backendUrl,
             token: backendToken,
@@ -177,7 +260,8 @@ export default function App() {
           args: result.call.input
         });
         append('assistant', 'Approval required. No action was executed. Review the exact tool request below.');
-      } else append('assistant', `Task ${result.status}: ${result.reason}`);
+      } else append('assistant', 'Task ' + result.status + ': ' + result.reason +
+        (activeProvider && result.reason === 'Planning failed' ? ' Check AI Configuration > Test connection.' : ''));
     } catch {
       append('assistant', 'Secure task initialization failed; no device action was executed.');
     } finally { setRunning(false); activeAbort.current = null; }
@@ -278,13 +362,73 @@ export default function App() {
       <StatusBar barStyle="light-content" />
       <View style={styles.header}>
         <View style={styles.logo}><Text style={styles.logoText}>AI</Text></View>
-        <View style={{flex: 1}}><Text style={styles.title}>Personal AI Assistant</Text><Text style={styles.subtitle}>Agentic tool harness • {remoteActive ? 'LangGraph planning' : 'Local planning'}</Text></View>
+        <View style={{flex: 1}}><Text style={styles.title}>Personal AI Assistant</Text><Text style={styles.subtitle}>Agentic tool harness • {remoteActive ? 'LangGraph backend' : activeProvider ? PROVIDERS[activeProvider.provider].label + ' AI' : 'Local planning'}</Text></View>
         <View style={styles.demoLabel}><Text style={styles.demoLabelText}>{engine.live ? 'ANDROID' : 'DEMO'}</Text></View>
       </View>
       <View style={styles.infoBanner}>
         <Text style={styles.bannerTitle}>{engine.live ? 'Native Android intents available' : 'Simulation mode enabled'}</Text>
         <Text style={styles.bannerText}>{engine.live ? 'This build supports camera and allowlisted app launching plus opt-in push-to-talk and offline speech playback. No wake word, background microphone, accessibility, message sending, location or screen verification yet.' : 'This platform has no Android native bridge. Device actions are simulated and nothing is sent.'}</Text>
       </View>
+      {engine.live && <View style={styles.backendBox}>
+        <Pressable accessibilityRole="button" onPress={() => setShowProvider(previous => !previous)}
+          accessibilityLabel="AI Configuration and API Key settings">
+          <Text style={styles.bannerTitle}>AI Configuration & API Key  {showProvider ? '▲' : '▼'}</Text>
+        </Pressable>
+        <Text style={styles.bannerText}>
+          {activeProvider && !remoteActive
+            ? 'Connected mode: ' + PROVIDERS[activeProvider.provider].label + ' / ' + activeProvider.model
+            : 'Choose your AI provider to enable intelligent chat without running a separate backend.'}
+        </Text>
+        {showProvider && <View style={{gap: 10, paddingTop: 10}}>
+          <Text style={styles.sectionLabel}>Select AI provider</Text>
+          <View style={styles.controlsRow}>
+            {(['openai', 'gemini', 'groq', 'openrouter'] as DirectProviderId[]).map(id =>
+              <Pressable key={id} accessibilityRole="button"
+                accessibilityState={{selected: providerChoice === id}} disabled={running || providerBusy}
+                style={[styles.capabilityChip, providerChoice === id && styles.chipActive]}
+                onPress={() => {
+                  setProviderChoice(id);
+                  setProviderModel(PROVIDERS[id].defaultModel);
+                  setProviderKeyInput('');
+                  setProviderNotice('');
+                }}>
+                <Text style={styles.chipText}>{PROVIDERS[id].label}</Text>
+              </Pressable>)}
+          </View>
+          <Text style={styles.bannerText}>Model name</Text>
+          <TextInput accessibilityLabel="AI model name" value={providerModel}
+            onChangeText={setProviderModel} autoCapitalize="none" autoCorrect={false}
+            editable={!running && !providerBusy} style={styles.input}
+            placeholder={PROVIDERS[providerChoice].defaultModel} placeholderTextColor="#9ca3af" />
+          <Text style={styles.bannerText}>Provider API key (hidden)</Text>
+          <TextInput accessibilityLabel="AI provider API key" value={providerKeyInput}
+            onChangeText={setProviderKeyInput} autoCapitalize="none" autoCorrect={false}
+            autoComplete="off" secureTextEntry editable={!running && !providerBusy}
+            style={styles.input} placeholder={activeProvider?.provider === providerChoice
+              ? 'Key saved securely — enter a replacement if needed' : 'Paste your provider API key'}
+            placeholderTextColor="#9ca3af" />
+          <Text style={styles.bannerText}>Your key is encrypted using Android Keystore. Commands are sent
+            over HTTPS directly to the provider you choose, not to our server.
+            Your provider may charge for API usage. Android permissions and confirmations still apply.</Text>
+          <View style={styles.controlsRow}>
+            <Pressable accessibilityRole="button" onPress={testAiConnection}
+              disabled={running || providerBusy} style={styles.capabilityChip}>
+              <Text style={styles.chipText}>{providerBusy ? 'Checking…' : 'Test connection'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={saveAiSettings}
+              disabled={running || providerBusy} style={[styles.capabilityChip, styles.chipActive]}>
+              <Text style={styles.chipText}>Save & Enable AI</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={clearAiSettings}
+              disabled={running || providerBusy} style={styles.capabilityChip}>
+              <Text style={styles.chipText}>Remove stored key</Text>
+            </Pressable>
+          </View>
+          {providerNotice !== '' && <Text style={styles.voiceNotice}>{providerNotice}</Text>}
+          <Text style={styles.note}>Only a saved, valid key enables AI mode.
+            For local-only use, remove the key. Existing LangGraph backend remains optional.</Text>
+        </View>}
+      </View>}
       {engine.live && <View style={styles.backendBox}>
         <Pressable accessibilityRole="button" disabled={running}
           onPress={() => setShowLaunchOptions(prev => !prev)}>

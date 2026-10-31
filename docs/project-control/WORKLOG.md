@@ -241,3 +241,28 @@
 - Remaining independent gates: newer voice safety instrumentation,
   actual Android phone, owner-provided real LLM provider and production
   dependency/release-signing review.
+
+## 2026-11-01 — Android AI provider settings and release-test APK milestone
+- Added Android AI Configuration & API Key in-app UI: OpenAI, Gemini, Groq
+  and OpenRouter; choose model; masked API key; Test connection; Save & Enable;
+  Remove stored key. No provider credentials committed or bundled.
+- Android PAAAgentJournal now encrypts validated provider settings with
+  Android Keystore AES-256-GCM, and supports load/update/clear. Auto backup
+  remains disabled. Added native Android instrumentation covering encryption
+  at rest, reinitialization, invalid setting refusal and clear behavior.
+- Direct mobile BYOK provider adapter sends bounded JSON prompts to fixed
+  selected provider HTTPS endpoints. Validates JSON and native tool plans;
+  invalid/unrelated actions blocked. No provider executes Android tools.
+  Post-action completion is grounded locally to Android observations.
+- Kept optional LangGraph backend planning as alternate mode. BYOK does not
+  require the user to deploy an agent server for single-turn AI chat.
+- Added GitHub Actions Android installable release-test workflow:
+  npm ci, test, typecheck, Gradle assembleRelease, dedicated testing key,
+  apksigner verification, SHA-256 and APK ZIP upload. Signing defaults to
+  ephemeral test-only; owner may supply stable private CI signing secrets.
+- Android release is no longer signed with the debug key in Gradle.
+- Local automated unit/static suite reached 100/100. Native release
+  assembly, Android emulator provider vault tests and physical device
+  acceptance require actual CI / owner test evidence; none claimed here.
+- Upstream npm audit advisories remain open, and the artifact is intended
+  only for controlled physical-device testing, not public distribution.
