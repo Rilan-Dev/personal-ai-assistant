@@ -55,3 +55,12 @@ Actions emulator job runs API 35 with `connectedDebugAndroidTest`.
 Source-code and JVM mock tests alone cannot prove native encryption. Emulator
 tests are stronger than static checks but still do not replace a physical
 phone process-death and OS-background acceptance run.
+
+## Concurrency and crash consistency hardening
+The Android journal uses a single companion-object mutex across native module
+instances in its process, preventing two React Native bridges from concurrently
+claiming the same action. Checkpoint and latest-session pointer are stored in
+the same encrypted SharedPreferences commit. Emulator instrumentation races
+12 module instances to assert only one claim is granted. This is still NOT
+cross-process/distributed transaction support; the Android manifest does not
+start a separate process for this module.

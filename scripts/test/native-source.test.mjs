@@ -107,3 +107,11 @@ test("Quick Settings tile can only open foreground chat after unlock", () => {
   assert.match(ui, /requestAssistantQuickTile\(\)/);
   assert.match(ui, /never starts the microphone or performs actions automatically/);
 });
+test("Android journal synchronizes claims across bridge instances and atomically checkpoints", () => {
+  const journal = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt");
+  assert.match(journal, /private companion object \{\s*val lock = Any\(\)/);
+  assert.match(journal, /val sessionKey = name\("session", s\)/);
+  assert.match(journal, /val latestKey = name\("latest", "device"\)/);
+  assert.match(journal, /\.putString\(sessionKey, encrypt\(data\)\)\s*\.putString\(latestKey, encrypt\(s\)\)\s*\.commit\(\)/);
+  assert.match(journal, /synchronized\(lock\) \{/);
+});

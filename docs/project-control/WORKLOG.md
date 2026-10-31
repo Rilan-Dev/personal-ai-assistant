@@ -117,3 +117,28 @@
 - Tile opens foreground chat after unlock, never starts microphone or tools.
 - Added source regression and emulator permission metadata check.
 - Local automated tests: 67/67 passed; web and TypeScript build verified.
+
+## 2026-10-31 — Encrypted journal concurrency + security triage
+- Identified that Android journal used a per-module lock, which did not
+  serialize claims across two live React Native bridge module instances.
+  Replaced with one process-wide Kotlin companion lock. Multi-process Android
+  app mode remains unsupported; no assumptions about distributed CAS.
+- Checkpoint and latest-session pointer are now written in one synchronous
+  encrypted SharedPreferences transaction rather than two commits.
+- Added emulator instrumentation for 12 concurrent bridge objects racing
+  to claim one native action; exactly one should return true. Emulator
+  acceptance remains pending current GitHub CI and is not yet verified.
+- npm audit currently reports 12 advisories: two high, nine moderate,
+  one low. High-severity findings trace through Expo CLI/Zod 3 toolchain.
+  Did NOT force incompatible Expo downgrade or major Zod overrides.
+- Added non-blocking security audit evidence artifacts to Core tests,
+  with detailed risk notes in docs/security/DEPENDENCY_AUDIT_2026-10-31.md.
+
+### Emulator compiler follow-up
+- Emulator 3b5f4ee reached :app:compileDebugAndroidTestKotlin and rejected
+  the anonymous ReactApplicationContext because ReactContext has additional
+  abstract members, including handleException.
+- Reviewed installed React Native 0.88 source and selected its concrete
+  test-oriented BridgeReactContext (marked @VisibleForTesting by upstream),
+  without initializing a JavaScript Catalyst instance. The journal only
+  uses application preferences. Await Android emulator runtime proof.

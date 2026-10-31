@@ -39,3 +39,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   `SecureJournalAndroidTest.kt` Keystore/approval/replay suite on API 35.
 - Fix any CI compilation, runner, keystore or emulator failures before
   claiming native journal verification. Still need genuine phone testing.
+
+## Latest safety improvements
+- Process-shared Android journal monitor prevents claim races across bridge
+  instance recreation; session snapshot and latest pointer saved atomically.
+- GitHub Core tests now include an informational npm audit report artifact.
+- There are 12 unresolved advisories (two high) predominantly in the Expo
+  dependency toolchain. Review docs/security/DEPENDENCY_AUDIT_2026-10-31.md.
+  No unsupported major-dependency downgrade was applied.

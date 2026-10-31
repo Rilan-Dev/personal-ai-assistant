@@ -22,7 +22,11 @@ import org.json.JSONObject
 /** Device-local encrypted journal. Commit an irreversible action claim before dispatch. */
 class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJavaModule(context) {
     private val prefs = context.getSharedPreferences("paa_secure_journal_v1", Context.MODE_PRIVATE)
-    private val lock = Any()
+    // Shared across React Native bridge re-instantiations inside this process.
+    // Multi-process mode is intentionally not supported.
+    private companion object {
+        val lock = Any()
+    }
     override fun getName() = "PAAAgentJournal"
 
     private fun secret(): SecretKey {
@@ -82,8 +86,14 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             val json = JSONObject(data)
             require(json.optInt("version") == 1 && json.optString("sessionId") == s)
             synchronized(lock) {
-                write(name("session", s), data)
-                write(name("latest", "device"), s)
+                // One SharedPreferences transaction makes latest pointer and
+                // encrypted task snapshot durable together.
+                val sessionKey = name("session", s)
+                val latestKey = name("latest", "device")
+                check(prefs.edit()
+                    .putString(sessionKey, encrypt(data))
+                    .putString(latestKey, encrypt(s))
+                    .commit()) { "Atomic checkpoint write failed" }
             }
             p.resolve(true)
         } catch (_: Exception) { p.reject("JOURNAL_WRITE", "Secure journal write failed") }
