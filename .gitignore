@@ -19,3 +19,8 @@ android/local.properties
 **/.gradle/
 **/build/
 **/Pods/
+
+# Physical device acceptance reports are owner-local, never committed.
+device-acceptance-*.json
+__pycache__/
+*.pyc

@@ -211,3 +211,11 @@
   ciphertext/tag (JOURNAL_READ), and successfully restores the original
   encrypted record. This is test-only manipulation of a synthetic session,
   not a production journaling bypass.
+- Built standalone owner-run ADB physical acceptance kit
+  scripts/acceptance/android_device.py with device/package prechecks and
+  manual pass/fail/skip outcomes for voice, torch, battery, approvals,
+  force-stop replay and lock-screen assistant tile.
+- Android phone is not connected to the available remote workspace; this
+  kit is not a substitute for actually executing those hardware checks.
+- Recorded device-specific acceptance procedure in
+  docs/architecture/ANDROID_DEVICE_ACCEPTANCE.md. Reports are gitignored.

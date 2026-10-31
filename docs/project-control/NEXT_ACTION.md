@@ -72,3 +72,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   five synthetic planning cases; no real device action or messaging.
 - No real provider test has been executed. See
   docs/architecture/REAL_LLM_ACCEPTANCE.md.
+
+## Physical device acceptance kit
+- Run py scripts/acceptance/android_device.py --check and --walkthrough on
+  an owner-controlled Windows PC with ADB and the current debug APK, or
+  use python3 on Linux/macOS.
+- Only owner-entered results are recorded; no automatic message sending
+  or unprompted microphone/camera access.
+- Details: docs/architecture/ANDROID_DEVICE_ACCEPTANCE.md.
