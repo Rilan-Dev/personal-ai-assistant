@@ -142,3 +142,14 @@
   test-oriented BridgeReactContext (marked @VisibleForTesting by upstream),
   without initializing a JavaScript Catalyst instance. The journal only
   uses application preferences. Await Android emulator runtime proof.
+
+## 2026-10-31 — Emulator runtime diagnosis
+- Checked GitHub emulator acceptance run 41210468241: Android APK and
+  instrumentation Kotlin compiled and four journal tests actually executed,
+  but all four rejected secure writes/reservations. Cause was hidden by
+  generic exception catches in the native journal.
+- Added privacy-safe native diagnostics: exception *class name only*, never
+  request, key, fingerprint, exception message or stack. Emulator workflow
+  captures this restricted logcat on failure; tests include the safe class.
+- This is diagnostic evidence, not a claim the journal is fixed. Must inspect
+  the new emulator run and resolve underlying Keystore/storage error.

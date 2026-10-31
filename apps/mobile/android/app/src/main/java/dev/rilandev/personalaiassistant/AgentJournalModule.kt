@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -28,6 +29,13 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         val lock = Any()
     }
     override fun getName() = "PAAAgentJournal"
+    private fun rejectSafe(p: Promise, code: String, e: Exception) {
+        // Safe diagnostic: only exception CLASS, never key, fingerprint,
+        // request, ciphertext, or exception message.
+        val category = e.javaClass.simpleName.ifBlank { "UnknownException" }
+        Log.e("PAAAgentJournal", "$code: $category")
+        p.reject(code, "Secure journal unavailable ($category)")
+    }
 
     private fun secret(): SecretKey {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
@@ -74,11 +82,11 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
 
     @ReactMethod fun loadSession(s: String, p: Promise) {
         try { synchronized(lock) { p.resolve(read(name("session", s))) } }
-        catch (_: Exception) { p.reject("JOURNAL_READ", "Secure journal read failed") }
+        catch (e: Exception) { rejectSafe(p, "JOURNAL_READ", e) }
     }
     @ReactMethod fun latestSession(p: Promise) {
         try { synchronized(lock) { p.resolve(read(name("latest", "device"))) } }
-        catch (_: Exception) { p.reject("JOURNAL_READ", "Secure journal read failed") }
+        catch (e: Exception) { rejectSafe(p, "JOURNAL_READ", e) }
     }
     @ReactMethod fun saveSession(s: String, data: String, p: Promise) {
         try {
@@ -96,7 +104,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     .commit()) { "Atomic checkpoint write failed" }
             }
             p.resolve(true)
-        } catch (_: Exception) { p.reject("JOURNAL_WRITE", "Secure journal write failed") }
+        } catch (e: Exception) { rejectSafe(p, "JOURNAL_WRITE", e) }
     }
     @ReactMethod fun prepareApproval(s: String, c: String, fp: String, p: Promise) {
         try {
@@ -109,7 +117,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                 } else p.resolve(old.optString("fingerprint") == fp &&
                     old.optString("status") in listOf("pending", "approved"))
             }
-        } catch (_: Exception) { p.reject("APPROVAL_PREPARE", "Approval prepare failed") }
+        } catch (e: Exception) { rejectSafe(p, "APPROVAL_PREPARE", e) }
     }
     @ReactMethod fun approveAction(s: String, c: String, fp: String, p: Promise) {
         try {
@@ -121,7 +129,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     write(k, record("approved", fp)); p.resolve(true)
                 } else p.resolve(false)
             }
-        } catch (_: Exception) { p.reject("APPROVAL", "Approval failed") }
+        } catch (e: Exception) { rejectSafe(p, "APPROVAL", e) }
     }
     @ReactMethod fun claimAction(s: String, c: String, fp: String,
                                 requiresApproval: Boolean, p: Promise) {
@@ -140,7 +148,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     write(k, record("claimed", fp)); p.resolve(true)
                 }
             }
-        } catch (_: Exception) { p.reject("CLAIM", "Action reservation failed") }
+        } catch (e: Exception) { rejectSafe(p, "CLAIM", e) }
     }
     @ReactMethod fun finishAction(s: String, c: String, uncertain: Boolean, p: Promise) {
         try {
@@ -152,6 +160,6 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     old.getString("fingerprint")))
             }
             p.resolve(true)
-        } catch (_: Exception) { p.reject("RECONCILE", "Action state uncertain") }
+        } catch (e: Exception) { rejectSafe(p, "RECONCILE", e) }
     }
 }

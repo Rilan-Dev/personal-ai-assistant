@@ -43,11 +43,20 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Capture journal diagnostic logcat on instrumentation failure
+        if: failure()
+        shell: bash
+        run: |
+          adb logcat -d -s PAAAgentJournal:E > android-journal-errors.log 2>/dev/null || true
+          echo "Note: only sanitized exception class names, no secrets."
+          cat android-journal-errors.log || true
       - name: Upload device instrumentation test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-secure-journal-test-reports
-          path: apps/mobile/android/app/build/reports/androidTests/connected/
+          path: |
+            apps/mobile/android/app/build/reports/androidTests/connected/
+            android-journal-errors.log
           if-no-files-found: ignore
           retention-days: 7

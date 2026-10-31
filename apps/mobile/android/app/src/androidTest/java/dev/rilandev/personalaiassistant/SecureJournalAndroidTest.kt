@@ -36,7 +36,8 @@ class SecureJournalAndroidTest {
                 }
                 "reject" -> {
                     val code = args?.firstOrNull()?.toString() ?: "unknown"
-                    fail("Native journal rejected unexpectedly: $code")
+                    val message = args?.getOrNull(1)?.toString().orEmpty()
+                    fail("Native journal rejected unexpectedly: $code [$message]")
                 }
             }
             null
