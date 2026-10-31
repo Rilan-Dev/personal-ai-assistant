@@ -16,7 +16,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
+      # GitHub ubuntu-latest already contains Android command-line tools.
+      # setup-android@v3 currently requests obsolete SDK "tools" and fails
+      # before any app compilation; install the required components directly.
+      - name: Ensure Android SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Android SDK root: $ANDROID_HOME"
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
       - run: npm ci
       - name: Compile Android app and Kotlin native bridge
         working-directory: apps/mobile/android

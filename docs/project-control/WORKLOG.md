@@ -18,3 +18,10 @@
 - Android Kotlin compilation: NOT VERIFIED; Linux worker lacks Java JDK and Android SDK.
 - iOS Xcode build and real Android physical-device testing: NOT VERIFIED.
 - Owner-controlled native launch actions are intentionally disabled until the in-app grant is selected.
+
+### GitHub Actions build infrastructure
+- Initial Core tests workflow: SUCCESS on commit 00799b3.
+- Initial Android workflow: FAILED before compilation at android-actions/setup-android@v3;
+  GitHub Actions log shows obsolete SDK package "tools" unavailable.
+- Replaced that setup action with direct SDK manager installation for API 36 and build-tools 36.0.0.
+  Android Kotlin compilation remains unverified until a new workflow run reaches Gradle.
