@@ -40,9 +40,16 @@
   not persist bearer tokens to disk.
 - Corrected Android CI: create ephemeral debug.keystore with keytool in runner
   before APK compilation; no key checked into Git.
-- Local npm test: 48/48 passing with real LangGraph graph and simulated
+- Local npm test: 49/49 passing with real LangGraph graph and simulated
   end-to-end HTTP model -> tool -> observation loop; npm run typecheck passed.
 - Expo web static export passed. An actual LLM provider and physical-device
   acceptance remain unverified.
 - Added a server/client action-to-user-intent gate: currently only exact supported single-step commands can trigger native app/camera operations; multi-step or unrelated commands fail closed.
 - Android CI signing fix and GitHub verification pending commit.
+
+### Provider protocol and APK handoff
+- Added a transport-level test using the actual LangChain ChatOpenAI structured
+  response SDK against a local OpenAI-compatible mock endpoint.
+- No live LLM API credential was used, and no provider model quality was tested.
+- Android CI now uploads a short-lived debug APK artifact AFTER a successful
+  Gradle compile, enabling actual phone testing; this is not a release APK.

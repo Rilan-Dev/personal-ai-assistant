@@ -35,3 +35,11 @@ jobs:
       - name: Compile Android app and Kotlin native bridge
         working-directory: apps/mobile/android
         run: ./gradlew :app:assembleDebug --no-daemon
+      # Debug-only, ephemeral signing. This is NOT a release APK.
+      - name: Attach debug APK for owner device testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-ai-assistant-debug-apk
+          path: apps/mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

@@ -13,7 +13,7 @@
   model/tool/observation loop.
 
 ## Open acceptance gates / next sprint
-1. Build a signed DEBUG Android APK from GitHub Actions. Debug key must be created
+1. Build a signed DEBUG Android APK from GitHub Actions (artifact is uploaded on successful build). Debug key must be created
    fresh during CI and must NOT be committed. Diagnose Kotlin/API build failures.
 2. Physical Android test: native bridge available, permission-off blocks actions,
    WhatsApp/camera Intent launch observed, unsupported/not-installed apps fail.

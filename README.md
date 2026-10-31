@@ -68,6 +68,8 @@ credentials, API keys, contacts, messages, screen captures, or signing keys.
 The code is under development; do not use it for emergency communication,
 live messaging, or private-device data without reviewing permissions.
 
+After a successful Android debug build, a seven-day GitHub Actions artifact can be downloaded for owner device testing. It is NOT a signed production release.
+
 Before personal APK release, resolve or assess upstream dependency advisories
 and complete a real Android phone acceptance test. Backend LLM provider calls,
 Android physical-device tests, iOS native compilation, wake-word detection,
