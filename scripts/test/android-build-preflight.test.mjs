@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {readFileSync} from "node:fs";
+import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
 
 const script="scripts/acceptance/android_build_preflight.py";
 
@@ -20,6 +22,7 @@ test("Android build preflight is read-only and reports actionable results",()=>{
   assert.equal(r.status,report.safe_to_attempt?0:2);
   assert.doesNotMatch(r.stdout,/api.?key|bearer|secret|token/i);
 });
+
 test("Emulator preflight checks hardware acceleration and stricter capacity",()=>{
   const r=spawnSync("python3",[script,"--mode","emulator","--json"],{
     encoding:"utf8",timeout:10000
@@ -29,4 +32,22 @@ test("Emulator preflight checks hardware acceleration and stricter capacity",()=
   assert.equal(report.minimum_memory_gib,6);
   assert.equal(report.minimum_disk_gib,12);
   assert.equal(typeof report.kvm_available,"boolean");
+});
+
+test("JDK version check runs under Python 3.6 using portable subprocess arguments",()=>{
+  const work=mkdtempSync(join(tmpdir(),"paa-preflight-java-"));
+  try {
+    const fake=join(work,"java");
+    writeFileSync(fake, ["#!/bin/sh", "echo 'openjdk version \"21.0.12.1\"' >&2", ""].join("\n"));
+    chmodSync(fake,0o755);
+    const result=spawnSync("python3",[script,"--mode","compile","--json"],{
+      encoding:"utf8",timeout:10000,
+      env:{...process.env,PATH:work+":"+process.env.PATH}
+    });
+    assert.ok([0,2].includes(result.status),result.stderr);
+    assert.equal(JSON.parse(result.stdout).java_major,21);
+    assert.doesNotMatch(result.stderr,/TypeError|capture_output|traceback/i);
+  } finally {
+    rmSync(work,{recursive:true,force:true});
+  }
 });

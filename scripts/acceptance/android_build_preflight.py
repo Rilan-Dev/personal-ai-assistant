@@ -34,8 +34,9 @@ def java_major():
     if not binary:
         return None
     try:
-        response = subprocess.run([binary, "-version"], capture_output=True,
-                                  text=True, timeout=6, check=False)
+        response = subprocess.run([binary, "-version"],
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  universal_newlines=True, timeout=6, check=False)
         matched = re.search(r'version "[^"]*?(\d+)(?:\.|")',
                             response.stderr + response.stdout)
         return int(matched.group(1)) if matched else None

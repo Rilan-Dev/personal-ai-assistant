@@ -358,3 +358,10 @@
   success the Android release-test APK. Fetch job logs, fix actual Kotlin
   failures and verify artifact signature. Physical device/STT/Accessibility
   acceptance remains owner-dependent.
+- Follow-up preflight regression: initial Python subprocess usage relied on
+  capture_output/text flags unavailable on this AlmaLinux Python 3.6 host.
+  Replaced with compatible stdout/stderr PIPE and universal_newlines.
+  Tested the Java-version path using a synthetic java executable. New
+  preflight correctly identifies OpenJDK 21 and Android platform 36 but
+  rejects local build due inadequate available RAM/disk.
+- Latest full local test suite: 118/118 PASS; TypeScript typecheck PASS.
