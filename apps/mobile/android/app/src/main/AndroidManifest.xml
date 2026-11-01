@@ -41,6 +41,15 @@
         <action android:name="android.intent.action.MAIN"/>
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
+      <!-- Explicit owner/Assistant shortcut navigation, never microphone start. -->
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="nexa" android:host="voice"/>
+      </intent-filter>
+      <meta-data android:name="android.app.shortcuts"
+          android:resource="@xml/nexa_shortcuts"/>
     </activity>
     <!-- Bound only by Android after user selects Nexa as default assistant. -->
     <service android:name=".NexaAssistantService"
