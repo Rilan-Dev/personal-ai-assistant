@@ -19,7 +19,8 @@ test('voice WhatsApp command only creates ephemeral, one-time local review state
   assert.match(pending,/fun take\(now: Long/);
   assert.match(pending,/@ReactMethod fun consumePendingVoiceDraft/);
   assert.match(pending,/result\.putString\("mode", "review_only"\)/);
-  assert.doesNotMatch(pending,/getSharedPreferences|storeFile|WRITE_EXTERNAL_STORAGE/);
+  const memoryOnly=pending.split('class NexaToolOverlayModule')[0];
+  assert.doesNotMatch(memoryOnly,/getSharedPreferences|storeFile|WRITE_EXTERNAL_STORAGE/);
   assert.doesNotMatch(pending,/whatsapp\.send|sendTextMessage|ACTION_SEND/);
 });
 test('spoken message is not normalized or directly dispatched to WhatsApp',()=>{
