@@ -672,6 +672,8 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
         try {
             val intent=Intent(context,RealtimeVoiceService::class.java).apply {
                 action=RealtimeVoiceService.ACTION_START
+                // The visible React Native Voice tab exposes Approve/Deny.
+                putExtra(RealtimeVoiceService.EXTRA_ASSISTANT_PANEL, true)
             }
             context.startForegroundService(intent)
             p.resolve(true) // Service startup requested, not confirmation of connection.
@@ -710,12 +712,36 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
             p.reject("MIC_MUTE_FAILED","Android rejected microphone mute request")
         }
     }
+    @ReactMethod fun decideVoiceAppAction(approve: Boolean,p: Promise) {
+        // No background or remote invocation may approve a proposed app
+        // launch. This action is initiated by one visible owner tap only.
+        if(context.currentActivity?.hasWindowFocus()!=true) {
+            p.reject("NOT_FOREGROUND","Open Nexa Voice to review the pending action")
+            return
+        }
+        if(RealtimeVoiceService.pendingApprovalSummary == null ||
+            RealtimeVoiceService.status!="listening") {
+            p.reject("NO_PENDING_APP","No live voice app action is awaiting review")
+            return
+        }
+        try {
+            context.startService(Intent(context,RealtimeVoiceService::class.java).apply {
+                action=if(approve)RealtimeVoiceService.ACTION_APPROVE_TOOL
+                    else RealtimeVoiceService.ACTION_DENY_TOOL
+            })
+            p.resolve(true)
+        } catch (_: Exception) {
+            p.reject("VOICE_APPROVAL_FAILED","Android rejected the app approval request")
+        }
+    }
     @ReactMethod fun getVoiceSessionStatus(p: Promise) {
         val data=Arguments.createMap()
         data.putString("state",RealtimeVoiceService.status)
         data.putString("message",RealtimeVoiceService.message)
         data.putBoolean("microphoneActive",RealtimeVoiceService.status=="listening")
         data.putBoolean("microphoneMuted",RealtimeVoiceService.microphoneMuted)
+        data.putString("pendingAppApproval",RealtimeVoiceService.pendingApprovalSummary)
+        data.putString("lastToolResult",RealtimeVoiceService.lastToolResult)
         p.resolve(data)
     }
 }
