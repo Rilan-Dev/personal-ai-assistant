@@ -335,3 +335,16 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Physically test all seven Setup actions, Android Settings return, revoked
   runtime grants, separate Accessibility enablements, one-time contact/location,
   skip/reopen flow, and OEM-specific gesture/permission experience.
+
+## Permanent release signer production gate (2026-11-01)
+- Owner repository admin: authenticate GitHub CLI on the authorized VPS and
+  run scripts/signing/upload-secrets-to-github.sh exactly once. The script
+  writes all three encrypted repository secrets without printing them.
+- Backup the private signing key and credentials to secure OFF-HOST storage;
+  encrypted GitHub Actions secrets are not a recoverable backup.
+- Trigger a new release workflow; require identical pinned certificate in
+  signed APK artifact, native build/instrumentation pass and versionCode increase.
+- Install a stable-signed APK, then prove a subsequent APK signed with that same
+  identity upgrades without uninstalling or data loss. Prior temporary-signer
+  APKs cannot be upgraded directly if their old private key is unavailable.
+- Never revert to a per-run signing key or replace the pinned fingerprint.

@@ -622,3 +622,24 @@
   legacy Personal AI Assistant even though native app_name and JS title were
   Nexa AI. Updated Expo name, web name, version and Screen Assist label;
   kept the existing Android package ID to preserve app identity.
+
+## 2026-11-01 — Permanent Nexa Android release signing
+- Root cause: GitHub workflows silently generated a new temporary testing-release
+  private key when encrypted signing secrets were absent, breaking in-place APK
+  updates. The previous temporary private key cannot be recovered from an APK.
+- Created new, owner-controlled 4096-bit RSA PKCS12 certificate (36,500-day
+  validity) in an access-restricted VPS directory, with protected credentials.
+  Bootstrap refuses identity rotation; no private key or password was committed.
+- Pinned the permanent public signer SHA256 in scripts/signing/; both release
+  workflows now REQUIRE the same encrypted GitHub Actions secrets, verify the
+  public certificate before building and verify the actual APK after signing.
+- No fallback release key generation, or silently signed wrong-key APK upload.
+  The temporary Android DEBUG test signer remains intentionally independent.
+- Added shared long-lived UTC minute-based versionCode calculation, to avoid
+  cross-workflow downgrades and the 2038 Unix-second code ceiling.
+- Local signer loading and fingerprint check PASS using a JDK17 Docker container.
+- Repository administrator still must provision three encrypted GitHub Actions
+  secrets, because the connected GitHub app cannot edit repository secrets.
+  Until then, CI release intentionally fails closed; stable-key APK not yet built.
+- Recovery plan and one-time migration limitation documented in
+  docs/architecture/NEXA_PERMANENT_ANDROID_SIGNING.md.

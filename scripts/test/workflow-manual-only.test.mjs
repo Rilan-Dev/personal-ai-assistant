@@ -76,6 +76,7 @@ test("manual release APK contains source-commit provenance and signer verificati
   assert.match(yml,/\$GITHUB_SHA.*release-test-source-sha\.txt/);
   assert.match(yml,/release-test-sha256\.txt/);
   assert.match(yml,/release-test-verification\.txt/);
-  assert.match(yml,/apksigner_bin.*verify/);
+  assert.match(yml,/bash scripts\/signing\/verify-release-apk\.sh/);
+  assert.match(readFileSync("scripts/signing/verify-release-apk.sh","utf8"),/apksigner/);
   assert.match(yml,/if-no-files-found: error/);
 });

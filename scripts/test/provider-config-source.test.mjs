@@ -29,9 +29,10 @@ test("release workflow produces signed optimized APK with separate test key",()=
   assert.match(workflow,/npm test/);
   assert.match(workflow,/npm run typecheck/);
   assert.match(workflow,/:app:assembleRelease/);
-  assert.match(workflow,/apksigner/);
+  assert.match(workflow,/bash scripts\/signing\/verify-release-apk\.sh/);
+  assert.match(read("scripts/signing/verify-release-apk.sh"),/apksigner/);
   assert.match(workflow,/personal-ai-assistant-release-test-apk/);
-  assert.match(workflow,/PAA_TEST_RELEASE_KEYSTORE_B64/);
+  assert.match(workflow,/NEXA_RELEASE_KEYSTORE_B64/);
   assert.match(workflow,/if-no-files-found: error/);
   assert.match(gradle,/testing-release\.keystore/);
   assert.match(gradle,/if \(file\('testing-release\.keystore'\)\.exists\(\)\)/);

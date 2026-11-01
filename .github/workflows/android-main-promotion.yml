@@ -49,6 +49,13 @@ jobs:
           npm run typecheck
       # One source revision, one GitHub Actions runner: native tests MUST pass
       # before spending CPU minutes to build a signed release APK.
+      - name: Load permanent Nexa release signer (required, never regenerate)
+        shell: bash
+        env:
+          NEXA_RELEASE_KEYSTORE_B64: ${{ secrets.NEXA_RELEASE_KEYSTORE_B64 }}
+          NEXA_RELEASE_STORE_PASSWORD: ${{ secrets.NEXA_RELEASE_STORE_PASSWORD }}
+          NEXA_RELEASE_KEY_PASSWORD: ${{ secrets.NEXA_RELEASE_KEY_PASSWORD }}
+        run: bash scripts/signing/load-ci-release-key.sh
       - name: Prepare temporary Android debug signing key
         shell: bash
         run: |
@@ -78,39 +85,6 @@ jobs:
           path: apps/mobile/android/app/build/reports/androidTests/connected/
           if-no-files-found: ignore
           retention-days: 7
-      - name: Generate or load dedicated testing-release key
-        shell: bash
-        env:
-          PAA_KEYSTORE_B64: ${{ secrets.PAA_TEST_RELEASE_KEYSTORE_B64 }}
-          PAA_KEYSTORE_STOREPASS: ${{ secrets.PAA_TEST_RELEASE_STORE_PASSWORD }}
-          PAA_KEYSTORE_KEYPASS: ${{ secrets.PAA_TEST_RELEASE_KEY_PASSWORD }}
-          PAA_KEYSTORE_ALIAS: ${{ vars.PAA_TEST_RELEASE_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          umask 077
-          path="apps/mobile/android/app/testing-release.keystore"
-          if [[ -n "$PAA_KEYSTORE_B64" ]]; then
-            test -n "$PAA_KEYSTORE_STOREPASS"
-            test -n "$PAA_KEYSTORE_KEYPASS"
-            test -n "$PAA_KEYSTORE_ALIAS"
-            printf '%s' "$PAA_KEYSTORE_B64" | base64 --decode > "$path"
-            keytool -list -keystore "$path" -storepass "$PAA_KEYSTORE_STOREPASS" -alias "$PAA_KEYSTORE_ALIAS" > /dev/null
-            echo "PAA_TEST_APK_STORE_PASSWORD=$PAA_KEYSTORE_STOREPASS" >> "$GITHUB_ENV"
-            echo "PAA_TEST_APK_KEY_PASSWORD=$PAA_KEYSTORE_KEYPASS" >> "$GITHUB_ENV"
-            echo "PAA_TEST_APK_KEY_ALIAS=$PAA_KEYSTORE_ALIAS" >> "$GITHUB_ENV"
-            echo "Owner-provided testing-release signer. Do not use for Play Store without security review." >> "$GITHUB_STEP_SUMMARY"
-          else
-            keypass="$(openssl rand -hex 24)"
-            echo "::add-mask::$keypass"
-            keytool -genkeypair -keystore "$path" \
-              -alias "paatest" -storepass "$keypass" -keypass "$keypass" \
-              -keyalg RSA -keysize 3072 -validity 365 \
-              -dname "CN=PAA Temporary Release Test,O=Owner Testing,C=US" -noprompt
-            echo "PAA_TEST_APK_STORE_PASSWORD=$keypass" >> "$GITHUB_ENV"
-            echo "PAA_TEST_APK_KEY_PASSWORD=$keypass" >> "$GITHUB_ENV"
-            echo "PAA_TEST_APK_KEY_ALIAS=paatest" >> "$GITHUB_ENV"
-            echo "Temporary test-only release signer: APK signer changes per run. Android cannot update a build signed with a different key; uninstall deletes saved app settings and encrypted credentials. Configure stable PAA_TEST_RELEASE_KEYSTORE_B64 and signing secrets for upgrades." >> "$GITHUB_STEP_SUMMARY"
-          fi
       - name: Assemble optimized signed Android release variant
         working-directory: apps/mobile/android
         env:
@@ -118,24 +92,17 @@ jobs:
         run: |
           set -euo pipefail
           # Both workflows produce comparable ascending Android version codes.
-          export PAA_BUILD_VERSION_CODE="$(date -u +%s)"
+          export PAA_BUILD_VERSION_CODE="$(bash ../../../scripts/signing/release-version-code.sh)"
           test "$PAA_BUILD_VERSION_CODE" -lt 2100000000
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
-      - name: Verify APK signer, release variant and file checksum
+      - name: Verify release signature matches permanent Nexa identity
         shell: bash
         run: |
           set -euo pipefail
-          apk="apps/mobile/android/app/build/outputs/apk/release/app-release.apk"
-          test -s "$apk"
-          apksigner_bin="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$apksigner_bin" verify --verbose --print-certs "$apk" | tee release-test-verification.txt
-          grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' release-test-verification.txt
-          sha256sum "$apk" | tee release-test-sha256.txt
+          bash scripts/signing/verify-release-apk.sh
           echo "$GITHUB_SHA" > release-test-source-sha.txt
-          grep 'Signer #1 certificate SHA-256 digest' release-test-verification.txt > release-test-signing-certificate.txt
           echo "Build source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Test-release APK" >> "$GITHUB_STEP_SUMMARY"
-          echo "Optimized non-debuggable release variant, signed with a dedicated testing key (not production)." >> "$GITHUB_STEP_SUMMARY"
+          echo "Signed using pinned Nexa Android release certificate." >> "$GITHUB_STEP_SUMMARY"
           cat release-test-sha256.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Upload installable release-test APK
         uses: actions/upload-artifact@v4

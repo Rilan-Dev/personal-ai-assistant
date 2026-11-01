@@ -111,6 +111,7 @@ android {
         // GitHub CI provides this keystore and passwords only during build.
         testRelease {
             storeFile file('testing-release.keystore')
+            storeType 'pkcs12'
             storePassword (System.getenv("PAA_TEST_APK_STORE_PASSWORD") ?: "unset")
             keyAlias (System.getenv("PAA_TEST_APK_KEY_ALIAS") ?: "paatest")
             keyPassword (System.getenv("PAA_TEST_APK_KEY_PASSWORD") ?: "unset")

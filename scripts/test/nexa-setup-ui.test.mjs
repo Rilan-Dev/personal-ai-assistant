@@ -44,9 +44,10 @@ test('APK embeds its real commit and uses comparable Android version codes',()=>
   assert.match(gradle,/PAA_BUILD_VERSION_CODE/);
   for(const ci of [workflow,releaseWorkflow]){
     assert.match(ci,/PAA_BUILD_SOURCE_REVISION: \$\{\{ github\.sha \}\}/);
-    assert.match(ci,/export PAA_BUILD_VERSION_CODE="\$\(date -u \+%s\)"/);
+    assert.match(ci,/release-version-code\.sh/);
     assert.match(ci,/release-test-signing-certificate\.txt/);
-    assert.match(ci,/signer changes per run/);
+    assert.match(ci,/Load permanent Nexa release signer/);
+    assert.doesNotMatch(ci,/Temporary test-only release signer|PAA Temporary Release Test/);
   }
 });
 

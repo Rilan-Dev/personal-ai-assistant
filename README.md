@@ -208,3 +208,14 @@ release. A per-run temporary signer cannot update a previously installed APK
 signed with a different certificate. Prefer the same persistent owner-managed
 signer for installation continuity; back up stored credentials before any
 uninstall. The app never auto-grants Android permissions.
+
+### Permanent Android APK signing (important)
+The Nexa release certificate is now generated once and pinned by SHA256.
+Release CI fails closed when its encrypted signing secrets are absent or when
+its certificate changes. No more per-run temporary release signers. The
+repository administrator must first run the protected server-side GitHub
+Secrets provisioning script; see
+[Permanent signing and migration](docs/architecture/NEXA_PERMANENT_ANDROID_SIGNING.md).
+An APK previously signed with a different temporary key **cannot** be
+upgraded in place by the new certificate. After installing a permanent-signer
+APK, subsequent APKs with the same package ID and signer can update normally.
