@@ -69,7 +69,7 @@ export default function App() {
   useEffect(()=>{
     if(Platform.OS!=='android')return;
     let active=true;
-    const route=(url:string|null)=>{
+    const route=(url:string|null|undefined)=>{
       if(!active)return;
       if(url==='nexa://voice'||url==='nexa://voice/'){
         voiceShortcutRequested.current=true;
