@@ -285,6 +285,10 @@ class NexaToolOverlayService : Service() {
                             button("Launcher status") { sendLocal("launcher status") },
                             button("Full Tools") { openTab("tools") }
                         ))
+                        addView(row(
+                            button("App permissions") { sendLocal("open app settings") },
+                            button("Battery settings") { sendLocal("background settings") }
+                        ))
                         addView(text("WhatsApp sending requires recipient review and confirmation in full Nexa.",11f,true))
                     }
                     else -> {
