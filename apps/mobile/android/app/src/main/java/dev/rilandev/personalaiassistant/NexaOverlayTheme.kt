@@ -61,19 +61,19 @@ internal object NexaOverlayTheme {
     }
 
     fun palette(ctx: Context): Palette {
-        val systemDark = ctx.resources.configuration.uiMode and
-            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val systemDark = (ctx.resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         val dark = when (mode(ctx)) { DARK -> true; LIGHT -> false; else -> systemDark }
         val accent = if (dark) dynamicColor(ctx, "system_accent1_300", Color.rgb(132, 190, 255))
             else dynamicColor(ctx, "system_accent1_600", Color.rgb(64, 79, 203))
         return if (dark) Palette(
-            true, Color.argb(241, 18, 27, 49), Color.argb(247, 42, 50, 86),
-            Color.argb(230, 36, 46, 75), Color.argb(205, 102, 124, 189),
+            true, Color.argb(226, 18, 27, 49), Color.argb(233, 42, 50, 86),
+            Color.argb(218, 36, 46, 75), Color.argb(205, 102, 124, 189),
             Color.WHITE, Color.rgb(198, 211, 236), accent,
             Color.rgb(48, 57, 104), Color.WHITE, Color.rgb(94, 238, 180)
         ) else Palette(
-            false, Color.argb(245, 249, 251, 255), Color.argb(249, 235, 239, 255),
-            Color.argb(241, 230, 235, 250), Color.argb(210, 145, 154, 195),
+            false, Color.argb(236, 249, 251, 255), Color.argb(242, 235, 239, 255),
+            Color.argb(228, 230, 235, 250), Color.argb(210, 145, 154, 195),
             Color.rgb(25, 34, 59), Color.rgb(78, 88, 116), accent,
             Color.rgb(221, 227, 252), Color.rgb(29, 39, 86), Color.rgb(0, 119, 89)
         )
