@@ -53,6 +53,8 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
                 serviceEnabled(NexaLauncherNavigationService::class.java))
             data.putBoolean("assistantRoleAvailable",
                 manager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) == true)
+            data.putBoolean("overlayGranted", Settings.canDrawOverlays(context))
+            data.putBoolean("overlayVisible", NexaToolOverlayService.visible)
             data.putBoolean("assistantSelected",
                 manager?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
             data.putBoolean("setupAcknowledged", prefs.getBoolean("acknowledged_v2", false))

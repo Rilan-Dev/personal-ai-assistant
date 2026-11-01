@@ -18,7 +18,7 @@ test("explicit Kotlin ReactPackage is registered", () => {
 test("AndroidManifest requests minimal package visibility, not dangerous permissions", () => {
   assert.match(manifest, /<package android:name="com\.whatsapp"\s*\/>/);
   assert.match(manifest, /<package android:name="com\.whatsapp\.w4b"\s*\/>/);
-  assert.doesNotMatch(manifest, /READ_SMS|SEND_SMS|READ_CALL_LOG|QUERY_ALL_PACKAGES|SYSTEM_ALERT_WINDOW/);
+  assert.doesNotMatch(manifest, /READ_SMS|SEND_SMS|READ_CALL_LOG|QUERY_ALL_PACKAGES/);
 });
 test("native operations are restricted to camera and allowlisted apps", () => {
   assert.match(module, /"whatsapp" -> "com\.whatsapp"/);

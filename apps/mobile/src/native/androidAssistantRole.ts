@@ -8,7 +8,8 @@ export type NexaAssistantRoleStatus = {
 };
 interface AssistantBridge {
   getAssistantRoleStatus(): Promise<NexaAssistantRoleStatus>;
-  requestAssistantRole(): Promise<'unavailable'|'already_selected'|'selection_opened'>;
+  requestAssistantRole(): Promise<'unavailable'|'already_selected'|'selection_opened'|'settings_opened'>;
+  openAssistantSettings(): Promise<'settings_opened'>;
 }
 function bridge(): AssistantBridge {
   const module = NativeModules.PAANexaAssistantRole;
@@ -23,5 +24,8 @@ export const assistantRoleAvailable = (): boolean =>
   typeof NativeModules.PAANexaAssistantRole?.getAssistantRoleStatus === 'function';
 export const getNexaAssistantRoleStatus = (): Promise<NexaAssistantRoleStatus> =>
   bridge().getAssistantRoleStatus();
-export const requestNexaAssistantRole = (): Promise<'unavailable'|'already_selected'|'selection_opened'> =>
+export const requestNexaAssistantRole = (): Promise<'unavailable'|'already_selected'|'selection_opened'|'settings_opened'> =>
   bridge().requestAssistantRole();
+
+export const openNexaAssistantSettings = (): Promise<'settings_opened'> =>
+  bridge().openAssistantSettings();

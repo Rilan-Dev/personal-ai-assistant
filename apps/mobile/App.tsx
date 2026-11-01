@@ -11,9 +11,11 @@ import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, rea
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
-import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistantRole } from './src/native/androidAssistantRole';
+import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistantRole, openNexaAssistantSettings } from './src/native/androidAssistantRole';
 import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
+import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
+  hideToolOverlay, consumeToolOverlayNavigation} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -108,11 +110,22 @@ export default function App() {
       if (!mounted) return;
       setSetupStatus(status);
       if (status.setupAcknowledged) setTab(prev=>prev==='setup'?'chat':prev);
+      // Explicit overlay navigation is consumed once. No background AI action.
+      if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
+        .then(target=>{
+          if (target==='chat'||target==='voice'||target==='tools') setTab(target);
+        }).catch(()=>{});
     }).catch(()=>{
       if (mounted) setSetupNotice('Android permission center is unavailable. You can still use basic Chat.');
     });
     const subscription=AppState.addEventListener('change',state=>{
-      if (state==='active') void refreshSetupStatus();
+      if (state==='active') {
+        void refreshSetupStatus();
+        if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
+          .then(target=>{
+            if (target==='chat'||target==='voice'||target==='tools') setTab(target);
+          }).catch(()=>{});
+      }
     });
     return ()=>{mounted=false;subscription.remove();};
   },[engine.live]);
@@ -149,13 +162,21 @@ export default function App() {
   const selectNexaAssistant = async () => {
     try {
       const result = await requestNexaAssistantRole();
-      setAssistantRoleNotice(result === 'selection_opened'
+      setSetupNotice(result === 'settings_opened'
+        ? 'Android Default apps settings opened. Choose Digital assistant and select Nexa if listed. Return and tap Refresh status.'
+        : result === 'selection_opened'
+          ? 'Android assistant chooser requested. Select Nexa and return to confirm the role.'
+          : 'Assistant status will refresh after you return to Nexa.');
+      setAssistantRoleNotice(result === 'settings_opened'
+        ? 'Android Default apps settings opened. Select Nexa as your Digital assistant if available.'
+        : result === 'selection_opened'
         ? 'Android assistant selection opened. Choose Nexa AI and return; status refreshes automatically.'
         : result === 'already_selected'
           ? 'Nexa AI is already selected as the default assistant.'
           : 'This device does not support selecting Nexa as a default assistant.');
+      return result;
     } catch {
-      setAssistantRoleNotice('Unable to open Android assistant role selection.');
+      setAssistantRoleNotice('Role dialog unavailable. Use Open Android Default apps in Setup.');
     }
   };
   const checkGitHubOnPhone = async () => {
@@ -811,8 +832,10 @@ export default function App() {
     if (setupBusy || running) return;
     setSetupBusy(true); setSetupNotice('');
     try {
-      await action();
-      setSetupNotice(label+' requested. Check the actual Android state below; not all requests are automatically granted.');
+      const outcome = await action();
+      setSetupNotice(outcome === 'settings_opened' || outcome === 'selection_opened'
+        ? 'Android selection or settings opened. Choose the permission or assistant there; return and refresh. Opening Settings does not mean the grant succeeded.'
+        : label+' requested. Check actual Android status; no permission is assumed granted.');
     } catch {
       setSetupNotice(label+' could not be completed. Android may require you to change the permission manually in App settings.');
     } finally {
@@ -860,6 +883,10 @@ export default function App() {
         providerReady={Boolean(activeProvider)}
         onVoice={()=>void runSetupAction('Voice permission',prepareNexaPermissions)}
         onAssistant={()=>void runSetupAction('Default assistant role',selectNexaAssistant)}
+        onAssistantSettings={()=>void runSetupAction('Android Default apps',openNexaAssistantSettings)}
+        onOverlaySettings={()=>void runSetupAction('Display over other apps',requestToolOverlayPermission)}
+        onOverlayShow={()=>void runSetupAction('Floating Nexa tools',showToolOverlay)}
+        onOverlayHide={()=>void runSetupAction('Hide floating tools',hideToolOverlay)}
         onAccessibility={()=>void runSetupAction('Accessibility settings',openScreenSettings)}
         onCamera={()=>void runSetupAction('Camera permission',grantFlashlightAccess)}
         onLocation={()=>void runSetupAction('Approximate location',requestApproximateLocationSetup)}

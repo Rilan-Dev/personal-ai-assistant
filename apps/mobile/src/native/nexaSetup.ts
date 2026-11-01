@@ -10,6 +10,8 @@ export type NexaSetupStatus = {
   launcherNavigation: boolean;
   assistantRoleAvailable: boolean;
   assistantSelected: boolean;
+  overlayGranted: boolean;
+  overlayVisible: boolean;
   setupAcknowledged: boolean;
   versionName: string;
   versionCode: number;

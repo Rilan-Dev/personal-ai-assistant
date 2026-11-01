@@ -649,3 +649,19 @@
   validation; native emulator and APK artifact still running at status check.
 - AES-256-PBKDF2 local recovery archive verified; copy to off-host vault is not
   attested, so disaster-recovery readiness remains explicitly incomplete.
+
+## 2026-11-01 — Android default-assistant fallback and compact floating tools
+- Reproduced source-level UX issue: Setup disabled Choose Nexa when Android
+  reported assistant role unavailable, preventing any role request/fallback.
+- Native assistant chooser now requires resumed Activity (not window focus),
+  falls back to official Android Voice Input / Default Apps settings and adds
+  an independent manual Settings button. Grant is never inferred from launch.
+- Added optional SYSTEM_ALERT_WINDOW Android grant flow and a small draggable
+  52dp non-modal overlay, owner-toggled and not enabled at boot. Expanded
+  controls: Chat, Voice, Tools, Stop live voice, Collapse, Hide. It does not
+  acquire accessibility, record in background or operate other apps.
+- Setup now tracks eight independent features; real OS permission states
+  refresh after returning from Android Settings.
+- Real Hey Nexa hotword remains unimplemented, never presented as working:
+  no validated on-device keyword-spotting engine/model has been integrated.
+- See docs/architecture/NEXA_ASSISTANT_ROLE_OVERLAY_2026-11-01.md.

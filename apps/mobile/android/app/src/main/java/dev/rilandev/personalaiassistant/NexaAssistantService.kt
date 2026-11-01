@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
+import com.facebook.react.common.LifecycleState
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -281,24 +283,53 @@ class NexaAssistantRoleModule(private val context: ReactApplicationContext) :
         result.putBoolean("wakeWordReady", false)
         p.resolve(result)
     }
+    private fun canPresent(): Boolean {
+        val activity = context.currentActivity
+        return activity != null && !activity.isFinishing &&
+            context.lifecycleState == LifecycleState.RESUMED
+    }
+    private fun openDefaultAssistantSettings(p: Promise) {
+        val activity = context.currentActivity
+        if (!canPresent() || activity == null) {
+            p.reject("NOT_FOREGROUND", "Open Nexa to change the Android default assistant")
+            return
+        }
+        // OEMs may omit the role dialog; attempt public Settings actions.
+        val intents = listOf(Settings.ACTION_VOICE_INPUT_SETTINGS,
+            Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS,
+            Settings.ACTION_SETTINGS)
+        for (action in intents) {
+            try {
+                activity.startActivity(Intent(action))
+                p.resolve("settings_opened")  // Never claims the role was granted.
+                return
+            } catch (_: Exception) { }
+        }
+        p.reject("ASSISTANT_SETTINGS_UNAVAILABLE",
+            "Android does not expose default assistant settings")
+    }
+    @ReactMethod fun openAssistantSettings(p: Promise) = openDefaultAssistantSettings(p)
     @ReactMethod fun requestAssistantRole(p: Promise) {
         val activity = context.currentActivity
-        if (activity?.hasWindowFocus() != true) {
+        if (!canPresent() || activity == null) {
             p.reject("NOT_FOREGROUND", "Open Nexa to select it as your assistant")
             return
         }
         val manager = roleManager()
-        if (manager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) != true) {
-            p.resolve("unavailable")
+        if (manager?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true) {
+            p.resolve("already_selected")
             return
         }
-        if (manager.isRoleHeld(RoleManager.ROLE_ASSISTANT)) {
-            p.resolve("already_selected")
+        if (manager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) != true) {
+            openDefaultAssistantSettings(p)
             return
         }
         try {
             activity.startActivity(manager.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT))
-            p.resolve("selection_opened") // Not evidence of a granted role
-        } catch (_: Exception) { p.reject("ROLE_REQUEST_FAILED", "Android could not show assistant selection") }
+            p.resolve("selection_opened")
+        } catch (_: Exception) {
+            openDefaultAssistantSettings(p)
+        }
     }
+
 }

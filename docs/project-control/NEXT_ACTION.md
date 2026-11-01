@@ -351,3 +351,15 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - GitHub encrypted secrets now provisioned, so do NOT regenerate or replace
   the permanent key. Verify current release run 41296332100 to green and
   compare output APK signer fingerprint to public pinned SHA256.
+
+## Nexa default assistant, overlay and wake-word device gates
+- Complete signed Android emulator CI against the new role fallback and
+  overlay native module; then install the confirmed APK on the owner phone.
+- Confirm Nexa appears in Android Default apps -> Digital assistant app on the
+  actual OEM, or capture system RoleManager/VoiceInteractionService diagnostics.
+- Owner must explicitly grant Display over other apps in Android Settings,
+  enable bubble in Nexa Setup and check screen readability, tool navigation,
+  drag, collapse, hide, user stop and overlay revocation.
+- Hey Nexa custom wake-word is still not working. Require a licensed offline
+  KWS model, background microphone platform compliance, battery/privacy tests
+  and hands-free real phone acceptance. Never equate role selection with KWS.

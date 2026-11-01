@@ -9,6 +9,10 @@ type Props = {
   notice: string;
   onVoice: () => void;
   onAssistant: () => void;
+  onAssistantSettings: () => void;
+  onOverlaySettings: () => void;
+  onOverlayShow: () => void;
+  onOverlayHide: () => void;
   onAccessibility: () => void;
   onCamera: () => void;
   onLocation: () => void;
@@ -25,7 +29,7 @@ type PermissionStep = {
 
 export default function NexaSetupScreen(props: Props) {
   const {
-    status: s, providerReady, busy, notice, onVoice, onAssistant,
+    status: s, providerReady, busy, notice, onVoice, onAssistant, onAssistantSettings, onOverlaySettings, onOverlayShow, onOverlayHide,
     onAccessibility, onCamera, onLocation, onProvider, onAppSettings,
     onRefresh, onFinish
   } = props;
@@ -55,6 +59,10 @@ export default function NexaSetupScreen(props: Props) {
     {key:'location', index:'07', title:'Approximate location',
       detail:'Optional permission for one location read when requested in Tools. No background tracking.',
       granted:Boolean(s?.approximateLocation), action:'Request permission', onPress:onLocation, optional:true},
+    {key:'overlay', index:'08', title:'Floating quick tools',
+      detail:'Optional small movable bubble over home screen. Open Chat, Voice or Tools without covering the whole display. It does not secretly listen or click other apps.',
+      granted:Boolean(s?.overlayGranted), action:'Allow display over apps',
+      onPress:onOverlaySettings, optional:true},
   ];
   const readyCount = permissions.filter(item => item.granted).length;
   const revision = s?.sourceRevision && /^[0-9a-f]{7,40}$/i.test(s.sourceRevision)
@@ -75,10 +83,10 @@ export default function NexaSetupScreen(props: Props) {
         </Text>
         <View style={styles.progressPanel}>
           <View style={styles.progressHead}>
-            <Text style={styles.progressText}>{s ? `${readyCount} of 7 features available` : 'Checking device permissions…'}</Text>
+            <Text style={styles.progressText}>{s ? `${readyCount} of 8 features available` : 'Checking device permissions…'}</Text>
             <Text style={styles.progressHint}>Optional setup</Text>
           </View>
-          <View style={styles.track}><View style={[styles.progress,{width:`${readyCount / 7 * 100}%`}]} /></View>
+          <View style={styles.track}><View style={[styles.progress,{width:`${readyCount / 8 * 100}%`}]} /></View>
         </View>
       </View>
       <View style={styles.sectionIntro}>
@@ -100,14 +108,31 @@ export default function NexaSetupScreen(props: Props) {
             </Text>
             <Pressable accessibilityRole="button"
               accessibilityLabel={step.action + ' for ' + step.title}
-              disabled={busy || s === null || step.granted || (step.key==='assistant' && !s.assistantRoleAvailable)}
+              disabled={busy || s === null || step.granted}
               onPress={step.onPress}
-              style={[styles.action, (busy || step.granted || !s || (step.key==='assistant'&&!s.assistantRoleAvailable))&&styles.actionDisabled]}>
+              style={[styles.action, (busy || step.granted || !s)&&styles.actionDisabled]}>
               <Text style={styles.actionText}>{step.granted?'Enabled':step.action}</Text>
             </Pressable>
           </View>
-          {step.key==='assistant' && s && !s.assistantRoleAvailable &&
-            <Text style={styles.helper}>This Android device does not offer Nexa the assistant role.</Text>}
+          {step.key==='assistant' && !step.granted && <>
+            <Pressable accessibilityRole="button" style={styles.secondary}
+              disabled={busy} onPress={onAssistantSettings}>
+              <Text style={styles.secondaryText}>Open Android Default apps / Digital assistant settings</Text>
+            </Pressable>
+            {s && !s.assistantRoleAvailable && <Text style={styles.helper}>
+              This phone did not offer the assistant-role dialog. Select Nexa in Android Settings if listed, then return and refresh.
+            </Text>}
+          </>}
+          {step.key==='overlay' && s?.overlayGranted && <View style={styles.footerActions}>
+            <Pressable accessibilityRole="button" style={styles.secondary}
+              disabled={busy} onPress={onOverlayShow}>
+              <Text style={styles.secondaryText}>{s.overlayVisible?'Refresh floating bubble':'Show floating bubble'}</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.secondary}
+              disabled={busy} onPress={onOverlayHide}>
+              <Text style={styles.secondaryText}>Hide bubble</Text>
+            </Pressable>
+          </View>}
         </View>
       ))}
       <View style={styles.footerCard}>
