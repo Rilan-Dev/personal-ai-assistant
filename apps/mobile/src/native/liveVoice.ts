@@ -5,12 +5,15 @@ export type LiveVoiceStatus={
   message:string;
   microphoneActive:boolean;
   microphoneMuted:boolean;
+  pendingAppApproval?:string|null;
+  lastToolResult?:string;
 };
 interface NativeSession {
   startVoiceSession():Promise<boolean>;
   stopVoiceSession():Promise<boolean>;
   getVoiceSessionStatus():Promise<LiveVoiceStatus>;
   setVoiceMicrophoneMuted(muted:boolean):Promise<boolean>;
+  decideVoiceAppAction(approve:boolean):Promise<boolean>;
 }
 function module():NativeSession {
   const m=NativeModules.PAARealtimeVoice;
@@ -51,6 +54,10 @@ export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):P
   return module().startVoiceSession();
 }
 export const stopOwnerLiveVoice=():Promise<boolean>=>module().stopVoiceSession();
+export const decideOwnerLiveAppAction=(approve:boolean):Promise<boolean>=>{
+  if(typeof approve!=='boolean')throw new Error('INVALID_APP_APPROVAL');
+  return module().decideVoiceAppAction(approve);
+};
 export const setOwnerLiveMicMuted=(muted:boolean):Promise<boolean>=>{
   if(typeof muted!=='boolean')throw new Error('INVALID_MIC_MUTE');
   return module().setVoiceMicrophoneMuted(muted);
