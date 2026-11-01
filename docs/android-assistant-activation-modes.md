@@ -18,6 +18,37 @@ Official references:
 
 **Migration:** an existing pre-v2 `wake_enabled=true` flag does not automatically start the microphone after upgrade. The new versioned `activation_mode_v2=continuous` preference is saved only by the user's explicit wake enable action. The mode can be turned off from Setup or notification. Protected hotword detection is reported unavailable to an ordinary APK.
 
+## Phase 2 source implementation — 2026-11-01
+
+**Owner-controlled conversational invocation:** Under Setup, the user can
+enable "AI conversation on assistant invocation". This opt-in defaults OFF
+and is stored as `nexa_setup.auto_voice_invocation_v1` only through a
+foreground, visible Setup action after microphone/notification permissions
+and valid OpenAI Realtime or Sarvam Voice Agent credentials are present.
+
+On an explicit Android assistant gesture, owner overlay tap or opted-in local
+Hey Nexa wake event, a configured and enabled session requests an Android
+microphone foreground service, shows an ongoing Stop notification and the
+normal microphone privacy indicator, and opens the direct live speech-to-speech
+provider. When this session window hides/dies, its live service stops.
+Without the preference/provider, the existing single local command path
+remains the fallback. Initial microphone grants, cloud account access and
+live-provider charges are not silently assumed by an old install.
+
+**Barge-in hardening:** playback chunks now carry a generation token.
+User interruption invalidates the generation, clears queued samples and
+synchronizes the audio sink with its flush. The OpenAI transport also checks
+server response identifiers so late audio from an interrupted response cannot
+play over the next turn. Sarvam interruption still depends on the provider
+emitting its documented interruption event; this requires phone/provider
+acceptance.
+
+**Validated on connected server:** 199 Node tests, TS compilation and
+Expo web export passed at commit `3308d1b`. Native Android Kotlin compile,
+instrumentation, actual cloud voice and physical-device acceptance were not
+run by these checks; the home Android build server was unreachable and the
+alternative Linux server has no JDK/Android SDK/ADB.
+
 ## Next phases — not yet delivered
 
 Phase 2: conversational assistant session, voice streaming/provider selection, interruption and speech-end behavior, error/retry handling, explicit device-command approvals.
