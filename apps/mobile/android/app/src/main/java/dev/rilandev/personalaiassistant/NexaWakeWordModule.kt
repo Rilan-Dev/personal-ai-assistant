@@ -46,6 +46,12 @@ class NexaWakeWordModule(private val context: ReactApplicationContext) :
         data.putBoolean("modelReady", modelReady(context))
         data.putBoolean("installing", installing)
         data.putBoolean("listening", NexaWakeWordService.listening)
+        data.putBoolean("enabled", NexaWakeWordService.enabled(context))
+        data.putBoolean("restartRequired",
+            NexaWakeWordService.enabled(context) &&
+                NexaWakeWordService.state != "listening" &&
+                NexaWakeWordService.state != "loading" &&
+                NexaWakeWordService.state != "paused")
         data.putString("state", NexaWakeWordService.state)
         data.putString("message",
             if (installing || (!modelReady(context) && installMessage.isNotBlank()))
@@ -157,13 +163,30 @@ class NexaWakeWordModule(private val context: ReactApplicationContext) :
         try {
             val intent = Intent(context, NexaWakeWordService::class.java)
                 .setAction(NexaWakeWordService.START)
+            NexaWakeWordService.persistEnabled(context, true)
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent)
             else context.startService(intent)
             p.resolve("start_requested")
-        } catch (_: Exception) { p.reject("MIC_START_DENIED", "Android blocked microphone service") }
+        } catch (_: Exception) {
+            NexaWakeWordService.persistEnabled(context, false)
+            p.reject("MIC_START_DENIED", "Android blocked microphone service")
+        }
+    }
+    @ReactMethod fun resumeIfEnabled(p: Promise) {
+        if (!NexaWakeWordService.enabled(context)) { p.resolve("disabled"); return }
+        if (!foreground()) { p.resolve("requires_visible_app"); return }
+        if (!modelReady(context)) { p.resolve("model_missing"); return }
+        if (NexaWakeWordService.state == "listening" ||
+            NexaWakeWordService.state == "loading" ||
+            NexaWakeWordService.state == "paused") {
+            p.resolve("already_running")
+            return
+        }
+        startListening(p)
     }
     @ReactMethod fun stopListening(p: Promise) {
         try {
+            NexaWakeWordService.persistEnabled(context, false)
             context.stopService(Intent(context, NexaWakeWordService::class.java))
             p.resolve(true)
         } catch (_: Exception) { p.reject("STOP_FAILED", "Could not stop wake-word listening") }
