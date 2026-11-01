@@ -44,7 +44,8 @@ test('overlay gives user controlled wake arm/stop and explicit Android backgroun
   assert.match(overlay,/Manifest\.permission\.RECORD_AUDIO/);
   assert.match(overlay,/Manifest\.permission\.POST_NOTIFICATIONS/);
   assert.match(overlay,/NexaWakeWordService\.START/);
-  assert.match(overlay,/stopService\(Intent\(this,NexaWakeWordService::class\.java\)\)/);
+  assert.match(overlay,/NexaWakeWordService\.persistEnabled\(this, false\)/);
+  assert.match(overlay,/stopService\(Intent\(this, NexaWakeWordService::class\.java\)\)/);
   assert.match(overlay,/RealtimeVoiceService\.ACTION_STOP/);
   assert.doesNotMatch(overlay,/RealtimeVoiceService\.ACTION_START/);
   assert.match(overlay,/Android blocked background microphone startup/);
@@ -56,7 +57,9 @@ test('overlay remains non-modal, draggable, collapsible, and bounded in size and
   assert.match(overlay,/FLAG_NOT_FOCUSABLE/);
   assert.match(overlay,/TYPE_APPLICATION_OVERLAY/);
   assert.match(overlay,/ACTION_MOVE/);
-  assert.match(overlay,/if \(expanded\) dp\(320\) else dp\(52\)/);
+  assert.match(overlay,/if \(expanded\) minOf\(dp\(310\)/);
+  assert.match(overlay,/if \(expanded\) minOf\(dp\(340\)/);
+  assert.match(overlay,/ScrollView\(this\)/);
   assert.match(overlay,/while \(history\.size > 10\) history\.removeFirst\(\)/);
   assert.match(overlay,/raw\.trim\(\)\.take\(150\)/);
   assert.match(overlay,/button\("Collapse"\)/);
@@ -84,11 +87,22 @@ test('owner tapped voice opens an existing system assistant session, not arbitra
   assert.ok(assistant.includes('listenOneDeviceCommand()'));
   assert.ok(overlay.includes('Talk to Nexa · one device command'));
   assert.ok(overlay.includes('NexaAssistantService.showFromOwnerTap()'));
-  assert.ok(overlay.includes('stopService(Intent(this, NexaWakeWordService::class.java))'));
+  assert.ok(overlay.includes('NexaWakeWordService.pauseForAssistant()'));
   assert.ok(overlay.includes('NexaWakeWordService.listening'));
   assert.ok(overlay.includes('RealtimeVoiceService.status == "listening"'));
   assert.ok(overlay.includes('Manifest.permission.RECORD_AUDIO'));
   assert.ok(overlay.includes('Select Nexa in Android Default assistant settings'));
   assert.ok(!overlay.includes('AudioRecord('));
   assert.doesNotMatch(assistant,/sendTextMessage|SmsManager|Runtime\.getRuntime\(\)/);
+});
+
+test('polite Brave requests and compact Nexa icon remain restricted to explicit app launch',()=>{
+  const manifest=read('apps/mobile/android/app/src/main/AndroidManifest.xml');
+  assert.match(manifest,/com\.brave\.browser/);
+  assert.match(commands,/can you please /);
+  assert.match(commands,/open my brave app/);
+  assert.match(commands,/com\.brave\.browser/);
+  assert.match(overlay,/R\.drawable\.ic_nexa_assistant/);
+  assert.match(overlay,/ImageView\(this\)/);
+  assert.doesNotMatch(commands,/QUERY_ALL_PACKAGES|Runtime\.getRuntime/);
 });
