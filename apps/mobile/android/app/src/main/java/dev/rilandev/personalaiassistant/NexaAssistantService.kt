@@ -568,13 +568,16 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         }
         label?.contentDescription = if (automaticLiveVoice)
             "$activationSource: live AI conversation with configured provider" else
-            "$activationSource: continuous on-device command conversation"
+            "$activationSource: configure live voice in Nexa Setup"
         commandFeedback = null
         feedbackUntil = 0L
         handler.postDelayed({
             if (!commandBusy && label != null) {
+                // Invocation starts a configured live AI session, not a
+                // second keyword-based command mode. Local tools remain
+                // available only when owner explicitly taps Talk.
                 if (automaticLiveVoice) startOwnerVoice()
-                else beginLocalConversation()
+                else feedback("Enable live AI after assistant invocation and configure Sarvam in Nexa Setup.")
             }
         }, 420L)
     }
