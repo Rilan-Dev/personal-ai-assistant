@@ -11,6 +11,7 @@ type Props = {
   onWakeStart: () => void;
   onWakeStop: () => void;
   onWakeRefresh: () => void;
+  onAutoVoiceToggle: () => void;
   busy: boolean;
   notice: string;
   onVoice: () => void;
@@ -36,7 +37,7 @@ type PermissionStep = {
 export default function NexaSetupScreen(props: Props) {
   const {
     status: s, providerReady, wakeStatus, onWakeDownload, onWakeStart,
-    onWakeStop, onWakeRefresh, busy, notice, onVoice, onAssistant, onAssistantSettings, onOverlaySettings, onOverlayShow, onOverlayHide,
+    onWakeStop, onWakeRefresh, onAutoVoiceToggle, busy, notice, onVoice, onAssistant, onAssistantSettings, onOverlaySettings, onOverlayShow, onOverlayHide,
     onAccessibility, onCamera, onLocation, onProvider, onAppSettings,
     onRefresh, onFinish
   } = props;
@@ -143,11 +144,31 @@ export default function NexaSetupScreen(props: Props) {
         </View>
       ))}
       <View style={styles.footerCard}>
+        <Text style={styles.footerTitle}>Assistant gesture → AI conversation</Text>
+        <Text style={styles.footerCopy}>
+          Optional: after you explicitly invoke Nexa using the Android assistant
+          gesture or enabled wake detector, start a live conversation with your
+          configured OpenAI or Sarvam provider instead of a single offline device
+          command. Audio is sent to that provider during the active session.
+          Android shows the microphone indicator and a Stop notification.
+          This never enables idle microphone capture on its own.
+        </Text>
+        <Text style={styles.status}>{s?.autoStartVoiceOnInvocation
+          ? '✓ Live AI on assistant invocation enabled'
+          : '○ Offline command mode · live AI opt-in disabled'}</Text>
+        <Pressable accessibilityRole="button" disabled={busy || !s}
+          style={styles.secondary} onPress={onAutoVoiceToggle}>
+          <Text style={styles.secondaryText}>{s?.autoStartVoiceOnInvocation
+            ? 'Disable automatic live AI · use offline commands'
+            : 'Enable live AI after assistant invocation'}</Text>
+        </Pressable>
+      </View>
+      <View style={styles.footerCard}>
         <Text style={styles.footerTitle}>Nexa activation · {wakeStatus?.enabled ? 'Hands-free' : 'Privacy-first'}</Text>
         <Text style={styles.footerCopy}>
           Recommended: choose Nexa as the default Android assistant and use your
           phone's assistant gesture or button. There is NO idle microphone capture
-          in this mode. Nexa listens for one device command after invocation, with
+          in this mode. Unless live AI activation is explicitly enabled, Nexa listens for one offline device command after invocation, with
           Android's normal microphone indicator while audio is actually recorded.
         </Text>
         <Text style={styles.footerCopy}>
@@ -199,8 +220,8 @@ export default function NexaSetupScreen(props: Props) {
           </Pressable>
         </View>
         <Text style={styles.footerCopy}>
-          If Nexa is the Android default assistant, recognition requests a short
-          on-device voice-command session. Otherwise tap the detection notification
+          If Nexa is the Android default assistant, invocation uses your selected
+          live AI or short on-device command mode. Otherwise tap the detection notification
           to open Nexa. No message will be sent without review.
         </Text>
       </View>
