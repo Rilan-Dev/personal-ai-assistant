@@ -148,14 +148,14 @@ export default function NexaSetupScreen(props: Props) {
         <Text style={styles.footerCopy}>
           Optional: after you explicitly invoke Nexa using the Android assistant
           gesture or enabled wake detector, start a live conversation with your
-          configured OpenAI or Sarvam provider instead of a single offline device
-          command. Audio is sent to that provider during the active session.
+          configured OpenAI or Sarvam provider instead of the offline multi-turn
+          command conversation. Audio is sent to that provider during the active session.
           Android shows the microphone indicator and a Stop notification.
           This never enables idle microphone capture on its own.
         </Text>
         <Text style={styles.status}>{s?.autoStartVoiceOnInvocation
-          ? '✓ Live AI on assistant invocation enabled'
-          : '○ Offline command mode · live AI opt-in disabled'}</Text>
+          ? '✓ Continuous provider conversation on invocation enabled'
+          : '○ Offline multi-command conversation · live provider disabled'}</Text>
         <Pressable accessibilityRole="button" disabled={busy || !s}
           style={styles.secondary} onPress={onAutoVoiceToggle}>
           <Text style={styles.secondaryText}>{s?.autoStartVoiceOnInvocation
@@ -184,8 +184,10 @@ export default function NexaSetupScreen(props: Props) {
         <Text style={styles.footerCopy}>
           Recommended: choose Nexa as the default Android assistant and use your
           phone's assistant gesture or button. There is NO idle microphone capture
-          in this mode. Unless live AI activation is explicitly enabled, Nexa listens for one offline device command after invocation, with
-          Android's normal microphone indicator while audio is actually recorded.
+          in this mode. Unless live AI activation is explicitly enabled, Nexa
+          listens for successive offline device commands after invocation, and
+          ends the conversation when you stop or remain silent. Android still
+          shows its microphone indicator during actual recording.
         </Text>
         <Text style={styles.status}>
           {wakeStatus?.protectedHotwordAvailable
