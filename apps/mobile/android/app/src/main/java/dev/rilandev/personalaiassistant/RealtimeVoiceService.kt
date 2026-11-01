@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -201,6 +202,7 @@ class RealtimeVoiceService : Service() {
         message="Connecting to "+(if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
         main.postDelayed(maxSession,15*60*1000L)
         main.postDelayed(handshakeTimeout,25_000L)
+        try {
         if(selectedProvider=="sarvam") {
             val transport=SarvamAudioTransport(object:SarvamAudioTransport.Callbacks{
                 override fun connected() {
@@ -224,6 +226,13 @@ class RealtimeVoiceService : Service() {
             sarvamTransport=transport
             transport.connect(credentials)
         } else connect(credentials.apiKey)
+        } catch (failure: Exception) {
+            // Network credential/provider configuration errors must not kill
+            // the app process. No URL, key, or microphone samples in Logcat.
+            Log.e("NexaVoice", "Provider initialization failed: " +
+                failure.javaClass.simpleName)
+            stopWithStatus("error", "Could not initialize live voice provider")
+        }
         return START_NOT_STICKY
     }
 
@@ -354,7 +363,9 @@ class RealtimeVoiceService : Service() {
                             }
                         }
                     }
-                    "error" -> main.post { stopWithStatus("error","Live provider rejected the session or audio") }
+                    "error" -> main.post {
+                        if (active.get()) stopWithStatus("error","Live provider rejected the session or audio")
+                    }
                 }
             }
             override fun onFailure(webSocket: WebSocket,t: Throwable,response: Response?) {
@@ -518,8 +529,10 @@ class RealtimeVoiceService : Service() {
                     }
                 }
             },"paa-voice-microphone").also { it.start() }
-        } catch (_: Exception) {
-            stopWithStatus("error","Could not start the microphone or speaker")
+        } catch (failure: Exception) {
+            Log.e("NexaVoice", "Audio initialization failed: " +
+                failure.javaClass.simpleName)
+            stopWithStatus("error","Could not start microphone or speaker; see privacy permissions")
         }
     }
 
