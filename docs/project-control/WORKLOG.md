@@ -549,3 +549,7 @@
   precise location or background location permission. One-turn
   Sarvam dictation now stops and rejects any audio upload if the
   visible application loses focus during the microphone capture.
+- Additional strict foreground privacy correction: the Android
+  LocationManager callback now discards the fix if the owner switches
+  away from the app before the one-time result returns. Source test
+  asserts this; no background location permission was introduced.

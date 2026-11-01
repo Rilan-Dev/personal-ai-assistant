@@ -157,6 +157,10 @@ class OwnerPrivacyModule(private val context:ReactApplicationContext):
                     if(!resolved.compareAndSet(false,true))return@Consumer
                     main.removeCallbacks(timeout)
                     locationBusy.set(false)
+                    if(!visible()){
+                        p.reject("FOREGROUND_REQUIRED","Location discarded after app lost focus")
+                        return@Consumer
+                    }
                     if(fix==null || !fix.latitude.isFinite() || !fix.longitude.isFinite() ||
                         fix.latitude !in -90.0..90.0 ||
                         fix.longitude !in -180.0..180.0 ||

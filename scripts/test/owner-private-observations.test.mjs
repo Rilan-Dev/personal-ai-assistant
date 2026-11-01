@@ -16,6 +16,7 @@ test("Android location is user-initiated, approximate, fresh and bounded",()=>{
   assert.match(source,/ACCESS_COARSE_LOCATION/);
   assert.match(source,/getCurrentLocation\(choice,signal,context\.mainExecutor/);
   assert.match(source,/main\.postDelayed\(timeout,12000L\)/);
+  assert.match(source,/Location discarded after app lost focus/);
   assert.match(source,/60_000_000_000L/);
   assert.match(source,/fun quantizeCoordinate\(value:Double\)/);
   assert.match(source,/data\.putDouble\("latitude",quantizeCoordinate\(fix\.latitude\)\)/);

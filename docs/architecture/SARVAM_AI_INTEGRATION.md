@@ -145,3 +145,6 @@ when the visible app loses focus; audio captured before focus loss is
 discarded instead of uploaded. This does not interrupt an explicitly
 owner-started live audio FGS session, which may continue in background
 until notification Stop, owner mute or the hard session limit.
+One-shot location is rejected if the app loses foreground focus before
+Android delivers a fix; it does not continue into an unattended background
+observation.
