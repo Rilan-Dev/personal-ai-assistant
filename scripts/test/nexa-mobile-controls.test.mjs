@@ -27,6 +27,7 @@ test('WhatsApp draft dispatch is not an automatic send',()=>{
   assert.match(whatsapp,/currentActivity\?\.hasWindowFocus\(\) != true/);
   assert.match(whatsapp,/context\.packageManager\.getLaunchIntentForPackage\("com.whatsapp"\)/);
   assert.match(whatsapp,/appendQueryParameter\("text", message\)/);
+  assert.match(whatsapp,/startsWith\("\+"\)/);
   assert.match(whatsapp,/intent\.resolveActivity\(context\.packageManager\)/);
   assert.match(whatsapp,/result\.putBoolean\("messageSent", false\)/);
   assert.doesNotMatch(whatsapp,/AccessibilityService|ACTION_CLICK|dispatchGesture|sendTextMessage/);

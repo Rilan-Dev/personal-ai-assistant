@@ -590,3 +590,5 @@
   requires the separate Android Accessibility user grant.
 - No arbitrary third-party action, cloud transcription, message send or hotword.
 - Added source security regressions; native emulator and physical UAT remain gates.
+- WhatsApp reviewed draft now rejects national-only phone strings and requires
+  an international +country-code contact to avoid ambiguous recipients.

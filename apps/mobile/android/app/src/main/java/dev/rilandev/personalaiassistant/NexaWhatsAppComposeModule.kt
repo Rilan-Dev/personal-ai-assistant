@@ -25,6 +25,12 @@ class NexaWhatsAppComposeModule(private val context: ReactApplicationContext) :
         }
         // Dialable E.164 digits only. No parsing URLs or accepting encoded query
         // parameters from a model. Country codes are mandatory.
+        // Require an international +country-code value. A national-only phone
+        // number could silently address the wrong person in another country.
+        if (!phone.trim().startsWith("+")) {
+            p.reject("COUNTRY_CODE_REQUIRED", "Contact number must begin with +country code")
+            return
+        }
         val digits = phone.trim().removePrefix("+").replace(Regex("[ ()-]"), "")
         if (digits.length !in 8..15 || digits[0] == '0' || digits.any { !it.isDigit() } ||
             digits.any { it !in '0'..'9' }) {

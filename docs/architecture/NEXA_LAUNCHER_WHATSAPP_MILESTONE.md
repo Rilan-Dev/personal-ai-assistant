@@ -85,3 +85,7 @@ or OpenAI live speech is active. An exact deterministic allowlist opens GitHub,
 opens WhatsApp, or requests the bounded launcher scan. Session dismissal and
 20-second timeout cancel the recognizer. No cloud transcript, arbitrary UI
 navigation, third-party message send or always-on Hey Nexa activation.
+
+A reviewed WhatsApp draft additionally rejects contact phone numbers without
+an explicit leading +country code; the owner must correct such numbers in the
+phone contact record before the app can prepare the WhatsApp link.

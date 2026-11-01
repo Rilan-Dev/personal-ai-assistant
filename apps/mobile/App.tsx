@@ -978,7 +978,7 @@ export default function App() {
               <Text style={styles.groupLabel}>Selected contact · local preview</Text>
               <Text style={styles.cardText}>{selectedContact.name} · {selectedContact.phone}</Text>
               {whatsAppDraftAvailable() && <>
-                <Text style={styles.settingHelp}>Compose only. The message will not be sent by Nexa; confirm recipient and tap Send within WhatsApp.</Text>
+                <Text style={styles.settingHelp}>Compose only. The selected number must include +country code. Nexa only opens a draft; confirm recipient and tap Send in WhatsApp.</Text>
                 <TextInput style={styles.composerInput} placeholder="WhatsApp message to selected contact"
                   placeholderTextColor="#7f8ba5" value={whatsAppDraft}
                   onChangeText={setWhatsAppDraft} multiline maxLength={500}
