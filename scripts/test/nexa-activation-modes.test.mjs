@@ -20,7 +20,9 @@ test('gesture is default and previous wake preference cannot restart microphone 
   assert.match(assistant,/NexaWakeWordService\.enabled\(this\)/);
 });
 test('default-assistant gesture invokes one bounded speech recognizer and self-dismisses',()=>{
-  assert.match(assistant,/autoDismissAfterCommand = true/);
+  // Gesture default is one-shot; explicit cloud conversation opt-in is not.
+  assert.match(assistant,/autoDismissAfterCommand = !automaticLiveVoice/);
+  assert.match(assistant,/automaticLiveVoice/);
   assert.match(assistant,/Android assistant gesture/);
   assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
