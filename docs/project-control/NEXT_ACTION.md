@@ -1,5 +1,23 @@
 # Next authorized implementation actions
 
+## 2026-11-01 — Conversational assistant gesture milestone
+- Implemented optional, foreground-consented auto-launch of configured
+  OpenAI/Sarvam live speech-to-speech from Android assistant invocation.
+  Default remains one bounded offline device command; no idle microphone.
+- Closing the voice assistant window ends the session-started provider stream.
+- Audio playback generations and OpenAI response IDs reject stale post-barge-in
+  audio without stopping the user's mic/VAD.
+- Local Node/TS/web checks: 199 tests passed, typecheck passed,
+  web export passed. Kotlin instrumentation has new consent check but cannot
+  be marked passed until an Android runner executes it.
+- Android phone/emulator, live account, battery/reboot and release APK signing
+  still require their actual test platforms. No protected OEM hotword privilege
+  is available to a normal user-installed APK.
+- Connected home Android server failed Tailscale reachability; working alternate
+  Linux checkout lacked Android SDK/JDK/ADB. Do not promote a signed APK or claim
+  final completion from JavaScript tests.
+
+
 ## Implemented in source
 - Expo SDK 58 Android/iOS starter, React Native UI and Web demo.
 - Kotlin Intent launch tools (camera, WhatsApp apps) and explicit grants.
