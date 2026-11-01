@@ -682,3 +682,23 @@
   and limitations documented in docs/architecture/NEXA_OFFLINE_WAKE_WORD.md.
 - Real device accuracy, accent/noise, battery, background OEM and provider
   handoff acceptance remain pending. This is not a trained Hey Nexa KWS model.
+
+## 2026-11-01 — Live conversation on assistant gesture (privacy opt-in)
+- Added `auto_voice_invocation_v1`, default false, using the visible Android
+  Setup module and a React Native choice. Requires owner-present action,
+  provider credentials and relevant microphone/notification grants.
+- The selected Android assistant invocation uses direct configured realtime
+  speech-to-speech (OpenAI or Sarvam) when explicitly opted in, otherwise
+  retains a one-shot on-device command. Session-launched service stops on hide
+  or destroy; Android microphone indicator and Stop notification remain.
+- Made the native OpenAI playback reject audio from stale response IDs after
+  interruption; tagged audio chunks by generation with synchronized flush,
+  also applied to Sarvam interruption.
+- Added native permission-consent instrumentation and 3 Node source regressions.
+- Connected `/home/techadmin/workspaces/nexa-assistant` checkout updated from
+  the Development branch. Verified 199 Node tests, TypeScript typechecks and
+  Expo web export on connected Linux server.
+- Native compile/emulator, owner-supplied cloud provider credentials,
+  physical phone reliability, battery/reboot and permanent-key signed APK
+  must not be marked verified. Home Android host was unreachable through
+  Tailscale; secondary server had no Android SDK/JDK/ADB.
