@@ -48,3 +48,16 @@ test('live startup does not contend with wake mic and transport failures stay ca
   assert.match(transport,/Sarvam authorization response could not be processed/);
   assert.match(transport,/Sarvam session event could not be processed/);
 });
+
+test('app-started voice also exposes an owner-review surface, not a silent local action',()=>{
+  const ui=readFileSync('apps/mobile/App.tsx','utf8');
+  const native=readFileSync('apps/mobile/src/native/liveVoice.ts','utf8');
+  assert.match(realtime,/putExtra\(RealtimeVoiceService\.EXTRA_ASSISTANT_PANEL, true\)/);
+  assert.match(realtime,/fun decideVoiceAppAction\(approve: Boolean,p: Promise\)/);
+  assert.match(realtime,/context\.currentActivity\?\.hasWindowFocus\(\)!=true/);
+  assert.match(realtime,/data\.putString\("pendingAppApproval",RealtimeVoiceService\.pendingApprovalSummary\)/);
+  assert.match(native,/decideOwnerLiveAppAction/);
+  assert.match(ui,/pendingAppApproval/);
+  assert.match(ui,/Approve app once/);
+  assert.match(ui,/onPress=\{\(\)=>void reviewLiveAppAction\(false\)\}/);
+});
