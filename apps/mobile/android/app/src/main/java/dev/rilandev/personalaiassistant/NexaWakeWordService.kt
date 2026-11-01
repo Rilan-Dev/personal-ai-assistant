@@ -109,7 +109,7 @@ class NexaWakeWordService : Service() {
         try {
             Model(NexaWakeWordModule.modelDir(this).absolutePath).use { model ->
                 // Grammar keeps decoder local and tightly scoped to trigger sounds.
-                val grammar = "[\"hey nexa\", \"hey nexus\", \"hey next a\", \"hey nexa ai\", \"[unk]\"]"
+                val grammar = "[\"hey nexus\", \"hey next a\", \"[unk]\"]"
                 Recognizer(model, 16000.0f, grammar).use { recognizer ->
                     if (!running.get()) return
                     val min = AudioRecord.getMinBufferSize(16000,
