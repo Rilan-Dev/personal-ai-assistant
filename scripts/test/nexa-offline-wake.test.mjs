@@ -23,15 +23,17 @@ test('offline detector uses pinned Apache-licensed model and explicit user downl
   assert.match(module,/NOT_FOREGROUND/);
   assert.match(read('apps/mobile/android/app/build.gradle'),/com\.alphacephei:vosk-android:0\.3\.47/);
 });
-test('microphone service is visibly user-started, terminable, offline and non-sticky',()=>{
+test('microphone remains user-armed, disclosed, and pauses for assistant handoff',()=>{
   assert.match(manifest,/android:name="\.NexaWakeWordService"/);
   assert.match(manifest,/foregroundServiceType="microphone"/);
   assert.match(manifest,/android:exported="false"/);
-  assert.doesNotMatch(manifest,/RECEIVE_BOOT_COMPLETED/);
+  assert.match(manifest,/RECEIVE_BOOT_COMPLETED/);
+  assert.match(read(dir+'NexaWakeBootReceiver.kt'),/Tap to resume Hey Nexa safely after restart/);
+  assert.doesNotMatch(read(dir+'NexaWakeBootReceiver.kt'),/startForegroundService\(/);
   assert.match(service,/START_NOT_STICKY/);
   assert.match(service,/startForeground\(ID/);
-  assert.match(service,/Stop wake listening/);
-  assert.match(service,/Nexa wake recognition/);
+  assert.match(service,/Turn off wake listening/);
+  assert.match(service,/Nexa wake phrase recognized/);
   assert.match(service,/NotificationManager\.IMPORTANCE_HIGH/);
   assert.match(service,/Model\(NexaWakeWordModule\.modelDir\(this\)\.absolutePath\)/);
   assert.match(service,/Recognizer\(model, 16000\.0f, grammar\)/);
@@ -50,8 +52,8 @@ test('wake phrase gate requires stable, nontrivial phrase and does not auto-send
 });
 test('setup gives explicit download, start, stop and live status controls',()=>{
   assert.match(setup,/Download offline model/);
-  assert.match(setup,/Enable Hey Nexa listening/);
-  assert.match(setup,/Stop wake listening/);
+  assert.match(setup,/Enable Hey Nexa \(saved setting\)/);
+  assert.match(setup,/Disable Hey Nexa/);
   assert.match(setup,/40 MB model/);
   assert.match(app,/prepareWakeListening/);
   assert.match(app,/prepareOwnerLiveVoicePermissions/);
@@ -72,4 +74,21 @@ test('R8 retains Vosk/JNA reflective symbols and only suppresses desktop AWT nam
   assert.match(rules,/-keep class com\.sun\.jna\.\*\* \{ \*; \}/);
   assert.match(rules,/-dontwarn java\.awt\.\*\*/);
   assert.doesNotMatch(rules,/-dontwarn \*\*|-ignorewarnings/);
+});
+
+test('one owner opt-in survives updates, rearms after system assistant and never hides mic indicator',()=>{
+  const assistant=read(dir+'NexaAssistantService.kt');
+  assert.match(service,/START_STICKY/);
+  assert.match(service,/NexaWakeWordService/);
+  assert.match(service,/while \(running\.get\(\)\)/);
+  assert.match(service,/fun assistantClosed\(\)/);
+  assert.match(service,/fun persistEnabled/);
+  assert.match(service,/handoffPending = true/);
+  assert.match(assistant,/NexaWakeWordService\.assistantClosed\(\)/);
+  assert.match(module,/resumeIfEnabled\(p: Promise\)/);
+  assert.match(module,/persistEnabled\(context, true\)/);
+  assert.match(module,/persistEnabled\(context, false\)/);
+  assert.match(service,/microphone indicator is expected/);
+  assert.match(setup,/The Android green dot indicates real microphone activity/);
+  assert.match(app,/resumeWakeIfEnabled/);
 });
