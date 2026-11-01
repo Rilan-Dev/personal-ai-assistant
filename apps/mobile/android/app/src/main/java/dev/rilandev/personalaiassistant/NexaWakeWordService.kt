@@ -126,6 +126,8 @@ class NexaWakeWordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        // Successful foreground start supersedes any reboot reminder.
+        manager.cancel(4925)
         active = this
         state = "loading"
         message = "Loading the on-device wake model"
