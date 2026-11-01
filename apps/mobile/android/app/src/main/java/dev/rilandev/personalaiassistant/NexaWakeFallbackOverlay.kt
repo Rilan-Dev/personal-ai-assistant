@@ -88,13 +88,13 @@ internal class NexaWakeFallbackOverlay(
             if (current == "error" || (current == "stopped" &&
                 (providerEverListening ||
                     SystemClock.elapsedRealtime() - providerStartedAt > 4500L))) {
-                if (!providerEverListening) {
-                    providerManaged = false
-                    showStatus("Live AI unavailable · switching to offline commands")
-                    handler.postDelayed({ if (active) { initSpeech(); listen() } }, 850L)
-                } else handler.postDelayed({
+                // "Hey Nexa" is solely a wake trigger; never swap the
+                // ongoing Sarvam conversation for unrelated command STT.
+                showStatus(if (current=="error") RealtimeVoiceService.message
+                    else "Live conversation ended · Hey Nexa ready")
+                handler.postDelayed({
                     if (active) finish("Live conversation ended · Hey Nexa ready")
-                }, 800L)
+                }, 2_200L)
                 return
             }
             handler.postDelayed(this, 800L)
@@ -108,8 +108,6 @@ internal class NexaWakeFallbackOverlay(
 
     fun show(): Boolean {
         if (active) return true
-        val offlineReady = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            SpeechRecognizer.isOnDeviceRecognitionAvailable(service)
         val providerReady = service.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
             .getBoolean("auto_voice_invocation_v1", false) &&
             (try { AgentJournalModule.openVoiceCredentials(service) != null }
@@ -118,7 +116,7 @@ internal class NexaWakeFallbackOverlay(
         // Android on-device speech engine; only the offline fallback does.
         if (!Settings.canDrawOverlays(service) ||
             service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED || (!offlineReady && !providerReady)) return false
+            PackageManager.PERMISSION_GRANTED || !providerReady) return false
         val wm = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val palette = NexaOverlayTheme.palette(service)
         fun px(v: Int) = NexaOverlayTheme.dp(service, v)
@@ -244,13 +242,12 @@ internal class NexaWakeFallbackOverlay(
                     showStatus("Connecting to live AI · tap Stop at any time")
                     handler.postDelayed(liveMonitor, 800L)
                 } catch (_: Exception) {
-                    showStatus("Android blocked live microphone · using offline commands")
-                    initSpeech()
-                    handler.postDelayed({ listen() }, 650L)
+                    showStatus("Android blocked live microphone · open Nexa Voice to retry")
+                    handler.postDelayed({ if(active) finish("Voice could not start") }, 2400L)
                 }
             } else {
-                initSpeech()
-                listen()
+                showStatus("Configure a live voice provider and enable invocation in Nexa Setup")
+                handler.postDelayed({ if(active) finish("Voice not configured") }, 2400L)
             }
         }, 550L)
         return true
