@@ -28,7 +28,7 @@ test('system invocation routes to live provider only when configured and opted i
   assert.match(assistant,/getBoolean\("auto_voice_invocation_v1", false\)/);
   assert.match(assistant,/val automaticLiveVoice = saved && hasCredentials/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else listenOneDeviceCommand\(\)/);
+  assert.match(assistant,/else beginLocalConversation\(\)/);
   assert.match(assistant,/liveVoiceLaunchedFromSession/);
   assert.match(assistant,/action = RealtimeVoiceService.ACTION_STOP/);
   assert.match(assistant,/NexaWakeWordService.assistantClosed\(\)/);
@@ -42,7 +42,7 @@ test('barge-in invalidates buffered output and rejects old response chunks',()=>
   assert.match(audio,/json.optString\("response_id"\) == responseId/);
   assert.match(audio,/responseId = json.optJSONObject\("response"\)/);
   assert.match(audio,/\.put\("interrupt_response",true\)/);
-  assert.match(audio,/Reply in the user/);
-  assert.match(audio,/Never imply you performed a device action/);
+  assert.match(audio,/Reply in English, Tamil or Hindi/);
+  assert.match(audio,/Never claim an app opened unless the result confirms it/);
   assert.doesNotMatch(audio,/AudioManager\.setMicrophoneMute|AppOpsManager/);
 });
