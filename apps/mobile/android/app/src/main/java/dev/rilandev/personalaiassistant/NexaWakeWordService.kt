@@ -93,7 +93,10 @@ class NexaWakeWordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (intent?.action != START || !enabled(this)) return START_NOT_STICKY
+        // Null intents occur only for OS-managed START_STICKY restarts. Never
+        // auto-start from a BOOT_COMPLETED receiver.
+        if ((intent?.action != START && intent != null) || !enabled(this))
+            return START_NOT_STICKY
         if (!running.compareAndSet(false, true)) return START_STICKY
         if (!NexaWakeWordModule.modelReady(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
