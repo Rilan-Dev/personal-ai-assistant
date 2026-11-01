@@ -1,10 +1,26 @@
 /**
- * Initial product boundary: the only native commands supported end-to-end
- * are single-step, owner-requested status and allowlisted app/camera launches.
- * A model suggesting a syntactically valid but unrelated tool is NOT enough
- * to prove user intent. Expand via dedicated, evaluated multi-step policies.
+ * Device-side intent gate. The model can plan, but its output never supplies
+ * proof that the owner asked to launch an app or activate hardware.
+ *
+ * Recognize polite, natural *single action* requests while rejecting mixed,
+ * negated and quoted commands. Unknown intents do not become device actions.
  */
-/** Intentionally tiny grammar: no multi-step or ambiguous hardware commands. */
+export function normalizeNativeRequest(request: string): string | null {
+  if (typeof request !== "string" || request.length < 1 || request.length > 350) return null;
+  let text = request.toLowerCase().trim().replace(/[.!?]+$/, "").trim();
+  text = text.replace(/^hey\s+(?:nexa|assistant)[,!]?\s+/, "").trim();
+  // Clauses and negation are never auto-reduced to one side effect.
+  if (/[\n;"'“”‘’]|(?:\b(?:and|then|also|after|before|while|or|but|without|instead|send|text|message|call|delete|don't|do not|never|not|no)\b)/.test(text))
+    return null;
+  text = text.replace(/^(?:can|could|would|will) you (?:please )?/, "")
+    .replace(/^would you mind (?:please )?/, "")
+    .replace(/^please /, "").trim()
+    .replace(/\s+please$/, "").replace(/\s+for me$/, "").trim();
+  if (text.startsWith("opening ")) text = "open " + text.slice(8);
+  if (text.startsWith("launching ")) text = "launch " + text.slice(10);
+  return text;
+}
+
 export function parseFlashlightIntent(normalized: string): boolean | null {
   const prefix = normalized.match(/^(?:turn|switch) (on|off) (?:my |the )?(?:phone )?(?:flashlight|torch)$/);
   if (prefix) return prefix[1] === "on";
@@ -12,30 +28,35 @@ export function parseFlashlightIntent(normalized: string): boolean | null {
   return suffix ? suffix[1] === "on" : null;
 }
 
+export type NativeOwnerIntent = {
+  toolId: "device.status" | "device.battery_status" | "device.set_flashlight" |
+    "device.open_camera" | "device.open_app";
+  input: Record<string, unknown>;
+};
+
+export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | null {
+  const text = normalizeNativeRequest(request);
+  if (text === null) return null;
+  const desired = parseFlashlightIntent(text);
+  if (desired !== null) return {toolId:"device.set_flashlight",input:{enabled:desired}};
+  if (/^(?:check|show|what is|what's) (?:my |the )?(?:agent |device )?status$/.test(text))
+    return {toolId:"device.status",input:{}};
+  if (/^(?:(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge)(?: level| status| percentage| percent)?|(?:what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge) percentage|how much (?:battery|charge) (?:do i have|is left)|how (?:much|many) percent (?:battery|charge) (?:do i have|is left))$/.test(text))
+    return {toolId:"device.battery_status",input:{}};
+  if (/^(?:open|launch|start|turn on) (?:my |the )?camera(?: app)?$/.test(text))
+    return {toolId:"device.open_camera",input:{}};
+  const app = text.match(/^(?:open|launch|start) (?:my |the )?(whatsapp business|whatsapp)(?: app)?$/);
+  if (app) return {toolId:"device.open_app",input:{app:app[1]==="whatsapp business"?"whatsapp-business":"whatsapp"}};
+  return null;
+}
+
 export function requestAllowsNativeTool(
-  request: string,
-  toolId: string,
-  input: Record<string, unknown>
+  request: string, toolId: string, input: Record<string, unknown>
 ): boolean {
-  const normalized = request.toLowerCase().trim()
-    .replace(/^hey\s+(nexa|assistant)[,!]?\s+/, "")
-    .replace(/[.!?]+$/, "").trim();
-  if (toolId === "device.status") {
-    return /^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(normalized);
-  }
-  if (toolId === "device.battery_status") {
-    return /^(?:(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge)(?: level| status| percentage| percent)?|(?:what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge) percentage|how much (?:battery|charge) (?:do i have|is left)|how (?:much|many) percent (?:battery|charge) (?:do i have|is left))$/.test(normalized);
-  }
-  if (toolId === "device.set_flashlight") {
-    const desired = parseFlashlightIntent(normalized);
-    return desired !== null && input.enabled === desired && Object.keys(input).length === 1;
-  }
-  if (toolId === "device.open_camera") {
-    return /^(?:please )?(?:open|launch|start|turn on) (?:my |the )?camera(?: please)?$/.test(normalized);
-  }
-  if (toolId === "device.open_app") {
-    const match = normalized.match(/^(?:please )?(?:open|launch|start) (?:my |the )?(whatsapp business|whatsapp)(?: please)?$/);
-    return !!match && input.app === (match[1] === "whatsapp business" ? "whatsapp-business" : "whatsapp");
-  }
-  return false;
+  const intent = parseNativeOwnerIntent(request);
+  if (!intent || intent.toolId !== toolId || !input || typeof input !== "object" || Array.isArray(input))
+    return false;
+  const expected = intent.input;
+  return Object.keys(input).length === Object.keys(expected).length &&
+    Object.entries(expected).every(([k,v])=>Object.prototype.hasOwnProperty.call(input,k) && input[k]===v);
 }
