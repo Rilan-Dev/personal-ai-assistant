@@ -505,6 +505,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         try {
             app.startForegroundService(Intent(app, RealtimeVoiceService::class.java).apply {
                 action = RealtimeVoiceService.ACTION_START
+                putExtra(RealtimeVoiceService.EXTRA_ASSISTANT_PANEL, true)
             })
             liveVoiceLaunchedFromSession = true
             label?.text = "Connecting to live AI · microphone access visible · Stop to end"
