@@ -1,7 +1,6 @@
 # Nexa AI — permanent Android APK signing
 
-Status: **Permanent key generated and verified on owner server; GitHub Actions
-secrets require administrator authorization before a new release can be signed.**
+Status: **Permanent key generated; all three GitHub Actions encrypted secrets are provisioned; CI has successfully validated the signer; native signed-APK release verification underway.**
 
 ## Permanent identity
 
@@ -51,11 +50,12 @@ certificate for in-place upgrades.
 
 ## One-time GitHub Actions provisioning
 
-The connected ChatGPT GitHub tool does not have an action for editing encrypted
-repository secrets. The existing server git credential helper also has no
-authorized GitHub HTTPS administrator token, and the GitHub CLI is not
-currently authenticated. Do **not** work around this by publishing the
-private signing key.
+The connected GitHub connector does not expose encrypted-secret writes. The
+initial provisioning was successfully completed on 2026-11-01 by securely
+streaming the VPS keystore and credentials over an authenticated SSH connection
+to the owner-connected home server, whose authenticated GitHub CLI uploaded
+all three encrypted repository secrets. No private key was posted to ChatGPT
+or the GitHub source repository.
 
 As the GitHub repository administrator, install and authenticate `gh` **on the
 authorized server**, then run:
@@ -73,7 +73,9 @@ for all subsequent GitHub Actions APK releases. After provisioning, trigger
 the `Android installable release-test APK` workflow or push approved code to
 `main` and verify the uploaded APK certificate against the fingerprint above.
 
-The key **must also be backed up off-host**, together with recovery passwords,
+An AES-256 encrypted recovery archive has been created and verified locally
+on the VPS. Transfer to separate owner-controlled off-host storage remains
+necessary for disaster recovery. The key **must also be backed up off-host**, together with recovery passwords,
 in an owner-controlled encrypted vault/storage. GitHub Actions secrets cannot
 normally be viewed again and should not be treated as a recoverable backup.
 Do not share the key or recovery password in a support ticket or conversation.
@@ -107,5 +109,6 @@ correct.
 - Install a second APK signed with the same key and higher versionCode over
   the first; verify user settings survive.
 
-Release readiness is not complete until secret provisioning and real APK
-upgrade acceptance have been verified.
+Encrypted-secret provisioning and the CI keystore identity check have passed.
+Release readiness still requires successful native APK signature verification
+and actual phone upgrade acceptance.

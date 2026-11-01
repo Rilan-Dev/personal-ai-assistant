@@ -348,3 +348,6 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   identity upgrades without uninstalling or data loss. Prior temporary-signer
   APKs cannot be upgraded directly if their old private key is unavailable.
 - Never revert to a per-run signing key or replace the pinned fingerprint.
+- GitHub encrypted secrets now provisioned, so do NOT regenerate or replace
+  the permanent key. Verify current release run 41296332100 to green and
+  compare output APK signer fingerprint to public pinned SHA256.

@@ -643,3 +643,9 @@
   Until then, CI release intentionally fails closed; stable-key APK not yet built.
 - Recovery plan and one-time migration limitation documented in
   docs/architecture/NEXA_PERMANENT_ANDROID_SIGNING.md.
+- 2026-11-01 signing follow-up: Authorized home-server GitHub CLI successfully
+  created all three encrypted NEXA_RELEASE_* repository secrets via SSH stream
+  from protected VPS. CI re-run for e898562 passed signer-load and certificate
+  validation; native emulator and APK artifact still running at status check.
+- AES-256-PBKDF2 local recovery archive verified; copy to off-host vault is not
+  attested, so disaster-recovery readiness remains explicitly incomplete.
