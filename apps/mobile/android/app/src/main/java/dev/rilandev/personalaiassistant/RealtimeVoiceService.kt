@@ -48,6 +48,7 @@ import org.json.JSONObject
 class RealtimeVoiceService : Service() {
     companion object {
         const val ACTION_START = "dev.rilandev.personalaiassistant.VOICE_START"
+        const val EXTRA_ASSISTANT_PANEL = "dev.rilandev.personalaiassistant.ASSISTANT_PANEL_TOOLS"
         const val ACTION_STOP = "dev.rilandev.personalaiassistant.VOICE_STOP"
         const val ACTION_MUTE = "dev.rilandev.personalaiassistant.VOICE_MUTE"
         const val ACTION_UNMUTE = "dev.rilandev.personalaiassistant.VOICE_UNMUTE"
@@ -74,6 +75,7 @@ class RealtimeVoiceService : Service() {
     private var socket: WebSocket? = null
     private var sarvamTransport: SarvamAudioTransport? = null
     private var selectedProvider = "openai"
+    @Volatile private var assistantPanelEnabled = false
     private data class PendingAppTool(val callId: String, val app: String, val command: String)
     private var pendingAppTool: PendingAppTool? = null
     private val seenCallIds = HashSet<String>()
@@ -126,7 +128,8 @@ class RealtimeVoiceService : Service() {
         }
         if (intent?.action == ACTION_APPROVE_TOOL || intent?.action == ACTION_DENY_TOOL) {
             val pending = pendingAppTool
-            if (active.get() && selectedProvider == "openai" && pending != null) {
+            if (active.get() && selectedProvider == "openai" &&
+                assistantPanelEnabled && pending != null) {
                 pendingAppTool = null
                 pendingApprovalSummary = null
                 val approved = intent.action == ACTION_APPROVE_TOOL
@@ -184,6 +187,7 @@ class RealtimeVoiceService : Service() {
             return START_NOT_STICKY
         }
         microphoneMuted=false
+        assistantPanelEnabled = intent.getBooleanExtra(EXTRA_ASSISTANT_PANEL, false)
         pendingAppTool = null
         pendingApprovalSummary = null
         lastToolResult = ""
@@ -305,8 +309,9 @@ class RealtimeVoiceService : Service() {
                     .put("type","realtime")
                     .put("audio",JSONObject().put("input",input).put("output",output))
                     .put("instructions","You are Nexa, a natural conversational voice assistant. Reply in English, Tamil or Hindi as appropriate. Keep answers brief and grounded, remember prior turns, handle user interruptions, and state tool outcomes precisely. You have three restricted Android function tools: read device status, read battery, and request opening Brave/GitHub/WhatsApp. An app-open request ALWAYS requires a visible human approval. Never claim an app opened unless the result confirms it; intent dispatch does not prove the app screen. You cannot send WhatsApp messages, change arbitrary permissions, control the screen, or access other private data in this mode. Explain limitations rather than inventing actions. Never ask for secrets.")
-                    .put("tools", NexaLiveToolPolicy.definitions())
-                    .put("tool_choice", "auto")
+                    .put("tools", if (assistantPanelEnabled)
+                        NexaLiveToolPolicy.definitions() else org.json.JSONArray())
+                    .put("tool_choice", if (assistantPanelEnabled) "auto" else "none")
                     .put("max_output_tokens",512)
                 webSocket.send(JSONObject().put("type","session.update").put("session",session).toString())
             }
@@ -316,8 +321,8 @@ class RealtimeVoiceService : Service() {
                 when (json.optString("type")) {
                     "session.updated" -> main.post { if (active.get() && status=="connecting") startAudio() }
                     "response.done" -> main.post {
-                        if (active.get() && selectedProvider == "openai")
-                            handleRealtimeToolCalls(json)
+                        if (active.get() && selectedProvider == "openai" &&
+                            assistantPanelEnabled) handleRealtimeToolCalls(json)
                     }
                     "response.created" -> {
                         // A cancelled response can still yield late network deltas.
@@ -553,6 +558,7 @@ class RealtimeVoiceService : Service() {
         sarvamTransport=null
         pendingAppTool = null
         pendingApprovalSummary = null
+        assistantPanelEnabled = false
         lastToolResult = ""
         seenCallIds.clear()
         toolCallsInSession = 0
