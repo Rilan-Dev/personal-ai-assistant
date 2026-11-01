@@ -22,7 +22,6 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -229,9 +228,8 @@ class RealtimeVoiceService : Service() {
         } catch (failure: Exception) {
             // Network credential/provider configuration errors must not kill
             // the app process. No URL, key, or microphone samples in Logcat.
-            Log.e("NexaVoice", "Provider initialization failed: " +
-                failure.javaClass.simpleName)
-            stopWithStatus("error", "Could not initialize live voice provider")
+            stopWithStatus("error", "Could not initialize live voice provider (" +
+                failure.javaClass.simpleName + ")")
         }
         return START_NOT_STICKY
     }
@@ -530,9 +528,8 @@ class RealtimeVoiceService : Service() {
                 }
             },"paa-voice-microphone").also { it.start() }
         } catch (failure: Exception) {
-            Log.e("NexaVoice", "Audio initialization failed: " +
-                failure.javaClass.simpleName)
-            stopWithStatus("error","Could not start microphone or speaker; see privacy permissions")
+            stopWithStatus("error","Could not start microphone or speaker (" +
+                failure.javaClass.simpleName + "); check Android privacy permissions")
         }
     }
 
