@@ -78,6 +78,8 @@ class RealtimeVoiceService : Service() {
     @Volatile private var assistantPanelEnabled = false
     private data class PendingAppTool(val callId: String, val app: String, val command: String)
     private var pendingAppTool: PendingAppTool? = null
+    private var lastLocalUtterance = ""
+    private var lastLocalUtteranceAt = 0L
     private val seenCallIds = HashSet<String>()
     private var toolCallsInSession = 0
     private var activeRate = RATE
@@ -128,8 +130,7 @@ class RealtimeVoiceService : Service() {
         }
         if (intent?.action == ACTION_APPROVE_TOOL || intent?.action == ACTION_DENY_TOOL) {
             val pending = pendingAppTool
-            if (active.get() && selectedProvider == "openai" &&
-                assistantPanelEnabled && pending != null) {
+            if (active.get() && assistantPanelEnabled && pending != null) {
                 pendingAppTool = null
                 pendingApprovalSummary = null
                 val approved = intent.action == ACTION_APPROVE_TOOL
@@ -138,8 +139,13 @@ class RealtimeVoiceService : Service() {
                     else "Denied by owner. No app was opened."
                 lastToolResult = outcome.take(320)
                 message = lastToolResult
-                sendRealtimeToolOutput(pending.callId, lastToolResult)
-                socket?.send(JSONObject().put("type", "response.create").toString())
+                if (selectedProvider == "openai") {
+                    sendRealtimeToolOutput(pending.callId, lastToolResult)
+                    socket?.send(JSONObject().put("type", "response.create").toString())
+                }
+                // Sarvam's managed CALL transport has no documented on-phone
+                // function_call_output event. The outcome is shown locally;
+                // never falsely tell Sarvam the tool ran through its harness.
             }
             return START_NOT_STICKY
         }
@@ -191,6 +197,8 @@ class RealtimeVoiceService : Service() {
         pendingAppTool = null
         pendingApprovalSummary = null
         lastToolResult = ""
+        lastLocalUtterance = ""
+        lastLocalUtteranceAt = 0L
         seenCallIds.clear()
         toolCallsInSession = 0
         idleGate.reset(0L)
@@ -218,6 +226,14 @@ class RealtimeVoiceService : Service() {
                 override fun interrupted() {
                     idleGate.reset(SystemClock.elapsedRealtime())
                     interruptSpeakerPlayback()
+                }
+                override fun transcript(role: String, content: String) {
+                    // Official Sarvam transcript callback: role=user, content.
+                    // Never allow bot text or arbitrary transcript to run tools.
+                    main.post { if(active.get() && status=="listening" &&
+                        selectedProvider=="sarvam" && role=="user")
+                        handleSarvamOwnerRequest(content)
+                    }
                 }
                 override fun failed(reason:String){
                     main.post {if(active.get())stopWithStatus("error",reason)}
@@ -377,6 +393,33 @@ class RealtimeVoiceService : Service() {
                 main.post { if (active.get()) stopWithStatus("stopped","Provider closed voice session") }
             }
         })
+    }
+
+    /**
+     * Transcribed owner utterances are untrusted input. The Sarvam managed
+     * model remains responsible for live listening/reasoning/speaking; Nexa
+     * independently proposes only explicit allowlisted app launches, with a
+     * visible confirmation before the native Intent. No automatic dispatch.
+     *
+     * Sarvam-managed webhooks are not client-device tools. This local bridge
+     * does NOT feed results into Sarvam's remote LLM conversation.
+     */
+    private fun handleSarvamOwnerRequest(transcript: String) {
+        if (!assistantPanelEnabled || pendingAppTool != null) return
+        val intent = NexaVoiceIntentGate.appRequest(transcript) ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (intent.command == lastLocalUtterance &&
+            now - lastLocalUtteranceAt < 12_000L) return
+        if (++toolCallsInSession > 12) {
+            lastToolResult = "Voice device-action limit reached"
+            message = lastToolResult
+            return
+        }
+        lastLocalUtterance = intent.command
+        lastLocalUtteranceAt = now
+        pendingAppTool = PendingAppTool("local-sarvam", intent.app, intent.command)
+        pendingApprovalSummary = "Open ${intent.app}? Confirm or deny below."
+        message = "Nexa local device approval required to open ${intent.app}"
     }
 
     private fun sendRealtimeToolOutput(callId: String, result: String) {
