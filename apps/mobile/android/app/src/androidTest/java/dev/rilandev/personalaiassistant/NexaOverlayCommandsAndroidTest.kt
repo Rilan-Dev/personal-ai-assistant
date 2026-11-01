@@ -14,7 +14,7 @@ class NexaOverlayCommandsAndroidTest {
     @Test fun unknownInstructionsCannotRunAnUnlistedAction() {
         val result = NexaOverlayCommands.handle(context, "unrecognized remote control")
         assertTrue(result.contains("Unsupported local command"))
-        assertTrue(result.contains("Full"))
+        assertTrue(result.contains("full Nexa"))
     }
 
     @Test fun messagingCannotBeSentByLocalOverlayCommand() {
