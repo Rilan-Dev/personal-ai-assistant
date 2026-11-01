@@ -66,3 +66,12 @@ test('live voice supports idle exit while retaining microphone disclosure',()=>{
   assert.match(realtime,/FOREGROUND_SERVICE_TYPE_MICROPHONE/);
   assert.match(realtime,/makeNotification\("Microphone active/);
 });
+
+test('Realtime tool calls require a visible assistant approval surface',()=>{
+  assert.match(session,/putExtra\(RealtimeVoiceService\.EXTRA_ASSISTANT_PANEL, true\)/);
+  assert.match(realtime,/assistantPanelEnabled = intent\.getBooleanExtra\(EXTRA_ASSISTANT_PANEL, false\)/);
+  assert.match(realtime,/if \(assistantPanelEnabled\)/);
+  assert.match(realtime,/tool_choice/);
+  assert.match(realtime,/assistantPanelEnabled && pending != null/);
+  assert.match(realtime,/assistantPanelEnabled\) handleRealtimeToolCalls\(json\)/);
+});
