@@ -26,7 +26,9 @@ test('default-assistant gesture invokes one bounded speech recognizer and self-d
   assert.match(assistant,/Android assistant gesture/);
   assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
-  assert.match(assistant,/if \(!commandBusy && label != null\) listenOneDeviceCommand\(\)/);
+  assert.match(assistant,/if \(!commandBusy && label != null\) \{/);
+  assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
+  assert.match(assistant,/else listenOneDeviceCommand\(\)/);
   assert.match(assistant,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(assistant,/handler\.postDelayed\(autoHide, 6500L\)/);
   assert.doesNotMatch(assistant,/MANAGE_HOTWORD_DETECTION|CAPTURE_AUDIO_HOTWORD/);
