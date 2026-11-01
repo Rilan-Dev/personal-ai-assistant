@@ -50,6 +50,12 @@ class RealtimeVoiceService : Service() {
         const val ACTION_STOP = "dev.rilandev.personalaiassistant.VOICE_STOP"
         const val ACTION_MUTE = "dev.rilandev.personalaiassistant.VOICE_MUTE"
         const val ACTION_UNMUTE = "dev.rilandev.personalaiassistant.VOICE_UNMUTE"
+        const val ACTION_APPROVE_TOOL = "dev.rilandev.personalaiassistant.TOOL_APPROVE"
+        const val ACTION_DENY_TOOL = "dev.rilandev.personalaiassistant.TOOL_DENY"
+        @Volatile var pendingApprovalSummary: String? = null
+            private set
+        @Volatile var lastToolResult = ""
+            private set
         @Volatile var microphoneMuted = false
             private set
         private const val CHANNEL = "paa_voice_session_v1"
@@ -67,6 +73,10 @@ class RealtimeVoiceService : Service() {
     private var socket: WebSocket? = null
     private var sarvamTransport: SarvamAudioTransport? = null
     private var selectedProvider = "openai"
+    private data class PendingAppTool(val callId: String, val app: String, val command: String)
+    private var pendingAppTool: PendingAppTool? = null
+    private val seenCallIds = HashSet<String>()
+    private var toolCallsInSession = 0
     private var activeRate = RATE
     private var client: OkHttpClient? = null
     private var recorder: AudioRecord? = null
@@ -102,6 +112,22 @@ class RealtimeVoiceService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             stopWithStatus("stopped","Stopped by owner")
+            return START_NOT_STICKY
+        }
+        if (intent?.action == ACTION_APPROVE_TOOL || intent?.action == ACTION_DENY_TOOL) {
+            val pending = pendingAppTool
+            if (active.get() && selectedProvider == "openai" && pending != null) {
+                pendingAppTool = null
+                pendingApprovalSummary = null
+                val approved = intent.action == ACTION_APPROVE_TOOL
+                val outcome = if (approved)
+                    NexaOverlayCommands.handle(this, pending.command)
+                    else "Denied by owner. No app was opened."
+                lastToolResult = outcome.take(320)
+                message = lastToolResult
+                sendRealtimeToolOutput(pending.callId, lastToolResult)
+                socket?.send(JSONObject().put("type", "response.create").toString())
+            }
             return START_NOT_STICKY
         }
         if (intent?.action == ACTION_MUTE || intent?.action == ACTION_UNMUTE) {
@@ -148,6 +174,11 @@ class RealtimeVoiceService : Service() {
             return START_NOT_STICKY
         }
         microphoneMuted=false
+        pendingAppTool = null
+        pendingApprovalSummary = null
+        lastToolResult = ""
+        seenCallIds.clear()
+        toolCallsInSession = 0
         selectedProvider=credentials.provider
         activeRate=if(selectedProvider=="sarvam")16000 else RATE
         active.set(true)
@@ -261,7 +292,9 @@ class RealtimeVoiceService : Service() {
                 val session = JSONObject()
                     .put("type","realtime")
                     .put("audio",JSONObject().put("input",input).put("output",output))
-                    .put("instructions","You are Nexa, a natural spoken voice assistant. Reply in the user's language when possible, including English, Tamil or Hindi. Use short, clear spoken sentences and carry context across follow-up questions. Avoid reading markdown, raw URLs or technical IDs aloud. Let the user finish thoughts and handle interruptions naturally. Never imply you performed a device action or sent a message; you have no device tools in this voice mode. Direct device actions to Nexa's separately approved tools. Never request API keys or other secrets.")
+                    .put("instructions","You are Nexa, a natural conversational voice assistant. Reply in English, Tamil or Hindi as appropriate. Keep answers brief and grounded, remember prior turns, handle user interruptions, and state tool outcomes precisely. You have three restricted Android function tools: read device status, read battery, and request opening Brave/GitHub/WhatsApp. An app-open request ALWAYS requires a visible human approval. Never claim an app opened unless the result confirms it; intent dispatch does not prove the app screen. You cannot send WhatsApp messages, change arbitrary permissions, control the screen, or access other private data in this mode. Explain limitations rather than inventing actions. Never ask for secrets.")
+                    .put("tools", NexaLiveToolPolicy.definitions())
+                    .put("tool_choice", "auto")
                     .put("max_output_tokens",512)
                 webSocket.send(JSONObject().put("type","session.update").put("session",session).toString())
             }
@@ -270,6 +303,10 @@ class RealtimeVoiceService : Service() {
                 val json = try { JSONObject(text) } catch (_: Exception) { return }
                 when (json.optString("type")) {
                     "session.updated" -> main.post { if (active.get() && status=="connecting") startAudio() }
+                    "response.done" -> main.post {
+                        if (active.get() && selectedProvider == "openai")
+                            handleRealtimeToolCalls(json)
+                    }
                     "response.created" -> {
                         // A cancelled response can still yield late network deltas.
                         // Only the newest server response may reach the speaker.
@@ -309,6 +346,54 @@ class RealtimeVoiceService : Service() {
                 main.post { if (active.get()) stopWithStatus("stopped","Provider closed voice session") }
             }
         })
+    }
+
+    private fun sendRealtimeToolOutput(callId: String, result: String) {
+        val output = JSONObject().put("type", "conversation.item.create")
+            .put("item", JSONObject().put("type", "function_call_output")
+                .put("call_id", callId)
+                .put("output", JSONObject().put("result", result.take(500)).toString()))
+        socket?.send(output.toString())
+    }
+
+    private fun handleRealtimeToolCalls(event: JSONObject) {
+        val output = event.optJSONObject("response")?.optJSONArray("output") ?: return
+        var handled = false
+        for (i in 0 until minOf(output.length(), 12)) {
+            val item = output.optJSONObject(i) ?: continue
+            if (item.optString("type") != "function_call") continue
+            handled = true
+            val id = item.optString("call_id")
+            if (!id.matches(Regex("[a-zA-Z0-9_-]{1,128}")) ||
+                !seenCallIds.add(id)) continue
+            toolCallsInSession++
+            if (toolCallsInSession > 12) {
+                sendRealtimeToolOutput(id, "Rejected: voice tool-call budget exhausted")
+                continue
+            }
+            if (pendingAppTool != null) {
+                sendRealtimeToolOutput(id, "Rejected: another action awaits owner's approval")
+                continue
+            }
+            val name = item.optString("name")
+            val args = item.optString("arguments")
+            when (val decision = NexaLiveToolPolicy.decide(this, name, args)) {
+                is NexaLiveToolPolicy.Decision.Immediate -> {
+                    lastToolResult = decision.result.take(320)
+                    message = "Tool $name: $lastToolResult"
+                    sendRealtimeToolOutput(id, decision.result)
+                }
+                is NexaLiveToolPolicy.Decision.NeedsApproval -> {
+                    pendingAppTool = PendingAppTool(id, decision.app, decision.command)
+                    pendingApprovalSummary = "Open ${decision.app}? Confirm or deny below."
+                    message = "Approval required to open ${decision.app}"
+                }
+            }
+        }
+        // The next model turn is requested only after all pending owner
+        // approvals have been resolved. Realtime does not auto-continue tools.
+        if (handled && pendingAppTool == null)
+            socket?.send(JSONObject().put("type", "response.create").toString())
     }
 
     private fun startAudio() {
@@ -446,6 +531,11 @@ class RealtimeVoiceService : Service() {
         player = null
         sarvamTransport?.close()
         sarvamTransport=null
+        pendingAppTool = null
+        pendingApprovalSummary = null
+        lastToolResult = ""
+        seenCallIds.clear()
+        toolCallsInSession = 0
         try { socket?.close(1000,"owner-stop") } catch (_: Exception) {}
         socket = null
         client?.dispatcher?.executorService?.shutdown()
