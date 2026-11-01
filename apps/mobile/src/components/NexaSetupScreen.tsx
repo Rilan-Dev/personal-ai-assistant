@@ -172,7 +172,11 @@ export default function NexaSetupScreen(props: Props) {
           through Google Play. This uses Google's own hotword detection;
           Nexa itself does not keep the microphone active while idle.
           Starting microphone capture remains a separate, visible action.
-          This is NOT an always-on "Hey Nexa" replacement.
+          This is NOT an always-on "Hey Nexa" replacement. Google Assistant
+          normally must remain the selected voice assistant for its own
+          "Hey Google" phrase. If you select Nexa as the default assistant
+          instead, use Android's assistant gesture; Google hotword launch
+          may no longer be available on that phone.
         </Text>
       </View>
       <View style={styles.footerCard}>
