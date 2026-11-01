@@ -147,10 +147,20 @@ test("provider prose cannot claim that it executed a hardware or messaging actio
   const planner=createDirectProviderPlanner({settings,availableToolIds:allowed,
     fetchImpl:fakeDecision({type:"done",response:"I sent your WhatsApp message and opened camera."})
   });
-  for(const question of ["Send a WhatsApp message","Open camera","Turn flashlight on","Check battery level","Check device status"]) {
+  for(const question of ["Send a WhatsApp message","Open camera","Turn flashlight on"]) {
     const r=await planner.next(question,[]);
     assert.equal(r.type,"clarify");
     assert.match(r.question,/No device action was executed/);
+  }
+  // Exact read-only requests bypass unsafe provider prose and use local
+  // Android tools instead; neither action is claimed complete in prose.
+  for(const [question,toolId] of [
+    ["Check battery level","device.battery_status"],
+    ["Check device status","device.status"]
+  ]) {
+    const r=await planner.next(question,[]);
+    assert.equal(r.type,"tool");
+    assert.equal(r.call.toolId,toolId);
   }
 });
 
