@@ -164,6 +164,18 @@ export default function NexaSetupScreen(props: Props) {
         </Pressable>
       </View>
       <View style={styles.footerCard}>
+        <Text style={styles.footerTitle}>Voice shortcut · no idle Nexa microphone</Text>
+        <Text style={styles.footerCopy}>
+          You can open Nexa's Voice screen with the Android launcher shortcut
+          "Nexa Voice". On supported devices, Google Assistant may recognize
+          "Hey Google, open Nexa voice" after the App Action is made available
+          through Google Play. This uses Google's own hotword detection;
+          Nexa itself does not keep the microphone active while idle.
+          Starting microphone capture remains a separate, visible action.
+          This is NOT an always-on "Hey Nexa" replacement.
+        </Text>
+      </View>
+      <View style={styles.footerCard}>
         <Text style={styles.footerTitle}>Nexa activation · {wakeStatus?.enabled ? 'Continuous microphone active' : 'Privacy-first'}</Text>
         <Text style={styles.footerCopy}>
           Recommended: choose Nexa as the default Android assistant and use your
