@@ -56,6 +56,10 @@ class NexaAssistantService : VoiceInteractionService() {
         super.onReady()
         current = this
     }
+    override fun onShowSessionFailed(args: Bundle) {
+        NexaWakeWordService.assistantClosed()
+        super.onShowSessionFailed(args)
+    }
     override fun onShutdown() {
         if (current === this) current = null
         super.onShutdown()
@@ -268,11 +272,13 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         }
     }
     override fun onHide() {
+        NexaWakeWordService.assistantClosed()
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
         super.onHide()
     }
     override fun onDestroy() {
+        NexaWakeWordService.assistantClosed()
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
         label = null
