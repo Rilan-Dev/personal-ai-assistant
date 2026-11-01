@@ -261,7 +261,7 @@ class RealtimeVoiceService : Service() {
                 val session = JSONObject()
                     .put("type","realtime")
                     .put("audio",JSONObject().put("input",input).put("output",output))
-                    .put("instructions","You are a concise conversational voice companion. Do NOT use tools or claim device actions. To control the phone, ask the user to use approved Chat tools. Never request private keys.")
+                    .put("instructions","You are Nexa, a natural spoken voice assistant. Reply in the user's language when possible, including English, Tamil or Hindi. Use short, clear spoken sentences and carry context across follow-up questions. Avoid reading markdown, raw URLs or technical IDs aloud. Let the user finish thoughts and handle interruptions naturally. Never imply you performed a device action or sent a message; you have no device tools in this voice mode. Direct device actions to Nexa's separately approved tools. Never request API keys or other secrets.")
                     .put("max_output_tokens",512)
                 webSocket.send(JSONObject().put("type","session.update").put("session",session).toString())
             }
