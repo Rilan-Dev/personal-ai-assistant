@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Google Assistant uses its OWN authorized hardware wake detection.
+         Nexa merely opens the user-requested Voice screen and does not
+         claim native indicator-free "Hey Nexa" detection. The App Action
+         requires Google Play discovery/Assistant support and user consent. -->
+    <capability android:name="actions.intent.OPEN_APP_FEATURE">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="dev.rilandev.personalaiassistant"
+            android:targetClass="dev.rilandev.personalaiassistant.MainActivity"
+            android:data="nexa://voice">
+            <parameter android:name="feature" android:key="feature"/>
+        </intent>
+    </capability>
+    <shortcut android:shortcutId="nexa_voice"
+        android:shortcutShortLabel="@string/nexa_voice_shortcut_short"
+        android:shortcutLongLabel="@string/nexa_voice_shortcut_long"
+        android:icon="@drawable/ic_nexa_assistant">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="dev.rilandev.personalaiassistant"
+            android:targetClass="dev.rilandev.personalaiassistant.MainActivity"
+            android:data="nexa://voice"/>
+        <capability-binding android:key="actions.intent.OPEN_APP_FEATURE">
+            <parameter-binding android:key="feature" android:value="Nexa voice"/>
+        </capability-binding>
+    </shortcut>
+</shortcuts>
