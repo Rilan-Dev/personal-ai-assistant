@@ -102,7 +102,7 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                 val start=android.os.SystemClock.elapsedRealtime()
                 var voiced=false
                 var lastVoice=start
-                while(capturing.get() && !cancelCapture.get() &&
+                while(capturing.get() && !cancelCapture.get() && usableForeground() &&
                     android.os.SystemClock.elapsedRealtime()-start<9500){
                     val got=record.read(data,0,data.size)
                     if(got<=0)break
@@ -121,6 +121,10 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                 }
                 record.stop();record.release();record=null;recorder=null
                 if(cancelCapture.get()) {p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
+                if(!usableForeground()) {
+                    p.reject("FOREGROUND_REQUIRED","Dictation stopped when app lost focus")
+                    return@Thread
+                }
                 val bytes=pcm.toByteArray()
                 if(bytes.size<1600){p.reject("EMPTY_AUDIO","No speech detected");return@Thread}
                 val body=MultipartBody.Builder().setType(MultipartBody.FORM)

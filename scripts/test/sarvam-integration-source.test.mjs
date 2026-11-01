@@ -75,6 +75,8 @@ test("One-turn STT uses memory-only 16k WAV and explicitly recognizes text for r
   assert.match(speech,/api-subscription-key/);
   assert.match(speech,/checkSelfPermission\(Manifest\.permission\.RECORD_AUDIO\)/);
   assert.match(speech,/usableForeground\(\)/);
+  assert.match(speech,/while\(capturing\.get\(\) && !cancelCapture\.get\(\) && usableForeground\(\)/);
+  assert.match(speech,/Dictation stopped when app lost focus/);
   assert.match(speech,/9500/);
   assert.match(speech,/transcript/);
   assert.doesNotMatch(speech,/FileOutputStream|openFileOutput|MediaRecorder\.setOutputFile/);

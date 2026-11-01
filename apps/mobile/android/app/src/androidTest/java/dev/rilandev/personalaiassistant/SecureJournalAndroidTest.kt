@@ -128,6 +128,17 @@ class SecureJournalAndroidTest {
         assertNull(AgentJournalModule.openAiVoiceKey(appContext))
     }
 
+    @Test fun ownerPrivateToolsNeverRequestBroadContactOrBackgroundLocationAccess() {
+        val info=appContext.packageManager.getPackageInfo(appContext.packageName,
+            android.content.pm.PackageManager.GET_PERMISSIONS)
+        val permissions=info.requestedPermissions?.toSet()?:emptySet()
+        assertTrue(permissions.contains(android.Manifest.permission.ACCESS_COARSE_LOCATION))
+        assertFalse(permissions.contains(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION))
+        assertFalse(permissions.contains(android.Manifest.permission.READ_CONTACTS))
+        assertFalse(permissions.contains(android.Manifest.permission.WRITE_CONTACTS))
+        assertFalse(permissions.contains(android.Manifest.permission.ACCESS_FINE_LOCATION))
+    }
+
     @Test fun ownerPrivacyLocationIsQuantizedWithoutRealDeviceAccess() {
         assertEquals(12.35,OwnerPrivacyModule.quantizeCoordinate(12.347),0.00001)
         assertEquals(-74.0,OwnerPrivacyModule.quantizeCoordinate(-73.997),0.00001)

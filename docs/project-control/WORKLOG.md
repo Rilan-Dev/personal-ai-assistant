@@ -540,3 +540,12 @@
   Contacts provider acceptance remains necessary.
 - All new changes remain in Development until consolidated release
   promotion, preserving the single-main-push CI budget policy.
+- Native acceptance gate for voice-hardening main commit bede808
+  passed the Android emulator step in run 41258027928; optimized
+  release APK build proceeded, and the separate private-tools
+  milestone remained on Development while native voice was verified.
+- Extended native privacy acceptance: the installed Android package's
+  manifest must contain coarse location but no broad contacts,
+  precise location or background location permission. One-turn
+  Sarvam dictation now stops and rejects any audio upload if the
+  visible application loses focus during the microphone capture.

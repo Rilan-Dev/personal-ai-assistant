@@ -139,3 +139,9 @@ one-time UI flow**, not an autonomous voice-agent tool:
 Android API sources:
 https://developer.android.com/reference/android/location/LocationManager#getCurrentLocation(java.lang.String,android.os.CancellationSignal,java.util.concurrent.Executor,java.util.function.Consumer)
 https://developer.android.com/guide/components/intents-common#Contacts
+
+Further one-turn privacy hardening: Saaras v4 dictation is stopped
+when the visible app loses focus; audio captured before focus loss is
+discarded instead of uploaded. This does not interrupt an explicitly
+owner-started live audio FGS session, which may continue in background
+until notification Stop, owner mute or the hard session limit.
