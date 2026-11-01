@@ -19,15 +19,17 @@ test('gesture is default and previous wake preference cannot restart microphone 
   assert.match(read(root+'NexaWakeBootReceiver.kt'),/NexaWakeWordService\.enabled\(context\)/);
   assert.match(assistant,/NexaWakeWordService\.enabled\(this\)/);
 });
-test('default-assistant gesture invokes one bounded speech recognizer and self-dismisses',()=>{
-  assert.match(assistant,/autoDismissAfterCommand = !automaticLiveVoice/);
+test('assistant gesture starts a bounded multi-turn local conversation unless live voice opted in',()=>{
+  assert.match(assistant,/autoDismissAfterCommand = false/);
   assert.match(assistant,/Android assistant gesture/);
   assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else listenOneDeviceCommand\(\)/);
+  assert.match(assistant,/else beginLocalConversation\(\)/);
   assert.match(assistant,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
-  assert.match(assistant,/handler\.postDelayed\(autoHide, 6500L\)/);
+  assert.match(assistant,/silenceWindowMs = 18_000L/);
+  assert.match(assistant,/TextToSpeech/);
+  assert.match(assistant,/NexaWakeWordService\.assistantClosed\(\)/);
   assert.doesNotMatch(assistant,/MANAGE_HOTWORD_DETECTION|CAPTURE_AUDIO_HOTWORD/);
 });
 test('continuous mode remains opt-in with honest Android microphone disclosure',()=>{
