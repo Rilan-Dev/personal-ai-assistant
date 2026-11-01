@@ -142,7 +142,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             panel.addView(it)
         }
         panel.addView(TextView(app).apply {
-            text = "Tap Speak, or Talk in the Nexa overlay, for one on-device command. Live provider audio starts separately with Start live voice."
+            text = "Invoke Nexa with the Android assistant gesture for one voice command. Live AI voice starts separately using Start live voice."
             setTextColor(Color.LTGRAY)
         })
         panel.addView(button("Speak a device command") { listenOneDeviceCommand() })
@@ -288,16 +288,29 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     }
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
+        // Coordinate microphone ownership even for a system-assistant gesture,
+        // not only for a recognized wake phrase or floating-overlay tap.
+        NexaWakeWordService.assistantShown()
         handler.removeCallbacks(refresh)
         handler.removeCallbacks(autoHide)
         handler.post(refresh)
-        autoDismissAfterCommand = args?.getBoolean("nexa_hotword") == true ||
-            args?.getBoolean("nexa_overlay_tap") == true
-        if (autoDismissAfterCommand) {
-            // Wake detector has released AudioRecord before showing this UI.
-            // Only a bounded, on-device, one-shot recognizer is started.
-            handler.postDelayed({ if (!commandBusy) listenOneDeviceCommand() }, 420L)
+        // System gesture, user-tapped overlay and opted-in hotword all represent
+        // an explicit invocation. Listen for exactly one bounded command.
+        // No AudioRecord is opened by VoiceInteractionService while idle.
+        autoDismissAfterCommand = true
+        // Preserve which explicit activation path brought up the session for
+        // accessibility, while the on-device recognizer behavior is identical.
+        val activationSource = when {
+            args?.getBoolean("nexa_hotword") == true -> "Hey Nexa"
+            args?.getBoolean("nexa_overlay_tap") == true -> "Nexa overlay"
+            else -> "Android assistant gesture"
         }
+        label?.contentDescription = "$activationSource: one on-device voice command"
+        commandFeedback = null
+        feedbackUntil = 0L
+        handler.postDelayed({
+            if (!commandBusy && label != null) listenOneDeviceCommand()
+        }, 420L)
     }
     override fun onHide() {
         autoDismissAfterCommand = false

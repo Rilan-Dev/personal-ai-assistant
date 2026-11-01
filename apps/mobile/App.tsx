@@ -130,7 +130,7 @@ export default function App() {
         return;
       }
       await startWakeListening();
-      setSetupNotice('Local Hey Nexa listening requested. Check the Stop notification and status.');
+      setSetupNotice('Continuous Hey Nexa requested. Android will show the microphone indicator and a Stop notification.');
     } catch (error) {
       setSetupNotice('Could not start wake listening: '+String(error).slice(0,140));
     } finally {setWakeBusy(false);void refreshWakeStatus();}
@@ -146,7 +146,7 @@ export default function App() {
     finally {setWakeBusy(false);void refreshWakeStatus();}
   };
   const stopWake = async () => {
-    try {await stopWakeListening();setSetupNotice('Wake listening stopped by owner.');}
+    try {await stopWakeListening();setSetupNotice('Privacy-first assistant gesture mode restored. Continuous wake microphone stopped.');}
     catch {setSetupNotice('Android could not stop wake listener; use the persistent Stop notification.');}
     finally {void refreshWakeStatus();}
   };

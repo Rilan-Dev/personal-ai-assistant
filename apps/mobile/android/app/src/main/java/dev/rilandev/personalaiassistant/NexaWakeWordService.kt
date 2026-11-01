@@ -46,22 +46,54 @@ class NexaWakeWordService : Service() {
             private set
 
         /** Called by the Android system-selected assistant session. */
-        fun assistantClosed() { active?.handoffPending = false }
+        fun assistantShown() {
+            active?.apply {
+                handoffPending = true
+                assistantSessionVisible = true
+                handoffStartedAt = 0L
+            }
+        }
+        fun assistantClosed() {
+            active?.apply {
+                assistantSessionVisible = false
+                handoffPending = false
+                handoffStartedAt = 0L
+            }
+        }
 
         /** Pause an existing armed FGS without destroying it. */
-        fun pauseForAssistant() { active?.handoffPending = true }
+        fun pauseForAssistant() {
+            active?.apply {
+                assistantSessionVisible = false
+                handoffStartedAt = SystemClock.elapsedRealtime()
+                handoffPending = true
+            }
+        }
 
-        fun enabled(ctx: Context): Boolean =
+        // A legacy wake_enabled flag alone must not restart continuous microphone
+        // capture after an APK upgrade. Version 2 requires a fresh user opt-in.
+        const val MODE_GESTURE = "gesture"
+        const val MODE_CONTINUOUS = "continuous"
+        private const val MODE_KEY = "activation_mode_v2"
+        private fun prefs(ctx: Context) =
             ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
-                .getBoolean("wake_enabled", false)
+        fun mode(ctx: Context): String =
+            if (prefs(ctx).getString(MODE_KEY, MODE_GESTURE) == MODE_CONTINUOUS &&
+                prefs(ctx).getBoolean("wake_enabled", false)) MODE_CONTINUOUS
+            else MODE_GESTURE
+        fun enabled(ctx: Context): Boolean = mode(ctx) == MODE_CONTINUOUS
         fun persistEnabled(ctx: Context, enabled: Boolean) {
-            ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
-                .edit().putBoolean("wake_enabled", enabled).apply()
+            prefs(ctx).edit()
+                .putString(MODE_KEY, if (enabled) MODE_CONTINUOUS else MODE_GESTURE)
+                .putBoolean("wake_enabled", enabled)
+                .apply()
         }
     }
 
     private val running = AtomicBoolean(false)
     @Volatile private var handoffPending = false
+    @Volatile private var assistantSessionVisible = false
+    @Volatile private var handoffStartedAt = 0L
     @Volatile private var audio: AudioRecord? = null
     private var worker: Thread? = null
     override fun onBind(intent: Intent?): IBinder? = null
@@ -141,6 +173,18 @@ class NexaWakeWordService : Service() {
         try {
             Model(NexaWakeWordModule.modelDir(this).absolutePath).use { model ->
                 while (running.get()) {
+                    // Some OEMs neither display the requested assistant session
+                    // nor report a failure. Do not remain paused indefinitely.
+                    // A genuinely visible session stays paused until onHide.
+                    if (handoffPending && !assistantSessionVisible &&
+                        handoffStartedAt > 0L &&
+                        SystemClock.elapsedRealtime() - handoffStartedAt >= 12000L) {
+                        handoffPending = false
+                        handoffStartedAt = 0L
+                        message = "Assistant did not open; resuming opted-in wake listening"
+                        manager.notify(ID + 1, notification(
+                            "Assistant did not open · Tap to open Nexa", true))
+                    }
                     // During a voice command, Android's recognizer needs sole
                     // ownership of the microphone. Keep the existing FGS.
                     if (handoffPending || RealtimeVoiceService.status == "listening" ||
@@ -154,12 +198,15 @@ class NexaWakeWordService : Service() {
                     val heard = detectOnce(model)
                     if (!running.get()) break
                     if (heard) {
+                        assistantSessionVisible = false
+                        handoffStartedAt = SystemClock.elapsedRealtime()
                         handoffPending = true
                         state = "paused"
                         message = "Wake recognized · microphone released for assistant"
                         val shown = NexaAssistantService.showFromWakeWord()
                         if (!shown) {
                             handoffPending = false
+                            handoffStartedAt = 0L
                             manager.notify(ID + 1, notification(
                                 "Open Nexa to choose a device command", true))
                             SystemClock.sleep(900)
@@ -193,7 +240,7 @@ class NexaWakeWordService : Service() {
 
     private fun detectOnce(model: Model): Boolean {
         val gate = NexaWakePhrase()
-        val grammar = "[\"hey nexus\", \"hey next a\", \"[unk]\"]"
+        val grammar = "[\"hey nexa\", \"hey nexus\", \"hey next a\", \"[unk]\"]"
         val frame = ShortArray(4000)
         try {
             Recognizer(model, 16000.0f, grammar).use { recognizer ->
@@ -247,6 +294,8 @@ class NexaWakeWordService : Service() {
     override fun onDestroy() {
         running.set(false)
         handoffPending = false
+        assistantSessionVisible = false
+        handoffStartedAt = 0L
         releaseAudio()
         listening = false
         worker?.interrupt()

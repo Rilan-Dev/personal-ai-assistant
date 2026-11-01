@@ -47,6 +47,9 @@ class NexaWakeWordModule(private val context: ReactApplicationContext) :
         data.putBoolean("installing", installing)
         data.putBoolean("listening", NexaWakeWordService.listening)
         data.putBoolean("enabled", NexaWakeWordService.enabled(context))
+        data.putString("mode", NexaWakeWordService.mode(context))
+        // A regular installed APK cannot access protected indicator-free DSP hotword.
+        data.putBoolean("protectedHotwordAvailable", false)
         data.putBoolean("restartRequired",
             NexaWakeWordService.enabled(context) &&
                 NexaWakeWordService.state != "listening" &&
