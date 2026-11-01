@@ -49,3 +49,13 @@ test('APK embeds its real commit and uses comparable Android version codes',()=>
     assert.match(ci,/signer changes per run/);
   }
 });
+
+test('Expo identity and Android screen permission name use the new Nexa brand',()=>{
+  const config=JSON.parse(read('apps/mobile/app.json'));
+  assert.equal(config.expo.name,'Nexa AI');
+  assert.equal(config.expo.web.name,'Nexa AI');
+  assert.equal(config.expo.android.package,'dev.rilandev.personalaiassistant');
+  const manifest=read('apps/mobile/android/app/src/main/AndroidManifest.xml');
+  assert.match(manifest,/Nexa Screen Assist/);
+  assert.doesNotMatch(manifest,/Personal AI Screen Assist/);
+});

@@ -618,3 +618,7 @@
   TypeScript, web export and Android release workflow gates.
 - See docs/architecture/NEXA_UI_PERMISSIONS_RELEASE.md for install safety,
   stable signing requirement and physical phone acceptance.
+- Follow-up branding audit found Expo app.json name and web name still using
+  legacy Personal AI Assistant even though native app_name and JS title were
+  Nexa AI. Updated Expo name, web name, version and Screen Assist label;
+  kept the existing Android package ID to preserve app identity.

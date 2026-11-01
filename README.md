@@ -1,4 +1,4 @@
-# Personal AI Assistant
+# Nexa AI — Personal Android Assistant
 
 An Android-first personal agentic AI assistant built with Expo SDK 58, React Native,
 TypeScript and Kotlin. The same repository contains an iOS native starter and

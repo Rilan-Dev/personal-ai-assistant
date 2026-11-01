@@ -466,7 +466,7 @@ export default function App() {
   };
   const openScreenSettings=async()=>{
     try {await openScreenAssistSettings();
-      setScreenAssistNotice('Enable Personal AI Screen Assist in Android Accessibility settings. Return and arm a single capture.');}
+      setScreenAssistNotice('Enable Nexa Screen Assist in Android Accessibility settings. Return and arm a single capture.');}
     catch{setScreenAssistNotice('Could not open Accessibility Settings.');}
   };
   const armScreenRead=async()=>{

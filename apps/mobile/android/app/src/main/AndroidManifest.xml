@@ -67,7 +67,7 @@
     <!-- Optional user-enabled Accessibility service: read-once visible text only.
          Android Settings must explicitly enable it. No gestures or continuous scan. -->
     <service android:name=".ScreenAssistService"
-        android:label="Personal AI Screen Assist"
+        android:label="Nexa Screen Assist"
         android:description="@string/screen_assist_description"
         android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
         android:exported="true">

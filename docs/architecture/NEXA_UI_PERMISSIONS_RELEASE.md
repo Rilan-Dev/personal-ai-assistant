@@ -89,3 +89,11 @@ This does not implement an unattended Hey Nexa wake word or a privileged
 accessibility agent that sends WhatsApp autonomously. Always-on microphone
 use and third-party app actions have separate device/OEM/consent acceptance
 requirements. No real phone acceptance is claimed by source or emulator tests.
+
+## Expo entrypoint branding audit
+Verified apps/mobile/index.js imports the current apps/mobile/App.tsx, so
+there is no competing legacy React Native root component. The Expo app.json
+still specified Personal AI Assistant even though the native app label was
+Nexa AI; this has been corrected to Nexa AI for Android and web metadata and
+the separate Accessibility service label is now Nexa Screen Assist. The
+Android package ID is unchanged and no data migration is forced by branding.
