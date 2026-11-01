@@ -67,10 +67,10 @@ test('overlay remains non-modal, draggable, collapsible, and bounded in size and
 test('privacy and background settings are system-owned, not self-granted',()=>{
   assert.match(commands,/PowerManager/);
   assert.match(commands,/isIgnoringBatteryOptimizations/);
-  assert.match(commands,/Settings\\.ACTION_APPLICATION_DETAILS_SETTINGS/);
-  assert.match(commands,/Settings\\.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS/);
+  assert.ok(commands.includes('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'));
+  assert.ok(commands.includes('Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS'));
   assert.match(commands,/Only you can change system permissions/);
-  assert.match(overlay,/button\\("App permissions"\\)/);
-  assert.match(overlay,/button\\("Battery settings"\\)/);
+  assert.ok(overlay.includes('button("App permissions")'));
+  assert.ok(overlay.includes('button("Battery settings")'));
   assert.doesNotMatch(overlay,/REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
 });
