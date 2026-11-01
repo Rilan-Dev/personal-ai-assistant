@@ -25,6 +25,7 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
         fun connected()
         fun audio(bytes: ByteArray)
         fun interrupted()
+        fun transcript(role: String, content: String)
         fun failed(message: String)
         fun ended()
     }
@@ -115,6 +116,15 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                                                 }catch(_:Exception){}
                                             }
                                         }
+                                    }
+                                    "server.event.transcription"->{
+                                        // Official Sarvam SDK 0.0.42 ServerTranscriptMsg:
+                                        // {type, role: "user"|"bot", content}.
+                                        // Never log, persist or forward full transcript.
+                                        val role=event.optString("role")
+                                        val content=event.optString("content")
+                                        if(role=="user" && content.length in 1..250)
+                                            callbacks.transcript(role,content)
                                     }
                                     "server.event.user_interrupt"->callbacks.interrupted()
                                     "server.system.ping"->ws.send(JSONObject()
