@@ -6,11 +6,13 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import com.facebook.react.common.LifecycleState
 import android.speech.RecognitionListener
@@ -21,9 +23,13 @@ import android.service.voice.VoiceInteractionService
 import android.service.voice.VoiceInteractionSession
 import android.service.voice.VoiceInteractionSessionService
 import android.view.View
+import android.view.Gravity
+import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -96,79 +102,125 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private var commandBusy = false
     private var commandFeedback: String? = null
     private var autoDismissAfterCommand = false
+    // SpeechRecognizer is one-turn by design. Keep the *assistant session*
+    // open and restart a new recognition turn only after the spoken result.
+    private var localConversationActive = false
+    private var localTurnCount = 0
+    private var localTurnGeneration = 0
+    private var silenceDeadlineMs = 0L
+    private var outputSpeech: TextToSpeech? = null
+    private var outputSpeechReady = false
+    private var outputUtterance = ""
+    private var liveEverActive = false
+    private val silenceWindowMs = 18_000L
+    private val silenceTimer = Runnable {
+        if (localConversationActive) {
+            localConversationActive = false
+            label?.text = "No more requests · returning to Hey Nexa"
+            handler.postDelayed({ hide() }, 350L)
+        }
+    }
     private var liveVoiceLaunchedFromSession = false
     private val autoHide = Runnable {
-        if (autoDismissAfterCommand && !commandBusy) hide()
+        if (autoDismissAfterCommand && !localConversationActive && !commandBusy) hide()
     }
     private var feedbackUntil = 0L
     private val refresh = object : Runnable {
         override fun run() {
-            label?.text = if (commandBusy) "Listening for one device command…" else if
-                (commandFeedback != null && android.os.SystemClock.elapsedRealtime() < feedbackUntil)
-                commandFeedback else when (RealtimeVoiceService.status) {
+            label?.text = if (commandBusy) "Listening · tell me what to do…" else if
+                (commandFeedback != null && SystemClock.elapsedRealtime() < feedbackUntil)
+                commandFeedback else if (localConversationActive)
+                "Nexa ready for your next command" else when (RealtimeVoiceService.status) {
                 "listening" -> if (RealtimeVoiceService.microphoneMuted)
                     "Nexa voice active · microphone muted" else "Nexa voice active · microphone in use"
                 "connecting" -> "Connecting to the selected voice provider…"
                 "error" -> RealtimeVoiceService.message
-                else -> "Nexa ready · tap Start to talk"
+                else -> "Nexa ready"
+            }
+            if (liveVoiceLaunchedFromSession) {
+                if (RealtimeVoiceService.status == "listening") liveEverActive = true
+                if (liveEverActive && (RealtimeVoiceService.status == "stopped" ||
+                    RealtimeVoiceService.status == "error")) {
+                    handler.post { hide() }
+                }
             }
             if (label != null) handler.postDelayed(this, 750L)
         }
     }
     private fun button(text: String, action: () -> Unit): Button = Button(app).apply {
         this.text = text
+        textSize = 13f
         isAllCaps = false
+        minHeight = (48 * app.resources.displayMetrics.density).toInt()
+        setTextColor(Color.WHITE)
+        backgroundTintList = ColorStateList.valueOf(Color.rgb(66, 73, 147))
         setOnClickListener { action() }
     }
+    private fun row(vararg children: Button): LinearLayout =
+        LinearLayout(app).apply {
+            orientation = LinearLayout.HORIZONTAL
+            children.forEach { child ->
+                addView(child, LinearLayout.LayoutParams(0,
+                    (50 * app.resources.displayMetrics.density).toInt(), 1f))
+            }
+        }
     override fun onCreateContentView(): View {
-        val density = app.resources.displayMetrics.density
-        val pad = (16 * density).toInt()
+        val d = app.resources.displayMetrics.density
+        val pad = (14 * d).toInt()
         val panel = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
             background = GradientDrawable().apply {
-                setColor(Color.rgb(21, 26, 46))
-                cornerRadius = 24 * density
+                setColor(Color.rgb(18, 24, 45))
+                cornerRadius = 22 * d
+                setStroke((1*d).toInt(), Color.rgb(85, 92, 151))
             }
+            addView(TextView(app).apply {
+                text = "✦  Nexa AI  ·  Voice"
+                textSize = 17f
+                setTextColor(Color.WHITE)
+            })
         }
-        panel.addView(TextView(app).apply {
-            text = "✦  Nexa AI"
-            textSize = 20f
-            setTextColor(Color.WHITE)
-        })
         label = TextView(app).also {
             it.setTextColor(Color.WHITE)
-            it.textSize = 15f
-            it.setPadding(0, pad / 2, 0, pad / 2)
+            it.textSize = 14f
+            it.setPadding(0, pad, 0, pad)
+            it.maxLines = 3
             panel.addView(it)
         }
-        panel.addView(TextView(app).apply {
-            text = "Assistant gesture starts one offline device command by default. You can opt in to AI conversation on invocation in Nexa Setup. Live voice sends audio to your configured provider and shows Android microphone privacy controls."
-            setTextColor(Color.LTGRAY)
-        })
-        panel.addView(button("Speak a device command") { listenOneDeviceCommand() })
-        panel.addView(button("Cancel spoken command") { cancelDeviceCommand() })
-        panel.addView(button("Start live voice") { startOwnerVoice() })
-        panel.addView(button("Stop live voice") {
-            if (RealtimeVoiceService.status == "connecting" || RealtimeVoiceService.status == "listening") {
+        panel.addView(row(
+            button("🎙 Talk") { if (localConversationActive) listenOneDeviceCommand()
+                else if (RealtimeVoiceService.status == "stopped") beginLocalConversation() },
+            button("Stop / Dismiss") { stopConversation() }
+        ))
+        panel.addView(row(
+            button("Live AI") { startOwnerVoice() },
+            button("Open Nexa") {
                 try {
-                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
-                        action = RealtimeVoiceService.ACTION_STOP
+                    app.startActivity(Intent(app, MainActivity::class.java).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                     })
-                } catch (_: Exception) { label?.text = "Stop failed · use the notification Stop control" }
+                    hide()
+                } catch (_: Exception) { label?.text = "Unable to open Nexa" }
             }
-        })
-        panel.addView(button("Open Nexa") {
-            try {
-                app.startActivity(Intent(app, MainActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                })
-                hide()
-            } catch (_: Exception) { label?.text = "Unable to open Nexa" }
-        })
-        panel.addView(button("Dismiss") { hide() })
+        ))
         return panel
     }
+
+    private fun configureVoicePlate() {
+        try {
+            val window = getWindow().window ?: return
+            window.setBackgroundDrawableResource(android.R.color.transparent)
+            window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL)
+            window.setGravity(Gravity.BOTTOM)
+            window.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.WRAP_CONTENT)
+        } catch (_: Exception) {
+            // Some OEMs reject changing system-owned assistant window decor.
+        }
+    }
+
     private fun feedback(message: String) {
         commandFeedback = message
         feedbackUntil = android.os.SystemClock.elapsedRealtime() + 6500L
