@@ -95,6 +95,10 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private var commandRecognizer: SpeechRecognizer? = null
     private var commandBusy = false
     private var commandFeedback: String? = null
+    private var autoDismissAfterCommand = false
+    private val autoHide = Runnable {
+        if (autoDismissAfterCommand && !commandBusy) hide()
+    }
     private var feedbackUntil = 0L
     private val refresh = object : Runnable {
         override fun run() {
@@ -168,6 +172,10 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         commandFeedback = message
         feedbackUntil = android.os.SystemClock.elapsedRealtime() + 6500L
         label?.text = message
+        if (autoDismissAfterCommand) {
+            handler.removeCallbacks(autoHide)
+            handler.postDelayed(autoHide, 6500L)
+        }
     }
     private fun cancelDeviceCommand() {
         val recognizer = commandRecognizer
@@ -281,21 +289,27 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
         handler.removeCallbacks(refresh)
+        handler.removeCallbacks(autoHide)
         handler.post(refresh)
-        if (args?.getBoolean("nexa_hotword") == true ||
-            args?.getBoolean("nexa_overlay_tap") == true) {
+        autoDismissAfterCommand = args?.getBoolean("nexa_hotword") == true ||
+            args?.getBoolean("nexa_overlay_tap") == true
+        if (autoDismissAfterCommand) {
             // Wake detector has released AudioRecord before showing this UI.
             // Only a bounded, on-device, one-shot recognizer is started.
             handler.postDelayed({ if (!commandBusy) listenOneDeviceCommand() }, 420L)
         }
     }
     override fun onHide() {
+        autoDismissAfterCommand = false
+        handler.removeCallbacks(autoHide)
         NexaWakeWordService.assistantClosed()
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
         super.onHide()
     }
     override fun onDestroy() {
+        autoDismissAfterCommand = false
+        handler.removeCallbacks(autoHide)
         NexaWakeWordService.assistantClosed()
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
