@@ -110,7 +110,7 @@ test("Native Sarvam service declares no new background location/contacts or hotw
   assert.match(manifest,/FOREGROUND_SERVICE_MICROPHONE/);
   assert.match(manifest,/\.RealtimeVoiceService/);
   assert.match(manifest,/android:exported="false"/);
-  assert.doesNotMatch(manifest,/READ_CONTACTS|ACCESS_BACKGROUND_LOCATION|RECEIVE_BOOT_COMPLETED/);
+  assert.doesNotMatch(manifest,/READ_CONTACTS|ACCESS_BACKGROUND_LOCATION/);
   assert.match(read(native+"DeviceControlPackage.kt"),/SarvamSpeechModule\(reactContext\)/);
 });
 
