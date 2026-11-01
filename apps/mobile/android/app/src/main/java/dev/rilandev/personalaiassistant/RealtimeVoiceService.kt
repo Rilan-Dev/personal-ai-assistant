@@ -196,6 +196,10 @@ class RealtimeVoiceService : Service() {
         idleGate.reset(0L)
         selectedProvider=credentials.provider
         activeRate=if(selectedProvider=="sarvam")16000 else RATE
+        // Stop the separate offline wake AudioRecord before attempting a
+        // second microphone capture. The wake service remains owner-armed,
+        // but may not record concurrently with the live session.
+        NexaWakeWordService.pauseForLiveVoice()
         active.set(true)
         status="connecting"
         message="Connecting to "+(if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
@@ -564,6 +568,9 @@ class RealtimeVoiceService : Service() {
             try { player?.pause(); player?.flush(); player?.release() } catch (_: Exception) {}
         }
         player = null
+        // Resume detection only after both live capture and playback release;
+        // an already-visible assistant panel still keeps the wake mic paused.
+        NexaWakeWordService.resumeAfterLiveVoice()
         sarvamTransport?.close()
         sarvamTransport=null
         pendingAppTool = null
