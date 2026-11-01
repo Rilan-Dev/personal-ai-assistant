@@ -116,3 +116,26 @@ persistent Stop notification are preserved.
   non-exported microphone foreground service remains the entry point.
 - Emulator acceptance tests include synthetic WAV PCM16 round-trip and
   malformed PCM format rejection without network credentials.
+
+## Adjacent Android owner-private observations
+
+The requested Contacts and Location access is implemented as an **opt-in,
+one-time UI flow**, not an autonomous voice-agent tool:
+- Android's Phone Contact Picker gives a single selected phone-number
+  URI and temporary read grant. No READ_CONTACTS permission is declared
+  and no bulk contact query or background listener exists.
+- Android's current location API requires foreground UI and a
+  user-granted ACCESS_COARSE_LOCATION permission. Only coordinates
+  rounded to 2 decimal places are returned to React Native. No
+  ACCESS_FINE_LOCATION or ACCESS_BACKGROUND_LOCATION permission.
+- Results are previewed in Tools, expire from React memory after
+  60 seconds, and can only be inserted into the Chat composer through
+  a separate explicit owner interaction. Inserting alone does not
+  transmit them or authorize device actions.
+- Native location is Android 11+; older Android versions remain
+  unsupported for this particular one-shot observation.
+- This work does not enable unseen screen capture or background
+  location, a wake word, unrestricted contact read, or message sending.
+Android API sources:
+https://developer.android.com/reference/android/location/LocationManager#getCurrentLocation(java.lang.String,android.os.CancellationSignal,java.util.concurrent.Executor,java.util.function.Consumer)
+https://developer.android.com/guide/components/intents-common#Contacts

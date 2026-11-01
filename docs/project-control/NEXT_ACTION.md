@@ -273,3 +273,14 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Compatible Expo SDK58/Zod vulnerability remediation and production
   stable signing remain separate release-security gates; audit fix
   --force is forbidden because it downgrades Expo incompatibly.
+
+## Owner-private Android tools acceptance
+- Scope: explicit single-contact picker and coarse location (Android
+  11+), not a new autonomous permissionless location/contact tool.
+- Run Android instrumentation for native module registration and
+  coordinate quantization, then signed APK build and verify v2 signature.
+- Owner verifies Contacts provider selection, no READ_CONTACTS grant,
+  cancellation, permission-denied location, accepted coarse location,
+  60-second UI expiration, and reviewed-only Chat composition.
+- No live credentials, real contacts or user locations may appear in
+  committed test fixtures, logs, screenshots, or worklogs.

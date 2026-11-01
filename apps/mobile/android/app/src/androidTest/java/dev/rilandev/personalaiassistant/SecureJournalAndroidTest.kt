@@ -128,6 +128,12 @@ class SecureJournalAndroidTest {
         assertNull(AgentJournalModule.openAiVoiceKey(appContext))
     }
 
+    @Test fun ownerPrivacyLocationIsQuantizedWithoutRealDeviceAccess() {
+        assertEquals(12.35,OwnerPrivacyModule.quantizeCoordinate(12.347),0.00001)
+        assertEquals(-74.0,OwnerPrivacyModule.quantizeCoordinate(-73.997),0.00001)
+        assertEquals(0.0,OwnerPrivacyModule.quantizeCoordinate(0.001),0.00001)
+    }
+
     @Test fun sarvamWavCodecRoundTripsAndRejectsUnsupportedFormats() {
         val bridge=SarvamSpeechModule(BridgeReactContext(appContext))
         val pcm=ByteArray(3200) { ((it * 13) % 251).toByte() }

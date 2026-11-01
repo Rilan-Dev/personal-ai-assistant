@@ -520,3 +520,23 @@
   SDK58/RN0.88 project. Do not blindly apply --force; track
   compatible upstream patched versions, minimize public build
   API exposure, and preserve native app isolation.
+
+## 2026-11-01 — Owner-private contact and approximate location milestone
+- Reviewed Android LocationManager getCurrentLocation with permission,
+  cancellation and API30 minimum, plus Android ACTION_PICK Phone MIME
+  and temporary URI grant. Did not add unrestricted READ_CONTACTS.
+- Added OwnerPrivacyModule: opt-in Android phone contact selection,
+  single contact URI validation and a single phone-number row query,
+  not an address-book scan. No raw contacts in logs/files.
+- Added foreground-only approximate location request with Android
+  ACCESS_COARSE_LOCATION, current fix not older than 60 seconds,
+  one in-flight request, 12-second timeout, two-decimal coordinate
+  rounding and no background tracking.
+- Added React Native Tools UI, local observation preview, 60-second
+  memory expiration, discard control and explicit insertion into
+  the editable Chat composer. No automatic model upload or actions.
+- Added owner-private observation source regressions and emulator
+  synthetic quantization test; physical device location & installed
+  Contacts provider acceptance remains necessary.
+- All new changes remain in Development until consolidated release
+  promotion, preserving the single-main-push CI budget policy.
