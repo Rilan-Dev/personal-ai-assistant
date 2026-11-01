@@ -23,11 +23,19 @@ internal object NexaVoiceIntentGate {
         // into a partial app-opening side effect.
         if (Regex("[;\\n\\\"'“”‘’]|\\b(and|then|or|also|after|before|send|text|message|call|dial|delete|don't|not|never|without|instead)\\b")
                 .containsMatchIn(text)) return null
+        val courtesy = Regex("^(would you mind (please )?|(can|could|would|will) you (please )?|please )")
+            .containsMatchIn(text)
         text = text.replace(Regex("^would you mind (please )?"), "")
             .replace(Regex("^(can|could|would|will) you (please )?"), "")
             .replace(Regex("^please "), "")
+            .replace(Regex("^i (want|need) you to "), "")
+            .replace(Regex("^i would like you to "), "")
+            .replace(Regex("^i'd like you to "), "")
             .replace(Regex(" please$"), "")
             .replace(Regex(" for me$"), "").trim()
+        // Only repair an extra recognition filler following a polite request.
+        // "I open WhatsApp" alone is not an authorization to execute a tool.
+        if (courtesy) text = text.replace(Regex("^i (?=(open|launch|start)\\b)"), "")
         text = text.replace(Regex("^opening "), "open ")
         text = text.replace(Regex("^launching "), "launch ")
         val match = Regex("^(open|launch|start) (my |the )?(whatsapp business|whatsapp|github|brave)( app)?$")
