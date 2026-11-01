@@ -9,6 +9,45 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 
+/**
+ * In-memory, single-use, expiry-bounded voice-to-WhatsApp review handoff.
+ * No number, contact database, message dispatch, or shared preferences.
+ */
+internal object NexaVoiceDraftState {
+    private val lock = Any()
+    private var draft: Pair<String, String>? = null
+    private var expiresAt: Long = 0L
+    private val grammar = Regex(
+        """^(?:hey\s+nexa[,!]?\s+)?(?:(?:can you|could you|please)\s+)?(?:send|prepare)\s+(?:a\s+)?whatsapp\s+(?:message\s+)?to\s+(?:my\s+)?([a-z][a-z -]{0,49}?)\s+(?:saying|that says)\s+(.{1,500})$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    fun parse(raw: String): Pair<String, String>? {
+        if (raw.length > 700 || raw.contains('\n') || raw.contains('\r')) return null
+        val parts = grammar.matchEntire(raw.trim()) ?: return null
+        val hint = parts.groupValues[1].trim()
+        val message = parts.groupValues[2].trim().trim('"', '“', '”')
+        if (hint.isEmpty() || message.isEmpty() || message.length > 500 ||
+            message.any { it.code < 32 }) return null
+        return Pair(hint, message)
+    }
+
+    fun queue(intent: Pair<String, String>, now: Long = android.os.SystemClock.elapsedRealtime()) {
+        synchronized(lock) {
+            draft = intent
+            expiresAt = now + 60_000L
+        }
+    }
+    fun take(now: Long = android.os.SystemClock.elapsedRealtime()): Pair<String, String>? =
+        synchronized(lock) {
+            val value = if (now <= expiresAt) draft else null
+            draft = null
+            expiresAt = 0L
+            value
+        }
+    fun clear() = synchronized(lock) { draft = null; expiresAt = 0L }
+}
+
 /** Explicit owner actions, not part of the AI provider tool registry. */
 class NexaToolOverlayModule(private val context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
@@ -71,6 +110,16 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
         } catch (_: Exception) {
             p.reject("OVERLAY_STOP_DENIED", "Could not hide the tool bubble")
         }
+    }
+
+    @ReactMethod fun consumePendingVoiceDraft(p: Promise) {
+        val pending = NexaVoiceDraftState.take()
+        if (pending == null) { p.resolve(null); return }
+        val result = Arguments.createMap()
+        result.putString("contactHint", pending.first)
+        result.putString("message", pending.second)
+        result.putString("mode", "review_only")
+        p.resolve(result)
     }
 
     @ReactMethod fun consumePendingTab(p: Promise) {
