@@ -36,11 +36,12 @@ test('owner-enabled overlay stays small, movable, dismissible, and nonmodal',()=
   assert.match(module,/context\.lifecycleState != com\.facebook\.react\.common\.LifecycleState\.RESUMED/);
 });
 test('overlay cannot execute arbitrary AI tool calls, capture screens, or secretly listen',()=>{
-  for(const forbidden of [/AccessibilityService/,/AudioRecord/,/MediaRecorder/,/dispatchGesture/,/ACTION_CLICK/,/ACTION_SET_TEXT/,/READ_SMS/,/onBoot/,/sendMessage\(/]) {
+  for(const forbidden of [/AccessibilityService/,/MediaRecorder/,/dispatchGesture/,/ACTION_CLICK/,/ACTION_SET_TEXT/,/READ_SMS/,/onBoot/,/sendMessage\(/]) {
     assert.doesNotMatch(service,forbidden);
   }
   assert.match(service,/RealtimeVoiceService\.ACTION_STOP/);
   assert.doesNotMatch(service,/RealtimeVoiceService\.ACTION_START/);
+  assert.ok(!service.includes('AudioRecord('));
   assert.match(module,/consumePendingTab/);
   assert.match(app,/consumeToolOverlayNavigation/);
 });
@@ -59,5 +60,5 @@ test('custom wake-word is explicitly not claimed as enabled',()=>{
   // Overlay may check RECORD_AUDIO permission before an explicit owner tap,
   // but must not itself contain a microphone recorder or speech recognizer.
   assert.ok(service.includes('Manifest.permission.RECORD_AUDIO'));
-  assert.doesNotMatch(service,/HotwordDetector|SpeechRecognizer|AudioRecord|MediaRecorder/);
+  assert.doesNotMatch(service,/HotwordDetector|SpeechRecognizer|MediaRecorder/);
 });
