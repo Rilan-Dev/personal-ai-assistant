@@ -488,6 +488,11 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         // Coordinate microphone ownership even for a system-assistant gesture,
         // not only for a recognized wake phrase or floating-overlay tap.
         NexaWakeWordService.assistantShown()
+        configureVoicePlate()
+        localConversationActive = false
+        liveEverActive = false
+        outputUtterance = ""
+        handler.removeCallbacks(silenceTimer)
         handler.removeCallbacks(refresh)
         handler.removeCallbacks(autoHide)
         handler.post(refresh)
@@ -501,7 +506,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             AgentJournalModule.openVoiceCredentials(app) != null
         } catch (_: Exception) { false }
         val automaticLiveVoice = saved && hasCredentials
-        autoDismissAfterCommand = !automaticLiveVoice
+        autoDismissAfterCommand = false
         // Preserve which explicit activation path brought up the session for
         // accessibility, while the on-device recognizer behavior is identical.
         val activationSource = when {
@@ -511,19 +516,26 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         }
         label?.contentDescription = if (automaticLiveVoice)
             "$activationSource: live AI conversation with configured provider" else
-            "$activationSource: one on-device voice command"
+            "$activationSource: continuous on-device command conversation"
         commandFeedback = null
         feedbackUntil = 0L
         handler.postDelayed({
             if (!commandBusy && label != null) {
                 if (automaticLiveVoice) startOwnerVoice()
-                else listenOneDeviceCommand()
+                else beginLocalConversation()
             }
         }, 420L)
     }
     override fun onHide() {
         autoDismissAfterCommand = false
+        localConversationActive = false
+        handler.removeCallbacks(silenceTimer)
         handler.removeCallbacks(autoHide)
+        outputSpeech?.stop()
+        outputSpeech?.shutdown()
+        outputSpeech = null
+        outputSpeechReady = false
+        outputUtterance = ""
         // A session-invoked conversation must not keep streaming after its
         // assistant window is dismissed. App-started sessions are unaffected.
         if (liveVoiceLaunchedFromSession) {
@@ -540,6 +552,12 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         super.onHide()
     }
     override fun onDestroy() {
+        localConversationActive = false
+        handler.removeCallbacks(silenceTimer)
+        outputSpeech?.stop()
+        outputSpeech?.shutdown()
+        outputSpeech = null
+        outputUtterance = ""
         if (liveVoiceLaunchedFromSession) {
             liveVoiceLaunchedFromSession = false
             try {
