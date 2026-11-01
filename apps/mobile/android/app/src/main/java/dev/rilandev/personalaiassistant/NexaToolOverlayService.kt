@@ -10,6 +10,8 @@ import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.Gravity
 import android.view.MotionEvent
@@ -173,6 +175,36 @@ class NexaToolOverlayService : Service() {
         render()
     }
 
+    private fun talkToNexa() {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            note = "Microphone is off. Open Nexa Setup to grant permission."
+            render()
+            return
+        }
+        if (RealtimeVoiceService.status == "listening" ||
+            RealtimeVoiceService.status == "connecting") {
+            note = "Stop the existing live voice call first, then tap Talk."
+            render()
+            return
+        }
+        // A wake detector and a one-shot assistant session cannot own the
+        // microphone simultaneously. Stop the detector and give it time to
+        // release AudioRecord before requesting the system assistant.
+        if (NexaWakeWordService.listening) {
+            try { stopService(Intent(this, NexaWakeWordService::class.java)) }
+            catch (_: Exception) {}
+        }
+        collapse()
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!NexaAssistantService.showFromOwnerTap()) {
+                note = "Select Nexa in Android Default assistant settings before Talk."
+                expanded = true
+                section = "voice"
+                render()
+            }
+        }, 450L)
+    }
+
     private fun showSection(name: String) {
         section = name
         render()
@@ -294,6 +326,7 @@ class NexaToolOverlayService : Service() {
                     else -> {
                         addView(text("Microphone access and model status",12f,true))
                         addView(text(NexaOverlayCommands.status(this@NexaToolOverlayService),12f))
+                        addView(button("Talk to Nexa · one device command") { talkToNexa() })
                         addView(row(
                             button("Arm Hey Nexa") { startWake() },
                             button("Stop wake") { stopWake() }
@@ -302,6 +335,7 @@ class NexaToolOverlayService : Service() {
                             button("Stop live voice") { stopVoice() },
                             button("Full Voice") { openTab("voice") }
                         ))
+                        addView(text("Talk opens Android's compact Nexa assistant (when selected), listens for one on-device command, and never sends messages without review.",11f,true))
                         addView(text("Android may block background microphone starts. Use full Voice/Setup to grant permission and start a session.",11f,true))
                     }
                 }
