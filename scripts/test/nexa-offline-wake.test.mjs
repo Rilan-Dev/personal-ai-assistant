@@ -105,3 +105,12 @@ test('only the OS-selected assistant may attempt automatic opted-in wake recover
   assert.doesNotMatch(receiver,/startForegroundService\(|AudioRecord\(/);
   assert.match(service,/manager\.cancel\(4925\)/);
 });
+
+test('wake-driven one-shot assistant closes itself to resume local wake detection',()=>{
+  const assistant=read(dir+'NexaAssistantService.kt');
+  assert.match(assistant,/autoDismissAfterCommand/);
+  assert.match(assistant,/handler\.postDelayed\(autoHide, 6500L\)/);
+  assert.match(assistant,/handler\.removeCallbacks\(autoHide\)/);
+  assert.match(assistant,/NexaWakeWordService\.assistantClosed\(\)/);
+  assert.match(service,/handoffPending/);
+});
