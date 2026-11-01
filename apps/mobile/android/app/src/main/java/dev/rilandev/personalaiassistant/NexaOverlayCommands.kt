@@ -18,8 +18,19 @@ import java.util.Locale
  * No account data, Accessibility events, screen contents or contact data.
  */
 internal object NexaOverlayCommands {
-    private fun normalize(text: String): String =
-        text.lowercase(Locale.ROOT).trim().replace(Regex("\\s+"), " ")
+    private fun normalize(text: String): String {
+        // One cautious grammar normalization step, not arbitrary LLM commands.
+        // Natural politeness such as "Can you please open my Brave app?" should
+        // not prevent a previously allowlisted app-opening action.
+        var value = text.lowercase(Locale.ROOT)
+            .replace(Regex("[?!.,]"), " ")
+            .replace(Regex("\\s+"), " ").trim()
+        for (prefix in listOf("hey nexa ", "can you please ", "could you please ",
+                "would you please ", "can you ", "could you ", "please ")) {
+            if (value.startsWith(prefix)) value = value.removePrefix(prefix).trim()
+        }
+        return value
+    }
     private fun installed(context: Context, pkg: String): Boolean =
         context.packageManager.getLaunchIntentForPackage(pkg) != null
 
@@ -52,6 +63,8 @@ internal object NexaOverlayCommands {
             "\nMicrophone: " + (if (mic) "allowed" else "off") +
             " · Notifications: " + (if (notifications) "allowed" else "off") +
             "\nHey Nexa model: " + (if (NexaWakeWordModule.modelReady(context)) "ready" else "not installed") +
+            " · Wake preference: " +
+            (if (NexaWakeWordService.enabled(context)) "enabled" else "disabled") +
             " · Wake listener: " + NexaWakeWordService.state +
             "\nLive voice: " + RealtimeVoiceService.status +
             " · Launcher: $launcher ($swipes swipes)" +
@@ -63,7 +76,7 @@ internal object NexaOverlayCommands {
         return when (text) {
             "help", "commands", "what can you do" ->
                 "Try: device status, battery, check github, check whatsapp, open github, " +
-                "open whatsapp, find my github app, launcher status. Messages require review."
+                "open whatsapp, open brave, find my github app, launcher status. Messages require review."
             "status", "permissions", "device status", "check device status", "privacy",
             "background status", "background voice status", "hey nexa status" -> status(context)
             "battery", "battery level", "check battery", "check battery level" -> {
@@ -83,6 +96,12 @@ internal object NexaOverlayCommands {
                 else "WhatsApp Business not installed or not visible"
             "open github", "open github app", "open my github app" ->
                 launch(context, "com.github.android", "GitHub")
+            "open brave", "open brave app", "open brave browser", "open my brave",
+            "open my brave app", "open my brave browser" ->
+                launch(context, "com.brave.browser", "Brave")
+            "check brave", "is brave installed" ->
+                if (installed(context, "com.brave.browser")) "Brave is installed"
+                else "Brave not installed or not visible"
             "open whatsapp", "open my whatsapp" ->
                 launch(context, "com.whatsapp", "WhatsApp")
             "open whatsapp business" ->
