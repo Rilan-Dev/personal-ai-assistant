@@ -19,12 +19,15 @@ test('system assistant accepts one explicit on-device spoken command with no clo
   assert.match(code,/cancelDeviceCommand\(\)/);
   assert.doesNotMatch(code,/createSpeechRecognizer\(|recordFile|uploadTranscript|SpeechRecognizer\.createSpeechRecognizer/);
 });
-test('system spoken commands are deterministic and do not send messages or tap arbitrary apps',()=>{
-  assert.match(code,/private fun applyDeviceCommand\(raw: String\)/);
-  assert.match(code,/"open github", "open github app", "open my github app"/);
-  assert.match(code,/"open whatsapp", "open my whatsapp"/);
-  assert.match(code,/"find github", "find my github app", "find github app"/);
-  assert.match(code,/LauncherNavigationState\.begin\(pkg\)/);
-  assert.match(code,/Messages require review in Nexa Tools/);
+test('system spoken commands use the same deterministic gate as typed overlay tools',()=>{
+  const commands = readFileSync('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaOverlayCommands.kt','utf8');
+  assert.ok(code.includes('private fun applyDeviceCommand(raw: String)'));
+  assert.ok(code.includes('NexaOverlayCommands.handle(app, command)'));
+  assert.ok(commands.includes('"open github", "open github app"'));
+  assert.ok(commands.includes('"open whatsapp", "open my whatsapp"'));
+  assert.ok(commands.includes('"find github", "find github app"'));
+  assert.ok(commands.includes('LauncherNavigationState.begin(pkg)'));
+  assert.ok(commands.includes('Not sent.'));
   assert.doesNotMatch(code,/sendMessage|SmsManager|ACTION_SET_TEXT|ACTION_CLICK|dispatchGesture/);
+  assert.doesNotMatch(commands,/sendTextMessage|SmsManager|ACTION_SET_TEXT|ACTION_CLICK|dispatchGesture/);
 });
