@@ -43,4 +43,27 @@ class NexaWakePersistenceAndroidTest {
             NexaWakeWordService.persistEnabled(ctx, original)
         }
     }
+
+    @Test fun legacyWakePreferenceMustBeReauthorizedAfterUpgrade() {
+        val preferences = ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
+        val oldFlag = preferences.getBoolean("wake_enabled", false)
+        val oldMode = preferences.getString("activation_mode_v2", null)
+        try {
+            // Simulate upgrade from a build that stored only wake_enabled.
+            preferences.edit().putBoolean("wake_enabled", true)
+                .remove("activation_mode_v2").commit()
+            assertEquals(NexaWakeWordService.MODE_GESTURE, NexaWakeWordService.mode(ctx))
+            assertFalse(NexaWakeWordService.enabled(ctx))
+            NexaWakeWordService.persistEnabled(ctx, true)
+            assertEquals(NexaWakeWordService.MODE_CONTINUOUS, NexaWakeWordService.mode(ctx))
+            assertTrue(NexaWakeWordService.enabled(ctx))
+            NexaWakeWordService.persistEnabled(ctx, false)
+            assertEquals(NexaWakeWordService.MODE_GESTURE, NexaWakeWordService.mode(ctx))
+        } finally {
+            val restore = preferences.edit().putBoolean("wake_enabled", oldFlag)
+            if (oldMode == null) restore.remove("activation_mode_v2")
+            else restore.putString("activation_mode_v2", oldMode)
+            restore.commit()
+        }
+    }
 }

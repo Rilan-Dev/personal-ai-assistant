@@ -192,7 +192,7 @@ export default function NexaSetupScreen(props: Props) {
             onPress={onWakeStart}><Text style={styles.secondaryText}>Resume wake listening</Text></Pressable>}
           {wakeStatus?.enabled && <Pressable accessibilityRole="button"
             style={styles.secondary} onPress={onWakeStop}>
-            <Text style={styles.secondaryText}>Switch to privacy-first mode (stop microphone)</Text>
+            <Text style={styles.secondaryText}>Disable Hey Nexa · switch to privacy-first mode (stop microphone)</Text>
           </Pressable>}
           <Pressable accessibilityRole="button" style={styles.secondary} onPress={onWakeRefresh}>
             <Text style={styles.secondaryText}>Refresh wake status</Text>

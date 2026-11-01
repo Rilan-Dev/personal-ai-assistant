@@ -295,6 +295,16 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         // an explicit invocation. Listen for exactly one bounded command.
         // No AudioRecord is opened by VoiceInteractionService while idle.
         autoDismissAfterCommand = true
+        // Preserve which explicit activation path brought up the session for
+        // accessibility, while the on-device recognizer behavior is identical.
+        val activationSource = when {
+            args?.getBoolean("nexa_hotword") == true -> "Hey Nexa"
+            args?.getBoolean("nexa_overlay_tap") == true -> "Nexa overlay"
+            else -> "Android assistant gesture"
+        }
+        label?.contentDescription = "$activationSource: one on-device voice command"
+        commandFeedback = null
+        feedbackUntil = 0L
         handler.postDelayed({
             if (!commandBusy && label != null) listenOneDeviceCommand()
         }, 420L)
