@@ -12,7 +12,10 @@ class NexaSarvamVoiceIntentsAndroidTest {
             "Can you please open my WhatsApp?",
             "Could you open WhatsApp for me?",
             "Hey Nexa, please open WhatsApp.",
-            "Would you mind opening the WhatsApp app?"
+            "Would you mind opening the WhatsApp app?",
+            "Can you please i Open my WhatsApp",
+            "I want you to open the whatsapp app",
+            "I need you to open WhatsApp"
         )) {
             val plan = NexaVoiceIntentGate.appRequest(utterance)
             assertNotNull(utterance, plan)
