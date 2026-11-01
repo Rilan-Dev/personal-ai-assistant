@@ -110,7 +110,10 @@ class NexaWakeWordService : Service() {
                 fallbackOverlay = null
                 assistantClosed()
             }
-            if (fallback.show()) {
+            // OEM overlay/speech engines may reject this transition. Never
+            // allow their exception to kill the wake foreground process.
+            val shown = try { fallback.show() } catch (_: Exception) { false }
+            if (shown) {
                 fallbackOverlay = fallback
                 state = "paused"
                 message = "Compact local conversation is active"
