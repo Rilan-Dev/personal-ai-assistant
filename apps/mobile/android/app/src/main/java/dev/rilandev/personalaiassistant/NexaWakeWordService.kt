@@ -77,9 +77,11 @@ class NexaWakeWordService : Service() {
          */
         fun pauseForLiveVoice() {
             active?.apply {
-                liveVoiceOwnsMic = true
-                listening = false
-                releaseAudio()
+                synchronized(audioLock) {
+                    liveVoiceOwnsMic = true
+                    listening = false
+                    releaseAudio()
+                }
             }
         }
         fun resumeAfterLiveVoice() {
@@ -120,6 +122,7 @@ class NexaWakeWordService : Service() {
     @Volatile private var handoffStartedAt = 0L
     @Volatile private var audio: AudioRecord? = null
     @Volatile private var audioReleasing = false
+    private val audioLock = Any()
     private var worker: Thread? = null
     private val ui = Handler(Looper.getMainLooper())
     private var fallbackOverlay: NexaWakeFallbackOverlay? = null
@@ -297,12 +300,16 @@ class NexaWakeWordService : Service() {
                 val min = AudioRecord.getMinBufferSize(16000,
                     AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
                 if (min <= 0) error("Microphone audio buffer unavailable")
-                val source = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                    16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                    maxOf(min * 2, frame.size * 2))
-                audio = source
-                if (source.state != AudioRecord.STATE_INITIALIZED) error("Mic unavailable")
-                source.startRecording()
+                val source = synchronized(audioLock) {
+                    if (liveVoiceOwnsMic || handoffPending) return false
+                    val newRecord = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                        16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                        maxOf(min * 2, frame.size * 2))
+                    audio = newRecord
+                    if (newRecord.state != AudioRecord.STATE_INITIALIZED) error("Mic unavailable")
+                    newRecord.startRecording()
+                    newRecord
+                }
                 listening = true
                 state = "listening"
                 message = "Hey Nexa listening locally · Android microphone indicator is expected"
@@ -335,14 +342,16 @@ class NexaWakeWordService : Service() {
     }
 
     private fun releaseAudio() {
-        audioReleasing = true
-        try {
-            val current = audio
-            audio = null
-            try { current?.stop() } catch (_: Exception) {}
-            try { current?.release() } catch (_: Exception) {}
-        } finally {
-            audioReleasing = false
+        synchronized(audioLock) {
+            audioReleasing = true
+            try {
+                val current = audio
+                audio = null
+                try { current?.stop() } catch (_: Exception) {}
+                try { current?.release() } catch (_: Exception) {}
+            } finally {
+                audioReleasing = false
+            }
         }
     }
 
