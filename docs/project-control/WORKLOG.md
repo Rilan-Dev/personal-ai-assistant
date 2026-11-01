@@ -717,3 +717,26 @@
 - Dedicated Android compile and emulator CI were triggered; real phone
   recognition, OEM behavior and live WhatsApp acceptance remain unverified.
 - See docs/android-voice-whatsapp-review-handoff.md and GitHub PR #7.
+
+
+## 2026-11-01 — Protected "Hey Nexa" no-dot feasibility audit
+- Verified Android 17 CDD 9.8/H-1-9 and H-1-14 against Android
+  SoundTrigger, VoiceInteractionService and microphone FGS policies.
+- Confirmed the ordinary Nexa APK cannot provide OEM-only protected
+  always-on detection, irrespective of model size, assistant role or app code.
+- Verified Nexa wake status already reports protectedHotwordAvailable=false;
+  the current optional Vosk service uses ordinary AudioRecord with required
+  Android indicator and notification. No attempt to suppress them.
+- Improved React Native Setup wording so the continuous capture mode is not
+  misdescribed as indicator-free "hands-free"; show protected backend as
+  unavailable in the installed APK, and explain privacy-first gesture mode.
+- Recorded the July 16 2026 EU DMA interoperability decision and deadlines
+  for Android 18 (August 1 2027) / Android 19 concurrent hotword
+  (August 1 2028); not a currently shipped API or worldwide guarantee.
+- Detailed source-level and device/OEM acceptance gates:
+  docs/architecture/NEXA_HOTWORD_PARITY_FEASIBILITY_2026-11-01.md.
+- Linux verification after UI correction: 202 Node tests passed,
+  TypeScript checks passed and Expo web export succeeded at b9258bd.
+- Native APK, actual device microphone privacy behavior and OEM
+  integration remain unverified; release gate is NO-GO for no-dot
+  always-on voice-only activation on ordinary APK.
