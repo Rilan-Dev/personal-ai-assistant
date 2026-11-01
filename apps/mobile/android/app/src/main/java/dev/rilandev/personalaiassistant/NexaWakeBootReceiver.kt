@@ -43,6 +43,6 @@ class NexaWakeBootReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(open)
             .build())
-        // NO startForegroundService(), startService(), AudioRecord, or hidden mic.
+        // This receiver only posts a visible reminder; it never opens audio.
     }
 }
