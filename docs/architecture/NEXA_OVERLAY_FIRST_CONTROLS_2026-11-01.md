@@ -79,3 +79,32 @@ Full provider-backed Chat in the overlay, secure reviewed actions in the
 overlay, conversation-grade voice task execution, durable wake monitoring
 and OEM/background power behavior remain outstanding and must not be marked
 completed from a source-only test.
+
+## Overlay voice entrypoint — follow-on work
+
+The expanded native Voice panel now exposes **Talk to Nexa · one device
+command**. This is an explicit user tap: it checks microphone grant and
+rejects concurrent provider voice, stops the offline wake detector if needed,
+collapses the floating panel, and requests the Android-selected
+VoiceInteractionService's small assistant window. It does not start hidden
+recording or a new background microphone foreground service.
+
+The assistant starts one on-device SpeechRecognizer turn if supported by
+the device. Typed overlay and spoken assistant commands call the SAME
+fixed local tool gate in NexaOverlayCommands; the gate supports battery,
+permissions/background status, approved app checks/launches, and bounded
+launcher search, but cannot send messages. It never accepts arbitrary AI
+tool names or screen coordinates. Unsupported requests return guidance.
+
+The assistant role must be selected, the native service ready, a mic
+permission granted, and an on-device recognizer available for complete
+end-to-end operation. Android may reject display of the system assistant
+window, and the request is not itself proof that the phone displayed it.
+Live provider-based conversation remains a separate task.
+
+Acceptance: Tap Talk from the home-screen bubble with the app not foreground.
+Verify Nexa's compact assistant window, its actual mic indicator,
+single utterance recognition, status commands, denial paths, and return
+to the existing launcher screen. Repeat with a running wake detector,
+active live call, revoked microphone grant, no default assistant selection
+and varied OEM Android devices.
