@@ -50,30 +50,15 @@ class NexaToolOverlayService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
-    private fun bg(color: Int = Color.rgb(19,26,48), border: Boolean = false): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(16).toFloat()
-            if (border) setStroke(dp(1), Color.rgb(91,102,158))
-        }
+    private fun bg(color: Int = NexaOverlayTheme.palette(this).card,
+                   border: Boolean = false): GradientDrawable =
+        if (border) NexaOverlayTheme.card(this, NexaOverlayTheme.palette(this), 20)
+        else NexaOverlayTheme.inset(this, NexaOverlayTheme.palette(this), 18)
+            .apply { setColor(color) }
     private fun text(value: String, size: Float = 13f, muted: Boolean = false): TextView =
-        TextView(this).apply {
-            this.text = value
-            textSize = size
-            setTextColor(if (muted) Color.rgb(185,198,225) else Color.WHITE)
-            setPadding(dp(3),dp(4),dp(3),dp(4))
-        }
+        NexaOverlayTheme.label(this, value, NexaOverlayTheme.palette(this), size, muted)
     private fun button(label: String, action: () -> Unit): Button =
-        Button(this).apply {
-            text = label
-            isAllCaps = false
-            textSize = 12f
-            minHeight = dp(40)
-            setPadding(dp(7),0,dp(7),0)
-            setTextColor(Color.WHITE)
-            backgroundTintList = android.content.res.ColorStateList.valueOf(Color.rgb(59,67,130))
-            setOnClickListener { action() }
-        }
+        NexaOverlayTheme.action(this, label, NexaOverlayTheme.palette(this), action)
     private fun row(vararg buttons: Button): LinearLayout =
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -227,7 +212,7 @@ class NexaToolOverlayService : Service() {
         val layout: View = if (!expanded) {
             ImageView(this).apply {
                 setImageResource(R.drawable.ic_nexa_assistant)
-                setColorFilter(Color.WHITE)
+                setColorFilter(NexaOverlayTheme.palette(this@NexaToolOverlayService).accent)
                 setPadding(dp(12), dp(12), dp(12), dp(12))
                 contentDescription = "Nexa assistant. Tap to expand, drag to move."
                 scaleType = ImageView.ScaleType.FIT_CENTER
@@ -265,9 +250,15 @@ class NexaToolOverlayService : Service() {
                 orientation=LinearLayout.VERTICAL
                 setPadding(dp(9),dp(9),dp(9),dp(9))
                 background=bg(border=true)
-                addView(text("✦  NEXA · Quick assistant",16f))
-                // Keep important controls, not descriptive development text.
-                addView(text("On-device tools · microphone only when enabled",10f,true))
+                background=NexaOverlayTheme.card(this@NexaToolOverlayService,
+                    NexaOverlayTheme.palette(this@NexaToolOverlayService))
+                elevation=dp(12).toFloat()
+                addView(text("━━    ✦ NEXA  ·  LIVE ASSISTANT",12f,true))
+                addView(text("How can I help?",22f))
+                addView(NexaOverlayTheme.waveform(this@NexaToolOverlayService,
+                    NexaOverlayTheme.palette(this@NexaToolOverlayService)),
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(37)))
+                addView(text("Choose a tool or ask a local device question",12f,true))
                 addView(row(
                     button("Chat") { showSection("chat") },
                     button("Tools") { showSection("tools") },
@@ -277,7 +268,8 @@ class NexaToolOverlayService : Service() {
                     "chat" -> {
                         addView(text("Ask Nexa to check, find or open an app.",12f,true))
                         val transcript = ScrollView(this@NexaToolOverlayService).apply {
-                            background = bg(Color.rgb(26,35,58))
+                            background = NexaOverlayTheme.inset(this@NexaToolOverlayService,
+                                NexaOverlayTheme.palette(this@NexaToolOverlayService))
                             addView(text(
                                 if(history.isEmpty()) "Try: open Brave, device status, check GitHub."
                                 else history.takeLast(4).joinToString("\n\n"),12f))
@@ -286,12 +278,13 @@ class NexaToolOverlayService : Service() {
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
                         val input = EditText(this@NexaToolOverlayService).apply {
                             hint = "Ask a local tool…"
-                            setHintTextColor(Color.rgb(150,166,195))
-                            setTextColor(Color.WHITE)
+                            setHintTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).secondary)
+                            setTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).title)
                             textSize=13f
                             isSingleLine=true
                             imeOptions=EditorInfo.IME_ACTION_SEND
-                            background=bg(Color.rgb(32,41,65),true)
+                            background=NexaOverlayTheme.inset(this@NexaToolOverlayService,
+                                NexaOverlayTheme.palette(this@NexaToolOverlayService))
                             setPadding(dp(9),dp(9),dp(9),dp(9))
                         }
                         addView(input, LinearLayout.LayoutParams(
@@ -345,7 +338,14 @@ class NexaToolOverlayService : Service() {
                         addView(text("Microphone indicator and Stop notification are Android privacy protections.",11f,true))
                     }
                 }
+                addView(text("Actions need approval  ·  Screen access requires permission",11f,true))
                 addView(text(note,11f,true))
+                addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
+                    " (tap to change)") {
+                    val newMode=NexaOverlayTheme.cycleMode(this@NexaToolOverlayService)
+                    note="Appearance updated: " + newMode + ". Auto follows Android and wallpaper colors."
+                    render()
+                })
                 addView(row(
                     button("Collapse") { collapse() },
                     button("Hide Nexa") { stopSelf() }
@@ -360,8 +360,8 @@ class NexaToolOverlayService : Service() {
             }
         } else layout
         val p = WindowManager.LayoutParams(
-            if (expanded) minOf(dp(310), resources.displayMetrics.widthPixels - dp(32)) else dp(52),
-            if (expanded) minOf(dp(340), resources.displayMetrics.heightPixels - dp(100)) else dp(52),
+            if (expanded) minOf(dp(360), resources.displayMetrics.widthPixels - dp(24)) else dp(52),
+            if (expanded) minOf(dp(490), resources.displayMetrics.heightPixels - dp(110)) else dp(52),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 (if (expanded && section == "chat") 0
@@ -383,6 +383,11 @@ class NexaToolOverlayService : Service() {
             visible=false
             stopSelf()
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (view != null) render() // Follow system day/night and display changes.
     }
 
     override fun onDestroy() {
