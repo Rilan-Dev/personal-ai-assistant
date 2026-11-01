@@ -12,7 +12,11 @@ test("background microphone only runs as owner-started notification foreground s
   assert.match(manifest,/android:name="\.RealtimeVoiceService"/);
   assert.match(manifest,/android:foregroundServiceType="microphone"/);
   assert.match(manifest,/android:exported="false"/);
-  assert.doesNotMatch(manifest,/RECEIVE_BOOT_COMPLETED|BOOT_COMPLETED|ACCESS_BACKGROUND_LOCATION/);
+  assert.doesNotMatch(manifest,/ACCESS_BACKGROUND_LOCATION/);
+  const restore=read(path+"NexaWakeBootReceiver.kt");
+  assert.match(manifest,/RECEIVE_BOOT_COMPLETED/);
+  assert.match(restore,/NexaWakeWordService\.enabled/);
+  assert.doesNotMatch(restore,/startForegroundService\(|startService\(|AudioRecord\(/);
   assert.match(code,/context\.currentActivity\?\.hasWindowFocus\(\)!=true/);
   assert.match(code,/context\.startForegroundService\(intent\)/);
   assert.match(code,/startForeground\(NOTIFICATION_ID,notification/);
