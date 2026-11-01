@@ -375,10 +375,10 @@ class RealtimeVoiceService : Service() {
         for (i in 0 until minOf(output.length(), 12)) {
             val item = output.optJSONObject(i) ?: continue
             if (item.optString("type") != "function_call") continue
-            handled = true
             val id = item.optString("call_id")
             if (!id.matches(Regex("[a-zA-Z0-9_-]{1,128}")) ||
                 !seenCallIds.add(id)) continue
+            handled = true
             toolCallsInSession++
             if (toolCallsInSession > 12) {
                 sendRealtimeToolOutput(id, "Rejected: voice tool-call budget exhausted")
