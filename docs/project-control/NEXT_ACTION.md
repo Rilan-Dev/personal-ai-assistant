@@ -453,3 +453,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Enable Sarvam Voice Agent IDs plus explicitly opt-in to Live AI after assistant invocation, arm Hey Nexa; verify automatic transition to managed STS (no intermediate keyword-only command mode), user transcription reaches local approval, and approval opens only the requested app.
 - Confirm app denial, offline provider, unsupported phrases, duplicate transcripts, background microphone restrictions, screen content privacy, and returning to wake mode after Stop all fail safely.
 - For **actual Sarvam agentic tool calling**, design a Sarvam managed API-tool webhook + authenticated device broker, per-session pending action channel and signed phone result feedback; do not claim this exists merely because local transcript approvals work.
+
+## 2026-11-02 — mandatory acceptance after repeated owner failure
+- Run native main-promotion GitHub Actions once against exact tested source SHA. Verify Kotlin compilation, emulator instrumentation including NexaLiveVoiceStartupAndroidTest, and signed same-signing-identity APK artifact. If failing, fix and retest before suggesting installation.
+- Owner to install latest build and check Settings → Installed app source revision equals expected SHA. Re-run EXACT Chat screenshots, accepting one-time app launch approval; confirm Android only reports an Intent dispatch unless foreground destination verified.
+- Start Sarvam Voice tab and separately Hey Nexa. Validate handshake, 30s conversation, interruption, Stop/restart, pending app approval and denial, Android notification/microphone indicator, and no process crash.
+- Capture redacted `adb logcat` AndroidRuntime Fatal exception (exclude audio samples, credentials, contacts) if owner's OEM phone still crashes; emulator smoke testing alone cannot explain device-specific failure.
+- Do not call Sarvam local transcript path full managed tool-calling; separate authenticated Sarvam cloud API tool broker and model-result feedback remain unimplemented.
