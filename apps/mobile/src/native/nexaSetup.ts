@@ -13,6 +13,7 @@ export type NexaSetupStatus = {
   overlayGranted: boolean;
   overlayVisible: boolean;
   setupAcknowledged: boolean;
+  autoStartVoiceOnInvocation: boolean;
   versionName: string;
   versionCode: number;
   sourceRevision: string;
@@ -22,6 +23,7 @@ export type NexaSetupStatus = {
 interface SetupBridge {
   getSetupStatus(): Promise<NexaSetupStatus>;
   acknowledgeSetup(): Promise<boolean>;
+  setAutoStartVoiceOnInvocation(enabled: boolean): Promise<boolean>;
   openAppSettings(): Promise<boolean>;
 }
 function bridge(): SetupBridge {
@@ -39,11 +41,14 @@ export async function readNexaSetupStatus(): Promise<NexaSetupStatus> {
   if (!data || typeof data.versionName !== 'string' ||
       typeof data.setupAcknowledged !== 'boolean' ||
       typeof data.microphone !== 'boolean' ||
-      typeof data.screenAssist !== 'boolean')
+      typeof data.screenAssist !== 'boolean' ||
+      typeof data.autoStartVoiceOnInvocation !== 'boolean')
     throw new Error('The installed Android build did not return valid setup status.');
   return data;
 }
 export const acknowledgeNexaSetup = () => bridge().acknowledgeSetup();
+export const setAutoStartVoiceOnInvocation = (enabled: boolean) =>
+  bridge().setAutoStartVoiceOnInvocation(enabled);
 export const openNexaAppSettings = () => bridge().openAppSettings();
 
 /** Only asks for permission; does not obtain coordinates or start tracking. */
