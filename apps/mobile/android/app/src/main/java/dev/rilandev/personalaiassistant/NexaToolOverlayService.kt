@@ -21,6 +21,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -141,8 +142,8 @@ class NexaToolOverlayService : Service() {
 
     private fun stopWake() {
         try {
-            stopService(Intent(this,NexaWakeWordService::class.java))
-            note = "Offline Hey Nexa listener stopped by user"
+            startService(Intent(this,NexaWakeWordService::class.java).setAction(NexaWakeWordService.STOP))
+            note = "Hey Nexa disabled; persistent preference cleared"
         } catch (_: Exception) { note = "Android rejected stop · use notification Stop" }
         render()
     }
@@ -164,10 +165,12 @@ class NexaToolOverlayService : Service() {
                     val start = Intent(this,NexaWakeWordService::class.java).apply {
                         action = NexaWakeWordService.START
                     }
+                    NexaWakeWordService.persistEnabled(this, true)
                     if (Build.VERSION.SDK_INT >= 26) startForegroundService(start)
                     else startService(start)
                     note = "Wake start requested · check Android microphone indicator and Stop notification"
                 } catch (_: Exception) {
+                    NexaWakeWordService.persistEnabled(this, false)
                     note = "Android blocked background microphone startup. Open Nexa Setup to start visibly."
                 }
             }
@@ -191,8 +194,7 @@ class NexaToolOverlayService : Service() {
         // microphone simultaneously. Stop the detector and give it time to
         // release AudioRecord before requesting the system assistant.
         if (NexaWakeWordService.listening) {
-            try { stopService(Intent(this, NexaWakeWordService::class.java)) }
-            catch (_: Exception) {}
+            NexaWakeWordService.pauseForAssistant()
         }
         collapse()
         Handler(Looper.getMainLooper()).postDelayed({
@@ -221,12 +223,12 @@ class NexaToolOverlayService : Service() {
             visible = false
         }
         val layout: View = if (!expanded) {
-            TextView(this).apply {
-                text = "✦"
-                contentDescription = "Nexa tools. Tap to expand, drag to move."
-                setTextColor(Color.WHITE)
-                textSize = 23f
-                gravity = Gravity.CENTER
+            ImageView(this).apply {
+                setImageResource(R.drawable.ic_nexa_assistant)
+                setColorFilter(Color.WHITE)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                contentDescription = "Nexa assistant. Tap to expand, drag to move."
+                scaleType = ImageView.ScaleType.FIT_CENTER
                 background = bg(border = true)
                 setOnClickListener { expanded = true; render() }
                 var startX = 0f
@@ -262,7 +264,8 @@ class NexaToolOverlayService : Service() {
                 setPadding(dp(9),dp(9),dp(9),dp(9))
                 background=bg(border=true)
                 addView(text("✦  NEXA · Quick assistant",16f))
-                addView(text("Floating local workspace · owner controlled",11f,true))
+                // Keep important controls, not descriptive development text.
+                addView(text("On-device tools · microphone only when enabled",10f,true))
                 addView(row(
                     button("Chat") { showSection("chat") },
                     button("Tools") { showSection("tools") },
@@ -270,15 +273,15 @@ class NexaToolOverlayService : Service() {
                 ))
                 when(section) {
                     "chat" -> {
-                        addView(text("Test device tools here without opening Nexa.",12f,true))
+                        addView(text("Ask Nexa to check, find or open an app.",12f,true))
                         val transcript = ScrollView(this@NexaToolOverlayService).apply {
                             background = bg(Color.rgb(26,35,58))
                             addView(text(
-                                if(history.isEmpty()) "Try: check device status, battery, check github, open whatsapp, find my github app."
-                                else history.joinToString("\n\n"),12f))
+                                if(history.isEmpty()) "Try: open Brave, device status, check GitHub."
+                                else history.takeLast(4).joinToString("\n\n"),12f))
                         }
                         addView(transcript, LinearLayout.LayoutParams(
-                            LinearLayout.LayoutParams.MATCH_PARENT,dp(168)))
+                            LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
                         val input = EditText(this@NexaToolOverlayService).apply {
                             hint = "Ask a local tool…"
                             setHintTextColor(Color.rgb(150,166,195))
@@ -310,9 +313,10 @@ class NexaToolOverlayService : Service() {
                             button("Find GitHub") { sendLocal("find my github app") }
                         ))
                         addView(row(
-                            button("Open GitHub") { sendLocal("open github") },
+                            button("Open Brave") { sendLocal("open brave") },
                             button("Open WhatsApp") { sendLocal("open whatsapp") }
                         ))
+                        addView(button("Open GitHub") { sendLocal("open github") })
                         addView(row(
                             button("Launcher status") { sendLocal("launcher status") },
                             button("Full Tools") { openTab("tools") }
@@ -321,7 +325,7 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
-                        addView(text("WhatsApp sending requires recipient review and confirmation in full Nexa.",11f,true))
+                        addView(text("Messages require recipient review in full Nexa.",11f,true))
                     }
                     else -> {
                         addView(text("Microphone access and model status",12f,true))
@@ -336,7 +340,7 @@ class NexaToolOverlayService : Service() {
                             button("Full Voice") { openTab("voice") }
                         ))
                         addView(text("Talk opens Android's compact Nexa assistant (when selected), listens for one on-device command, and never sends messages without review.",11f,true))
-                        addView(text("Android may block background microphone starts. Use full Voice/Setup to grant permission and start a session.",11f,true))
+                        addView(text("Microphone indicator and Stop notification are Android privacy protections.",11f,true))
                     }
                 }
                 addView(text(note,11f,true))
@@ -346,9 +350,16 @@ class NexaToolOverlayService : Service() {
                 ))
             }
         }
+        val fittedLayout: View = if (expanded) {
+            ScrollView(this).apply {
+                isFillViewport = false
+                isVerticalScrollBarEnabled = true
+                addView(layout)
+            }
+        } else layout
         val p = WindowManager.LayoutParams(
-            if (expanded) dp(320) else dp(52),
-            if (expanded) WindowManager.LayoutParams.WRAP_CONTENT else dp(52),
+            if (expanded) minOf(dp(310), resources.displayMetrics.widthPixels - dp(32)) else dp(52),
+            if (expanded) minOf(dp(340), resources.displayMetrics.heightPixels - dp(100)) else dp(52),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 (if (expanded && section == "chat") 0
@@ -362,8 +373,8 @@ class NexaToolOverlayService : Service() {
         }
         params=p
         try {
-            wm.addView(layout,p)
-            view=layout
+            wm.addView(fittedLayout,p)
+            view=fittedLayout
             visible=true
         } catch (_: Exception) {
             view=null
