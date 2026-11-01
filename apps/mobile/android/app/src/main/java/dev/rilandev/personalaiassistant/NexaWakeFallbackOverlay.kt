@@ -75,6 +75,9 @@ internal class NexaWakeFallbackOverlay(
             if (current == "listening") providerEverListening = true
             val approval = RealtimeVoiceService.pendingApprovalSummary
             approvalRow?.visibility = if (approval != null) View.VISIBLE else View.GONE
+            // Owner approval must be visible even when the voice dock was
+            // previously collapsed; never auto-approve a model request.
+            if (approval != null) showDetail(true)
             val statusMessage = when {
                 approval != null -> approval
                 current == "connecting" -> "Connecting to your live AI provider…"
