@@ -55,6 +55,24 @@ class NexaAssistantService : VoiceInteractionService() {
     override fun onReady() {
         super.onReady()
         current = this
+        // Android explicitly exempts the currently active system-selected
+        // VoiceInteractionService from some background microphone-FGS limits.
+        // This is a best-effort restore for an ALREADY opted-in assistant,
+        // never a new permission grant or a silent recorder. OEM may reject it.
+        if (NexaWakeWordService.enabled(this) && NexaWakeWordModule.modelReady(this) &&
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED &&
+            (Build.VERSION.SDK_INT < 33 ||
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED)) {
+            try {
+                val start = Intent(this, NexaWakeWordService::class.java)
+                    .setAction(NexaWakeWordService.START)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(start)
+                else startService(start)
+            } catch (_: Exception) {
+                // Android/OEM is authoritative; boot recovery notification
+                // and the visible-app resume path remain available.
+            }
+        }
     }
     override fun onShowSessionFailed(args: Bundle) {
         NexaWakeWordService.assistantClosed()
