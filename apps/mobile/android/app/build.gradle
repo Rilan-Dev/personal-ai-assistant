@@ -167,6 +167,8 @@ android {
 }
 
 dependencies {
+    // Offline speech decoder: Apache-2.0; model downloaded only on explicit opt-in.
+    implementation("com.alphacephei:vosk-android:0.3.47")
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 

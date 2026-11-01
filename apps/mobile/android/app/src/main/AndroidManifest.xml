@@ -88,6 +88,12 @@
       <meta-data android:name="android.accessibilityservice"
           android:resource="@xml/nexa_launcher_navigation_config"/>
     </service>
+    <!-- Owner-started on-device phrase detector. Microphone FGS with visible
+         Stop notification; never auto-starts at boot or after termination. -->
+    <service android:name=".NexaWakeWordService"
+        android:foregroundServiceType="microphone"
+        android:exported="false"
+        android:stopWithTask="false"/>
     <!-- Small user-started floating tools bubble. Never records audio or controls other apps. -->
     <service android:name=".NexaToolOverlayService"
         android:exported="false"

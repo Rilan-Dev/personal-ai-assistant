@@ -24,6 +24,9 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
   requestApproximateLocationSetup} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
+import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
+  stopWakeListening} from './src/native/androidWakeWord';
+import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
@@ -88,6 +91,50 @@ export default function App() {
   const [setupStatus, setSetupStatus] = useState<NexaSetupStatus|null>(null);
   const [setupBusy, setSetupBusy] = useState(false);
   const [setupNotice, setSetupNotice] = useState('');
+  const [wakeStatus, setWakeStatus] = useState<WakeStatus|null>(null);
+  const [wakeBusy, setWakeBusy] = useState(false);
+  const refreshWakeStatus = async () => {
+    if (!wakeWordAvailable()) return;
+    try { setWakeStatus(await readWakeStatus()); }
+    catch {setSetupNotice('Offline wake service status unavailable in installed APK.');}
+  };
+  useEffect(()=>{
+    if (!engine.live || !wakeWordAvailable()) return;
+    void refreshWakeStatus();
+    // Poll only while Setup is open. No JS always-running background loop.
+    if (tab!=='setup') return;
+    const id=setInterval(()=>{ void refreshWakeStatus(); },2500);
+    return ()=>clearInterval(id);
+  },[engine.live,tab]);
+  const prepareWakeListening = async () => {
+    if (wakeBusy) return;
+    setWakeBusy(true);
+    try {
+      if (!await prepareOwnerLiveVoicePermissions(activeProvider?.provider==='sarvam'?'sarvam':'openai')) {
+        setSetupNotice('Microphone/notification access is needed for local wake listening.');
+        return;
+      }
+      await startWakeListening();
+      setSetupNotice('Local Hey Nexa listening requested. Check the Stop notification and status.');
+    } catch (error) {
+      setSetupNotice('Could not start wake listening: '+String(error).slice(0,140));
+    } finally {setWakeBusy(false);void refreshWakeStatus();}
+  };
+  const downloadWakeModel = async () => {
+    if (wakeBusy) return;
+    setWakeBusy(true);
+    try {
+      const result = await installWakeModel();
+      setSetupNotice(result==='already_installed' ? 'Offline model already installed.'
+        : 'Offline model download started (about 40 MB). Stay connected and watch status.');
+    } catch(error) {setSetupNotice('Offline model download failed to start: '+String(error).slice(0,140));}
+    finally {setWakeBusy(false);void refreshWakeStatus();}
+  };
+  const stopWake = async () => {
+    try {await stopWakeListening();setSetupNotice('Wake listening stopped by owner.');}
+    catch {setSetupNotice('Android could not stop wake listener; use the persistent Stop notification.');}
+    finally {void refreshWakeStatus();}
+  };
   const refreshSetupStatus = async () => {
     if (!engine.live || !nexaSetupAvailable()) {
       setSetupNotice('This installed APK is missing the new permission center. Install the latest signed Nexa build.');
@@ -881,6 +928,11 @@ export default function App() {
       {tab === 'setup' && <NexaSetupScreen
         status={setupStatus} busy={setupBusy} notice={setupNotice}
         providerReady={Boolean(activeProvider)}
+        wakeStatus={wakeStatus}
+        onWakeDownload={()=>void downloadWakeModel()}
+        onWakeStart={()=>void prepareWakeListening()}
+        onWakeStop={()=>void stopWake()}
+        onWakeRefresh={()=>void refreshWakeStatus()}
         onVoice={()=>void runSetupAction('Voice permission',prepareNexaPermissions)}
         onAssistant={()=>void runSetupAction('Default assistant role',selectNexaAssistant)}
         onAssistantSettings={()=>void runSetupAction('Android Default apps',openNexaAssistantSettings)}

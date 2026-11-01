@@ -55,6 +55,6 @@ test('overlay permission appears independently from default-assistant gesture',(
   assert.match(read(base+'java/dev/rilandev/personalaiassistant/NexaSetupModule.kt'),/Settings\.canDrawOverlays/);
 });
 test('custom wake-word is explicitly not claimed as enabled',()=>{
-  assert.match(role,/putBoolean\("wakeWordReady", false\)/);
+  assert.match(role,/putBoolean\("wakeWordReady", NexaWakeWordModule\.modelReady\(context\)\)/);
   assert.doesNotMatch(service,/HotwordDetector|RecognitionService|RECORD_AUDIO/);
 });

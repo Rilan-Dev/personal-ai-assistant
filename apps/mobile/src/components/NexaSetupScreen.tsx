@@ -1,10 +1,16 @@
 import React from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {NexaSetupStatus} from '../native/nexaSetup';
+import type {WakeStatus} from '../native/androidWakeWord';
 
 type Props = {
   status: NexaSetupStatus | null;
   providerReady: boolean;
+  wakeStatus: WakeStatus | null;
+  onWakeDownload: () => void;
+  onWakeStart: () => void;
+  onWakeStop: () => void;
+  onWakeRefresh: () => void;
   busy: boolean;
   notice: string;
   onVoice: () => void;
@@ -29,7 +35,8 @@ type PermissionStep = {
 
 export default function NexaSetupScreen(props: Props) {
   const {
-    status: s, providerReady, busy, notice, onVoice, onAssistant, onAssistantSettings, onOverlaySettings, onOverlayShow, onOverlayHide,
+    status: s, providerReady, wakeStatus, onWakeDownload, onWakeStart,
+    onWakeStop, onWakeRefresh, busy, notice, onVoice, onAssistant, onAssistantSettings, onOverlaySettings, onOverlayShow, onOverlayHide,
     onAccessibility, onCamera, onLocation, onProvider, onAppSettings,
     onRefresh, onFinish
   } = props;
@@ -135,6 +142,45 @@ export default function NexaSetupScreen(props: Props) {
           </View>}
         </View>
       ))}
+      <View style={styles.footerCard}>
+        <Text style={styles.footerTitle}>Hey Nexa · offline wake listening</Text>
+        <Text style={styles.footerCopy}>
+          Experimental, English-first voice trigger. Download an Apache-licensed
+          40 MB model once. You must explicitly start microphone listening.
+          Android shows a permanent Stop notification. Detection is local, not
+          streamed to an AI provider. Listening stops after one trigger; arm it
+          again when needed.
+        </Text>
+        <Text style={styles.status}>
+          {wakeStatus ? wakeStatus.modelReady
+            ? wakeStatus.listening ? '● Listening for Hey Nexa' : '● Model ready · '+wakeStatus.state
+            : wakeStatus.installing ? '○ Downloading model' : '○ Offline model not installed'
+            : 'Checking offline voice availability'}
+        </Text>
+        {wakeStatus?.message ? <Text style={styles.footerCopy}>{wakeStatus.message}</Text> : null}
+        <View style={styles.footerActions}>
+          {!wakeStatus?.modelReady && <Pressable accessibilityRole="button"
+            style={styles.secondary} disabled={busy || wakeStatus?.installing}
+            onPress={onWakeDownload}>
+            <Text style={styles.secondaryText}>{wakeStatus?.installing ? 'Installing…':'Download offline model'}</Text>
+          </Pressable>}
+          {wakeStatus?.modelReady && !wakeStatus.listening && <Pressable accessibilityRole="button"
+            style={styles.secondary} disabled={busy}
+            onPress={onWakeStart}><Text style={styles.secondaryText}>Enable Hey Nexa listening</Text></Pressable>}
+          {wakeStatus?.listening && <Pressable accessibilityRole="button"
+            style={styles.secondary} onPress={onWakeStop}>
+            <Text style={styles.secondaryText}>Stop wake listening</Text>
+          </Pressable>}
+          <Pressable accessibilityRole="button" style={styles.secondary} onPress={onWakeRefresh}>
+            <Text style={styles.secondaryText}>Refresh wake status</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.footerCopy}>
+          If Nexa is the Android default assistant, recognition requests a short
+          on-device voice-command session. Otherwise tap the detection notification
+          to open Nexa. No message will be sent without review.
+        </Text>
+      </View>
       <View style={styles.footerCard}>
         <Text style={styles.footerTitle}>Manage & verify</Text>
         <Text style={styles.footerCopy}>Android may deny a permission without showing its prompt again. Use App settings if it was previously denied, and return here to re-check.</Text>

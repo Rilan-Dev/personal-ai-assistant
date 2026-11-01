@@ -665,3 +665,20 @@
 - Real Hey Nexa hotword remains unimplemented, never presented as working:
   no validated on-device keyword-spotting engine/model has been integrated.
 - See docs/architecture/NEXA_ASSISTANT_ROLE_OVERLAY_2026-11-01.md.
+
+## 2026-11-01 — Offline Hey Nexa experimental detector
+- Introduced Android Vosk 0.3.47 (Apache 2.0) and optional on-device small
+  English model (official 40 MB archive SHA-256 pinned and independently
+  verified). Bounded HTTPS download, ZIP traversal/size checks, app-private
+  atomic install, explicit owner grant and manual start.
+- New non-sticky microphone foreground service recognizes local trigger
+  phrases with a two-frame gate. It has a visible Android Stop notification,
+  no raw audio storage or cloud capture and no automatic boot/background start.
+- On detection the service releases the microphone and requests a bounded
+  system assistant session if the OEM has selected Nexa as default. The user
+  can always tap a fallback notification. Unrestricted AI device control and
+  messaging have not been enabled.
+- UI: optional model download, local status, arm/stop, refresh. Verification
+  and limitations documented in docs/architecture/NEXA_OFFLINE_WAKE_WORD.md.
+- Real device accuracy, accent/noise, battery, background OEM and provider
+  handoff acceptance remain pending. This is not a trained Hey Nexa KWS model.

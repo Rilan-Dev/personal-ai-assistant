@@ -177,7 +177,7 @@ test("Nexa assistant role is opt-in and does not imply a working hotword", () =>
   assert.doesNotMatch(speech, /AudioRecord|MediaRecorder|startRecording/);
   assert.match(native, /RoleManager\.ROLE_ASSISTANT/);
   assert.match(native, /createRequestRoleIntent/);
-  assert.match(native, /putBoolean\("wakeWordReady", false\)/);
+  assert.match(native, /putBoolean\("wakeWordReady", NexaWakeWordModule\.modelReady\(context\)\)/);
   assert.match(native, /checkSelfPermission\(Manifest\.permission\.RECORD_AUDIO\)/);
   assert.match(native, /RealtimeVoiceService\.ACTION_STOP/);
   assert.match(ui, /Choose Nexa as default assistant/);

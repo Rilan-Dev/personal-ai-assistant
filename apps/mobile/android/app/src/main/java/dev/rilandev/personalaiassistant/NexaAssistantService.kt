@@ -31,7 +31,31 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 
 /** System-selected entry point. Never opens microphone on its own. */
-class NexaAssistantService : VoiceInteractionService()
+class NexaAssistantService : VoiceInteractionService() {
+    companion object {
+        @Volatile private var current: NexaAssistantService? = null
+        fun showFromWakeWord(): Boolean {
+            val service = current ?: return false
+            return try {
+                service.handler.post {
+                    try {
+                        service.showSession(Bundle().apply { putBoolean("nexa_hotword", true) }, 0)
+                    } catch (_: Exception) {}
+                }
+                true // Dispatch requested; not proof OEM displayed session
+            } catch (_: Exception) { false }
+        }
+    }
+    private val handler = Handler(Looper.getMainLooper())
+    override fun onReady() {
+        super.onReady()
+        current = this
+    }
+    override fun onShutdown() {
+        if (current === this) current = null
+        super.onShutdown()
+    }
+}
 
 /** A compact system assistant session, not an app-wide overlay. */
 class NexaVoiceSessionService : VoiceInteractionSessionService() {
@@ -256,6 +280,11 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         super.onShow(args, showFlags)
         handler.removeCallbacks(refresh)
         handler.post(refresh)
+        if (args?.getBoolean("nexa_hotword") == true) {
+            // Wake detector has released AudioRecord before showing this UI.
+            // Only a bounded, on-device, one-shot recognizer is started.
+            handler.postDelayed({ if (!commandBusy) listenOneDeviceCommand() }, 420L)
+        }
     }
     override fun onHide() {
         cancelDeviceCommand()
@@ -280,7 +309,7 @@ class NexaAssistantRoleModule(private val context: ReactApplicationContext) :
         val result = Arguments.createMap()
         result.putBoolean("available", manager?.isRoleAvailable(RoleManager.ROLE_ASSISTANT) == true)
         result.putBoolean("selected", manager?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
-        result.putBoolean("wakeWordReady", false)
+        result.putBoolean("wakeWordReady", NexaWakeWordModule.modelReady(context))
         p.resolve(result)
     }
     private fun canPresent(): Boolean {

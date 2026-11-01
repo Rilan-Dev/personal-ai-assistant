@@ -52,7 +52,7 @@ class VoiceControlModule(private val context: ReactApplicationContext) :
                 value.putBoolean("micGranted",
                     context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
                 value.putBoolean("offlineOnly", true)
-                value.putBoolean("wakeWord", false)
+                value.putBoolean("wakeWord", NexaWakeWordModule.modelReady(context))
                 value.putInt("androidApi", Build.VERSION.SDK_INT)
                 promise.resolve(value)
             } catch (_: Exception) {

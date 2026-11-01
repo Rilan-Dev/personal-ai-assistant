@@ -363,3 +363,13 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Hey Nexa custom wake-word is still not working. Require a licensed offline
   KWS model, background microphone platform compliance, battery/privacy tests
   and hands-free real phone acceptance. Never equate role selection with KWS.
+
+## Offline Hey Nexa acceptance
+- Verify signed CI native test and check permanent-key APK certificate.
+- On physical phone: validate downloaded model and Hey Nexa microphone FGS,
+  notification Stop, offline detection, default assistant handoff and failure
+  fallback; capture battery/accuracy/false wake observations. Use model tests
+  with English (India) and Tamil-accented English voices.
+- Consider a dedicated licensed/accent-calibrated keyword spotting model after
+  quality baseline. Keep assistant gestures, permissions and tool approvals
+  independent. No claims of fully accepted always-on behavior before testing.
