@@ -1145,9 +1145,9 @@ export default function App() {
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Live session limitations</Text>
-          <Text style={styles.cardText}>Realtime streaming requires an authorized Sarvam managed Voice Agent or OpenAI realtime account. Native microphone recording only starts from a visible user action and may continue through an Android foreground notification while other apps are visible. Network interruptions and platform audio policies can stop the session. No wake-word or unattended recording.</Text>
+          <Text style={styles.cardText}>Live conversation requires a configured Sarvam Voice Agent or OpenAI realtime account. It starts from an explicit Voice action or an assistant invocation mode you enable in Setup. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
         </View>
-        <Text style={styles.mutedSmall}>No wake word or unattended recording. A user-started live voice service may continue while you use another app, with Android's microphone indicator and Stop notification.</Text>
+        <Text style={styles.mutedSmall}>Offline Hey Nexa listening and cloud live voice are separate features. Both must respect Android microphone disclosures and Stop controls. Nexa cannot hide the green microphone indicator or guarantee uninterrupted background listening on every phone.</Text>
       </ScrollView>}
 
       {tab === 'tools' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
