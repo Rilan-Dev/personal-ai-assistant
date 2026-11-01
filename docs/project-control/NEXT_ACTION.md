@@ -446,3 +446,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - On the actual phone, validate Home-screen visibility and touches around the overlay; Android dark/light switching; Android 12+ wallpaper accent after wallpaper change; Auto/Dark/Light cycle; layout on small screens; system gesture; wake fallback; opt-in Sarvam/OpenAI live session; Stop; expand/collapse; and action approve/deny UI.
 - Confirm Android system microphone dot and notification are not suppressed. Recheck no screen-content sharing without user consent, and no automatic outbound message send.
 - If native CI detects Kotlin or instrumentation defects, repair in Development before describing the APK as installable.
+
+## 2026-11-02 — action-routing/native release acceptance
+- Run Android main promotion (Kotlin compilation + emulator instrumentation + signed APK), fix all native errors before claiming installable build.
+- Install updated APK on owner's phone and verify Chat “Can you please open my WhatsApp?” enters the existing native approval flow and reports Intent dispatch without claiming destination screen verified.
+- Enable Sarvam Voice Agent IDs plus explicitly opt-in to Live AI after assistant invocation, arm Hey Nexa; verify automatic transition to managed STS (no intermediate keyword-only command mode), user transcription reaches local approval, and approval opens only the requested app.
+- Confirm app denial, offline provider, unsupported phrases, duplicate transcripts, background microphone restrictions, screen content privacy, and returning to wake mode after Stop all fail safely.
+- For **actual Sarvam agentic tool calling**, design a Sarvam managed API-tool webhook + authenticated device broker, per-session pending action channel and signed phone result feedback; do not claim this exists merely because local transcript approvals work.
