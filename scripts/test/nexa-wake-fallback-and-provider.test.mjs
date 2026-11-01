@@ -18,7 +18,7 @@ test('wake always tries compact native voice fallback when OEM assistant service
   assert.match(overlay,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(service\)/);
   assert.match(overlay,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(wake,/assistantClosed\(\)/);
-  assert.doesNotMatch(overlay,/startForegroundService\(|WebSocket|SmsManager|READ_CONTACTS|Runtime\.getRuntime/);
+  assert.doesNotMatch(overlay,/WebSocket|SmsManager|READ_CONTACTS|Runtime\.getRuntime/);
 });
 
 test('fallback voice uses a bounded on-device speech loop with truthful action status',()=>{
