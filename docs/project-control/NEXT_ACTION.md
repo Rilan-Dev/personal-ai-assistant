@@ -420,3 +420,16 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   recording, continuous mode foreground notification + indicator,
   Stop/reboot/update migration, post-wake voice privacy behavior.
 - See docs/architecture/NEXA_HOTWORD_PARITY_FEASIBILITY_2026-11-01.md.
+
+
+## 2026-11-02 — Google-assisted Nexa Voice shortcut
+- Added native App Actions/launcher "Nexa Voice" static shortcut, routed to
+  visible React Native Voice tab by `nexa://voice` with NO microphone startup.
+- Google Assistant may fulfill "Hey Google, open Nexa voice" when it remains
+  default and the App Action is registered in Google Play / supported preview.
+  No Google voice invocation success has been proven on a phone.
+- Run current-SHA Android native compile, emulator instrumentation and
+  shortcut deep-link tests. Run real phone assistant App Action acceptance,
+  verify idle microphone dot absent and active conversation indicator present.
+- Never claim "Hey Nexa" indicator-free hardware wake is available to
+  the sideloaded APK or suppress platform indicators.
