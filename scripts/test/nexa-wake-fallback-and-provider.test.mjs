@@ -29,6 +29,17 @@ test('fallback voice uses a bounded on-device speech loop with truthful action s
   assert.match(overlay,/SpeechRecognizer\.ERROR_NO_MATCH/);
   assert.match(overlay,/TextToSpeech/);
 });
+test('wake fallback honors owner live-voice opt-in and never auto-approves tool actions',()=>{
+  assert.match(overlay,/getBoolean\("auto_voice_invocation_v1", false\)/);
+  assert.match(overlay,/openVoiceCredentials\(service\)/);
+  assert.match(overlay,/RealtimeVoiceService\.ACTION_START/);
+  assert.match(overlay,/RealtimeVoiceService\.EXTRA_ASSISTANT_PANEL, true/);
+  assert.match(overlay,/pendingApprovalSummary/);
+  assert.match(overlay,/Approve app/);
+  assert.match(overlay,/ACTION_DENY_TOOL/);
+  assert.match(overlay,/providerManaged/);
+  assert.match(overlay,/RealtimeVoiceService\.ACTION_STOP/);
+});
 test('native live voice catches initialization failures and preserves privacy',()=>{
   assert.match(voice,/Could not initialize live voice provider/);
   assert.match(voice,/stopWithStatus\("error", "Could not initialize live voice provider/);
