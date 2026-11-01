@@ -222,49 +222,182 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     }
 
     private fun feedback(message: String) {
-        commandFeedback = message
-        feedbackUntil = android.os.SystemClock.elapsedRealtime() + 6500L
-        label?.text = message
-        if (autoDismissAfterCommand) {
+        commandFeedback = message.take(360)
+        feedbackUntil = SystemClock.elapsedRealtime() + 6500L
+        label?.text = commandFeedback
+        if (autoDismissAfterCommand && !localConversationActive) {
             handler.removeCallbacks(autoHide)
             handler.postDelayed(autoHide, 6500L)
         }
     }
+
+    private fun initSpeechOutput() {
+        if (outputSpeech != null) return
+        outputSpeech = TextToSpeech(app) { status ->
+            handler.post {
+                outputSpeechReady = status == TextToSpeech.SUCCESS
+                if (outputSpeechReady) {
+                    try { outputSpeech?.language = Locale.getDefault() } catch (_: Exception) {}
+                }
+            }
+        }
+        outputSpeech?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String) {}
+            override fun onDone(utteranceId: String) { speechFinished(utteranceId) }
+            @Deprecated("Deprecated by Android")
+            override fun onError(utteranceId: String) { speechFinished(utteranceId) }
+        })
+    }
+
+    private fun speechFinished(id: String) {
+        handler.post {
+            if (localConversationActive && outputUtterance == id) {
+                outputUtterance = ""
+                handler.postDelayed({ listenOneDeviceCommand() }, 400L)
+            }
+        }
+    }
+
+    private fun replyAndListen(message: String) {
+        feedback(message)
+        handler.removeCallbacks(silenceTimer)
+        if (!localConversationActive) return
+        if (localTurnCount >= 16) {
+            endLocalConversation("Conversation limit reached · say Hey Nexa to start again")
+            return
+        }
+        // Speak only a bounded tool result. TTS cannot drive or approve tools.
+        val speech = outputSpeech
+        if (outputSpeechReady && speech != null) {
+            val id = "nexa-local-" + (++localTurnGeneration)
+            outputUtterance = id
+            val result = try {
+                speech.speak(message.take(240), TextToSpeech.QUEUE_FLUSH, null, id)
+            } catch (_: Exception) { TextToSpeech.ERROR }
+            if (result == TextToSpeech.SUCCESS) {
+                handler.postDelayed({
+                    if (localConversationActive && outputUtterance == id)
+                        speechFinished(id)
+                }, 8_000L)
+                return
+            }
+            outputUtterance = ""
+        }
+        // A missing/offline TTS engine must not deadlock recognition.
+        handler.postDelayed({ if (localConversationActive) listenOneDeviceCommand() }, 850L)
+    }
+
     private fun cancelDeviceCommand() {
         val recognizer = commandRecognizer
         commandRecognizer = null
         commandBusy = false
         try { recognizer?.cancel(); recognizer?.destroy() } catch (_: Exception) {}
     }
-    private fun listenOneDeviceCommand() {
-        if (commandBusy || RealtimeVoiceService.status == "listening" ||
+
+    private fun endLocalConversation(message: String) {
+        if (!localConversationActive && !commandBusy) return
+        localConversationActive = false
+        handler.removeCallbacks(silenceTimer)
+        cancelDeviceCommand()
+        outputSpeech?.stop()
+        outputUtterance = ""
+        feedback(message)
+        handler.postDelayed({ hide() }, 650L)
+    }
+
+    private fun stopConversation() {
+        localConversationActive = false
+        handler.removeCallbacks(silenceTimer)
+        cancelDeviceCommand()
+        outputSpeech?.stop()
+        outputUtterance = ""
+        if (liveVoiceLaunchedFromSession) {
+            try {
+                app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                    action = RealtimeVoiceService.ACTION_STOP
+                })
+            } catch (_: Exception) {}
+        }
+        hide()
+    }
+
+    private fun beginLocalConversation() {
+        if (localConversationActive || commandBusy) return
+        if (RealtimeVoiceService.status == "listening" ||
             RealtimeVoiceService.status == "connecting") {
-            feedback("Stop live voice before requesting a separate device command.")
+            feedback("Live voice is already active. Stop it before starting local commands.")
             return
         }
-        if (app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            feedback("Open Nexa to grant microphone permission first.")
+        if (app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED) {
+            feedback("Microphone permission needed · open Nexa Setup")
             return
         }
         if (Build.VERSION.SDK_INT < 31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(app)) {
-            feedback("No on-device speech recognizer is installed on this phone.")
+            feedback("On-device speech recognition is not installed. Configure live AI in Nexa.")
             return
         }
+        localConversationActive = true
+        autoDismissAfterCommand = false
+        localTurnCount = 0
+        commandFeedback = null
+        initSpeechOutput()
+        listenOneDeviceCommand()
+    }
+
+    private fun listenOneDeviceCommand() {
+        if (!localConversationActive) {
+            beginLocalConversation()
+            return
+        }
+        if (commandBusy || outputUtterance.isNotEmpty()) return
+        if (RealtimeVoiceService.status == "listening" ||
+            RealtimeVoiceService.status == "connecting") {
+            endLocalConversation("Stopped local commands · live voice has the microphone")
+            return
+        }
+        // Each recognition invocation is one Android speech turn, but the
+        // Nexa voice session and permitted tool loop remain open.
+        val recognizer: SpeechRecognizer
+        try { recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(app) }
+        catch (_: Exception) {
+            endLocalConversation("Android on-device speech recognizer unavailable")
+            return
+        }
+        commandRecognizer = recognizer
+        commandBusy = true
+        commandFeedback = null
+        silenceDeadlineMs = SystemClock.elapsedRealtime() + silenceWindowMs
+        handler.removeCallbacks(silenceTimer)
+        handler.postDelayed(silenceTimer, silenceWindowMs)
+        label?.text = "Listening · tell Nexa your next request"
         try {
-            val recognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(app)
-            commandRecognizer = recognizer
-            commandBusy = true
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {}
-                override fun onBeginningOfSpeech() {}
+                override fun onReadyForSpeech(params: Bundle?) {
+                    handler.post { if (commandRecognizer === recognizer)
+                        label?.text = "Listening · speak naturally" }
+                }
+                override fun onBeginningOfSpeech() {
+                    handler.post { if (commandRecognizer === recognizer) {
+                        handler.removeCallbacks(silenceTimer)
+                        label?.text = "Hearing your request…"
+                    } }
+                }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
                 override fun onEndOfSpeech() {}
                 override fun onError(error: Int) {
                     handler.post {
-                        if (commandRecognizer === recognizer) {
-                            cancelDeviceCommand()
-                            feedback("On-device voice command was not recognized.")
+                        if (commandRecognizer !== recognizer) return@post
+                        cancelDeviceCommand()
+                        if (!localConversationActive) return@post
+                        if (error == SpeechRecognizer.ERROR_NO_MATCH ||
+                            error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                            // Silence means close and rearm the offline wake
+                            // detector; do not run an endless mic loop.
+                            endLocalConversation("No further request · Hey Nexa is ready")
+                        } else {
+                            endLocalConversation("Speech recognition stopped · try Hey Nexa again")
                         }
                     }
                 }
@@ -272,10 +405,13 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                     val phrase = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull().orEmpty()
                     handler.post {
-                        if (commandRecognizer === recognizer) {
-                            cancelDeviceCommand()
-                            applyDeviceCommand(phrase)
-                        }
+                        if (commandRecognizer !== recognizer) return@post
+                        cancelDeviceCommand()
+                        handler.removeCallbacks(silenceTimer)
+                        if (!localConversationActive) return@post
+                        if (phrase.isBlank()) {
+                            endLocalConversation("No request heard · Hey Nexa is ready")
+                        } else applyDeviceCommand(phrase)
                     }
                 }
                 override fun onPartialResults(partialResults: Bundle?) {}
@@ -290,29 +426,35 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             handler.postDelayed({
                 if (commandRecognizer === recognizer) {
                     cancelDeviceCommand()
-                    feedback("Voice command timed out.")
+                    endLocalConversation("No further request · Hey Nexa is ready")
                 }
             }, 20000L)
         } catch (_: Exception) {
             cancelDeviceCommand()
-            feedback("Android could not start the on-device recognizer.")
+            endLocalConversation("Android rejected speech recognition · retry Hey Nexa")
         }
     }
+
     private fun applyDeviceCommand(raw: String) {
-        // One deterministic command gate for typed and spoken tool requests.
-        // No AI-generated coordinates or unreviewed external message sends.
         val command = raw.lowercase(Locale.ROOT).trim()
-            .removePrefix("hey nexa ").trim()
-            .trimEnd('.', '!', '?')
+            .removePrefix("hey nexa ").trim().trimEnd('.', '!', '?')
+        if (command in setOf("stop", "stop listening", "that's all", "goodbye",
+                "thank you goodbye", "cancel", "end conversation")) {
+            endLocalConversation("Conversation ended · Hey Nexa is ready")
+            return
+        }
+        localTurnCount++
+        // Native spoken and overlay typed requests share the same restricted
+        // tool gateway. General LLM-generated actions never bypass approval.
         val result = NexaOverlayCommands.handle(app, command)
-        feedback(result)
         if (result.startsWith("Launcher search started") ||
             result.contains("launch requested") ||
             result.startsWith("Android settings opened") ||
             result.startsWith("WhatsApp review opened")) {
-            // An Intent request is NOT evidence of a completed action.
-            hide()
-        }
+            localConversationActive = false
+            feedback(result)
+            handler.postDelayed({ hide() }, 900L)
+        } else replyAndListen(result)
     }
 
     private fun startOwnerVoice() {
