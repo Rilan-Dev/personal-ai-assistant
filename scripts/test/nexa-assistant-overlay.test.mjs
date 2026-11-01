@@ -56,5 +56,8 @@ test('overlay permission appears independently from default-assistant gesture',(
 });
 test('custom wake-word is explicitly not claimed as enabled',()=>{
   assert.match(role,/putBoolean\("wakeWordReady", NexaWakeWordModule\.modelReady\(context\)\)/);
-  assert.doesNotMatch(service,/HotwordDetector|RecognitionService|RECORD_AUDIO/);
+  // Overlay may check RECORD_AUDIO permission before an explicit owner tap,
+  // but must not itself contain a microphone recorder or speech recognizer.
+  assert.match(service,/Manifest\\.permission\\.RECORD_AUDIO/);
+  assert.doesNotMatch(service,/HotwordDetector|SpeechRecognizer|AudioRecord|MediaRecorder|Recognizer\\(/);
 });
