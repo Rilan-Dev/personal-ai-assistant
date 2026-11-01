@@ -92,7 +92,7 @@ class NexaWakeWordService : Service() {
          */
         fun liveMicReleased(): Boolean {
             val wake = active ?: return true
-            return !wake.listening && !wake.audioReleasing && wake.audio == null
+            return !listening && !wake.audioReleasing && wake.audio == null
         }
 
         // A legacy wake_enabled flag alone must not restart continuous microphone
