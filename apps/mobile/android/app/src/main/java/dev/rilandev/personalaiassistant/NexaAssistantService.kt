@@ -98,6 +98,7 @@ class NexaVoiceSessionService : VoiceInteractionSessionService() {
 internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSession(app) {
     private val handler = Handler(Looper.getMainLooper())
     private var label: TextView? = null
+    private var approvalRow: LinearLayout? = null
     private var commandRecognizer: SpeechRecognizer? = null
     private var commandBusy = false
     private var commandFeedback: String? = null
@@ -127,7 +128,10 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private var feedbackUntil = 0L
     private val refresh = object : Runnable {
         override fun run() {
-            label?.text = if (commandBusy) "Listening · tell me what to do…" else if
+            approvalRow?.visibility =
+                if (RealtimeVoiceService.pendingApprovalSummary != null) View.VISIBLE else View.GONE
+            label?.text = if (RealtimeVoiceService.pendingApprovalSummary != null)
+                RealtimeVoiceService.pendingApprovalSummary else if (commandBusy) "Listening · tell me what to do…" else if
                 (commandFeedback != null && SystemClock.elapsedRealtime() < feedbackUntil)
                 commandFeedback else if (localConversationActive)
                 "Nexa ready for your next command" else when (RealtimeVoiceService.status) {
@@ -204,6 +208,24 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                 } catch (_: Exception) { label?.text = "Unable to open Nexa" }
             }
         ))
+        approvalRow = row(
+            button("Approve app") {
+                try {
+                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_APPROVE_TOOL
+                    })
+                } catch (_: Exception) { feedback("Android blocked action approval") }
+            },
+            button("Deny") {
+                try {
+                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_DENY_TOOL
+                    })
+                } catch (_: Exception) { feedback("Could not reject pending action") }
+            }
+        )
+        approvalRow?.visibility = View.GONE
+        approvalRow?.let { panel.addView(it) }
         return panel
     }
 
@@ -492,6 +514,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         localConversationActive = false
         liveEverActive = false
         outputUtterance = ""
+        approvalRow?.visibility = View.GONE
         handler.removeCallbacks(silenceTimer)
         handler.removeCallbacks(refresh)
         handler.removeCallbacks(autoHide)
@@ -572,6 +595,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
         label = null
+        approvalRow = null
         super.onDestroy()
     }
 }
