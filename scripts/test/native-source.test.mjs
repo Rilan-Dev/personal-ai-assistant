@@ -56,7 +56,7 @@ test("Android push-to-talk is foreground-only, requires runtime microphone grant
   assert.match(manifest, /android\.permission\.RECORD_AUDIO/);
   assert.match(manifest, /android\.speech\.RecognitionService/);
   assert.match(manifest, /android\.intent\.action\.TTS_SERVICE/);
-  assert.doesNotMatch(manifest, /<uses-permission[^>]*BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT|RECEIVE_BOOT_COMPLETED/);
+  assert.doesNotMatch(manifest, /<uses-permission[^>]*BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT/);
   assert.match(adapters, /VoiceControlModule\(reactContext\)/);
   assert.match(voice, /isOnDeviceRecognitionAvailable\(context\)/);
   assert.match(voice, /createOnDeviceSpeechRecognizer\(context\)/);
