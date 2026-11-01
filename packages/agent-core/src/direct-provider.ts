@@ -112,6 +112,13 @@ export function createDirectProviderPlanner(options: DirectProviderOptions): Pla
       // Once Android has acted, do not let the LLM invent the outcome.
       if (observations.length > 0) return androidIntentPlanner.next(request, observations, signal);
       if (signal?.aborted) throw new Error("CANCELLED");
+      // Battery/device-status reads must not depend on the provider guessing
+      // a matching tool for a precise, safe, owner-requested read. Never
+      // dispatch any side-effecting tool through this deterministic route.
+      for (const id of ["device.battery_status", "device.status"] as const) {
+        if (allowed.has(id) && requestAllowsNativeTool(request, id, {}))
+          return {type:"tool",call:{callId:"direct-1",toolId:id,input:{}}};
+      }
       if (request.length < 1 || request.length > 2000) throw new Error("INVALID_REQUEST");
       const controller = new AbortController();
       const onAbort = () => controller.abort();
