@@ -110,9 +110,16 @@ export default function App() {
   // saved opt-in. Never auto-launch a microphone from boot receiver.
   useEffect(()=>{
     if (!engine.live || !wakeWordAvailable()) return;
-    void resumeWakeIfEnabled().then(()=>refreshWakeStatus()).catch(()=>{
-      // Android retains final authority over microphone foreground access.
+    const resume = () => {
+      void resumeWakeIfEnabled().then(()=>refreshWakeStatus()).catch(()=>{
+        // Android retains final authority over microphone foreground access.
+      });
+    };
+    resume();
+    const subscription=AppState.addEventListener('change',state=>{
+      if(state==='active') resume();
     });
+    return ()=>subscription.remove();
   },[engine.live]);
   const prepareWakeListening = async () => {
     if (wakeBusy) return;
