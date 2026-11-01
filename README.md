@@ -159,3 +159,19 @@ may perform speech recognition and retain call data on its servers.
 
 For provider setup, protocol, source validation and acceptance
 limitations, see docs/architecture/SARVAM_AI_INTEGRATION.md.
+
+### On-demand private Android tools
+
+On Android, **Tools → Private, one-time observations** lets the
+signed-in phone owner select a single phone contact through the system
+contact picker or read an approximate current location. The app does
+not request bulk READ_CONTACTS, ACCESS_FINE_LOCATION, or background
+location permission. It uses Android's temporary selected-contact
+URI grant and the foreground ACCESS_COARSE_LOCATION permission only.
+
+Results are previewed locally, automatically cleared when leaving
+Tools or after 60 seconds, and are never sent to an AI provider until
+the owner explicitly inserts them into Chat and sends that message.
+The one-time location API is available on Android 11 or later.
+Neither a voice agent nor an LLM can call these privacy-sensitive
+tools automatically.
