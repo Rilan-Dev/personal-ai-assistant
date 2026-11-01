@@ -3,6 +3,8 @@ package dev.rilandev.personalaiassistant
 import android.Manifest
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -37,6 +39,21 @@ class NexaAssistantAndroidTest {
         block(callback)
         assertTrue(latch.await(5, TimeUnit.SECONDS))
         return Pair(value.get(), error.get())
+    }
+
+    @Test fun voiceShortcutResolvesToMainActivityWithoutMicrophoneService() {
+        val pm = app.packageManager
+        val main = ComponentName(app, MainActivity::class.java)
+        @Suppress("DEPRECATION")
+        val info = pm.getActivityInfo(main, PackageManager.GET_META_DATA)
+        assertTrue((info.metaData?.getInt("android.app.shortcuts") ?: 0) != 0)
+        // Deep links can only open the visible app's Voice screen.
+        // The shortcut cannot launch NexaWakeWordService or RealtimeVoiceService.
+        val intent = Intent(Intent.ACTION_VIEW,
+            Uri.parse("nexa://voice")).setPackage(app.packageName)
+        @Suppress("DEPRECATION")
+        val found = pm.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+        assertTrue(found.any { it.activityInfo.name == MainActivity::class.java.name })
     }
 
     @Test fun assistantServiceIsSystemBoundWithVoiceMetadata() {
