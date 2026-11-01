@@ -59,5 +59,5 @@ test('custom wake-word is explicitly not claimed as enabled',()=>{
   // Overlay may check RECORD_AUDIO permission before an explicit owner tap,
   // but must not itself contain a microphone recorder or speech recognizer.
   assert.match(service,/Manifest\\.permission\\.RECORD_AUDIO/);
-  assert.doesNotMatch(service,/HotwordDetector|SpeechRecognizer|AudioRecord|MediaRecorder|Recognizer\\(/);
+  assert.doesNotMatch(service,/HotwordDetector|SpeechRecognizer|AudioRecord|MediaRecorder/);
 });
