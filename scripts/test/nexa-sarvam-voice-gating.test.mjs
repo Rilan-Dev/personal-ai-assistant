@@ -35,3 +35,16 @@ test('Hey Nexa is wake-only and cannot silently revert to local speech commands'
   assert.doesNotMatch(wake,/switching to offline commands/);
   assert.match(wake,/Live AI unavailable|Live conversation ended|Voice could not start/);
 });
+
+test('live startup does not contend with wake mic and transport failures stay caught',()=>{
+  const wake=readFileSync(dir+'NexaWakeWordService.kt','utf8');
+  assert.match(wake,/fun liveMicReleased\(\): Boolean/);
+  assert.match(wake,/audioReleasing = true/);
+  assert.match(wake,/audioReleasing = false/);
+  assert.match(realtime,/if \(!NexaWakeWordService\.liveMicReleased\(\)\)/);
+  assert.match(realtime,/main\.postDelayed\(\{ startAudio\(\) \},100L\)/);
+  assert.match(realtime,/micReleaseRetries > 20/);
+  assert.match(transport,/catch \(_:\s*Exception\) \{ false \}/);
+  assert.match(transport,/Sarvam authorization response could not be processed/);
+  assert.match(transport,/Sarvam session event could not be processed/);
+});
