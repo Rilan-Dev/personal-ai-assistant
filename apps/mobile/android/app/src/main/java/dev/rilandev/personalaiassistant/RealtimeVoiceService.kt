@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -103,6 +104,15 @@ class RealtimeVoiceService : Service() {
     // the server VAD never hears the owner interrupting (broken barge-in).
     @Volatile private var interruptedResponse = false
     private val maxSession = Runnable { stopWithStatus("stopped","15-minute session limit reached") }
+    private val idleGate = NexaVoiceIdleGate()
+    private val idleCheck = object : Runnable {
+        override fun run() {
+            if (!active.get() || status != "listening") return
+            if (idleGate.inactive(SystemClock.elapsedRealtime())) {
+                stopWithStatus("stopped", "Conversation idle · say Hey Nexa to start again")
+            } else main.postDelayed(this, 5_000L)
+        }
+    }
     private val handshakeTimeout = Runnable {
         if (active.get() && status=="connecting")
             stopWithStatus("error","Live voice provider did not accept session within 15 seconds")
@@ -179,6 +189,7 @@ class RealtimeVoiceService : Service() {
         lastToolResult = ""
         seenCallIds.clear()
         toolCallsInSession = 0
+        idleGate.reset(0L)
         selectedProvider=credentials.provider
         activeRate=if(selectedProvider=="sarvam")16000 else RATE
         active.set(true)
@@ -196,6 +207,7 @@ class RealtimeVoiceService : Service() {
                         main.post {if(active.get())stopWithStatus("error","Voice playback buffer overloaded")}
                 }
                 override fun interrupted() {
+                    idleGate.reset(SystemClock.elapsedRealtime())
                     interruptSpeakerPlayback()
                 }
                 override fun failed(reason:String){
@@ -314,6 +326,7 @@ class RealtimeVoiceService : Service() {
                         interruptedResponse = false
                     }
                     "input_audio_buffer.speech_started" -> {
+                        idleGate.reset(SystemClock.elapsedRealtime())
                         // The owner interrupted playback. Clear stale output
                         // immediately; never play responses after a VAD cancel.
                         interruptedResponse = true
@@ -446,6 +459,9 @@ class RealtimeVoiceService : Service() {
             }
             status = "listening"
             message = "Live speech-to-speech running · Stop in notification"
+            idleGate.reset(SystemClock.elapsedRealtime())
+            main.removeCallbacks(idleCheck)
+            main.postDelayed(idleCheck, 5_000L)
             try {
                 getSystemService(NotificationManager::class.java)
                     .notify(NOTIFICATION_ID,makeNotification("Microphone active · Tap Stop to end"))
@@ -469,6 +485,9 @@ class RealtimeVoiceService : Service() {
                     val got = try { recorder?.read(data,0,data.size) ?: break }
                         catch (_: Exception) { break }
                     if (got>0 && active.get()) {
+                        // This local amplitude check never uploads audio by
+                        // itself; the provider's consent rules still apply.
+                        idleGate.observePcm(data, got, SystemClock.elapsedRealtime())
                         // Serialize state changes with the transmit boundary:
                         // after a mute action is applied, no new raw PCM
                         // frames can enter the provider's outgoing queue.
@@ -509,6 +528,7 @@ class RealtimeVoiceService : Service() {
         status=state
         message=reason
         main.removeCallbacks(maxSession)
+        main.removeCallbacks(idleCheck)
         main.removeCallbacks(handshakeTimeout)
         try { recorder?.stop() } catch (_: Exception) {}
         try { recorder?.release() } catch (_: Exception) {}
