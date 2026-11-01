@@ -85,6 +85,13 @@ class NexaWakeWordService : Service() {
         fun resumeAfterLiveVoice() {
             active?.liveVoiceOwnsMic = false
         }
+        /** A voice provider may start audio only after wake AudioRecord has
+         * been completely stopped/released, including on slower OEM devices.
+         */
+        fun liveMicReleased(): Boolean {
+            val wake = active ?: return true
+            return !wake.listening && !wake.audioReleasing && wake.audio == null
+        }
 
         // A legacy wake_enabled flag alone must not restart continuous microphone
         // capture after an APK upgrade. Version 2 requires a fresh user opt-in.
@@ -112,6 +119,7 @@ class NexaWakeWordService : Service() {
     @Volatile private var assistantSessionVisible = false
     @Volatile private var handoffStartedAt = 0L
     @Volatile private var audio: AudioRecord? = null
+    @Volatile private var audioReleasing = false
     private var worker: Thread? = null
     private val ui = Handler(Looper.getMainLooper())
     private var fallbackOverlay: NexaWakeFallbackOverlay? = null
@@ -327,10 +335,15 @@ class NexaWakeWordService : Service() {
     }
 
     private fun releaseAudio() {
-        val current = audio
-        audio = null
-        try { current?.stop() } catch (_: Exception) {}
-        try { current?.release() } catch (_: Exception) {}
+        audioReleasing = true
+        try {
+            val current = audio
+            audio = null
+            try { current?.stop() } catch (_: Exception) {}
+            try { current?.release() } catch (_: Exception) {}
+        } finally {
+            audioReleasing = false
+        }
     }
 
     override fun onDestroy() {
