@@ -68,6 +68,18 @@ class NexaAssistantAndroidTest {
         assertTrue(status.hasKey("available"))
     }
 
+    @Test fun liveVoiceOnInvocationCannotBeEnabledWithoutVisibleUserAction() {
+        val setup = NexaSetupModule(BridgeReactContext(app))
+        val status = invoke { setup.getSetupStatus(it) }
+        assertNull(status.second)
+        val data = status.first as ReadableMap
+        assertTrue(data.hasKey("autoStartVoiceOnInvocation"))
+        // A non-UI context must not enroll cloud voice or start microphone.
+        val denied = invoke { setup.setAutoStartVoiceOnInvocation(true, it) }
+        assertNull(denied.first)
+        assertEquals("NOT_FOREGROUND", denied.second)
+    }
+
     @Test fun packageAvailabilityNeverClaimsHomeScreenLocation() {
         val result = invoke {
             DeviceControlModule(BridgeReactContext(app)).checkSupportedApp("github", it)
