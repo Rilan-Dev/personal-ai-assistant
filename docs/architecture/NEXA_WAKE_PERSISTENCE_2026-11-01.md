@@ -95,3 +95,13 @@ enrolled and enabled detector, and device-specific evidence. Provider-backed
 chat inside the overlay and arbitrary phone-wide AI control are separate
 features and not silently enabled. The source implementation's behavior
 must still be verified on the actual phone.
+
+## One-shot assistant dismissal
+
+If the wake detector invokes the compact Android voice session, Nexa starts a
+bounded on-device speech turn and displays the result. After approximately
+6.5 seconds of feedback it automatically dismisses the session, unless another
+spoken command is currently active. `onHide` clears the microphone handoff
+flag so the existing owner-armed wake foreground service resumes recording
+locally. The same behavior applies to the explicitly tapped Talk action.
+Users can always dismiss immediately or turn off wake listening.
