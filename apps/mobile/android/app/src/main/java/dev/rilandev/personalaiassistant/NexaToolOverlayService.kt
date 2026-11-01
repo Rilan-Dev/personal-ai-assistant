@@ -142,8 +142,9 @@ class NexaToolOverlayService : Service() {
 
     private fun stopWake() {
         try {
-            startService(Intent(this,NexaWakeWordService::class.java).setAction(NexaWakeWordService.STOP))
-            note = "Hey Nexa disabled; persistent preference cleared"
+            NexaWakeWordService.persistEnabled(this, false)
+            stopService(Intent(this, NexaWakeWordService::class.java))
+            note = "Hey Nexa disabled; saved preference cleared"
         } catch (_: Exception) { note = "Android rejected stop · use notification Stop" }
         render()
     }
