@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.BatteryManager
 import android.os.Build
+import android.os.PowerManager
+import android.net.Uri
 import android.provider.Settings
 import java.util.Locale
 
@@ -39,6 +41,11 @@ internal object NexaOverlayCommands {
         val notifications = Build.VERSION.SDK_INT < 33 ||
             context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
+        val power = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val batteryPolicy = if (Build.VERSION.SDK_INT >= 23 && power != null)
+            if (power.isIgnoringBatteryOptimizations(context.packageName)) "exempted by user"
+            else "Android-managed"
+        else "unknown"
         val (launcher, swipes) = LauncherNavigationState.status()
         return "Overlay: " + (if (Settings.canDrawOverlays(context)) "allowed" else "disabled") +
             " · Assistant: " + (if (assistant) "selected" else "not selected") +
@@ -47,7 +54,8 @@ internal object NexaOverlayCommands {
             "\nHey Nexa model: " + (if (NexaWakeWordModule.modelReady(context)) "ready" else "not installed") +
             " · Wake listener: " + NexaWakeWordService.state +
             "\nLive voice: " + RealtimeVoiceService.status +
-            " · Launcher: $launcher ($swipes swipes)"
+            " · Launcher: $launcher ($swipes swipes)" +
+            "\nBattery background policy: $batteryPolicy"
     }
 
     fun handle(context: Context, raw: String): String {
@@ -81,6 +89,11 @@ internal object NexaOverlayCommands {
                 launch(context, "com.whatsapp.w4b", "WhatsApp Business")
             "find github", "find github app", "find my github app", "launcher search" ->
                 findGitHubOnHome(context)
+            "app settings", "open app settings", "privacy settings" ->
+                openSettings(context,Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.parse("package:" + context.packageName)))
+            "battery settings", "background settings", "battery optimization settings" ->
+                openSettings(context,Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
             "launcher status", "where is github" -> {
                 val (state, swipes) = LauncherNavigationState.status()
                 "Launcher search: $state · $swipes swipes. Home-screen page is not verified."
@@ -92,6 +105,14 @@ internal object NexaOverlayCommands {
                 "AI chat remains available in the full Nexa app."
         }
     }
+
+    private fun openSettings(context: Context, intent: Intent): String =
+        try {
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "Android settings opened. Only you can change system permissions."
+        } catch (_: Exception) {
+            "This phone blocked the requested Android Settings screen"
+        }
 
     private fun findGitHubOnHome(context: Context): String {
         if (!installed(context, "com.github.android")) return "GitHub is not installed"
