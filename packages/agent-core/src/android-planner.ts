@@ -1,6 +1,6 @@
 import type { Planner } from "./runtime.ts";
 import type { ToolCall } from "../../agent-contracts/src/index.ts";
-import { parseFlashlightIntent } from "../../agent-contracts/src/intent-policy.ts";
+import { parseNativeOwnerIntent } from "../../agent-contracts/src/intent-policy.ts";
 
 /**
  * Deterministic first native-command planner. Deliberately NOT an LLM:
@@ -48,28 +48,10 @@ export const androidIntentPlanner: Planner = {
       }
       return { type: "clarify", question: "The action returned an unexpected result; no additional action was taken." };
     }
-    const input = request.toLowerCase().trim()
-      .replace(/^hey\s+(nexa|assistant)[,!]?\s+/, "")
-      .replace(/[.!?]+$/, "").trim();
-    let call: ToolCall | null = null;
-    if (input === "test approval") {
-      call = { callId: "native-1", toolId: "demo.approval_test", input: {} };
-    } else if (parseFlashlightIntent(input) !== null) {
-      call = { callId: "native-1", toolId: "device.set_flashlight",
-        input: { enabled: parseFlashlightIntent(input) } };
-    } else if (/^(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?battery(?: level| status)?$/.test(input)) {
-      call = { callId: "native-1", toolId: "device.battery_status", input: {} };
-    } else if (/^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(input)) {
-      call = { callId: "native-1", toolId: "device.status", input: {} };
-    } else {
-      const match = input.match(/^(?:please )?(?:open|launch|start) (?:my |the )?(camera|whatsapp business|whatsapp)(?: please)?$/);
-      if (match) {
-        const target = match[1];
-        call = target === "camera"
-          ? { callId: "native-1", toolId: "device.open_camera", input: {} }
-          : { callId: "native-1", toolId: "device.open_app", input: { app: target === "whatsapp business" ? "whatsapp-business" : "whatsapp" } };
-      }
-    }
+    const ownerIntent = parseNativeOwnerIntent(request);
+    const call: ToolCall | null = request.trim().toLowerCase() === "test approval"
+      ? {callId:"native-1",toolId:"demo.approval_test",input:{}}
+      : ownerIntent ? {callId:"native-1",...ownerIntent} : null;
     if (call) return { type: "tool", call };
     return {
       type: "clarify",
