@@ -323,3 +323,15 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Confirm ambiguous/unquoted or chained requests do not create draft state.
 - Test contact picker, international +country-code validation, WhatsApp handler
   and user-driven send on a physical device. Do not simulate third-party delivery.
+
+## Android setup UI and update installation acceptance
+- Verify CI Android emulator compilation + instrumentation and signed release
+  artifact for exact change commit. Source-only success is insufficient.
+- Check installed app title, versionCode, BuildConfig source Git revision on
+  owner phone; preserve encrypted API keys before considering uninstall.
+- Confirm current APK and new APK signer SHA256 match to update in place;
+  if temporary signers differ, use an owner-controlled persistent signer for
+  subsequent releases. Never ship or reveal keystore/password through chat.
+- Physically test all seven Setup actions, Android Settings return, revoked
+  runtime grants, separate Accessibility enablements, one-time contact/location,
+  skip/reopen flow, and OEM-specific gesture/permission experience.

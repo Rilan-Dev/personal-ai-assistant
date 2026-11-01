@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const app=readFileSync('apps/mobile/App.tsx','utf8');
 
-test('mobile navigation has four real independent tab screens',()=>{
-  assert.match(app,/useState<'chat'\|'voice'\|'tools'\|'settings'>\('chat'\)/);
-  for(const id of ['chat','voice','tools','settings']) {
+test('mobile navigation has five real independent tab screens including permission setup',()=>{
+  assert.match(app,/useState<'chat'\|'voice'\|'tools'\|'setup'\|'settings'>\(engine\.live\?'setup':'chat'\)/);
+  for(const id of ['chat','voice','tools','setup','settings']) {
     assert.match(app,new RegExp("tab === '"+id+"'"));
     assert.match(app,new RegExp("id:'"+id+"'"));
   }

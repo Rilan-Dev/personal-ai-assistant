@@ -601,3 +601,20 @@
   alias such as Mom remains a hint, never an inferred WhatsApp recipient.
 - User still chooses the single contact in Android picker and taps Send in
   WhatsApp. No background contact scans, LLM tool sends, or delivery claims.
+
+## 2026-11-01 — Android setup UX and stale-install diagnosis
+- Compared a supplied screenshot containing the old Personal AI Assistant
+  all-in-one UI with current four-tab Nexa UI. No source rollback detected.
+- Diagnosed workflow signing fallback: temporary test certificate per run makes
+  in-place Android upgrades impossible without the same signer. Independent
+  workflow run numbers could also lower the Android versionCode.
+- Built new first-run Nexa Setup tab, skip/continue, native local acknowledgement,
+  OS permission readback and AppState resume refresh, real system grants, provider
+  configuration and independent Accessibility setup. No auto-grants or hidden mic.
+- Added Android installed version, code and exact source revision diagnostics;
+  both release workflows use a comparable timestamp-based versionCode and embed
+  the commit; release artifact records the signer fingerprint for comparison.
+- Tests: source UI permission and workflow checks, Kotlin instrumentation suite,
+  TypeScript, web export and Android release workflow gates.
+- See docs/architecture/NEXA_UI_PERMISSIONS_RELEASE.md for install safety,
+  stable signing requirement and physical phone acceptance.

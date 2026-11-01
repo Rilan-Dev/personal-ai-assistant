@@ -197,3 +197,14 @@ the owner explicitly inserts them into Chat and sends that message.
 The one-time location API is available on Android 11 or later.
 Neither a voice agent nor an LLM can call these privacy-sensitive
 tools automatically.
+
+### Nexa first-run setup and Android update diagnosis
+The mobile app now has a dedicated **Setup** tab with real Android permission
+status, individual owner-initiated permission actions, a skip path, Settings
+shortcut and installed version/source-revision diagnostics. See
+[UI and permission acceptance](docs/architecture/NEXA_UI_PERMISSIONS_RELEASE.md).
+The GitHub release workflows produce a test APK, not an auto-updating Play Store
+release. A per-run temporary signer cannot update a previously installed APK
+signed with a different certificate. Prefer the same persistent owner-managed
+signer for installation continuity; back up stored credentials before any
+uninstall. The app never auto-grants Android permissions.

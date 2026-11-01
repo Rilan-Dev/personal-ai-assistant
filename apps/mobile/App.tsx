@@ -18,6 +18,10 @@ import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
 import type { NexaAssistantRoleStatus } from './src/native/androidAssistantRole';
+import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaAppSettings,
+  requestApproximateLocationSetup} from './src/native/nexaSetup';
+import type {NexaSetupStatus} from './src/native/nexaSetup';
+import NexaSetupScreen from './src/components/NexaSetupScreen';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
@@ -46,10 +50,10 @@ const makeEngine = () => {
 
 export default function App() {
   const engine = useMemo(makeEngine, []);
-  const [tab, setTab] = useState<'chat'|'voice'|'tools'|'settings'>('chat');
+  const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
-  const navigate=(destination:'chat'|'voice'|'tools'|'settings')=>{
+  const navigate=(destination:'chat'|'voice'|'tools'|'setup'|'settings')=>{
     Keyboard.dismiss();
     setTab(destination);
   };
@@ -79,6 +83,39 @@ export default function App() {
   const [tileNotice, setTileNotice] = useState('');
   const [assistantRole, setAssistantRole] = useState<NexaAssistantRoleStatus>({available:false,selected:false,wakeWordReady:false});
   const [assistantRoleNotice, setAssistantRoleNotice] = useState('');
+  const [setupStatus, setSetupStatus] = useState<NexaSetupStatus|null>(null);
+  const [setupBusy, setSetupBusy] = useState(false);
+  const [setupNotice, setSetupNotice] = useState('');
+  const refreshSetupStatus = async () => {
+    if (!engine.live || !nexaSetupAvailable()) {
+      setSetupNotice('This installed APK is missing the new permission center. Install the latest signed Nexa build.');
+      return;
+    }
+    try {
+      setSetupStatus(await readNexaSetupStatus());
+    } catch {
+      setSetupNotice('Android permission status could not be refreshed. Open Android App settings or retry.');
+    }
+  };
+  useEffect(() => {
+    if (!engine.live) return;
+    if (!nexaSetupAvailable()) {
+      setSetupNotice('This installed APK is missing the Nexa setup module. Install the updated Android APK.');
+      return;
+    }
+    let mounted=true;
+    readNexaSetupStatus().then(status=>{
+      if (!mounted) return;
+      setSetupStatus(status);
+      if (status.setupAcknowledged) setTab(prev=>prev==='setup'?'chat':prev);
+    }).catch(()=>{
+      if (mounted) setSetupNotice('Android permission center is unavailable. You can still use basic Chat.');
+    });
+    const subscription=AppState.addEventListener('change',state=>{
+      if (state==='active') void refreshSetupStatus();
+    });
+    return ()=>{mounted=false;subscription.remove();};
+  },[engine.live]);
   const [nexaPermissionBusy, setNexaPermissionBusy] = useState(false);
   const [githubStatus, setGithubStatus] = useState<AppAvailability | null>(null);
   const [githubNotice, setGithubNotice] = useState('');
@@ -770,6 +807,31 @@ export default function App() {
       append('assistant', 'Approval declined. Task cancelled without execution.');
     } catch { append('assistant', 'Could not persist cancellation; action remains unapproved.'); }
   };
+  const runSetupAction = async (label:string, action:()=>Promise<unknown>) => {
+    if (setupBusy || running) return;
+    setSetupBusy(true); setSetupNotice('');
+    try {
+      await action();
+      setSetupNotice(label+' requested. Check the actual Android state below; not all requests are automatically granted.');
+    } catch {
+      setSetupNotice(label+' could not be completed. Android may require you to change the permission manually in App settings.');
+    } finally {
+      setSetupBusy(false);
+      void refreshSetupStatus();
+    }
+  };
+  const finishSetup = async () => {
+    if (!nexaSetupAvailable()) { setTab('chat'); return; }
+    if (setupBusy) return;
+    setSetupBusy(true);
+    try {
+      await acknowledgeNexaSetup();
+      await refreshSetupStatus();
+      setTab('chat');
+    } catch {
+      setSetupNotice('Could not save the on-device setup preference. Please try again.');
+    } finally {setSetupBusy(false);}
+  };
   return (
     <SafeAreaView style={styles.root} edges={["top","bottom","left","right"]}>
       <StatusBar barStyle="light-content"/>
@@ -777,12 +839,12 @@ export default function App() {
         <View style={styles.brandIcon}><Text style={styles.brandInitial}>✦</Text></View>
         <View style={styles.brandText}>
           <Text style={styles.brandTitle}>
-            {tab === 'chat' ? 'Assistant' : tab === 'voice' ? 'Voice studio' : tab === 'tools' ? 'Device controls' : 'Settings'}
+            {tab === 'chat' ? 'Nexa AI' : tab === 'voice' ? 'Nexa · Voice' : tab === 'tools' ? 'Nexa · Tools' : tab === 'setup' ? 'Nexa · Setup' : 'Nexa · Settings'}
           </Text>
           <Text style={styles.brandSubtitle}>
             {tab === 'chat'
               ? remoteActive ? 'LangGraph connected' : activeProvider ? PROVIDERS[activeProvider.provider].label + ' · ' + activeProvider.model : 'Private local assistant'
-              : tab === 'voice' ? 'Talk naturally, stay in control' : tab === 'tools' ? 'Explicit permissions only' : 'Your AI, privacy and preferences'}
+              : tab === 'voice' ? 'Speak, listen, stay in control' : tab === 'tools' ? 'Device actions and one-time grants' : tab === 'setup' ? 'Permissions you control' : 'Your privacy and preferences'}
           </Text>
         </View>
         {tab === 'chat' ?
@@ -793,6 +855,19 @@ export default function App() {
           : <View style={styles.headerStatus}><View style={[styles.statusDot, engine.live ? styles.statusDotOn : null]}/><Text style={styles.statusLabel}>{engine.live ? 'Android' : 'Demo'}</Text></View>}
       </View>
 
+      {tab === 'setup' && <NexaSetupScreen
+        status={setupStatus} busy={setupBusy} notice={setupNotice}
+        providerReady={Boolean(activeProvider)}
+        onVoice={()=>void runSetupAction('Voice permission',prepareNexaPermissions)}
+        onAssistant={()=>void runSetupAction('Default assistant role',selectNexaAssistant)}
+        onAccessibility={()=>void runSetupAction('Accessibility settings',openScreenSettings)}
+        onCamera={()=>void runSetupAction('Camera permission',grantFlashlightAccess)}
+        onLocation={()=>void runSetupAction('Approximate location',requestApproximateLocationSetup)}
+        onProvider={()=>{setShowProvider(true);setTab('settings');}}
+        onAppSettings={()=>void runSetupAction('Android app settings',openNexaAppSettings)}
+        onRefresh={()=>void refreshSetupStatus()}
+        onFinish={()=>void finishSetup()}
+      />}
       {tab === 'chat' && <>
         <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}
           ref={chatScroll} onContentSizeChange={() => chatScroll.current?.scrollToEnd({animated: true})}
@@ -1137,6 +1212,14 @@ export default function App() {
 
       {tab === 'settings' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Preferences</Text><Text style={styles.pageSubtitle}>Manage AI connections and privacy.</Text></View>
+        <View style={styles.setupShortcut}>
+          <View style={styles.setupShortcutText}>
+            <Text style={styles.setupShortcutHeading}>Permission setup</Text>
+            <Text style={styles.setupShortcutDetail}>Review real Android grants, assistant role, accessibility services and installed build.</Text>
+          </View>
+          <Pressable style={styles.setupShortcutButton} accessibilityRole="button"
+            onPress={()=>navigate('setup')}><Text style={styles.setupShortcutButtonText}>Open setup  →</Text></Pressable>
+        </View>
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
             <Text style={styles.cardHeading}>AI provider</Text>
@@ -1260,15 +1343,18 @@ export default function App() {
           </View><Text style={styles.sectionTag}>{screenAssistEnabled?'Enabled':'Off'}</Text></View>
         </View>
         <View style={styles.sectionCard}><Text style={styles.cardHeading}>About this build</Text>
-          <Text style={styles.cardText}>Personal AI Assistant · Android prototype</Text>
+          <Text style={styles.cardText}>Nexa AI · Android</Text>
+          <Text style={styles.settingHelp}>Installed app {setupStatus?.versionName??'unknown'} · version code {setupStatus?.versionCode??'—'} · source {setupStatus?.sourceRevision?.slice(0,10)??'unverified'}</Text>
+          <Text style={styles.settingHelp}>If this source revision differs from the release you downloaded, you are running an older APK. Android rejects an update signed by a different certificate; do not uninstall without backing up your saved configuration.</Text>
           <Text style={styles.settingHelp}>Your AI credentials stay encrypted on-device. Tool approvals are separate from OS permissions.</Text>
         </View>
       </ScrollView>}
 
       <View style={styles.bottomNav}>
-        {([{id:'chat',glyph:'◇',label:'Chat'},
-           {id:'voice',glyph:'◎',label:'Voice'},
+        {([{id:'chat',glyph:'✦',label:'Chat'},
+           {id:'voice',glyph:'◉',label:'Voice'},
            {id:'tools',glyph:'▦',label:'Tools'},
+           {id:'setup',glyph:'✓',label:'Setup'},
            {id:'settings',glyph:'⚙',label:'Settings'}] as const).map(item=>
           <Pressable key={item.id} accessibilityRole="tab"
             accessibilityState={{selected:tab===item.id}}
@@ -1285,8 +1371,8 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root:{flex:1,backgroundColor:'#0B1020'},
-  topBar:{height:72,paddingHorizontal:20,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:1,borderColor:'#20293D',backgroundColor:'#0E1527'},
-  brandIcon:{width:40,height:40,backgroundColor:'#4F46E5',borderRadius:14,justifyContent:'center',alignItems:'center'},
+  topBar:{minHeight:72,paddingHorizontal:18,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:1,borderColor:'#263250',backgroundColor:'#10162A'},
+  brandIcon:{width:42,height:42,backgroundColor:'#5658D9',borderRadius:14,justifyContent:'center',alignItems:'center'},
   brandInitial:{fontFamily:'sans-serif',fontSize:25,fontWeight:'700',color:'#FFF'},
   brandText:{flex:1,minWidth:0},
   brandTitle:{fontFamily:'sans-serif',color:'#F8FAFC',fontSize:19,fontWeight:'700',letterSpacing:-.3},
@@ -1332,15 +1418,15 @@ const styles = StyleSheet.create({
   composerSend:{width:42,height:42,borderRadius:16,backgroundColor:'#6366F1',justifyContent:'center',alignItems:'center'},
   composerSendText:{fontFamily:'sans-serif',fontSize:23,color:'#FFF',fontWeight:'700'},
   composerNote:{fontFamily:'sans-serif',textAlign:'center',color:'#65748D',fontSize:10,marginTop:8},
-  bottomNav:{height:66,flexDirection:'row',backgroundColor:'#10192B',borderTopWidth:1,borderColor:'#25324B',paddingHorizontal:7},
-  tabButton:{flex:1,alignItems:'center',justifyContent:'center',gap:4,borderRadius:14,marginVertical:6},
+  bottomNav:{minHeight:70,flexDirection:'row',backgroundColor:'#11182C',borderTopWidth:1,borderColor:'#283554',paddingHorizontal:5},
+  tabButton:{flex:1,alignItems:'center',justifyContent:'center',gap:4,borderRadius:13,marginVertical:6,minHeight:52},
   tabButtonActive:{backgroundColor:'#232A54'},
   tabGlyph:{fontFamily:'sans-serif',fontSize:21,color:'#8391AD'},tabGlyphActive:{color:'#A5B4FC'},
-  tabLabel:{fontFamily:'sans-serif',fontSize:11,color:'#8391AD',fontWeight:'600'},tabLabelActive:{color:'#D7DDFF'},
+  tabLabel:{fontFamily:'sans-serif',fontSize:10,color:'#A5B0C9',fontWeight:'600'},tabLabelActive:{color:'#E1E6FF'},
   pageScroll:{flex:1},pageContent:{paddingHorizontal:18,paddingTop:24,paddingBottom:38,gap:17},
   pageIntro:{marginBottom:3},pageHeadline:{fontFamily:'sans-serif',fontSize:23,fontWeight:'700',color:'#F5F7FF'},
   pageSubtitle:{fontFamily:'sans-serif',fontSize:13,color:'#9AA9C4',lineHeight:20,marginTop:6},
-  sectionCard:{backgroundColor:'#151E31',borderRadius:20,borderWidth:1,borderColor:'#27364E',padding:18,gap:12},
+  sectionCard:{backgroundColor:'#151E32',borderRadius:19,borderWidth:1,borderColor:'#2F3B56',padding:17,gap:13},
   cardHeadingRow:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   cardHeading:{fontFamily:'sans-serif',fontSize:16,color:'#F3F5FF',fontWeight:'700'},
   cardText:{fontFamily:'sans-serif',color:'#A9B8D1',fontSize:13,lineHeight:21},
@@ -1351,7 +1437,7 @@ const styles = StyleSheet.create({
   settingHelp:{fontFamily:'sans-serif',fontSize:12,lineHeight:19,color:'#92A3BF',marginTop:4},
   toggleTrack:{width:46,height:27,backgroundColor:'#3A4860',borderRadius:20,justifyContent:'center',paddingHorizontal:3},
   toggleOn:{backgroundColor:'#5454CD'},toggleThumb:{backgroundColor:'#D8E1F0',width:21,height:21,borderRadius:11},toggleThumbOn:{alignSelf:'flex-end',backgroundColor:'#FFF'},
-  outlineAction:{borderWidth:1,borderColor:'#55678B',paddingVertical:13,borderRadius:14,alignItems:'center',justifyContent:'center'},
+  outlineAction:{borderWidth:1,borderColor:'#5E7096',minHeight:48,paddingVertical:13,paddingHorizontal:12,borderRadius:14,alignItems:'center',justifyContent:'center'},
   outlineActionText:{fontFamily:'sans-serif',fontWeight:'600',color:'#C9D6F1',fontSize:13},
   feedback:{fontFamily:'sans-serif',fontSize:12,lineHeight:19,color:'#B7CAFF',backgroundColor:'#222B4A',padding:12,borderRadius:12},
   groupLabel:{fontFamily:'sans-serif',color:'#9AAAC4',fontWeight:'700',fontSize:12,letterSpacing:.3},
@@ -1359,9 +1445,9 @@ const styles = StyleSheet.create({
   choicePill:{borderRadius:20,paddingVertical:10,paddingHorizontal:13,borderWidth:1,borderColor:'#40516F',backgroundColor:'#1C283E'},
   choiceActive:{backgroundColor:'#353775',borderColor:'#8B91EE'},
   choiceLabel:{fontFamily:'sans-serif',fontSize:12,color:'#E4EBFF',fontWeight:'600'},
-  primaryInline:{backgroundColor:'#4E50C6',borderRadius:12,paddingVertical:12,paddingHorizontal:16,alignItems:'center'},
+  primaryInline:{backgroundColor:'#5658D6',borderRadius:12,paddingVertical:12,paddingHorizontal:16,minHeight:46,alignItems:'center',justifyContent:'center'},
   primaryInlineText:{fontFamily:'sans-serif',color:'#FFF',fontSize:13,fontWeight:'700'},
-  outlineInline:{borderWidth:1,borderColor:'#566485',borderRadius:12,paddingVertical:12,paddingHorizontal:16,alignItems:'center'},
+  outlineInline:{borderWidth:1,borderColor:'#697797',borderRadius:12,paddingVertical:12,paddingHorizontal:16,minHeight:46,alignItems:'center',justifyContent:'center'},
   outlineInlineText:{fontFamily:'sans-serif',color:'#D6DEF2',fontSize:13,fontWeight:'600'},
   settingsExpand:{borderTopWidth:1,borderColor:'#29364F',paddingTop:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
   settingsExpandText:{fontFamily:'sans-serif',color:'#C6D1EA',fontSize:13,fontWeight:'600'},
@@ -1382,5 +1468,11 @@ const styles = StyleSheet.create({
   voiceStopButton:{backgroundColor:'#A43856'},
   voiceBigButtonText:{fontFamily:'sans-serif',color:'#FFF',fontWeight:'700',fontSize:15},
   voiceSecondary:{paddingTop:17},voiceSecondaryText:{fontFamily:'sans-serif',color:'#B8C6F4',fontSize:13,fontWeight:'600'},
-  mutedSmall:{fontFamily:'sans-serif',color:'#8292AF',fontSize:12,lineHeight:18,textAlign:'center'}
+  setupShortcut:{borderRadius:19,backgroundColor:'#20254B',borderColor:'#4C5291',borderWidth:1,padding:17,gap:13},
+  setupShortcutText:{gap:5},
+  setupShortcutHeading:{color:'#F1F3FF',fontSize:17,fontWeight:'700'},
+  setupShortcutDetail:{color:'#B8C3DD',fontSize:12,lineHeight:20},
+  setupShortcutButton:{backgroundColor:'#5658D6',minHeight:46,borderRadius:12,alignItems:'center',justifyContent:'center'},
+  setupShortcutButtonText:{fontSize:13,color:'#fff',fontWeight:'700'},
+  mutedSmall:{fontFamily:'sans-serif',color:'#9BAAC5',fontSize:12,lineHeight:18,textAlign:'center'}
 });

@@ -1,0 +1,51 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=path=>readFileSync(path,'utf8');
+const app=read('apps/mobile/App.tsx');
+const setup=read('apps/mobile/src/components/NexaSetupScreen.tsx');
+const native=read('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaSetupModule.kt');
+const gradle=read('apps/mobile/android/app/build.gradle');
+const workflow=read('.github/workflows/android-main-promotion.yml');
+const releaseWorkflow=read('.github/workflows/android-release-test.yml');
+
+test('old Personal AI header is replaced with Nexa multi-tab setup',()=>{
+  assert.match(app,/tab === 'chat' \? 'Nexa AI'/);
+  assert.match(app,/id:'setup',glyph:'✓',label:'Setup'/);
+  assert.match(app,/tab === 'setup' && <NexaSetupScreen/);
+  assert.match(app,/setupStatus\?\.sourceRevision\?\.slice\(0,10\)/);
+  assert.doesNotMatch(app,/Personal AI Assistant · Android prototype/);
+});
+test('first run is opt-in and status refreshes after Android settings',()=>{
+  assert.match(app,/engine\.live\?'setup':'chat'/);
+  assert.match(app,/if \(status\.setupAcknowledged\) setTab/);
+  assert.match(app,/AppState\.addEventListener\('change',state/);
+  assert.match(app,/await acknowledgeNexaSetup\(\)/);
+  assert.match(setup,/Continue to Nexa/);
+  assert.match(setup,/You can skip every optional permission/);
+  assert.match(setup,/Android app settings/);
+});
+test('setup exposes each real Android permission independently and cannot grant system roles silently',()=>{
+  for(const term of ['microphone','notifications','camera','approximateLocation',
+    'screenAssist','launcherNavigation','assistantSelected','sourceRevision','versionCode'])
+    assert.match(native,new RegExp(term));
+  assert.match(native,/checkSelfPermission/);
+  assert.match(native,/getEnabledAccessibilityServiceList/);
+  assert.match(native,/currentActivity\?\.hasWindowFocus\(\) != true/);
+  assert.match(native,/getSharedPreferences\("nexa_setup"/);
+  assert.doesNotMatch(native,/requestPermissions\(|dispatchGesture\(|startForegroundService\(/);
+  assert.match(setup,/Choose Nexa assistant/);
+  assert.match(setup,/No hidden permissions/);
+  assert.match(setup,/One-time screen assistance/);
+  assert.match(setup,/Home-screen app search/);
+});
+test('APK embeds its real commit and uses comparable Android version codes',()=>{
+  assert.match(gradle,/PAA_SOURCE_REVISION/);
+  assert.match(gradle,/PAA_BUILD_VERSION_CODE/);
+  for(const ci of [workflow,releaseWorkflow]){
+    assert.match(ci,/PAA_BUILD_SOURCE_REVISION: \$\{\{ github\.sha \}\}/);
+    assert.match(ci,/export PAA_BUILD_VERSION_CODE="\$\(date -u \+%s\)"/);
+    assert.match(ci,/release-test-signing-certificate\.txt/);
+    assert.match(ci,/signer changes per run/);
+  }
+});

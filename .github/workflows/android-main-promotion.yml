@@ -109,13 +109,18 @@ jobs:
             echo "PAA_TEST_APK_STORE_PASSWORD=$keypass" >> "$GITHUB_ENV"
             echo "PAA_TEST_APK_KEY_PASSWORD=$keypass" >> "$GITHUB_ENV"
             echo "PAA_TEST_APK_KEY_ALIAS=paatest" >> "$GITHUB_ENV"
-            echo "Temporary test-only release signer. Future CI builds may require uninstall; that wipes encrypted app data." >> "$GITHUB_STEP_SUMMARY"
+            echo "Temporary test-only release signer: APK signer changes per run. Android cannot update a build signed with a different key; uninstall deletes saved app settings and encrypted credentials. Configure stable PAA_TEST_RELEASE_KEYSTORE_B64 and signing secrets for upgrades." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Assemble optimized signed Android release variant
         working-directory: apps/mobile/android
         env:
-          PAA_BUILD_VERSION_CODE: ${{ github.run_number }}
-        run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
+          PAA_BUILD_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # Both workflows produce comparable ascending Android version codes.
+          export PAA_BUILD_VERSION_CODE="$(date -u +%s)"
+          test "$PAA_BUILD_VERSION_CODE" -lt 2100000000
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
       - name: Verify APK signer, release variant and file checksum
         shell: bash
         run: |
@@ -127,6 +132,7 @@ jobs:
           grep -q 'Verified using v2 scheme (APK Signature Scheme v2): true' release-test-verification.txt
           sha256sum "$apk" | tee release-test-sha256.txt
           echo "$GITHUB_SHA" > release-test-source-sha.txt
+          grep 'Signer #1 certificate SHA-256 digest' release-test-verification.txt > release-test-signing-certificate.txt
           echo "Build source commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "### Test-release APK" >> "$GITHUB_STEP_SUMMARY"
           echo "Optimized non-debuggable release variant, signed with a dedicated testing key (not production)." >> "$GITHUB_STEP_SUMMARY"
@@ -140,5 +146,6 @@ jobs:
             release-test-sha256.txt
             release-test-verification.txt
             release-test-source-sha.txt
+            release-test-signing-certificate.txt
           if-no-files-found: error
           retention-days: 14
