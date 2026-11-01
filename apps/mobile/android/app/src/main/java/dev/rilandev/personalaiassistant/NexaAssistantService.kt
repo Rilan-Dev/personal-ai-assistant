@@ -256,7 +256,8 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         feedback(result)
         if (result.startsWith("Launcher search started") ||
             result.contains("launch requested") ||
-            result.startsWith("Android settings opened")) {
+            result.startsWith("Android settings opened") ||
+            result.startsWith("WhatsApp review opened")) {
             // An Intent request is NOT evidence of a completed action.
             hide()
         }
