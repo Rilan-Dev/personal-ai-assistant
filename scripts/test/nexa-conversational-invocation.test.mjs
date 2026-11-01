@@ -14,7 +14,8 @@ const app=read('apps/mobile/App.tsx');
 test('live voice from assistant gesture defaults off and needs visible explicit opt-in',()=>{
   assert.match(setup,/getBoolean\("auto_voice_invocation_v1", false\)/);
   assert.match(setup,/currentActivity\?\.hasWindowFocus\(\) != true/);
-  assert.match(setup,/openVoiceCredentials\(context\) == null/);
+  assert.match(setup,/openVoiceCredentials\(context\) != null/);
+  assert.match(setup,/if \(enabled && !liveProviderReady\)/);
   assert.match(setup,/VOICE_PERMISSION_MISSING/);
   assert.match(setup,/autoStartVoiceOnInvocation/);
   assert.match(bridge,/setAutoStartVoiceOnInvocation/);
