@@ -76,8 +76,9 @@ integrated "Hey Google" recognition.
   disabled state after app update, reboot recovery prompt, denied permissions,
   battery optimization and lock screen. Inspect Android green dot and Stop
   notification. Measure false positives and power impact on the actual OEM.
-- The icon update covers overlay and Android notification glyphs, not the
-  installed app's original launcher artwork.
+- The icon update covers the overlay, notification glyphs and a new midnight-
+  purple adaptive launcher icon on Android 8+; earlier versions retain the
+  existing fallback raster icon.
 
 ## Remaining platform/product scope
 
