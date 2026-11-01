@@ -38,13 +38,19 @@ class NexaWakeWordAndroidTest {
         assertFalse(detector.observe("hey", 1000))
         assertFalse(detector.observe("nexa", 1200))
         assertFalse(detector.observe("hey nexa", 1300))
-        assertTrue(detector.observe("hey nexa", 1700))
+        assertTrue(detector.observe("hey nexa", 1700, complete = true))
         assertFalse(detector.observe("hey nexa", 5000))
         assertFalse(detector.observe("noise", 5100))
         assertFalse(detector.observe("hey nexa", 5500))
-        assertTrue(detector.observe("hey nexa", 5700))
+        assertTrue(detector.observe("hey nexa", 5700, complete = true))
         assertFalse(detector.observe("hello alexa", 6200))
         assertFalse(detector.observe("hey next", 6400))
+        // ASR may emit a misleading partial for "Hey next", but the final
+        // transcript rejects that false wake candidate.
+        val ambiguous = NexaWakePhrase()
+        assertFalse(ambiguous.observe("hey next a", 7000))
+        assertFalse(ambiguous.observe("hey next a", 7250))
+        assertFalse(ambiguous.observe("hey next", 7400, complete = true))
     }
     @Test fun serviceIsNotStartedWithoutVisibleOwner() {
         val module = NexaWakeWordModule(BridgeReactContext(ctx))

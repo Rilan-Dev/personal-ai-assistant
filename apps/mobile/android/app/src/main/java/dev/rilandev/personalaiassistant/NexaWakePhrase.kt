@@ -7,7 +7,7 @@ internal class NexaWakePhrase {
     private var matches = 0
     private var lastAt = 0L
 
-    fun observe(raw: String, now: Long): Boolean {
+    fun observe(raw: String, now: Long, complete: Boolean = false): Boolean {
         val normalized = raw.lowercase(Locale.ROOT)
             .replace(Regex("[^a-z ]"), " ")
             .replace(Regex("\\s+"), " ").trim()
@@ -19,6 +19,6 @@ internal class NexaWakePhrase {
         }
         matches = if (now - lastAt < 2000 && now >= lastAt) matches + 1 else 1
         lastAt = now
-        return if (matches >= 2) { matches = 0; true } else false
+        return if (complete && matches >= 2) { matches = 0; true } else false
     }
 }

@@ -39,7 +39,8 @@ test('microphone service is visibly user-started, terminable, offline and non-st
   assert.doesNotMatch(service,/WebSocket|Retrofit|sendMessage|dispatchGesture|startActivity\(Intent\(Intent\.ACTION_CALL/);
 });
 test('wake phrase gate requires stable, nontrivial phrase and does not auto-send',()=>{
-  assert.match(matcher,/matches >= 2/);
+  assert.match(matcher,/complete && matches >= 2/);
+  assert.match(service,/gate\.observe\(phrase, SystemClock\.elapsedRealtime\(\), utteranceFinished\)/);
   assert.match(matcher,/hey nexa/);
   assert.match(matcher,/2000/);
   assert.match(service,/manager\.notify\(ID \+ 1/);

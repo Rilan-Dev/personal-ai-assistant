@@ -138,7 +138,7 @@ class NexaWakeWordService : Service() {
                         val json = JSONObject(raw)
                         val phrase = if (utteranceFinished) json.optString("text")
                             else json.optString("partial")
-                        if (gate.observe(phrase, SystemClock.elapsedRealtime())) {
+                        if (gate.observe(phrase, SystemClock.elapsedRealtime(), utteranceFinished)) {
                             heard = true
                             state = "detected"
                             message = "Hey Nexa recognized locally"
