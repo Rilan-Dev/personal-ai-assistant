@@ -433,3 +433,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   verify idle microphone dot absent and active conversation indicator present.
 - Never claim "Hey Nexa" indicator-free hardware wake is available to
   the sideloaded APK or suppress platform indicators.
+
+## 2026-11-02 — Live voice crash and Gemini-style session acceptance
+- Development fix: wake AudioRecord is yielded before app-started live microphone capture, and resumed only after capture and playback teardown. Regression assertions and 222 source tests pass on isolated Linux checkout.
+- Existing Android Setup offers Enable live AI after assistant invocation; this opt-in and configured Sarvam/OpenAI voice credentials are required for live-provider handoff from Hey Nexa. Otherwise the fallback deliberately uses offline bounded commands.
+- Android native instrumentation, signed release APK, and physical-phone tests of starting/stopping Sarvam and OpenAI STS remain unverified until evidence is collected.
+- On physical phone: capture redacted ADB logcat AndroidRuntime fatal exception and foreground-service errors (redact credentials, contacts, transcripts); verify wake-to-live transition, audio focus, rearm after inactivity, repeated sessions, approval prompts, and battery read result.
+- Preserve visible microphone permissions, wake opt-in, one-time side-effect approvals and bounded agent tools. Do not bypass Android background capture restrictions or assert messaging delivery from Intent dispatch.
