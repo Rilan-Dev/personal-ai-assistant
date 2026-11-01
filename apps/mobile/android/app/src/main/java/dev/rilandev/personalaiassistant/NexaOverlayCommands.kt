@@ -72,6 +72,21 @@ internal object NexaOverlayCommands {
     }
 
     fun handle(context: Context, raw: String): String {
+        // Spoken message text is preserved exactly; never normalize/lowercase it.
+        // The user must still select the recipient and press Send in WhatsApp.
+        val review = NexaVoiceDraftState.parse(raw)
+        if (review != null) {
+            NexaVoiceDraftState.queue(review)
+            return try {
+                context.startActivity(Intent(context, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                "WhatsApp review opened in Nexa Tools. Select the intended contact. Nothing was sent."
+            } catch (_: Exception) {
+                NexaVoiceDraftState.clear()
+                "Could not open Nexa for message review. Nothing was sent."
+            }
+        }
         val text = normalize(raw)
         return when (text) {
             "help", "commands", "what can you do" ->

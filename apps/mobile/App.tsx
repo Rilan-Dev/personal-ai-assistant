@@ -15,7 +15,7 @@ import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistan
 import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
-  hideToolOverlay, consumeToolOverlayNavigation} from './src/native/androidToolOverlay';
+  hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -334,6 +334,30 @@ export default function App() {
   const [whatsAppDraft,setWhatsAppDraft]=useState('');
   const [whatsAppDraftNotice,setWhatsAppDraftNotice]=useState('');
   const [whatsAppDraftBusy,setWhatsAppDraftBusy]=useState(false);
+  // Consume one explicitly spoken command only after Nexa's RN UI becomes
+  // active. Native code never selects contacts or invokes WhatsApp Send.
+  useEffect(()=>{
+    if (!engine.live || !toolOverlayAvailable()) return;
+    let mounted=true;
+    const consume=async()=>{
+      try {
+        const pending=await consumeReviewedVoiceDraft();
+        if (!mounted || !pending) return;
+        setSelectedContact(null);
+        setWhatsAppDraft(pending.message);
+        setWhatsAppDraftNotice('Spoken contact hint: '+pending.contactHint+
+          '. Choose the real contact in Android, review the exact message, then open a draft. Nothing was sent.');
+        setTab('tools');
+      } catch {
+        if (mounted) setWhatsAppDraftNotice('Spoken review request was unavailable. No message was sent.');
+      }
+    };
+    void consume();
+    const sub=AppState.addEventListener('change',state=>{
+      if(state==='active') void consume();
+    });
+    return ()=>{mounted=false;sub.remove();};
+  },[engine.live]);
   const privateObservationDeadline=useRef(0);
   useEffect(()=>{
     if(!screenSnapshot)return;

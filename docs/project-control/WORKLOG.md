@@ -702,3 +702,18 @@
   physical phone reliability, battery/reboot and permanent-key signed APK
   must not be marked verified. Home Android host was unreachable through
   Tailscale; secondary server had no Android SDK/JDK/ADB.
+
+
+## 2026-11-01 — Owner-reviewed spoken WhatsApp handoff
+- Added deterministic Kotlin parsing of explicitly spoken WhatsApp message requests.
+  It stores only the contact hint and exact message in memory (60-second TTL)
+  and opens the existing React Native Tools review UI.
+- Native bridge consumes once; the React Native frontend never infers who Mom
+  is, never reads bulk contacts, and never sends WhatsApp messages automatically.
+  Existing Android contact picker, country-code check and manual send remain.
+- Added Kotlin Android instrumentation and JS source regression tests.
+- Reconciled with concurrent explicit-cloud-voice consent changes. The
+  combined source passes 202 automated tests and TypeScript checking.
+- Dedicated Android compile and emulator CI were triggered; real phone
+  recognition, OEM behavior and live WhatsApp acceptance remain unverified.
+- See docs/android-voice-whatsapp-review-handoff.md and GitHub PR #7.

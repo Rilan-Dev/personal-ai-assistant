@@ -391,3 +391,15 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Consider a dedicated licensed/accent-calibrated keyword spotting model after
   quality baseline. Keep assistant gestures, permissions and tool approvals
   independent. No claims of fully accepted always-on behavior before testing.
+
+
+## Owner-reviewed spoken WhatsApp action acceptance
+- Verify Android debug compile and connected emulator instrumentation on the
+  integrated PR head, then merge PR #7 only after native gates pass.
+- Test on the owner phone: explicitly invoke Nexa, dictate a contact hint and
+  message, see the React Native Tools preview, select a phone contact, and
+  manually send through WhatsApp. Verify no claim of automatic delivery.
+- Confirm expiry after 60 seconds, one-time consumption, cancellation, process
+  death clearing, Android permission denials and natural-language accents.
+- Keep live provider sessions separate from device tools until explicit
+  user-reviewed tool approval and proper physical-device testing exist.

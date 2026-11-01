@@ -122,7 +122,8 @@ class NexaToolOverlayService : Service() {
         history.addLast("NEXA LOCAL · $result")
         while (history.size > 10) history.removeFirst()
         note = "No cloud prompt or background AI action was executed"
-        if (query.lowercase().contains("find") && result.startsWith("Launcher search started"))
+        if ((query.lowercase().contains("find") && result.startsWith("Launcher search started")) ||
+            result.startsWith("WhatsApp review opened"))
             collapse()
         else render()
     }
