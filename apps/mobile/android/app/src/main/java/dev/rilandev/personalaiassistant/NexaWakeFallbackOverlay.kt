@@ -108,11 +108,17 @@ internal class NexaWakeFallbackOverlay(
 
     fun show(): Boolean {
         if (active) return true
+        val offlineReady = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(service)
+        val providerReady = service.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
+            .getBoolean("auto_voice_invocation_v1", false) &&
+            (try { AgentJournalModule.openVoiceCredentials(service) != null }
+                catch (_: Exception) { false })
+        // A configured, owner-enabled live voice overlay does not require an
+        // Android on-device speech engine; only the offline fallback does.
         if (!Settings.canDrawOverlays(service) ||
             service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED ||
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            !SpeechRecognizer.isOnDeviceRecognitionAvailable(service)) return false
+            PackageManager.PERMISSION_GRANTED || (!offlineReady && !providerReady)) return false
         val wm = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val palette = NexaOverlayTheme.palette(service)
         fun px(v: Int) = NexaOverlayTheme.dp(service, v)
