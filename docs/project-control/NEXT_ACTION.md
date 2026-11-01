@@ -440,3 +440,9 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Android native instrumentation, signed release APK, and physical-phone tests of starting/stopping Sarvam and OpenAI STS remain unverified until evidence is collected.
 - On physical phone: capture redacted ADB logcat AndroidRuntime fatal exception and foreground-service errors (redact credentials, contacts, transcripts); verify wake-to-live transition, audio focus, rearm after inactivity, repeated sessions, approval prompts, and battery read result.
 - Preserve visible microphone permissions, wake opt-in, one-time side-effect approvals and bounded agent tools. Do not bypass Android background capture restrictions or assert messaging delivery from Intent dispatch.
+
+## 2026-11-02 — adaptive assistant overlay release acceptance
+- Run main promotion Android emulator native Kotlin build and signed APK verification for the adaptive theme. Do not equate Node tests with successful native compilation.
+- On the actual phone, validate Home-screen visibility and touches around the overlay; Android dark/light switching; Android 12+ wallpaper accent after wallpaper change; Auto/Dark/Light cycle; layout on small screens; system gesture; wake fallback; opt-in Sarvam/OpenAI live session; Stop; expand/collapse; and action approve/deny UI.
+- Confirm Android system microphone dot and notification are not suppressed. Recheck no screen-content sharing without user consent, and no automatic outbound message send.
+- If native CI detects Kotlin or instrumentation defects, repair in Development before describing the APK as installable.
