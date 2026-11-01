@@ -164,17 +164,25 @@ export default function NexaSetupScreen(props: Props) {
         </Pressable>
       </View>
       <View style={styles.footerCard}>
-        <Text style={styles.footerTitle}>Nexa activation · {wakeStatus?.enabled ? 'Hands-free' : 'Privacy-first'}</Text>
+        <Text style={styles.footerTitle}>Nexa activation · {wakeStatus?.enabled ? 'Continuous microphone active' : 'Privacy-first'}</Text>
         <Text style={styles.footerCopy}>
           Recommended: choose Nexa as the default Android assistant and use your
           phone's assistant gesture or button. There is NO idle microphone capture
           in this mode. Unless live AI activation is explicitly enabled, Nexa listens for one offline device command after invocation, with
           Android's normal microphone indicator while audio is actually recorded.
         </Text>
+        <Text style={styles.status}>
+          {wakeStatus?.protectedHotwordAvailable
+            ? 'Protected system hotword: check OEM integration before using'
+            : 'Protected no-dot Hey Nexa: unavailable in this APK'}
+        </Text>
         <Text style={styles.footerCopy}>
-          A regular installed APK cannot use Google's protected hardware hotword
-          detector or suppress Android's privacy indicator. Genuine indicator-free
-          hotword activation requires supported OEM/system integration.
+          Android allows indicator-free idle hotword detection only through an
+          authorized protected system/OEM mechanism. A downloadable Nexa APK
+          cannot provide this mechanism just by being selected as assistant.
+          To have no persistent microphone notification or green dot, disable
+          continuous Hey Nexa listening and use the assistant gesture.
+          That means voice-only wake phrase activation is not available in this mode.
         </Text>
         <Text style={styles.footerCopy}>
           Optional continuous Hey Nexa mode requires an explicit microphone opt-in,
