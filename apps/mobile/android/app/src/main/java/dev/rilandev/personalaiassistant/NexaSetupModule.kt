@@ -94,7 +94,10 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
             p.reject("VOICE_PERMISSION_MISSING", "Grant voice permissions before enabling automatic conversation")
             return
         }
-        if (enabled && AgentJournalModule.openVoiceCredentials(context) == null) {
+        val liveProviderReady = try {
+            AgentJournalModule.openVoiceCredentials(context) != null
+        } catch (_: Exception) { false }
+        if (enabled && !liveProviderReady) {
             p.reject("VOICE_PROVIDER_MISSING", "Configure OpenAI realtime or Sarvam Voice Agent before enabling this")
             return
         }
