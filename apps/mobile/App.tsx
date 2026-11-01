@@ -31,7 +31,7 @@ import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlash
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
-import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted } from './src/native/liveVoice';
+import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
@@ -602,6 +602,19 @@ export default function App() {
     catch{setVoiceNotice('Unable to request a stop. Use the Android voice notification Stop action.');}
     finally{setLiveVoiceBusy(false);}
   };
+  const reviewLiveAppAction=async(approve:boolean)=>{
+    if(liveVoiceBusy || !liveVoiceStatus.pendingAppApproval)return;
+    setLiveVoiceBusy(true);
+    try {
+      await decideOwnerLiveAppAction(approve);
+      setVoiceNotice(approve
+        ? 'App-open request authorized once. Android launch is requested, not independently verified.'
+        : 'You denied the app action. Nothing was opened.');
+      setLiveVoiceStatus(await getLiveVoiceStatus());
+    }catch{
+      setVoiceNotice('Cannot complete approval. Keep Nexa Voice visible, or deny and restart the session.');
+    }finally{setLiveVoiceBusy(false);}
+  };
   const openScreenSettings=async()=>{
     try {await openScreenAssistSettings();
       setScreenAssistNotice('Enable Nexa Screen Assist in Android Accessibility settings. Return and arm a single capture.');}
@@ -1140,11 +1153,28 @@ export default function App() {
           </View>
           <Text style={styles.cardText}>{activeProvider?.provider==='sarvam'
             ? 'Sarvam managed Voice Agents: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
-            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Neither voice mode can execute device tools.'}</Text>
+            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Only explicitly requested allowlisted device actions can be proposed; each app launch requires your approval in Nexa Voice.'}</Text>
           <Text style={styles.settingHelp}>{activeProvider?.provider==='sarvam'
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
+          {Boolean(liveVoiceStatus.pendingAppApproval) && <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Voice tool approval needed</Text>
+            <Text style={styles.actionDescription}>{liveVoiceStatus.pendingAppApproval}</Text>
+            <Text style={styles.actionDescription}>The model cannot approve this action. A single owner tap is required.</Text>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
+                style={styles.primaryInline} onPress={()=>void reviewLiveAppAction(true)}>
+                <Text style={styles.primaryInlineText}>Approve app once</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
+                style={styles.outlineInline} onPress={()=>void reviewLiveAppAction(false)}>
+                <Text style={styles.outlineInlineText}>Deny</Text>
+              </Pressable>
+            </View>
+          </View>}
+          {Boolean(liveVoiceStatus.lastToolResult) &&
+            <Text style={styles.settingHelp}>Last Android tool result: {liveVoiceStatus.lastToolResult}</Text>}
           <Pressable accessibilityRole="button" disabled={running||liveVoiceBusy||!engine.live||listening||speaking}
             style={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?styles.outlineAction:styles.primaryInline}
             onPress={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?stopLiveVoice:startLiveVoice}>
