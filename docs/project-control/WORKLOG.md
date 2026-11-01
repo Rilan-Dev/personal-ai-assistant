@@ -769,3 +769,13 @@
 - Added scripts/test/nexa-live-mic-arbitration.test.mjs with lifecycle and safety regression assertions.
 - Isolated Linux clone on direct-connected AI-Comms server in /tmp/nexa-ai-review-20261102 (production services unchanged): npm ci succeeded; npm test 222/222 passed; npm run typecheck passed; npm run web:export passed.
 - Android native compilation and physical-phone crash reproduction NOT verified here: home Android machine unavailable via Tailscale; alternate server lacks Android SDK/JDK/ADB. Do not claim native APK, provider session success, or phone acceptance based on source tests.
+
+## 2026-11-02 — approved adaptive Hey Nexa overlay UI
+- Implemented original approved floating-glass UI in **all three** native paths: system assistant panel, offline/wake fallback, and owner-enabled movable Chat/Tools/Voice bubble.
+- New `NexaOverlayTheme.kt` shares dark/light translucent surfaces, 44dp actions, waveform and Android 12+ wallpaper-derived system accent tokens. Auto/Dark/Light choice is available directly inside the bubble. No wallpaper pixel capture, screen read, microphone bypass, or newly granted device permission.
+- Wake fallback includes safe Battery/Find GitHub/Tools shortcuts, live-provider state feedback, explicit approval/deny row, collapse/expand voice dock, and Stop. Live-provider panel may open without Android offline STT if explicitly opted-in and provider credentials are stored.
+- System assistant gesture now uses the same translucent conversation card, concise live status, safe local reads, owner-controlled Live AI and Stop, and a non-dimming system-owned window.
+- Tool bubble now has a themed expanded transcript/editor, native waveform and theme control; 52dp draggable/collapsible bubble preserved. Bounded size updated to 360dp x 490dp with display-size caps.
+- Added source regressions for three shared surfaces and permission disclosures plus `NexaAdaptiveThemeAndroidTest.kt` emulator coverage.
+- 226 local Node tests passed, TypeScript typecheck and web export passed in the isolated server checkout (at commit 15bd9bd); no Android SDK/JDK on that server. Build emulator and actual-phone appearance remain separate acceptance gates.
+- Detailed spec: docs/design/HEYNEXA_ADAPTIVE_OVERLAY.md.
