@@ -10,7 +10,7 @@ export function normalizeNativeRequest(request: string): string | null {
   let text = request.toLowerCase().trim().replace(/[.!?]+$/, "").trim();
   text = text.replace(/^hey\s+(?:nexa|assistant)[,!]?\s+/, "").trim();
   // Clauses and negation are never auto-reduced to one side effect.
-  if (/[\n;"'“”‘’]|(?:\b(?:and|then|also|after|before|while|or|but|without|instead|send|text|message|call|delete|don't|do not|never|not|no)\b)/.test(text))
+  if (/[\n;"“”‘’]|(?:\b(?:and|then|also|after|before|while|or|but|without|instead|send|text|message|call|delete|don't|do not|never|not|no)\b)/.test(text))
     return null;
   text = text.replace(/^would you mind (?:please )?/, "")
     .replace(/^(?:can|could|would|will) you (?:please )?/, "")
