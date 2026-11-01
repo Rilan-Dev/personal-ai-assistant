@@ -28,7 +28,7 @@ test('system invocation routes to live provider only when configured and opted i
   assert.match(assistant,/getBoolean\("auto_voice_invocation_v1", false\)/);
   assert.match(assistant,/val automaticLiveVoice = saved && hasCredentials/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else beginLocalConversation\(\)/);
+  assert.match(assistant,/else feedback\("Enable live AI after assistant invocation/);
   assert.match(assistant,/liveVoiceLaunchedFromSession/);
   assert.match(assistant,/action = RealtimeVoiceService.ACTION_STOP/);
   assert.match(assistant,/NexaWakeWordService.assistantClosed\(\)/);
