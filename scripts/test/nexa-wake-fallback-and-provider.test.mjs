@@ -14,7 +14,7 @@ test('wake always tries compact native voice fallback when OEM assistant service
   assert.match(wake,/assistant did not open|assistant session did not open/i);
   assert.match(overlay,/TYPE_APPLICATION_OVERLAY/);
   assert.match(overlay,/Settings\.canDrawOverlays\(service\)/);
-  assert.match(overlay,/isOnDeviceRecognitionAvailable\(service\)/);
+  assert.match(overlay,/val providerReady =/);
   assert.match(overlay,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(service\)/);
   assert.match(overlay,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(wake,/assistantClosed\(\)/);
