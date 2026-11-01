@@ -47,7 +47,9 @@ class NexaWakeWordModule(private val context: ReactApplicationContext) :
         data.putBoolean("installing", installing)
         data.putBoolean("listening", NexaWakeWordService.listening)
         data.putString("state", NexaWakeWordService.state)
-        data.putString("message", if (installing) installMessage else NexaWakeWordService.message)
+        data.putString("message",
+            if (installing || (!modelReady(context) && installMessage.isNotBlank()))
+                installMessage else NexaWakeWordService.message)
         data.putBoolean("permissionGranted",
             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
         p.resolve(data)

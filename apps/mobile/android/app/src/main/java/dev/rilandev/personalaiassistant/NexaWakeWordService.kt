@@ -32,6 +32,7 @@ class NexaWakeWordService : Service() {
         const val START = "dev.rilandev.personalaiassistant.WAKE_START"
         const val STOP = "dev.rilandev.personalaiassistant.WAKE_STOP"
         private const val CHANNEL = "nexa_wake_v1"
+        private const val CHANNEL_TRIGGER = "nexa_wake_detected_v1"
         private const val ID = 4921
         @Volatile var listening = false
             private set
@@ -54,12 +55,14 @@ class NexaWakeWordService : Service() {
         val stop = PendingIntent.getService(this, 1,
             Intent(this, NexaWakeWordService::class.java).setAction(STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this, CHANNEL)
+        return NotificationCompat.Builder(this,
+            if (detected) CHANNEL_TRIGGER else CHANNEL)
             .setSmallIcon(R.drawable.ic_assistant_tile)
             .setContentTitle(if (detected) "Hey Nexa detected" else "Nexa · Offline wake listening")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(!detected)
+            .setAutoCancel(detected)
             .setOnlyAlertOnce(!detected)
             .setPriority(if (detected) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
             .apply {
@@ -82,6 +85,8 @@ class NexaWakeWordService : Service() {
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL,
                 "Nexa on-device wake listening", NotificationManager.IMPORTANCE_LOW))
+            manager.createNotificationChannel(NotificationChannel(CHANNEL_TRIGGER,
+                "Nexa wake recognition", NotificationManager.IMPORTANCE_HIGH))
         }
         try {
             if (Build.VERSION.SDK_INT >= 29) {

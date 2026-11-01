@@ -70,3 +70,28 @@ OEM-integrated always-on hardware hotword. Unprivileged third-party apps
 cannot assume always-on hotword privileges. It still needs physical phone
 quality, battery, privacy and Android-version validation. The generic model
 may fail to transcribe the proper noun Nexa on some devices/accents.
+
+## Source and synthetic validation details
+
+On the VPS, an independent Python Vosk runtime loaded the official unmodified
+model. Its lexicon does not contain the proper noun **nexa**, so the native
+grammar uses the model's in-vocabulary phonetic alternatives "hey next a"
+and "hey nexus" instead. An eSpeak synthetic sample of "Hey Nexa" decoded as
+"hey next a". A synthetic "Hey next" also temporarily decoded that phrase,
+but its *completed* result was "hey next". The detector was tightened to
+require a stable matching phrase **and** completed utterance before activation.
+Synthetic "Hey Alexa" and "Hello Nexa" were also rejected by the phrase gate.
+
+These synthetic checks do not establish real-world activation accuracy.
+When Android has not selected Nexa as default assistant, the fallback wake
+notification uses its own high-importance channel so a visible alert can be
+shown, subject to the user's system notification preferences.
+
+## Release build R8 compatibility correction
+
+GitHub Actions run 41303066805 compiled and completed the native Android
+instrumentation gate but failed its release R8 task: JNA's unused desktop-only
+java.awt.Component signature was missing on Android. R8 remains enabled.
+The release rules now explicitly preserve JNA/Vosk reflection symbols and
+suppress **only** this unavailable desktop type. Successful release assembly,
+signed APK verification and actual device acceptance must follow this change.

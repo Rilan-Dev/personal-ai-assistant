@@ -12,3 +12,14 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+
+# Offline Vosk relies on JNA reflection to resolve native method names.
+# Keep its native interface and JNA marshaling classes in release APKs.
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }
+
+# The Android JNA AAR contains an unused *desktop-only* AWT signature in
+# Native.getWindowHandle0(). Android has no java.awt.Component.
+# R8 otherwise rejects an otherwise-valid Android release bundle.
+# Keep this suppression narrow; do not disable R8 or whole-package checks.
+-dontwarn java.awt.Component

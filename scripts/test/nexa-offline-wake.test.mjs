@@ -31,6 +31,8 @@ test('microphone service is visibly user-started, terminable, offline and non-st
   assert.match(service,/START_NOT_STICKY/);
   assert.match(service,/startForeground\(ID/);
   assert.match(service,/Stop wake listening/);
+  assert.match(service,/Nexa wake recognition/);
+  assert.match(service,/NotificationManager\.IMPORTANCE_HIGH/);
   assert.match(service,/Model\(NexaWakeWordModule\.modelDir\(this\)\.absolutePath\)/);
   assert.match(service,/Recognizer\(model, 16000\.0f, grammar\)/);
   assert.match(service,/AudioRecord\(/);
@@ -62,4 +64,12 @@ test('system assistant hotword readiness depends on verified model',()=>{
   assert.match(read(dir+'NexaAssistantService.kt'),/nexa_hotword/);
   assert.match(read(dir+'NexaAssistantService.kt'),/listenOneDeviceCommand\(\)/);
   assert.match(read(dir+'VoiceControlModule.kt'),/NexaWakeWordModule\.modelReady\(context\)/);
+});
+
+test('R8 retains Vosk/JNA reflective symbols and only suppresses desktop AWT type',()=>{
+  const rules=read('apps/mobile/android/app/proguard-rules.pro');
+  assert.match(rules,/-keep class org\.vosk\.\*\* \{ \*; \}/);
+  assert.match(rules,/-keep class com\.sun\.jna\.\*\* \{ \*; \}/);
+  assert.match(rules,/-dontwarn java\.awt\.Component/);
+  assert.doesNotMatch(rules,/-dontwarn \*\*|-ignorewarnings/);
 });
