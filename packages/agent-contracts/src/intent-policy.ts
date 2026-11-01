@@ -24,7 +24,7 @@ export function requestAllowsNativeTool(
     return /^(check|show|what is|what's) (my |the )?(agent |device )?status$/.test(normalized);
   }
   if (toolId === "device.battery_status") {
-    return /^(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?battery(?: level| status)?$/.test(normalized);
+    return /^(?:(?:check|show|what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge)(?: level| status| percentage| percent)?|(?:what is|what's) (?:my |the )?(?:device |phone )?(?:battery|charge) percentage|how much (?:battery|charge) (?:do i have|is left)|how (?:much|many) percent (?:battery|charge) (?:do i have|is left))$/.test(normalized);
   }
   if (toolId === "device.set_flashlight") {
     const desired = parseFlashlightIntent(normalized);
