@@ -740,3 +740,23 @@
 - Native APK, actual device microphone privacy behavior and OEM
   integration remain unverified; release gate is NO-GO for no-dot
   always-on voice-only activation on ordinary APK.
+
+
+## 2026-11-02 — Privacy-first voice entry and Google Assistant App Action
+- Inspected protected AOSP `VoiceInteractionService` hotword APIs. The DSP
+  detector is `@SystemApi`; a normal APK cannot acquire privileged backend
+  or suppress Android microphone indicators.
+- Implemented Android App Action `actions.intent.OPEN_APP_FEATURE`,
+  static "Nexa Voice" launcher shortcut and dedicated `nexa://voice`
+  entry point in AndroidManifest and res/xml.
+- React Native Linking now routes cold-start or warm-app external voice
+  shortcut to the Voice tab WITHOUT automatically starting a microphone.
+- Onboarding explains Google Assistant "Hey Google" fallback, Play/App Action
+  discovery, and possible loss of Hey Google after switching default
+  assistant role to Nexa.
+- Added native PackageManager instrumentation and Node source tests.
+- Source validation 206 / 206 passed, TypeScript and Expo export passed
+  at 3b54f3d. Next gate native Android compile for final SHA and device.
+- See docs/architecture/NEXA_PRIVACY_FIRST_ASSISTANT_VOICE_HANDOFF_2026-11-02.md.
+- True no-dot "Hey Nexa" from idle remains OEM/Android 18 access dependent;
+  source changes DO NOT claim to solve or hide ongoing microphone use.
