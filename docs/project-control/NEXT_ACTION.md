@@ -403,3 +403,20 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   death clearing, Android permission denials and natural-language accents.
 - Keep live provider sessions separate from device tools until explicit
   user-reviewed tool approval and proper physical-device testing exist.
+
+
+## 2026-11-01 — Indicator-free "Hey Nexa" feasibility decision
+- No general APK-only solution exists for continuous Hey Nexa while
+  suppressing Android microphone dot and microphone foreground notification.
+- Maintain privacy-first assistant gesture as default (no idle microphone),
+  with explicitly opted-in, privacy-disclosed continuous Vosk wake mode.
+- Show protected hotword as unavailable on ordinary installations.
+- Protected SoundTrigger/HotwordDetectionService integration requires
+  authorized OEM/system access, validation and real target device.
+- Track EU DMA Android 18 hotword interoperability (deadline 2027-08-01)
+  and Android 19 concurrent hotwords (deadline 2028-08-01); verify
+  actual developer API/regional rollout before attempting integration.
+- Reconfirm with native instrumentation and phone: idle gesture mode no
+  recording, continuous mode foreground notification + indicator,
+  Stop/reboot/update migration, post-wake voice privacy behavior.
+- See docs/architecture/NEXA_HOTWORD_PARITY_FEASIBILITY_2026-11-01.md.
