@@ -37,10 +37,16 @@ Date: November 1, 2026. Branch: feature/nexa-wake-persistence-overlay-20261101
   explicit disable in the app, overlay or notification clears the saved
   preference. A stopped or interrupted service is not falsely described as
   currently listening just because the preference is enabled.
-- After BOOT_COMPLETED or MY_PACKAGE_REPLACED, a receiver can show a
-  user-visible reminder for previously enabled users. It DOES NOT attempt to
-  create a microphone foreground service at boot. Opening the app visibly
-  causes the bridge to resume listening when Android grants access.
+- When Android initializes Nexa as its **selected VoiceInteractionService**,
+  onReady attempts to restore an already opted-in microphone FGS after
+  checking model, RECORD_AUDIO and notification permissions. This follows
+  Android's documented system-assistant exception, but may be rejected by
+  the OEM. It is a best-effort start, not a guaranteed hands-free boot.
+- After BOOT_COMPLETED or MY_PACKAGE_REPLACED, a separate receiver can show
+  a reminder for previously enabled users. The receiver NEVER launches a
+  microphone service from the boot broadcast. Opening Nexa visibly also
+  provides a permitted resume opportunity. Successful FGS startup dismisses
+  the stale recovery reminder.
 - The service still posts a non-silent, accurate status notification with a
   Stop action and never blocks the Android green privacy indicator.
 
@@ -50,7 +56,9 @@ Android 12+ requires a microphone privacy indicator during microphone usage:
 https://source.android.com/docs/core/permissions/privacy-indicators
 
 Android 14+ applies while-in-use permission checks to microphone foreground
-services, and boot receivers cannot launch microphone FGS:
+services, and boot receivers cannot launch microphone FGS. System-selected
+VoiceInteractionService is listed as a narrowly scoped exception, subject to
+device behavior:
 https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
 
 VoiceInteractionService and optional always-on hardware hotword pathways are
