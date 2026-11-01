@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -50,6 +51,41 @@ internal class NexaWakeFallbackOverlay(
     private var speech: TextToSpeech? = null
     private var speechReady = false
     private var outputId = ""
+    private var approvalRow: LinearLayout? = null
+    private var providerManaged = false
+    private var providerEverListening = false
+    private var providerStartedAt = 0L
+    private val liveMonitor = object : Runnable {
+        override fun run() {
+            if (!active || !providerManaged) return
+            val current = RealtimeVoiceService.status
+            if (current == "listening") providerEverListening = true
+            val approval = RealtimeVoiceService.pendingApprovalSummary
+            approvalRow?.visibility = if (approval != null) View.VISIBLE else View.GONE
+            status?.text = when {
+                approval != null -> approval
+                current == "connecting" -> "Connecting to your live AI provider…"
+                current == "listening" ->
+                    if (RealtimeVoiceService.lastToolResult.isNotBlank())
+                        "Tool result · " + RealtimeVoiceService.lastToolResult.take(140)
+                    else "Live Nexa is listening · speak naturally"
+                else -> RealtimeVoiceService.message.take(180)
+            }
+            if (current == "error" || (current == "stopped" &&
+                (providerEverListening ||
+                    SystemClock.elapsedRealtime() - providerStartedAt > 4500L))) {
+                if (!providerEverListening) {
+                    providerManaged = false
+                    status?.text = "Live AI unavailable · switching to offline commands"
+                    handler.postDelayed({ if (active) { initSpeech(); listen() } }, 850L)
+                } else handler.postDelayed({
+                    if (active) finish("Live conversation ended · Hey Nexa ready")
+                }, 800L)
+                return
+            }
+            handler.postDelayed(this, 800L)
+        }
+    }
     private var turn = 0
     private var active = false
     private val maxTurns = 16
@@ -109,6 +145,23 @@ internal class NexaWakeFallbackOverlay(
                 finish("Nexa opened")
             }, LinearLayout.LayoutParams(0, px(50), 1f))
         })
+        approvalRow = LinearLayout(service).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+            addView(action("Approve app") {
+                try {
+                    service.startService(Intent(service, RealtimeVoiceService::class.java)
+                        .setAction(RealtimeVoiceService.ACTION_APPROVE_TOOL))
+                } catch (_: Exception) { status?.text = "Could not approve app action" }
+            }, LinearLayout.LayoutParams(0, px(50), 1f))
+            addView(action("Deny") {
+                try {
+                    service.startService(Intent(service, RealtimeVoiceService::class.java)
+                        .setAction(RealtimeVoiceService.ACTION_DENY_TOOL))
+                } catch (_: Exception) { status?.text = "Could not deny app action" }
+            }, LinearLayout.LayoutParams(0, px(50), 1f))
+        }
+        approvalRow?.let { shell.addView(it) }
         val args = WindowManager.LayoutParams(
             minOf(px(330), service.resources.displayMetrics.widthPixels - px(20)),
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -130,8 +183,33 @@ internal class NexaWakeFallbackOverlay(
         turn = 0
         NexaWakeWordService.assistantShown()
         handler.postDelayed(maximum, 2 * 60 * 1000L)
-        initSpeech()
-        handler.postDelayed({ listen() }, 450L)
+        handler.postDelayed({
+            if (!active) return@postDelayed
+            val optedIn = service.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
+                .getBoolean("auto_voice_invocation_v1", false)
+            val configured = try { AgentJournalModule.openVoiceCredentials(service) != null }
+                catch (_: Exception) { false }
+            if (optedIn && configured && Build.VERSION.SDK_INT >= 26) {
+                try {
+                    service.startForegroundService(Intent(service,
+                        RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_START
+                        putExtra(RealtimeVoiceService.EXTRA_ASSISTANT_PANEL, true)
+                    })
+                    providerManaged = true
+                    providerStartedAt = SystemClock.elapsedRealtime()
+                    status?.text = "Connecting to live AI · tap Stop at any time"
+                    handler.postDelayed(liveMonitor, 800L)
+                } catch (_: Exception) {
+                    status?.text = "Android blocked live microphone · using offline commands"
+                    initSpeech()
+                    handler.postDelayed({ listen() }, 650L)
+                }
+            } else {
+                initSpeech()
+                listen()
+            }
+        }, 550L)
         return true
     }
 
@@ -267,6 +345,16 @@ internal class NexaWakeFallbackOverlay(
         active = false
         handler.removeCallbacks(silence)
         handler.removeCallbacks(maximum)
+        handler.removeCallbacks(liveMonitor)
+        if (providerManaged && RealtimeVoiceService.status in setOf("connecting", "listening")) {
+            try {
+                service.startService(Intent(service, RealtimeVoiceService::class.java)
+                    .setAction(RealtimeVoiceService.ACTION_STOP))
+            } catch (_: Exception) {}
+        }
+        providerManaged = false
+        providerEverListening = false
+        approvalRow = null
         releaseRecognizer()
         outputId = ""
         try { speech?.stop(); speech?.shutdown() } catch (_: Exception) {}
