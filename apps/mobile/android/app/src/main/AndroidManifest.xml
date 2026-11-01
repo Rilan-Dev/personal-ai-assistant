@@ -12,6 +12,7 @@
   <!-- Flashlight only: user must separately approve CAMERA at runtime. -->
   <uses-permission android:name="android.permission.CAMERA"/>
   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
   <uses-feature android:name="android.hardware.camera" android:required="false"/>
   <uses-feature android:name="android.hardware.camera.flash" android:required="false"/>
   <queries>
@@ -19,6 +20,7 @@
     <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
     <package android:name="com.whatsapp"/>
     <package android:name="com.github.android"/>
+    <package android:name="com.brave.browser"/>
     <intent>
       <action android:name="android.intent.action.MAIN"/>
       <category android:name="android.intent.category.HOME"/>
@@ -94,6 +96,15 @@
         android:foregroundServiceType="microphone"
         android:exported="false"
         android:stopWithTask="false"/>
+    <!-- Notification-only wake recovery. Android blocks boot-start microphone
+         FGS; this receiver never starts audio or a foreground service. -->
+    <receiver android:name=".NexaWakeBootReceiver"
+        android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED"/>
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+      </intent-filter>
+    </receiver>
     <!-- Small user-started floating tools bubble. Never records audio or controls other apps. -->
     <service android:name=".NexaToolOverlayService"
         android:exported="false"
