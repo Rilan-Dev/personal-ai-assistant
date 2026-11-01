@@ -1,7 +1,7 @@
 import type { Planner } from "./runtime.ts";
 import { androidIntentPlanner } from "./android-planner.ts";
 import type { PlannerDecision } from "../../agent-contracts/src/index.ts";
-import { requestAllowsNativeTool } from "../../agent-contracts/src/intent-policy.ts";
+import { parseNativeOwnerIntent, requestAllowsNativeTool } from "../../agent-contracts/src/intent-policy.ts";
 
 /**
  * BYOK direct-to-provider mode. The API key is never bundled into the APK
@@ -70,8 +70,7 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
       d.response.length <= 1500 && Object.keys(d).length === 2) {
     // A model must never falsely claim it executed a native action,
     // sent a message or read private data merely by answering in prose.
-    const exactDeviceRead = requestAllowsNativeTool(request,"device.status",{}) ||
-      requestAllowsNativeTool(request,"device.battery_status",{});
+    const exactDeviceRead = parseNativeOwnerIntent(request) !== null;
     if (exactDeviceRead || /^(?:please\s+)?(?:open|launch|start|turn|switch|send|text|call|dial|read|delete|toggle)\b/i.test(request.trim()))
       return {type:"clarify",question:"No device action was executed. Use a single supported command and confirm permissions."};
     return {type:"done",response:d.response.trim()};
@@ -112,13 +111,13 @@ export function createDirectProviderPlanner(options: DirectProviderOptions): Pla
       // Once Android has acted, do not let the LLM invent the outcome.
       if (observations.length > 0) return androidIntentPlanner.next(request, observations, signal);
       if (signal?.aborted) throw new Error("CANCELLED");
-      // Battery/device-status reads must not depend on the provider guessing
-      // a matching tool for a precise, safe, owner-requested read. Never
-      // dispatch any side-effecting tool through this deterministic route.
-      for (const id of ["device.battery_status", "device.status"] as const) {
-        if (allowed.has(id) && requestAllowsNativeTool(request, id, {}))
-          return {type:"tool",call:{callId:"direct-1",toolId:id,input:{}}};
-      }
+      // A supported, explicit user request should not fail because a model
+      // demands a magic wording or guesses an unrelated tool. The proposal
+      // still goes through the full phone-side AgentHarness grant, approval,
+      // journal and native argument validation before any side effect.
+      const intended = parseNativeOwnerIntent(request);
+      if (intended && allowed.has(intended.toolId))
+        return {type:"tool",call:{callId:"direct-1",...intended}};
       if (request.length < 1 || request.length > 2000) throw new Error("INVALID_REQUEST");
       const controller = new AbortController();
       const onAbort = () => controller.abort();
