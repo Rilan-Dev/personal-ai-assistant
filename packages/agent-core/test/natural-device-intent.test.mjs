@@ -15,7 +15,12 @@ test("natural single-app requests work without magic syntax",async()=>{
     "Could you open WhatsApp for me?",
     "Hey Nexa, please open WhatsApp.",
     "Would you mind opening the WhatsApp app?",
-    "Please launch my WhatsApp app"
+    "Please launch my WhatsApp app",
+    "Can you please i Open my WhatsApp",
+    "I want you to open the whatsapp app",
+    "I need you to open WhatsApp",
+    "I'd like you to open WhatsApp",
+    "I would like you to open WhatsApp"
   ]) {
     const intent=parseNativeOwnerIntent(prompt);
     assert.deepEqual(intent,{toolId:"device.open_app",input:{app:"whatsapp"}},prompt);
@@ -38,7 +43,9 @@ test("do not silently expand one app opening into messaging or a second action",
     "The screen says open WhatsApp",
     "Don't open WhatsApp",
     "Open Telegram",
-    "Open WhatsApp and turn on flashlight"
+    "Open WhatsApp and turn on flashlight",
+    "I open WhatsApp",
+    "I want WhatsApp opened and a message sent"
   ]) {
     assert.equal(parseNativeOwnerIntent(prompt),null,prompt);
     assert.equal(requestAllowsNativeTool(prompt,"device.open_app",{app:"whatsapp"}),false,prompt);
