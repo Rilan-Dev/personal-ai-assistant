@@ -421,6 +421,10 @@ class RealtimeVoiceService : Service() {
         pendingAppTool = PendingAppTool("local-sarvam", intent.app, intent.command)
         pendingApprovalSummary = "Open ${intent.app}? Confirm or deny below."
         message = "Nexa local device approval required to open ${intent.app}"
+        try {
+            getSystemService(NotificationManager::class.java).notify(
+                NOTIFICATION_ID, makeNotification("App approval pending · open Nexa Voice"))
+        } catch (_: Exception) {}
     }
 
     private fun sendRealtimeToolOutput(callId: String, result: String) {
