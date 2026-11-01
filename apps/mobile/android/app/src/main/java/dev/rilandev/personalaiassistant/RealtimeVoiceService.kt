@@ -30,6 +30,7 @@ import com.facebook.react.bridge.ReactMethod
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -83,7 +84,11 @@ class RealtimeVoiceService : Service() {
     }
     private var captureThread: Thread? = null
     private var playbackThread: Thread? = null
-    private val audioQueue = ArrayBlockingQueue<ByteArray>(32)
+    private data class PlaybackChunk(val turn: Long, val pcm: ByteArray)
+    private val audioQueue = ArrayBlockingQueue<PlaybackChunk>(32)
+    private val playbackTurn = AtomicLong(0L)
+    private val playbackLock = Any()
+    @Volatile private var responseId = ""
     // Keep sending AEC-filtered mic input while the model speaks; otherwise
     // the server VAD never hears the owner interrupting (broken barge-in).
     @Volatile private var interruptedResponse = false
@@ -156,18 +161,11 @@ class RealtimeVoiceService : Service() {
                     main.post {if(active.get() && status=="connecting")startAudio()}
                 }
                 override fun audio(bytes:ByteArray) {
-                    if(!audioQueue.offer(bytes))
+                    if(!audioQueue.offer(PlaybackChunk(playbackTurn.get(),bytes)))
                         main.post {if(active.get())stopWithStatus("error","Voice playback buffer overloaded")}
                 }
-                override fun interrupted(){
-                    main.post {
-                        audioQueue.clear()
-                        try {
-                            player?.pause()
-                            player?.flush()
-                            if(active.get())player?.play()
-                        }catch(_:Exception){}
-                    }
+                override fun interrupted() {
+                    interruptSpeakerPlayback()
                 }
                 override fun failed(reason:String){
                     main.post {if(active.get())stopWithStatus("error",reason)}
@@ -218,6 +216,25 @@ class RealtimeVoiceService : Service() {
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
     }
+    /**
+     * Invalidate queued and already-dequeued chunks on barge-in. AudioTrack
+     * writes and flushes share a lock, so old audio cannot be written after
+     * the interruption flush. This never stops mic capture/VAD.
+     */
+    private fun interruptSpeakerPlayback() {
+        playbackTurn.incrementAndGet()
+        audioQueue.clear()
+        main.post {
+            synchronized(playbackLock) {
+                try {
+                    player?.pause()
+                    player?.flush()
+                    if (active.get()) player?.play()
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
     private fun connect(key: String) {
         val http = OkHttpClient.Builder()
             .connectTimeout(12,TimeUnit.SECONDS)
@@ -253,26 +270,25 @@ class RealtimeVoiceService : Service() {
                 val json = try { JSONObject(text) } catch (_: Exception) { return }
                 when (json.optString("type")) {
                     "session.updated" -> main.post { if (active.get() && status=="connecting") startAudio() }
-                    "response.created" -> interruptedResponse = false
+                    "response.created" -> {
+                        // A cancelled response can still yield late network deltas.
+                        // Only the newest server response may reach the speaker.
+                        responseId = json.optJSONObject("response")?.optString("id").orEmpty()
+                        interruptedResponse = false
+                    }
                     "input_audio_buffer.speech_started" -> {
                         // The owner interrupted playback. Clear stale output
                         // immediately; never play responses after a VAD cancel.
                         interruptedResponse = true
-                        audioQueue.clear()
-                        main.post {
-                            try {
-                                player?.pause()
-                                player?.flush()
-                                if (active.get()) player?.play()
-                            } catch (_: Exception) {}
-                        }
+                        interruptSpeakerPlayback()
                     }
                     "response.output_audio.delta" -> {
-                        if (!interruptedResponse) {
+                        if (!interruptedResponse && responseId.isNotEmpty() &&
+                            json.optString("response_id") == responseId) {
                             val delta = json.optString("delta")
                             if (delta.length <= 160000) {
                                 try {
-                                    if (!audioQueue.offer(Base64.decode(delta,Base64.DEFAULT))) {
+                                    if (!audioQueue.offer(PlaybackChunk(playbackTurn.get(),Base64.decode(delta,Base64.DEFAULT)))) {
                                         main.post {
                                             if (active.get()) stopWithStatus(
                                                 "error", "Audio playback buffer overloaded"
@@ -352,8 +368,12 @@ class RealtimeVoiceService : Service() {
             playbackThread = Thread({
                 while (active.get()) {
                     try {
-                        val bytes = audioQueue.poll(250,TimeUnit.MILLISECONDS) ?: continue
-                        player?.write(bytes,0,bytes.size)
+                        val chunk = audioQueue.poll(250,TimeUnit.MILLISECONDS) ?: continue
+                        synchronized(playbackLock) {
+                            if (active.get() && chunk.turn == playbackTurn.get()) {
+                                player?.write(chunk.pcm,0,chunk.pcm.size)
+                            }
+                        }
                     } catch (_: InterruptedException) { break }
                     catch (_: Exception) { break }
                 }
@@ -412,6 +432,7 @@ class RealtimeVoiceService : Service() {
         captureThread = null
         playbackThread?.interrupt()
         playbackThread = null
+        playbackTurn.incrementAndGet()
         audioQueue.clear()
         try { echoCanceler?.release() } catch (_: Exception) {}
         echoCanceler = null
@@ -419,7 +440,9 @@ class RealtimeVoiceService : Service() {
         noiseSuppressor = null
         try { audioManager?.abandonAudioFocus(audioFocusListener) } catch (_: Exception) {}
         audioManager = null
-        try { player?.pause(); player?.flush(); player?.release() } catch (_: Exception) {}
+        synchronized(playbackLock) {
+            try { player?.pause(); player?.flush(); player?.release() } catch (_: Exception) {}
+        }
         player = null
         sarvamTransport?.close()
         sarvamTransport=null
