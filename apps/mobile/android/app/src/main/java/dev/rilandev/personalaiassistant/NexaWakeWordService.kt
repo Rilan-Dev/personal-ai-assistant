@@ -15,6 +15,8 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import org.json.JSONObject
@@ -96,7 +98,33 @@ class NexaWakeWordService : Service() {
     @Volatile private var handoffStartedAt = 0L
     @Volatile private var audio: AudioRecord? = null
     private var worker: Thread? = null
+    private val ui = Handler(Looper.getMainLooper())
+    private var fallbackOverlay: NexaWakeFallbackOverlay? = null
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun showFallbackConversation(manager: NotificationManager) {
+        ui.post {
+            if (!running.get() || !enabled(this)) return@post
+            if (fallbackOverlay != null) return@post
+            val fallback = NexaWakeFallbackOverlay(this) {
+                fallbackOverlay = null
+                assistantClosed()
+            }
+            if (fallback.show()) {
+                fallbackOverlay = fallback
+                state = "paused"
+                message = "Compact local conversation is active"
+                manager.cancel(ID + 1)
+            } else {
+                handoffPending = false
+                handoffStartedAt = 0L
+                state = "listening"
+                message = "Wake heard but Android did not show assistant or allow an overlay"
+                manager.notify(ID + 1, notification(
+                    "Tap to continue · grant Nexa overlay and default assistant access", true))
+            }
+        }
+    }
 
     private fun notification(text: String, detected: Boolean = false): Notification {
         val open = PendingIntent.getActivity(this, 0,
@@ -179,11 +207,9 @@ class NexaWakeWordService : Service() {
                     if (handoffPending && !assistantSessionVisible &&
                         handoffStartedAt > 0L &&
                         SystemClock.elapsedRealtime() - handoffStartedAt >= 12000L) {
-                        handoffPending = false
                         handoffStartedAt = 0L
-                        message = "Assistant did not open; resuming opted-in wake listening"
-                        manager.notify(ID + 1, notification(
-                            "Assistant did not open · Tap to open Nexa", true))
+                        message = "Android assistant session did not open · trying floating voice"
+                        showFallbackConversation(manager)
                     }
                     // During a voice command, Android's recognizer needs sole
                     // ownership of the microphone. Keep the existing FGS.
@@ -205,10 +231,8 @@ class NexaWakeWordService : Service() {
                         message = "Wake recognized · microphone released for assistant"
                         val shown = NexaAssistantService.showFromWakeWord()
                         if (!shown) {
-                            handoffPending = false
                             handoffStartedAt = 0L
-                            manager.notify(ID + 1, notification(
-                                "Open Nexa to choose a device command", true))
+                            showFallbackConversation(manager)
                             SystemClock.sleep(900)
                         }
                         // If shown, onHide/onShowSessionFailed releases pause.
@@ -293,6 +317,10 @@ class NexaWakeWordService : Service() {
 
     override fun onDestroy() {
         running.set(false)
+        ui.post {
+            fallbackOverlay?.finish("Wake listener disabled")
+            fallbackOverlay = null
+        }
         handoffPending = false
         assistantSessionVisible = false
         handoffStartedAt = 0L
