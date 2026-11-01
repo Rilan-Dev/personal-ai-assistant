@@ -75,3 +75,13 @@ physical app-version acceptance tests.
   sherpa-onnx open-vocabulary KWS is an upstream research candidate, but an
   actual customized model, CPU/battery profile, microphone FGS lifecycle and
   physical device evaluation must pass before enabling always-on recording.
+
+
+## Opt-in assistant-panel one-shot voice command
+The compact VoiceInteractionSession now has Speak a device command and Cancel
+spoken command controls. Android on-device SpeechRecognizer (API31+) is used
+only after a tap and a previous explicit RECORD_AUDIO grant, never while Sarvam
+or OpenAI live speech is active. An exact deterministic allowlist opens GitHub,
+opens WhatsApp, or requests the bounded launcher scan. Session dismissal and
+20-second timeout cancel the recognizer. No cloud transcript, arbitrary UI
+navigation, third-party message send or always-on Hey Nexa activation.

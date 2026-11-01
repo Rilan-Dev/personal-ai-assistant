@@ -580,3 +580,13 @@
 - Added owner-selected WhatsApp contact and exact-message preview; a bounded, encoded
   WhatsApp composer Intent is dispatched only after owner action. No send or delivery claim.
 - Read docs/architecture/NEXA_LAUNCHER_WHATSAPP_MILESTONE.md for gates.
+
+## 2026-11-01 — Nexa panel one-shot offline voice commands
+- Added explicit Speak a device command button to Android VoiceInteractionSession.
+- Uses Android API31+ on-device SpeechRecognizer only; RECORD_AUDIO must already
+  be user granted and no live Sarvam/OpenAI session may be using the microphone.
+- Fixed allowlist: Open GitHub, Open WhatsApp, Find my GitHub app; 20-second limit.
+- App launch request is not evidence of opening, and GitHub icon scan still
+  requires the separate Android Accessibility user grant.
+- No arbitrary third-party action, cloud transcription, message send or hotword.
+- Added source security regressions; native emulator and physical UAT remain gates.

@@ -308,3 +308,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   automatic Send or delivery verification was implemented in this milestone.
 - Hey Nexa always-on custom wake word and voice-device tool routing remain separate
   open engineering gates requiring offline KWS and real phone privacy evaluation.
+
+## One-shot voice command acceptance
+- On the owner phone select Nexa as Android default assistant and invoke the
+  compact panel. Tap Speak a device command, grant microphone as requested in
+  Settings, and verify Open GitHub, Open WhatsApp and Find my GitHub app.
+- Confirm voice input cancels on Dismiss, while live voice is active, when
+  recognition fails, or after the 20-second bound. No unattended wake word.
+- Validate native compilation/instrumentation before labeling as accepted.

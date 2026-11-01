@@ -38,6 +38,11 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
   Android release variant signed with a dedicated testing certificate,
   verifies its signature and publishes an APK artifact plus SHA-256.
   This is for private testing, not a public production release.
+- **Nexa panel offline device command (source milestone):** tap Speak a device
+  command after invoking the Android assistant gesture; exact offline phrases
+  Open GitHub, Open WhatsApp and Find my GitHub app use fixed native allowlists.
+  It is one-shot, owner-triggered, and cannot send WhatsApp messages or act as
+  a background wake-word detector. Physical-phone tests remain mandatory.
 - **Nexa Android assistant opt-in (source milestone):** Android RoleManager
   selection and system-owned compact VoiceInteractionSession UI. The owner can
   start/stop existing live audio from the panel after granting microphone and
