@@ -8,7 +8,7 @@ const realtime=read('RealtimeVoiceService.kt');
 const policy=read('NexaLiveToolPolicy.kt');
 const gate=read('NexaVoiceIdleGate.kt');
 
-test('wake session has bounded multi-turn listening and spoken feedback',()=>{
+test('manual offline command controls remain bounded; automatic wake uses live AI',()=>{
   assert.match(session,/beginLocalConversation\(\)/);
   assert.match(session,/localConversationActive/);
   assert.match(session,/silenceWindowMs = 18_000L/);
@@ -19,7 +19,7 @@ test('wake session has bounded multi-turn listening and spoken feedback',()=>{
   assert.match(session,/TextToSpeech\.QUEUE_FLUSH/);
   assert.match(session,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(session,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(session,/else beginLocalConversation\(\)/);
+  assert.match(session,/else feedback\("Enable live AI after assistant invocation/);
   assert.match(session,/NexaWakeWordService\.assistantClosed\(\)/);
   assert.match(session,/stopConversation\(\)/);
 });
