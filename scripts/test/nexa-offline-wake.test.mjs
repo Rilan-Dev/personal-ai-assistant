@@ -92,3 +92,16 @@ test('one owner opt-in survives updates, rearms after system assistant and never
   assert.match(setup,/The Android green dot indicates real microphone activity/);
   assert.match(app,/resumeWakeIfEnabled/);
 });
+
+test('only the OS-selected assistant may attempt automatic opted-in wake recovery',()=>{
+  const assistant=read(dir+'NexaAssistantService.kt');
+  const receiver=read(dir+'NexaWakeBootReceiver.kt');
+  assert.match(assistant,/override fun onReady\(\)/);
+  assert.match(assistant,/NexaWakeWordService\.enabled\(this\)/);
+  assert.match(assistant,/NexaWakeWordModule\.modelReady\(this\)/);
+  assert.match(assistant,/checkSelfPermission\(Manifest\.permission\.RECORD_AUDIO\)/);
+  assert.match(assistant,/NexaWakeWordService\.START/);
+  assert.match(assistant,/startForegroundService\(start\)/);
+  assert.doesNotMatch(receiver,/startForegroundService\(|AudioRecord\(/);
+  assert.match(service,/manager\.cancel\(4925\)/);
+});
