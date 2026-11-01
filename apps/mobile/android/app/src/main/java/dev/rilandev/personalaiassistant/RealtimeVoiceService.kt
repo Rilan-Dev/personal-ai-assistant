@@ -199,6 +199,7 @@ class RealtimeVoiceService : Service() {
         lastToolResult = ""
         lastLocalUtterance = ""
         lastLocalUtteranceAt = 0L
+        micReleaseRetries = 0
         seenCallIds.clear()
         toolCallsInSession = 0
         idleGate.reset(0L)
@@ -470,8 +471,19 @@ class RealtimeVoiceService : Service() {
             socket?.send(JSONObject().put("type", "response.create").toString())
     }
 
+    private var micReleaseRetries = 0
+
     private fun startAudio() {
         if (!active.get() || status!="connecting") return
+        // The offline wake capture can still be closing on some OEMs. Never
+        // initialize a second AudioRecord until the first one is released.
+        if (!NexaWakeWordService.liveMicReleased()) {
+            if (++micReleaseRetries > 20) {
+                stopWithStatus("error","Wake microphone handoff timed out; use Stop and retry")
+            } else main.postDelayed({ startAudio() },100L)
+            return
+        }
+        micReleaseRetries = 0
         main.removeCallbacks(handshakeTimeout)
         try {
             val manager = getSystemService(AUDIO_SERVICE) as AudioManager
@@ -552,7 +564,7 @@ class RealtimeVoiceService : Service() {
                         // Serialize state changes with the transmit boundary:
                         // after a mute action is applied, no new raw PCM
                         // frames can enter the provider's outgoing queue.
-                        val sent=synchronized(micSendLock) {
+                        val sent=try { synchronized(micSendLock) {
                             if(!active.get()) true else {
                                 val bytes=if(microphoneMuted)
                                     ByteArray(got) else data.copyOf(got)
@@ -566,7 +578,7 @@ class RealtimeVoiceService : Service() {
                                         .put("audio",encoded).toString())
                                 }
                             }
-                        }
+                        } } catch (_: Exception) { false }
                         if(!sent){
                             main.post {if(active.get())stopWithStatus("error","Voice network too slow")}
                             break
@@ -614,7 +626,7 @@ class RealtimeVoiceService : Service() {
         // Resume detection only after both live capture and playback release;
         // an already-visible assistant panel still keeps the wake mic paused.
         NexaWakeWordService.resumeAfterLiveVoice()
-        sarvamTransport?.close()
+        try { sarvamTransport?.close() } catch (_: Exception) {}
         sarvamTransport=null
         pendingAppTool = null
         pendingApprovalSummary = null
@@ -627,7 +639,7 @@ class RealtimeVoiceService : Service() {
         client?.dispatcher?.executorService?.shutdown()
         client?.connectionPool?.evictAll()
         client = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Exception) {}
         stopSelf()
     }
     override fun onDestroy() {
