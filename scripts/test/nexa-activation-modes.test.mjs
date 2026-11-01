@@ -19,13 +19,13 @@ test('gesture is default and previous wake preference cannot restart microphone 
   assert.match(read(root+'NexaWakeBootReceiver.kt'),/NexaWakeWordService\.enabled\(context\)/);
   assert.match(assistant,/NexaWakeWordService\.enabled\(this\)/);
 });
-test('assistant gesture starts a bounded multi-turn local conversation unless live voice opted in',()=>{
+test('assistant gesture starts only opted-in live provider; local commands require Talk tap',()=>{
   assert.match(assistant,/autoDismissAfterCommand = false/);
   assert.match(assistant,/Android assistant gesture/);
   assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else beginLocalConversation\(\)/);
+  assert.match(assistant,/else feedback\("Enable live AI after assistant invocation/);
   assert.match(assistant,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(assistant,/silenceWindowMs = 18_000L/);
   assert.match(assistant,/TextToSpeech/);
