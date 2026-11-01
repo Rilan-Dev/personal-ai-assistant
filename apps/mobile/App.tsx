@@ -21,7 +21,7 @@ import type { LauncherNavigationStatus } from './src/native/androidLauncherNavig
 import type { AppAvailability } from './src/native/androidAppDiscovery';
 import type { NexaAssistantRoleStatus } from './src/native/androidAssistantRole';
 import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaAppSettings,
-  requestApproximateLocationSetup} from './src/native/nexaSetup';
+  requestApproximateLocationSetup, setAutoStartVoiceOnInvocation} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -149,6 +149,19 @@ export default function App() {
     try {await stopWakeListening();setSetupNotice('Privacy-first assistant gesture mode restored. Continuous wake microphone stopped.');}
     catch {setSetupNotice('Android could not stop wake listener; use the persistent Stop notification.');}
     finally {void refreshWakeStatus();}
+  };
+  const toggleAssistantConversation = async () => {
+    const enable = !setupStatus?.autoStartVoiceOnInvocation;
+    try {
+      await setAutoStartVoiceOnInvocation(enable);
+      setSetupStatus(await readNexaSetupStatus());
+      setSetupNotice(enable
+        ? 'Voice-on-invocation enabled. The selected AI provider receives microphone audio only after you invoke the assistant.'
+        : 'Voice-on-invocation disabled. Assistant gestures use the offline one-shot command recognizer.');
+    } catch (error) {
+      setSetupNotice('Could not change voice-on-invocation: ' +
+        (error instanceof Error ? error.message.slice(0,120) : 'Check permissions and voice provider settings.'));
+    }
   };
   const refreshSetupStatus = async () => {
     if (!engine.live || !nexaSetupAvailable()) {
@@ -948,6 +961,7 @@ export default function App() {
         onWakeStart={()=>void prepareWakeListening()}
         onWakeStop={()=>void stopWake()}
         onWakeRefresh={()=>void refreshWakeStatus()}
+        onAutoVoiceToggle={()=>void runSetupAction('Voice on invocation',toggleAssistantConversation)}
         onVoice={()=>void runSetupAction('Voice permission',prepareNexaPermissions)}
         onAssistant={()=>void runSetupAction('Default assistant role',selectNexaAssistant)}
         onAssistantSettings={()=>void runSetupAction('Android Default apps',openNexaAssistantSettings)}
