@@ -95,3 +95,12 @@ java.awt.Component signature was missing on Android. R8 remains enabled.
 The release rules now explicitly preserve JNA/Vosk reflection symbols and
 suppress **only** this unavailable desktop type. Successful release assembly,
 signed APK verification and actual device acceptance must follow this change.
+
+### R8 second failure (run 41304199022)
+The JNA keep rule exposed additional desktop-only AWT symbols, namely
+GraphicsEnvironment, HeadlessException, and Window. This is the same
+desktop-only package as the original Component error, not an Android API.
+The scoped suppression is now **java.awt.\*\***, retaining all non-AWT
+missing-class checks, code shrinking, and the Vosk/JNA keep rules.
+This fix needs a subsequent successful **release APK** build before the
+release is called complete.

@@ -18,8 +18,8 @@
 -keep class org.vosk.** { *; }
 -keep class com.sun.jna.** { *; }
 
-# The Android JNA AAR contains an unused *desktop-only* AWT signature in
-# Native.getWindowHandle0(). Android has no java.awt.Component.
-# R8 otherwise rejects an otherwise-valid Android release bundle.
-# Keep this suppression narrow; do not disable R8 or whole-package checks.
--dontwarn java.awt.Component
+# JNA bundles unused desktop-only AWT helper signatures (Component, Window,
+# GraphicsEnvironment, HeadlessException, etc.). Android has no java.awt APIs.
+# Keep R8 and all other missing-class checks enabled. Scope this suppression
+# ONLY to AWT, not to all JNA or application classes.
+-dontwarn java.awt.**

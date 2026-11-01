@@ -66,10 +66,10 @@ test('system assistant hotword readiness depends on verified model',()=>{
   assert.match(read(dir+'VoiceControlModule.kt'),/NexaWakeWordModule\.modelReady\(context\)/);
 });
 
-test('R8 retains Vosk/JNA reflective symbols and only suppresses desktop AWT type',()=>{
+test('R8 retains Vosk/JNA reflective symbols and only suppresses desktop AWT namespace',()=>{
   const rules=read('apps/mobile/android/app/proguard-rules.pro');
   assert.match(rules,/-keep class org\.vosk\.\*\* \{ \*; \}/);
   assert.match(rules,/-keep class com\.sun\.jna\.\*\* \{ \*; \}/);
-  assert.match(rules,/-dontwarn java\.awt\.Component/);
+  assert.match(rules,/-dontwarn java\.awt\.\*\*/);
   assert.doesNotMatch(rules,/-dontwarn \*\*|-ignorewarnings/);
 });
