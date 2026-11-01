@@ -25,7 +25,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
-  stopWakeListening} from './src/native/androidWakeWord';
+  stopWakeListening, resumeWakeIfEnabled} from './src/native/androidWakeWord';
 import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
@@ -106,6 +106,14 @@ export default function App() {
     const id=setInterval(()=>{ void refreshWakeStatus(); },2500);
     return ()=>clearInterval(id);
   },[engine.live,tab]);
+  // Restore only when Nexa has a visible activity, with the owner's
+  // saved opt-in. Never auto-launch a microphone from boot receiver.
+  useEffect(()=>{
+    if (!engine.live || !wakeWordAvailable()) return;
+    void resumeWakeIfEnabled().then(()=>refreshWakeStatus()).catch(()=>{
+      // Android retains final authority over microphone foreground access.
+    });
+  },[engine.live]);
   const prepareWakeListening = async () => {
     if (wakeBusy) return;
     setWakeBusy(true);
