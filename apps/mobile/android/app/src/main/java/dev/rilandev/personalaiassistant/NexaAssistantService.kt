@@ -34,15 +34,20 @@ import com.facebook.react.bridge.ReactMethod
 class NexaAssistantService : VoiceInteractionService() {
     companion object {
         @Volatile private var current: NexaAssistantService? = null
-        fun showFromWakeWord(): Boolean {
+        fun showFromWakeWord(): Boolean = requestSession("nexa_hotword")
+
+        // Only the owner's direct tap on the small floating overlay invokes this.
+        fun showFromOwnerTap(): Boolean = requestSession("nexa_overlay_tap")
+
+        private fun requestSession(trigger: String): Boolean {
             val service = current ?: return false
             return try {
                 service.handler.post {
                     try {
-                        service.showSession(Bundle().apply { putBoolean("nexa_hotword", true) }, 0)
+                        service.showSession(Bundle().apply { putBoolean(trigger, true) }, 0)
                     } catch (_: Exception) {}
                 }
-                true // Dispatch requested; not proof OEM displayed session
+                true // Dispatch requested; OEM display success not yet observed
             } catch (_: Exception) { false }
         }
     }
@@ -111,7 +116,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             panel.addView(it)
         }
         panel.addView(TextView(app).apply {
-            text = "Audio starts only when you tap Start. Android shows a mic indicator and a Stop notification."
+            text = "Tap Speak, or Talk in the Nexa overlay, for one on-device command. Live provider audio starts separately with Start live voice."
             setTextColor(Color.LTGRAY)
         })
         panel.addView(button("Speak a device command") { listenOneDeviceCommand() })
@@ -211,46 +216,21 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         }
     }
     private fun applyDeviceCommand(raw: String) {
-        // Exact fixed grammar, no LLM output and no arbitrary app/tool dispatch.
+        // One deterministic command gate for typed and spoken tool requests.
+        // No AI-generated coordinates or unreviewed external message sends.
         val command = raw.lowercase(Locale.ROOT).trim()
-            .removePrefix("hey nexa ").trim().trimEnd("."[0], "!"[0], "?"[0])
-        when (command) {
-            "open github", "open github app", "open my github app" -> {
-                launchKnownApp("com.github.android")
-            }
-            "open whatsapp", "open my whatsapp" -> {
-                launchKnownApp("com.whatsapp")
-            }
-            "find github", "find my github app", "find github app" -> {
-                val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-                val pkg = app.packageManager.resolveActivity(home, 0)?.activityInfo?.packageName.orEmpty()
-                if (app.packageManager.getLaunchIntentForPackage("com.github.android") == null) {
-                    feedback("GitHub is not installed or not visible.")
-                } else if (pkg.isBlank() || pkg == "android" || pkg == app.packageName ||
-                    !LauncherNavigationState.begin(pkg)) {
-                    feedback("Enable Nexa Launcher Navigation in Android Accessibility Settings.")
-                } else try {
-                    app.startActivity(home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    hide()
-                } catch (_: Exception) {
-                    LauncherNavigationState.stop("launch_failed")
-                    feedback("Android could not open the home launcher.")
-                }
-            }
-            else -> feedback("Supported commands: Open GitHub, Open WhatsApp, Find my GitHub app. Messages require review in Nexa Tools.")
+            .removePrefix("hey nexa ").trim()
+            .trimEnd('.', '!', '?')
+        val result = NexaOverlayCommands.handle(app, command)
+        feedback(result)
+        if (result.startsWith("Launcher search started") ||
+            result.contains("launch requested") ||
+            result.startsWith("Android settings opened")) {
+            // An Intent request is NOT evidence of a completed action.
+            hide()
         }
     }
-    private fun launchKnownApp(packageId: String) {
-        val target = app.packageManager.getLaunchIntentForPackage(packageId)
-        if (target == null) {
-            feedback("The requested app is not installed or cannot be opened.")
-            return
-        }
-        try {
-            app.startActivity(target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            hide() // Intent dispatch is not proof that the app opened.
-        } catch (_: Exception) { feedback("Android rejected the application launch request.") }
-    }
+
     private fun startOwnerVoice() {
         if (RealtimeVoiceService.status == "listening" || RealtimeVoiceService.status == "connecting") {
             label?.text = "Voice already active. Use Stop to end it."
@@ -280,7 +260,8 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         super.onShow(args, showFlags)
         handler.removeCallbacks(refresh)
         handler.post(refresh)
-        if (args?.getBoolean("nexa_hotword") == true) {
+        if (args?.getBoolean("nexa_hotword") == true ||
+            args?.getBoolean("nexa_overlay_tap") == true) {
             // Wake detector has released AudioRecord before showing this UI.
             // Only a bounded, on-device, one-shot recognizer is started.
             handler.postDelayed({ if (!commandBusy) listenOneDeviceCommand() }, 420L)
