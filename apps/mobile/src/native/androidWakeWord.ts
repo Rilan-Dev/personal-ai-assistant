@@ -5,6 +5,8 @@ export type WakeStatus = {
   installing: boolean;
   listening: boolean;
   enabled: boolean;
+  mode: 'gesture' | 'continuous';
+  protectedHotwordAvailable: boolean;
   restartRequired: boolean;
   state: string;
   message: string;

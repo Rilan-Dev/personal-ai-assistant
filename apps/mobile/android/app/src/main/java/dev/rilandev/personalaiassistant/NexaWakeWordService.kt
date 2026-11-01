@@ -51,12 +51,23 @@ class NexaWakeWordService : Service() {
         /** Pause an existing armed FGS without destroying it. */
         fun pauseForAssistant() { active?.handoffPending = true }
 
-        fun enabled(ctx: Context): Boolean =
+        // A legacy wake_enabled flag alone must not restart continuous microphone
+        // capture after an APK upgrade. Version 2 requires a fresh user opt-in.
+        const val MODE_GESTURE = "gesture"
+        const val MODE_CONTINUOUS = "continuous"
+        private const val MODE_KEY = "activation_mode_v2"
+        private fun prefs(ctx: Context) =
             ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
-                .getBoolean("wake_enabled", false)
+        fun mode(ctx: Context): String =
+            if (prefs(ctx).getString(MODE_KEY, MODE_GESTURE) == MODE_CONTINUOUS &&
+                prefs(ctx).getBoolean("wake_enabled", false)) MODE_CONTINUOUS
+            else MODE_GESTURE
+        fun enabled(ctx: Context): Boolean = mode(ctx) == MODE_CONTINUOUS
         fun persistEnabled(ctx: Context, enabled: Boolean) {
-            ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
-                .edit().putBoolean("wake_enabled", enabled).apply()
+            prefs(ctx).edit()
+                .putString(MODE_KEY, if (enabled) MODE_CONTINUOUS else MODE_GESTURE)
+                .putBoolean("wake_enabled", enabled)
+                .apply()
         }
     }
 
@@ -193,7 +204,7 @@ class NexaWakeWordService : Service() {
 
     private fun detectOnce(model: Model): Boolean {
         val gate = NexaWakePhrase()
-        val grammar = "[\"hey nexus\", \"hey next a\", \"[unk]\"]"
+        val grammar = "[\"hey nexa\", \"hey nexus\", \"hey next a\", \"[unk]\"]"
         val frame = ShortArray(4000)
         try {
             Recognizer(model, 16000.0f, grammar).use { recognizer ->

@@ -143,7 +143,23 @@ export default function NexaSetupScreen(props: Props) {
         </View>
       ))}
       <View style={styles.footerCard}>
-        <Text style={styles.footerTitle}>Hey Nexa · offline wake listening</Text>
+        <Text style={styles.footerTitle}>Nexa activation · {wakeStatus?.enabled ? 'Hands-free' : 'Privacy-first'}</Text>
+        <Text style={styles.footerCopy}>
+          Recommended: choose Nexa as the default Android assistant and use your
+          phone's assistant gesture or button. There is NO idle microphone capture
+          in this mode. Nexa listens for one device command after invocation, with
+          Android's normal microphone indicator while audio is actually recorded.
+        </Text>
+        <Text style={styles.footerCopy}>
+          A regular installed APK cannot use Google's protected hardware hotword
+          detector or suppress Android's privacy indicator. Genuine indicator-free
+          hotword activation requires supported OEM/system integration.
+        </Text>
+        <Text style={styles.footerCopy}>
+          Optional continuous Hey Nexa mode requires an explicit microphone opt-in,
+          shows the green microphone dot and Stop notification, and may use more
+          battery. Existing installs must re-enable it after this upgrade.
+        </Text>
         <Text style={styles.footerCopy}>
           Experimental, English-first voice trigger. Download an Apache-licensed
           40 MB model once. You must explicitly start microphone listening.
@@ -158,7 +174,7 @@ export default function NexaSetupScreen(props: Props) {
             : wakeStatus.installing ? '○ Downloading model' : '○ Offline model not installed'
             : 'Checking offline voice availability'}
         </Text>
-        <Text style={styles.footerCopy}>Wake preference: {wakeStatus?.enabled ? 'ON (saved across updates/reboot)' : 'OFF'}.
+        <Text style={styles.footerCopy}>Activation mode: {wakeStatus?.mode === 'continuous' ? 'Continuous microphone (opt-in)' : 'Assistant gesture (no idle recording)'}.
           The Android green dot indicates real microphone activity; this app cannot hide it.
         </Text>
         {wakeStatus?.message ? <Text style={styles.footerCopy}>{wakeStatus.message}</Text> : null}
@@ -170,13 +186,13 @@ export default function NexaSetupScreen(props: Props) {
           </Pressable>}
           {wakeStatus?.modelReady && !wakeStatus.enabled && <Pressable accessibilityRole="button"
             style={styles.secondary} disabled={busy}
-            onPress={onWakeStart}><Text style={styles.secondaryText}>Enable Hey Nexa (saved setting)</Text></Pressable>}
+            onPress={onWakeStart}><Text style={styles.secondaryText}>Enable Hey Nexa (saved setting) · continuous mic</Text></Pressable>}
           {wakeStatus?.modelReady && wakeStatus.enabled && wakeStatus.restartRequired && <Pressable accessibilityRole="button"
             style={styles.secondary} disabled={busy}
             onPress={onWakeStart}><Text style={styles.secondaryText}>Resume wake listening</Text></Pressable>}
           {wakeStatus?.enabled && <Pressable accessibilityRole="button"
             style={styles.secondary} onPress={onWakeStop}>
-            <Text style={styles.secondaryText}>Disable Hey Nexa</Text>
+            <Text style={styles.secondaryText}>Switch to privacy-first mode (stop microphone)</Text>
           </Pressable>}
           <Pressable accessibilityRole="button" style={styles.secondary} onPress={onWakeRefresh}>
             <Text style={styles.secondaryText}>Refresh wake status</Text>
