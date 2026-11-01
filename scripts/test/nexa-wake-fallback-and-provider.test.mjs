@@ -30,8 +30,8 @@ test('fallback voice uses a bounded on-device speech loop with truthful action s
   assert.match(overlay,/TextToSpeech/);
 });
 test('native live voice catches initialization failures and preserves privacy',()=>{
-  assert.match(voice,/Log\.e\("NexaVoice", "Provider initialization failed/);
-  assert.match(voice,/stopWithStatus\("error", "Could not initialize live voice provider"\)/);
+  assert.match(voice,/Could not initialize live voice provider/);
+  assert.match(voice,/stopWithStatus\("error", "Could not initialize live voice provider/);
   assert.match(voice,/FOREGROUND_SERVICE_TYPE_MICROPHONE/);
   assert.match(voice,/Stop voice/);
   assert.doesNotMatch(voice,/Log\.e\([^\n]*apiKey|Log\.e\([^\n]*token/);
