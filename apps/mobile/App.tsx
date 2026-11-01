@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from '@paa/agent-core';
@@ -58,10 +58,28 @@ export default function App() {
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
+  const voiceShortcutRequested = useRef(false);
   const navigate=(destination:'chat'|'voice'|'tools'|'setup'|'settings')=>{
     Keyboard.dismiss();
     setTab(destination);
   };
+  // A Google Assistant App Action or Android launcher shortcut navigates
+  // to Voice only. Receiving a deep link never starts a microphone; the
+  // owner still uses Start live voice or the system assistant gesture.
+  useEffect(()=>{
+    if(Platform.OS!=='android')return;
+    let active=true;
+    const route=(url:string|null)=>{
+      if(!active)return;
+      if(url==='nexa://voice'||url==='nexa://voice/'){
+        voiceShortcutRequested.current=true;
+        navigate('voice');
+      }
+    };
+    void Linking.getInitialURL().then(route).catch(()=>{});
+    const sub=Linking.addEventListener('url',event=>route(event.url));
+    return ()=>{active=false;sub.remove();};
+  },[]);
   useEffect(()=>{
     if(Platform.OS!=='android')return;
     const sub=BackHandler.addEventListener('hardwareBackPress',()=>{
@@ -184,7 +202,7 @@ export default function App() {
     readNexaSetupStatus().then(status=>{
       if (!mounted) return;
       setSetupStatus(status);
-      if (status.setupAcknowledged) setTab(prev=>prev==='setup'?'chat':prev);
+      if (status.setupAcknowledged) setTab(prev=>prev==='setup'&&!voiceShortcutRequested.current?'chat':prev);
       // Explicit overlay navigation is consumed once. No background AI action.
       if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
         .then(target=>{
