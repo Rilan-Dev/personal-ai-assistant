@@ -74,3 +74,21 @@ test('privacy and background settings are system-owned, not self-granted',()=>{
   assert.ok(overlay.includes('button("Battery settings")'));
   assert.doesNotMatch(overlay,/REQUEST_IGNORE_BATTERY_OPTIMIZATIONS/);
 });
+
+test('owner tapped voice opens an existing system assistant session, not arbitrary speech capture',()=>{
+  const assistant=read(path+'NexaAssistantService.kt');
+  assert.ok(assistant.includes('fun showFromOwnerTap(): Boolean'));
+  assert.ok(assistant.includes('requestSession("nexa_overlay_tap")'));
+  assert.ok(assistant.includes('args?.getBoolean("nexa_overlay_tap") == true'));
+  assert.ok(assistant.includes('NexaOverlayCommands.handle(app, command)'));
+  assert.ok(assistant.includes('listenOneDeviceCommand()'));
+  assert.ok(overlay.includes('Talk to Nexa · one device command'));
+  assert.ok(overlay.includes('NexaAssistantService.showFromOwnerTap()'));
+  assert.ok(overlay.includes('stopService(Intent(this, NexaWakeWordService::class.java))'));
+  assert.ok(overlay.includes('NexaWakeWordService.listening'));
+  assert.ok(overlay.includes('RealtimeVoiceService.status == "listening"'));
+  assert.ok(overlay.includes('Manifest.permission.RECORD_AUDIO'));
+  assert.ok(overlay.includes('Select Nexa in Android Default assistant settings'));
+  assert.doesNotMatch(overlay,/SpeechRecognizer|AudioRecord|startRecording\(/);
+  assert.doesNotMatch(assistant,/sendTextMessage|SmsManager|Runtime\.getRuntime\(\)/);
+});
