@@ -154,54 +154,60 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             if (label != null) handler.postDelayed(this, 750L)
         }
     }
-    private fun button(text: String, action: () -> Unit): Button = Button(app).apply {
-        this.text = text
-        textSize = 13f
-        isAllCaps = false
-        minHeight = (48 * app.resources.displayMetrics.density).toInt()
-        setTextColor(Color.WHITE)
-        backgroundTintList = ColorStateList.valueOf(Color.rgb(66, 73, 147))
-        setOnClickListener { action() }
-    }
+    private fun button(text: String, action: () -> Unit): Button =
+        NexaOverlayTheme.action(app, text, NexaOverlayTheme.palette(app), action)
+
     private fun row(vararg children: Button): LinearLayout =
         LinearLayout(app).apply {
             orientation = LinearLayout.HORIZONTAL
             children.forEach { child ->
                 addView(child, LinearLayout.LayoutParams(0,
-                    (50 * app.resources.displayMetrics.density).toInt(), 1f))
+                    NexaOverlayTheme.dp(app, 48), 1f))
             }
         }
+
     override fun onCreateContentView(): View {
-        val d = app.resources.displayMetrics.density
-        val pad = (14 * d).toInt()
+        val p = NexaOverlayTheme.palette(app)
+        val pad = NexaOverlayTheme.dp(app, 14)
+        val outer = LinearLayout(app).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, NexaOverlayTheme.dp(app, 4), pad, pad)
+        }
         val panel = LinearLayout(app).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, pad, pad, pad)
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(18, 24, 45))
-                cornerRadius = 22 * d
-                setStroke((1*d).toInt(), Color.rgb(85, 92, 151))
-            }
-            addView(TextView(app).apply {
-                text = "✦  Nexa AI  ·  Voice"
-                textSize = 17f
-                setTextColor(Color.WHITE)
-            })
+            background = NexaOverlayTheme.card(app, p)
+            elevation = NexaOverlayTheme.dp(app, 12).toFloat()
+            addView(NexaOverlayTheme.label(app, "━━    ✦ NEXA  ·  LIVE ASSISTANT", p, 12f, true))
+            addView(NexaOverlayTheme.label(app, "How can I help?", p, 23f))
         }
-        label = TextView(app).also {
-            it.setTextColor(Color.WHITE)
-            it.textSize = 14f
-            it.setPadding(0, pad, 0, pad)
-            it.maxLines = 3
+        label = NexaOverlayTheme.label(app, "Listening for your request", p, 14f).also {
+            it.setPadding(pad, pad, pad, pad)
+            it.minHeight = NexaOverlayTheme.dp(app, 65)
+            it.maxLines = 4
+            it.background = NexaOverlayTheme.inset(app, p)
             panel.addView(it)
         }
         panel.addView(row(
+            button("Battery") {
+                feedback(NexaOverlayCommands.handle(app, "battery").take(250))
+            },
+            button("Check GitHub") {
+                feedback(NexaOverlayCommands.handle(app, "check github").take(250))
+            },
+            button("Find app") {
+                feedback(NexaOverlayCommands.handle(app, "find my github app").take(250))
+            }
+        ))
+        panel.addView(NexaOverlayTheme.label(app,
+            "Tools only with permission  ·  Actions need approval", p, 11f, true))
+        panel.addView(row(
             button("🎙 Talk") { if (localConversationActive) listenOneDeviceCommand()
                 else if (RealtimeVoiceService.status == "stopped") beginLocalConversation() },
-            button("Stop / Dismiss") { stopConversation() }
+            button("Live AI") { startOwnerVoice() }
         ))
         panel.addView(row(
-            button("Live AI") { startOwnerVoice() },
+            button("Stop / Dismiss") { stopConversation() },
             button("Open Nexa") {
                 try {
                     app.startActivity(Intent(app, MainActivity::class.java).apply {
@@ -229,7 +235,24 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         )
         approvalRow?.visibility = View.GONE
         approvalRow?.let { panel.addView(it) }
-        return panel
+        outer.addView(panel)
+        val dock = LinearLayout(app).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(pad, NexaOverlayTheme.dp(app, 5), pad, NexaOverlayTheme.dp(app, 5))
+            background = NexaOverlayTheme.card(app, p, 30)
+            elevation = NexaOverlayTheme.dp(app, 11).toFloat()
+            addView(NexaOverlayTheme.label(app, "✦", p, 20f))
+            addView(NexaOverlayTheme.waveform(app, p),
+                LinearLayout.LayoutParams(0, NexaOverlayTheme.dp(app, 40), 1f))
+            addView(button("Stop") { stopConversation() },
+                LinearLayout.LayoutParams(NexaOverlayTheme.dp(app, 76),
+                    NexaOverlayTheme.dp(app, 48)))
+        }
+        outer.addView(dock, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, NexaOverlayTheme.dp(app, 60)
+        ).apply { topMargin = NexaOverlayTheme.dp(app, 9) })
+        return outer
     }
 
     private fun configureVoicePlate() {
