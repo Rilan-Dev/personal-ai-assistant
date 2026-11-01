@@ -7,8 +7,13 @@ const code = readFileSync(
  'utf8'
 );
 
-test('system assistant accepts one explicit on-device spoken command with no cloud fallback',()=>{
-  assert.match(code,/button\("Speak a device command"\)/);
+test('system assistant loops on-device speech turns and does not force cloud fallback',()=>{
+  assert.ok(code.includes('button("🎙 Talk")'));
+  assert.match(code,/beginLocalConversation\(\)/);
+  assert.match(code,/replyAndListen\(result\)/);
+  assert.match(code,/TextToSpeech/);
+  assert.match(code,/silenceWindowMs = 18_000L/);
+  assert.match(code,/window\.setGravity\(Gravity\.BOTTOM\)/);
   assert.match(code,/SpeechRecognizer\.isOnDeviceRecognitionAvailable\(app\)/);
   assert.match(code,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(code,/EXTRA_PREFER_OFFLINE, true/);
