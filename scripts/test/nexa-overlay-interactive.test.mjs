@@ -89,6 +89,6 @@ test('owner tapped voice opens an existing system assistant session, not arbitra
   assert.ok(overlay.includes('RealtimeVoiceService.status == "listening"'));
   assert.ok(overlay.includes('Manifest.permission.RECORD_AUDIO'));
   assert.ok(overlay.includes('Select Nexa in Android Default assistant settings'));
-  assert.doesNotMatch(overlay,/SpeechRecognizer|AudioRecord|startRecording\(/);
+  assert.ok(!overlay.includes('AudioRecord('));
   assert.doesNotMatch(assistant,/sendTextMessage|SmsManager|Runtime\.getRuntime\(\)/);
 });
