@@ -23,9 +23,12 @@ import org.vosk.Recognizer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * User-armed on-device wake phrase listener. Does not upload, log or store
- * microphone data; no boot receiver or automatic restart. Releases AudioRecord
- * before transferring control to Android's selected assistant.
+ * Owner-armed offline microphone foreground service. Retains one foreground
+ * service across successive wake turns; releases its microphone while the
+ * assistant session owns it, then re-arms after onHide.
+ *
+ * Android's green mic privacy indicator and ongoing FGS notification are
+ * intentional OS disclosures and MUST NOT be hidden.
  */
 class NexaWakeWordService : Service() {
     companion object {
@@ -34,49 +37,68 @@ class NexaWakeWordService : Service() {
         private const val CHANNEL = "nexa_wake_v1"
         private const val CHANNEL_TRIGGER = "nexa_wake_detected_v1"
         private const val ID = 4921
+        @Volatile private var active: NexaWakeWordService? = null
         @Volatile var listening = false
             private set
         @Volatile var state = "off"
             private set
         @Volatile var message = "Wake-word detection is off"
             private set
+
+        /** Called by the Android system-selected assistant session. */
+        fun assistantClosed() { active?.handoffPending = false }
+
+        /** Pause an existing armed FGS without destroying it. */
+        fun pauseForAssistant() { active?.handoffPending = true }
+
+        fun enabled(ctx: Context): Boolean =
+            ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
+                .getBoolean("wake_enabled", false)
+        fun persistEnabled(ctx: Context, enabled: Boolean) {
+            ctx.getSharedPreferences("nexa_wake_preferences", Context.MODE_PRIVATE)
+                .edit().putBoolean("wake_enabled", enabled).apply()
+        }
     }
+
     private val running = AtomicBoolean(false)
-    private var audio: AudioRecord? = null
-    private var thread: Thread? = null
+    @Volatile private var handoffPending = false
+    @Volatile private var audio: AudioRecord? = null
+    private var worker: Thread? = null
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun notification(text: String, detected: Boolean = false): Notification {
-        val target = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val open = PendingIntent.getActivity(this, 0, target,
+        val open = PendingIntent.getActivity(this, 0,
+            Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1,
             Intent(this, NexaWakeWordService::class.java).setAction(STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this,
-            if (detected) CHANNEL_TRIGGER else CHANNEL)
-            .setSmallIcon(R.drawable.ic_assistant_tile)
-            .setContentTitle(if (detected) "Hey Nexa detected" else "Nexa · Offline wake listening")
+        return NotificationCompat.Builder(this, if (detected) CHANNEL_TRIGGER else CHANNEL)
+            .setSmallIcon(R.drawable.ic_nexa_assistant)
+            .setContentTitle(if (detected) "Nexa heard the wake phrase" else "Nexa · Microphone listening for Hey Nexa")
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(!detected)
             .setAutoCancel(detected)
             .setOnlyAlertOnce(!detected)
             .setPriority(if (detected) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_LOW)
-            .apply {
-                if (!detected) addAction(R.drawable.ic_assistant_tile, "Stop wake listening", stop)
-            }.build()
+            .apply { if (!detected) addAction(R.drawable.ic_nexa_assistant, "Turn off wake listening", stop) }
+            .build()
     }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == STOP) { stopSelf(); return START_NOT_STICKY }
-        if (intent?.action != START || !running.compareAndSet(false, true))
+        if (intent?.action == STOP) {
+            persistEnabled(this, false)
+            stopSelf()
             return START_NOT_STICKY
+        }
+        if (intent?.action != START || !enabled(this)) return START_NOT_STICKY
+        if (!running.compareAndSet(false, true)) return START_STICKY
         if (!NexaWakeWordModule.modelReady(this) ||
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             state = "error"
-            message = "Wake model or microphone grant is missing"
+            message = "Offline model or microphone permission missing"
             running.set(false)
             stopSelf()
             return START_NOT_STICKY
@@ -84,17 +106,16 @@ class NexaWakeWordService : Service() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= 26) {
             manager.createNotificationChannel(NotificationChannel(CHANNEL,
-                "Nexa on-device wake listening", NotificationManager.IMPORTANCE_LOW))
+                "Nexa offline wake microphone", NotificationManager.IMPORTANCE_LOW))
             manager.createNotificationChannel(NotificationChannel(CHANNEL_TRIGGER,
-                "Nexa wake recognition", NotificationManager.IMPORTANCE_HIGH))
+                "Nexa wake phrase recognized", NotificationManager.IMPORTANCE_HIGH))
         }
         try {
             if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(ID, notification("Local listening · Stop available"),
+                startForeground(ID, notification("Audio stays on this phone · Tap Stop to disable"),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-            } else {
-                startForeground(ID, notification("Local listening · Stop available"))
-            }
+            } else startForeground(ID,
+                notification("Audio stays on this phone · Tap Stop to disable"))
         } catch (_: Exception) {
             state = "error"
             message = "Android blocked the microphone foreground service"
@@ -102,96 +123,130 @@ class NexaWakeWordService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        active = this
         state = "loading"
-        message = "Loading local speech model"
-        thread = Thread { detect(manager) }.apply { name = "NexaOfflineWake"; start() }
-        return START_NOT_STICKY
+        message = "Loading the on-device wake model"
+        worker = Thread { monitor(manager) }.apply { name = "NexaOfflineWake"; start() }
+        // An existing owner-started FGS may recover after OS process death if
+        // Android permits it; this does not grant permission at boot.
+        return START_STICKY
     }
-    private fun detect(manager: NotificationManager) {
-        val frame = ShortArray(4000)
-        val gate = NexaWakePhrase()
-        var heard = false
+
+    private fun monitor(manager: NotificationManager) {
         try {
             Model(NexaWakeWordModule.modelDir(this).absolutePath).use { model ->
-                // Grammar keeps decoder local and tightly scoped to trigger sounds.
-                val grammar = "[\"hey nexus\", \"hey next a\", \"[unk]\"]"
-                Recognizer(model, 16000.0f, grammar).use { recognizer ->
-                    if (!running.get()) return
-                    val min = AudioRecord.getMinBufferSize(16000,
-                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-                    if (min <= 0) error("Microphone buffer unavailable")
-                    val source = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                        16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                        maxOf(min * 2, frame.size * 2))
-                    audio = source
-                    if (source.state != AudioRecord.STATE_INITIALIZED) error("Microphone unavailable")
-                    source.startRecording()
-                    state = "listening"
-                    message = "Offline Hey Nexa detector active"
-                    listening = true
-                    while (running.get()) {
-                        if (RealtimeVoiceService.status == "connecting" ||
-                            RealtimeVoiceService.status == "listening") {
-                            state = "paused"
-                            message = "Another voice session owns the microphone"
-                            break
+                while (running.get()) {
+                    // During a voice command, Android's recognizer needs sole
+                    // ownership of the microphone. Keep the existing FGS.
+                    if (handoffPending || RealtimeVoiceService.status == "listening" ||
+                        RealtimeVoiceService.status == "connecting") {
+                        listening = false
+                        state = "paused"
+                        message = "Assistant or live voice currently owns the microphone"
+                        SystemClock.sleep(300)
+                        continue
+                    }
+                    val heard = detectOnce(model)
+                    if (!running.get()) break
+                    if (heard) {
+                        handoffPending = true
+                        state = "paused"
+                        message = "Wake recognized · microphone released for assistant"
+                        val shown = NexaAssistantService.showFromWakeWord()
+                        if (!shown) {
+                            handoffPending = false
+                            manager.notify(ID + 1, notification(
+                                "Open Nexa to choose a device command", true))
+                            SystemClock.sleep(900)
                         }
-                        val n = source.read(frame, 0, frame.size)
-                        if (n <= 0) { if (!running.get()) break; error("Mic capture interrupted") }
-                        val utteranceFinished = recognizer.acceptWaveForm(frame, n)
-                        val raw = if (utteranceFinished) recognizer.result else recognizer.partialResult
-                        val json = JSONObject(raw)
-                        val phrase = if (utteranceFinished) json.optString("text")
-                            else json.optString("partial")
-                        if (gate.observe(phrase, SystemClock.elapsedRealtime(), utteranceFinished)) {
-                            heard = true
-                            state = "detected"
-                            message = "Hey Nexa recognized locally"
-                            running.set(false)
-                            break
-                        }
+                        // If shown, onHide/onShowSessionFailed releases pause.
+                        // A failed OEM callback leaves audio paused, not
+                        // secretly recording over an active assistant session.
+                    } else if (state == "error") {
+                        break
                     }
                 }
             }
         } catch (e: Exception) {
             if (running.get()) {
                 state = "error"
-                message = "Local wake detection failed: " + (e.message ?: "audio error").take(90)
+                message = "Wake model failure: " + (e.message ?: "unknown").take(100)
             }
         } finally {
             releaseAudio()
             listening = false
             running.set(false)
-            if (heard) {
-                // Display Android's selected assistant, if available. If not
-                // selected, user can tap the detection notification to continue.
-                // Always retain a user-clickable fallback, including when an
-                // OEM rejects the selected-assistant session asynchronously.
-                manager.notify(ID + 1, notification(
-                    "Tap if the assistant did not open automatically", true))
-                NexaAssistantService.showFromWakeWord()
-            } else if (state == "listening" || state == "loading") {
+            if (active === this) active = null
+            if (state != "error") {
                 state = "off"
-                message = "Wake listener stopped"
+                message = "Wake microphone stopped"
             }
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
-    private fun releaseAudio() {
-        val old = audio
-        audio = null
-        try { old?.stop() } catch (_: Exception) {}
-        try { old?.release() } catch (_: Exception) {}
+
+    private fun detectOnce(model: Model): Boolean {
+        val gate = NexaWakePhrase()
+        val grammar = "[\"hey nexus\", \"hey next a\", \"[unk]\"]"
+        val frame = ShortArray(4000)
+        try {
+            Recognizer(model, 16000.0f, grammar).use { recognizer ->
+                val min = AudioRecord.getMinBufferSize(16000,
+                    AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+                if (min <= 0) error("Microphone audio buffer unavailable")
+                val source = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                    16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                    maxOf(min * 2, frame.size * 2))
+                audio = source
+                if (source.state != AudioRecord.STATE_INITIALIZED) error("Mic unavailable")
+                source.startRecording()
+                listening = true
+                state = "listening"
+                message = "Hey Nexa listening locally · Android microphone indicator is expected"
+                while (running.get() && !handoffPending) {
+                    if (RealtimeVoiceService.status == "listening" ||
+                        RealtimeVoiceService.status == "connecting") break
+                    val n = source.read(frame, 0, frame.size)
+                    if (n <= 0) {
+                        if (!running.get() || handoffPending) break
+                        error("Microphone capture interrupted")
+                    }
+                    val utteranceFinished = recognizer.acceptWaveForm(frame, n)
+                    val json = JSONObject(if (utteranceFinished) recognizer.result else recognizer.partialResult)
+                    val phrase = if (utteranceFinished) json.optString("text")
+                        else json.optString("partial")
+                    if (gate.observe(phrase, SystemClock.elapsedRealtime(), utteranceFinished))
+                        return true
+                }
+            }
+        } catch (e: Exception) {
+            if (running.get() && !handoffPending) {
+                state = "error"
+                message = "Wake capture error: " + (e.message ?: "unknown").take(100)
+            }
+        } finally {
+            releaseAudio()
+            listening = false
+        }
+        return false
     }
+
+    private fun releaseAudio() {
+        val current = audio
+        audio = null
+        try { current?.stop() } catch (_: Exception) {}
+        try { current?.release() } catch (_: Exception) {}
+    }
+
     override fun onDestroy() {
         running.set(false)
+        handoffPending = false
         releaseAudio()
         listening = false
-        if (state == "listening" || state == "loading") {
-            state = "off"; message = "Wake listener stopped"
-        }
-        thread?.interrupt()
+        worker?.interrupt()
+        if (active === this) active = null
+        if (state != "error") { state = "off"; message = "Wake microphone stopped" }
         super.onDestroy()
     }
 }
