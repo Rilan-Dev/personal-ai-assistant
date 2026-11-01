@@ -284,3 +284,19 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   60-second UI expiration, and reviewed-only Chat composition.
 - No live credentials, real contacts or user locations may appear in
   committed test fixtures, logs, screenshots, or worklogs.
+
+
+## Nexa background-assistant acceptance gate (2026-11-01)
+- First run consolidated Android Kotlin instrumentation and signed APK CI for
+  the new role/session sources. Do not claim a pass from Node tests.
+- Owner must choose Nexa in default-assistant settings; confirm supported
+  gesture invokes compact session above another app and explicit Start can
+  continue audio in background with microphone and Stop notification visible.
+- Verify actual phone (OEM power policy, audio focus, Android 14+/15/16 mic
+  restrictions), Sarvam live account, network reconnect behavior, mute/Stop.
+- Separate future work: verified on-device wake-word engine, bound voice-tool
+  event channel, consented screen actions, launcher-page discovery and
+  WhatsApp compose/recipient confirmation/send outcome reconciliation.
+  These remain **not implemented**, rather than unverified features.
+- Preserve the current no-silent-recording, default-deny tools and one-time
+  approval policies while implementing those later capabilities.

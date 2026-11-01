@@ -22,16 +22,16 @@ export const liveVoiceAvailable=()=>Platform.OS==='android' &&
   typeof NativeModules.PAARealtimeVoice?.startVoiceSession==='function';
 export const getLiveVoiceStatus=()=>module().getVoiceSessionStatus();
 
-export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
+export async function prepareOwnerLiveVoicePermissions(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
   if(!liveVoiceAvailable())return false;
   const mic=PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
   const granted=await PermissionsAndroid.check(mic) ||
     await PermissionsAndroid.request(mic,{
       title:'Live voice microphone access',
-      message:'Starting voice streams microphone audio to '+(provider==='sarvam'
+      message:'When you choose Start live voice, microphone audio streams to '+(provider==='sarvam'
         ? 'your Sarvam managed Voice Agent'
         : 'your OpenAI realtime provider')+', even while another app is visible. A persistent notification lets you stop it. Only start when you want a live conversation.',
-      buttonPositive:'Start with microphone',
+      buttonPositive:'Allow microphone',
       buttonNegative:'Cancel'
     })===PermissionsAndroid.RESULTS.GRANTED;
   if(!granted)return false;
@@ -43,6 +43,11 @@ export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):P
       await PermissionsAndroid.request(notifications)===PermissionsAndroid.RESULTS.GRANTED;
     if(!approved)throw new Error('Notification permission is required for owner-visible voice');
   }
+  return true;
+}
+
+export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
+  if(!await prepareOwnerLiveVoicePermissions(provider))return false;
   return module().startVoiceSession();
 }
 export const stopOwnerLiveVoice=():Promise<boolean>=>module().stopVoiceSession();

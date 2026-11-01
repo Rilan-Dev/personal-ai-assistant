@@ -104,11 +104,34 @@ class DeviceControlModule(
         }
     }
 
+    /** Narrow package check. Android does not expose the launcher icon's home page. */
+    @ReactMethod
+    fun checkSupportedApp(app: String, promise: Promise) {
+        val packageId = when (app) {
+            "github" -> "com.github.android"
+            "whatsapp" -> "com.whatsapp"
+            "whatsapp-business" -> "com.whatsapp.w4b"
+            else -> {
+                promise.reject("UNSUPPORTED_APP", "This app is not yet allowlisted")
+                return
+            }
+        }
+        val result = Arguments.createMap()
+        result.putString("app", app)
+        result.putString("packageId", packageId)
+        result.putBoolean("installed",
+            context.packageManager.getLaunchIntentForPackage(packageId) != null)
+        result.putString("homeScreenPage", "unknown")
+        result.putString("verification", "package_manager_only")
+        promise.resolve(result)
+    }
+
     @ReactMethod
     fun openSupportedApp(app: String, promise: Promise) {
         val packageId = when (app) {
             "whatsapp" -> "com.whatsapp"
             "whatsapp-business" -> "com.whatsapp.w4b"
+            "github" -> "com.github.android"
             else -> {
                 promise.reject("UNSUPPORTED_APP", "App not on native allowlist")
                 return

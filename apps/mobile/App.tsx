@@ -10,11 +10,15 @@ import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, rea
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
+import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistantRole } from './src/native/androidAssistantRole';
+import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
+import type { AppAvailability } from './src/native/androidAppDiscovery';
+import type { NexaAssistantRoleStatus } from './src/native/androidAssistantRole';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
-import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, stopOwnerLiveVoice, setOwnerLiveMicMuted } from './src/native/liveVoice';
+import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
@@ -69,6 +73,63 @@ export default function App() {
   const [showLaunchOptions, setShowLaunchOptions] = useState(false);
   const [tileBusy, setTileBusy] = useState(false);
   const [tileNotice, setTileNotice] = useState('');
+  const [assistantRole, setAssistantRole] = useState<NexaAssistantRoleStatus>({available:false,selected:false,wakeWordReady:false});
+  const [assistantRoleNotice, setAssistantRoleNotice] = useState('');
+  const [nexaPermissionBusy, setNexaPermissionBusy] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<AppAvailability | null>(null);
+  const [githubNotice, setGithubNotice] = useState('');
+  useEffect(() => {
+    if (!engine.live || !assistantRoleAvailable()) return;
+    let mounted = true;
+    const refresh = () => getNexaAssistantRoleStatus().then(value => {
+      if (mounted) setAssistantRole(value);
+    }).catch(() => {});
+    refresh();
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') refresh();
+    });
+    return () => { mounted = false; sub.remove(); };
+  }, [engine.live]);
+  const prepareNexaPermissions = async () => {
+    setNexaPermissionBusy(true);
+    try {
+      const allowed = await prepareOwnerLiveVoicePermissions(
+        activeProvider?.provider === 'sarvam' ? 'sarvam' : 'openai');
+      setAssistantRoleNotice(allowed
+        ? 'Microphone and notification grants checked. Start live voice only when you choose to.'
+        : 'Voice permission denied or unavailable. No microphone session started.');
+    } catch {
+      setAssistantRoleNotice('Could not complete voice permission setup. Open Android Settings to retry.');
+    } finally { setNexaPermissionBusy(false); }
+  };
+  const selectNexaAssistant = async () => {
+    try {
+      const result = await requestNexaAssistantRole();
+      setAssistantRoleNotice(result === 'selection_opened'
+        ? 'Android assistant selection opened. Choose Nexa AI and return; status refreshes automatically.'
+        : result === 'already_selected'
+          ? 'Nexa AI is already selected as the default assistant.'
+          : 'This device does not support selecting Nexa as a default assistant.');
+    } catch {
+      setAssistantRoleNotice('Unable to open Android assistant role selection.');
+    }
+  };
+  const checkGitHubOnPhone = async () => {
+    setGithubNotice('');
+    try {
+      const status = await checkKnownApp('github');
+      setGithubStatus(status);
+      setGithubNotice(status.installed
+        ? 'GitHub app is installed. Android does not report which launcher page contains its icon.'
+        : 'GitHub app was not found in the Android package manager.');
+    } catch { setGithubStatus(null); setGithubNotice('App discovery is unavailable on this build.'); }
+  };
+  const openGitHubOnPhone = async () => {
+    try {
+      await launchKnownApp('github');
+      setGithubNotice('Android received the GitHub launch request. Screen opening has not been verified.');
+    } catch { setGithubNotice('Android could not launch GitHub.'); }
+  };
   const [flashNotice, setFlashNotice] = useState('');
   const [flashBusy, setFlashBusy] = useState(false);
   const [backendUrl, setBackendUrl] = useState('');
@@ -928,6 +989,40 @@ export default function App() {
             <Text style={styles.outlineActionText}>{tileBusy?'Requesting…':'Add Quick Settings tile'}</Text>
           </Pressable>}
           {tileNotice!==''&&<Text style={styles.feedback}>{tileNotice}</Text>}
+        </View>
+        <View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Find my GitHub app</Text>
+          <Text style={styles.cardText}>Check whether GitHub for Android is installed. You can open it here; finding its icon on a particular home-screen page requires separate launcher-specific on-device inspection, not package-manager access.</Text>
+          {engine.live && appDiscoveryAvailable() && <View style={styles.buttonRow}>
+            <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={checkGitHubOnPhone}>
+              <Text style={styles.outlineInlineText}>Check GitHub app</Text>
+            </Pressable>
+            {githubStatus?.installed && <Pressable accessibilityRole="button" style={styles.primaryInline} onPress={openGitHubOnPhone}>
+              <Text style={styles.primaryInlineText}>Open GitHub</Text>
+            </Pressable>}
+          </View>}
+          {githubNotice!=='' && <Text style={styles.feedback}>{githubNotice}</Text>}
+        </View>
+        <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardHeading}>Nexa as Android assistant</Text>
+            <Text style={[styles.sectionTag,assistantRole.selected&&styles.sectionTagActive]}>
+              {assistantRole.selected ? 'Selected' : 'Opt-in'}
+            </Text>
+          </View>
+          <Text style={styles.cardText}>Choose Nexa in Android's default-assistant dialog. The system assistant gesture can show a compact Nexa voice panel over your current app; you can start or stop a live session there without opening the full Nexa screen.</Text>
+          <Text style={styles.settingHelp}>This is not an always-listening hotword engine. Saying 'Hey Nexa' alone will not activate the phone until a device-supported on-device detector is integrated and verified. Voice requires microphone, notification and configured provider permissions.</Text>
+          {engine.live && assistantRoleAvailable() && <Pressable accessibilityRole="button"
+            disabled={!assistantRole.available || running}
+            style={styles.outlineAction} onPress={selectNexaAssistant}>
+            <Text style={styles.outlineActionText}>{assistantRole.selected ? 'Nexa is selected' : 'Choose Nexa as default assistant'}</Text>
+          </Pressable>}
+          {engine.live && liveVoiceAvailable() && <Pressable accessibilityRole="button"
+            disabled={nexaPermissionBusy || running} style={styles.outlineAction}
+            onPress={prepareNexaPermissions}>
+            <Text style={styles.outlineActionText}>{nexaPermissionBusy ? 'Checking permissions…' : 'Prepare microphone & notifications'}</Text>
+          </Pressable>}
+          {assistantRoleNotice!=='' && <Text style={styles.feedback}>{assistantRoleNotice}</Text>}
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Safety</Text>

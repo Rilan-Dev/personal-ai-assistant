@@ -38,6 +38,14 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
   Android release variant signed with a dedicated testing certificate,
   verifies its signature and publishes an APK artifact plus SHA-256.
   This is for private testing, not a public production release.
+- **Nexa Android assistant opt-in (source milestone):** Android RoleManager
+  selection and system-owned compact VoiceInteractionSession UI. The owner can
+  start/stop existing live audio from the panel after granting microphone and
+  notification access in the app. This is not a hotword detector, not a hidden
+  recording service, and is pending APK/emulator and real-phone acceptance.
+- **GitHub package lookup (source milestone):** an owner-triggered, allowlisted
+  package check for com.github.android and an optional GitHub launch Intent.
+  The Android launcher icon page cannot be inferred and is reported unknown.
 - **Quick Settings tile**: an owner-added Android tile opens the chat
   after unlock if locked. No automatic microphone or tool execution.
 - **Tap to talk** in the Android app uses strictly on-device speech recognition

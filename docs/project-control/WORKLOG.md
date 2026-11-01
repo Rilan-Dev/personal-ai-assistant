@@ -553,3 +553,22 @@
   LocationManager callback now discards the fix if the owner switches
   away from the app before the one-time result returns. Source test
   asserts this; no background location permission was introduced.
+
+
+## 2026-11-01 — Nexa assistant role and app discovery (Development)
+- Implemented Android default-assistant selection, system-bound
+  VoiceInteractionService/SessionService, and a compact system session panel.
+  Role and Android microphone/notification permissions remain owner-managed.
+- Session panel starts existing Sarvam/OpenAI FGS only on user tap, never at
+  boot or on session creation. Stop and status remain user-visible.
+- Added a dedicated preflight permission control in Tools & permissions.
+  Selecting the role never implies a working custom hotword detector.
+- Added GitHub installation lookup limited to com.github.android and
+  a user-initiated launch Intent; report launcher page unknown.
+- Added emulator instrumentation for assistant service manifest, role status,
+  GitHub lookup and rejection of unsupported apps. Source regressions prevent
+  unintended privileged-permission grants or always-on audio claims.
+- Local tests: 156 passed; TypeScript checks and web export passed.
+- Android native compilation, signed APK, assistant gestures and real-device
+  Sarvam STS are NOT yet verified for this milestone.
+- See docs/architecture/NEXA_BACKGROUND_ASSISTANT.md for gates and limits.

@@ -17,6 +17,7 @@
     <intent><action android:name="android.speech.RecognitionService"/></intent>
     <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
     <package android:name="com.whatsapp"/>
+    <package android:name="com.github.android"/>
     <package android:name="com.whatsapp.w4b"/>
     <intent><action android:name="android.media.action.STILL_IMAGE_CAMERA"/></intent>
     <!-- Support checking for http(s) links via the Linking API -->
@@ -34,6 +35,25 @@
         <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
     </activity>
+    <!-- Bound only by Android after user selects Nexa as default assistant. -->
+    <service android:name=".NexaAssistantService"
+        android:label="Nexa AI"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true">
+      <intent-filter><action android:name="android.service.voice.VoiceInteractionService"/></intent-filter>
+      <meta-data android:name="android.voice_interaction" android:resource="@xml/nexa_voice_interaction"/>
+    </service>
+    <service android:name=".NexaVoiceSessionService"
+        android:permission="android.permission.BIND_VOICE_INTERACTION"
+        android:exported="true"/>
+    <!-- Compatibility recognition service: deliberately refuses external STT. -->
+    <service android:name=".NexaRecognitionService"
+        android:label="Nexa voice recognition unavailable"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="android.speech.RecognitionService"/>
+      </intent-filter>
+    </service>
     <!-- Explicit owner-started live voice session; notification always
          has a Stop action. Cannot be started by other applications. -->
     <service android:name=".RealtimeVoiceService"

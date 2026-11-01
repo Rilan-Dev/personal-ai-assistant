@@ -56,7 +56,7 @@ test("Android push-to-talk is foreground-only, requires runtime microphone grant
   assert.match(manifest, /android\.permission\.RECORD_AUDIO/);
   assert.match(manifest, /android\.speech\.RecognitionService/);
   assert.match(manifest, /android\.intent\.action\.TTS_SERVICE/);
-  assert.doesNotMatch(manifest, /BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT|RECEIVE_BOOT_COMPLETED/);
+  assert.doesNotMatch(manifest, /<uses-permission[^>]*BIND_VOICE_INTERACTION|CAPTURE_AUDIO_OUTPUT|RECEIVE_BOOT_COMPLETED/);
   assert.match(adapters, /VoiceControlModule\(reactContext\)/);
   assert.match(voice, /isOnDeviceRecognitionAvailable\(context\)/);
   assert.match(voice, /createOnDeviceSpeechRecognizer\(context\)/);
@@ -160,4 +160,36 @@ test("Android Keystore GCM uses provider-generated IV for encryption and authent
   assert.match(source,/GCMParameterSpec\(128, data\.copyOfRange\(0, 12\)\)/);
   assert.doesNotMatch(source,/init\(Cipher\.ENCRYPT_MODE, secret\(\), GCMParameterSpec/);
   assert.doesNotMatch(source,/setRandomizedEncryptionRequired\(false\)/);
+});
+
+test("Nexa assistant role is opt-in and does not imply a working hotword", () => {
+  const manifest = read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  const xml = read("apps/mobile/android/app/src/main/res/xml/nexa_voice_interaction.xml");
+  const native = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaAssistantService.kt");
+  const ui = read("apps/mobile/App.tsx");
+  assert.match(manifest, /android:name="\.NexaAssistantService"/);
+  assert.match(manifest, /android:permission="android\.permission\.BIND_VOICE_INTERACTION"/);
+  assert.match(xml, /android:sessionService="dev\.rilandev\.personalaiassistant\.NexaVoiceSessionService"/);
+  const speech = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaRecognitionService.kt");
+  assert.match(xml, /NexaRecognitionService/);
+  assert.match(manifest, /android:name="\.NexaRecognitionService"/);
+  assert.match(speech, /listener\.error\(SpeechRecognizer\.ERROR_CLIENT\)/);
+  assert.doesNotMatch(speech, /AudioRecord|MediaRecorder|startRecording/);
+  assert.match(native, /RoleManager\.ROLE_ASSISTANT/);
+  assert.match(native, /createRequestRoleIntent/);
+  assert.match(native, /putBoolean\("wakeWordReady", false\)/);
+  assert.match(native, /checkSelfPermission\(Manifest\.permission\.RECORD_AUDIO\)/);
+  assert.match(native, /RealtimeVoiceService\.ACTION_STOP/);
+  assert.match(ui, /Choose Nexa as default assistant/);
+  assert.doesNotMatch(native, /RECEIVE_BOOT_COMPLETED|AlwaysOnHotwordDetector|setMicAlwaysOn/);
+});
+
+test("GitHub app discovery is narrow and never invents the home page", () => {
+  const native = read("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlModule.kt");
+  const manifest = read("apps/mobile/android/app/src/main/AndroidManifest.xml");
+  assert.match(manifest, /<package android:name="com\.github\.android"\/>/);
+  assert.match(native, /fun checkSupportedApp\(app: String, promise: Promise\)/);
+  assert.match(native, /result\.putString\("homeScreenPage", "unknown"\)/);
+  assert.match(native, /getLaunchIntentForPackage\(packageId\)/);
+  assert.doesNotMatch(native, /QUERY_ALL_PACKAGES|ACCESS_FINE_LOCATION/);
 });
