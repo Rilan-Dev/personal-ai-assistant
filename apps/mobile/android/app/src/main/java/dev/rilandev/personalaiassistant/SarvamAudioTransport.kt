@@ -53,7 +53,7 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                 if(running)callbacks.failed("Sarvam session authorization unavailable")
             }
             override fun onResponse(call:Call,response:Response) {
-                response.use {
+                try { response.use {
                     if(!running)return
                     if(!it.isSuccessful){
                         callbacks.failed(when(it.code){
@@ -95,16 +95,19 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                         object:WebSocketListener(){
                             override fun onOpen(ws:WebSocket,res:Response){
                                 if(!running)return
-                                ws.send(JSONObject()
+                                try { ws.send(JSONObject()
                                     .put("type","client.action.interaction_start")
                                     .put("origin","client")
                                     .put("timestamp",System.currentTimeMillis()/1000.0)
-                                    .toString())
+                                    .toString()) }
+                                catch (_: Exception) {
+                                    if (running) callbacks.failed("Sarvam session handshake rejected")
+                                }
                             }
                             override fun onMessage(ws:WebSocket,text:String){
                                 if(!running || text.length>180000)return
                                 val event=try{JSONObject(text)}catch(_:Exception){return}
-                                when(event.optString("type")){
+                                try { when(event.optString("type")){
                                     "server.action.interaction_connected"->callbacks.connected()
                                     "server.media.audio_chunk"->{
                                         if(event.optString("status")=="pending"){
@@ -135,6 +138,10 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                                     "server.action.interaction_end"->callbacks.ended()
                                     // Transcripts, text responses, media metadata
                                     // and tool suggestions are intentionally ignored.
+                                } } catch (_: Exception) {
+                                    // Untrusted provider messages must never terminate
+                                    // OkHttp's WebSocket thread or the Android process.
+                                    if (running) callbacks.failed("Sarvam session event could not be processed")
                                 }
                             }
                             override fun onFailure(ws:WebSocket,t:Throwable,res:Response?){
@@ -144,6 +151,8 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                                 if(running)callbacks.ended()
                             }
                         })
+                } } catch (_: Exception) {
+                    if (running) callbacks.failed("Sarvam authorization response could not be processed")
                 }
             }
         })
@@ -153,13 +162,14 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
         if(!running || pcm.isEmpty() || pcm.size>4096)return false
         val ws=socket?:return false
         if(ws.queueSize()>256*1024)return false
-        return ws.send(JSONObject()
+        return try { ws.send(JSONObject()
             .put("type","client.media.audio_chunk")
             .put("origin","client")
             .put("timestamp",System.currentTimeMillis()/1000.0)
             .put("audio_base64",Base64.encodeToString(pcm,Base64.NO_WRAP))
             .put("format","audio/wav")
-            .put("sample_rate",16000).toString())
+            .put("sample_rate",16000).toString()) }
+            catch (_: Exception) { false }
     }
 
     fun close(){
