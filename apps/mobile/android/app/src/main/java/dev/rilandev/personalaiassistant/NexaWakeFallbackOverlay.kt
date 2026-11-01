@@ -47,6 +47,19 @@ internal class NexaWakeFallbackOverlay(
     private var windowManager: WindowManager? = null
     private var window: View? = null
     private var status: TextView? = null
+    private var miniStatus: TextView? = null
+    private var detailCard: View? = null
+    private var expanded = true
+
+    private fun showDetail(visible: Boolean) {
+        expanded = visible
+        detailCard?.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    private fun showStatus(value: String) {
+        status?.text = value
+        miniStatus?.text = value.take(52)
+    }
     private var recognizer: SpeechRecognizer? = null
     private var speech: TextToSpeech? = null
     private var speechReady = false
@@ -62,7 +75,7 @@ internal class NexaWakeFallbackOverlay(
             if (current == "listening") providerEverListening = true
             val approval = RealtimeVoiceService.pendingApprovalSummary
             approvalRow?.visibility = if (approval != null) View.VISIBLE else View.GONE
-            status?.text = when {
+            val statusMessage = when {
                 approval != null -> approval
                 current == "connecting" -> "Connecting to your live AI provider…"
                 current == "listening" ->
@@ -71,12 +84,13 @@ internal class NexaWakeFallbackOverlay(
                     else "Live Nexa is listening · speak naturally"
                 else -> RealtimeVoiceService.message.take(180)
             }
+            showStatus(statusMessage)
             if (current == "error" || (current == "stopped" &&
                 (providerEverListening ||
                     SystemClock.elapsedRealtime() - providerStartedAt > 4500L))) {
                 if (!providerEverListening) {
                     providerManaged = false
-                    status?.text = "Live AI unavailable · switching to offline commands"
+                    showStatus("Live AI unavailable · switching to offline commands")
                     handler.postDelayed({ if (active) { initSpeech(); listen() } }, 850L)
                 } else handler.postDelayed({
                     if (active) finish("Live conversation ended · Hey Nexa ready")
@@ -100,51 +114,54 @@ internal class NexaWakeFallbackOverlay(
             Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             !SpeechRecognizer.isOnDeviceRecognitionAvailable(service)) return false
         val wm = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val d = service.resources.displayMetrics.density
-        fun px(v: Int) = (v * d).toInt()
-        fun action(text: String, run: () -> Unit) = Button(service).apply {
-            this.text = text
-            isAllCaps = false
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            backgroundTintList = ColorStateList.valueOf(Color.rgb(66, 73, 147))
-            setOnClickListener { run() }
+        val palette = NexaOverlayTheme.palette(service)
+        fun px(v: Int) = NexaOverlayTheme.dp(service, v)
+        fun action(text: String, run: () -> Unit) =
+            NexaOverlayTheme.action(service, text, palette, run)
+        fun quickCommand(command: String) {
+            val outcome = try { NexaOverlayCommands.handle(service, command) }
+                catch (_: Exception) { "Could not complete this local action" }
+            showStatus(outcome.take(220))
         }
         val shell = LinearLayout(service).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(14), px(12), px(14), px(12))
-            background = GradientDrawable().apply {
-                setColor(Color.rgb(18, 24, 45))
-                cornerRadius = 22f * d
-                setStroke(px(1), Color.rgb(94, 107, 160))
-            }
-            addView(TextView(service).apply {
-                text = "✦ Nexa · Voice"
-                textSize = 17f
-                setTextColor(Color.WHITE)
-            })
+            setPadding(px(2), px(2), px(2), px(2))
         }
-        status = TextView(service).apply {
-            text = "Listening · tell Nexa what to do"
-            textSize = 14f
-            setTextColor(Color.WHITE)
-            minHeight = px(53)
+        val panel = LinearLayout(service).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(16), px(13), px(16), px(14))
+            background = NexaOverlayTheme.card(service, palette)
+            elevation = px(14).toFloat()
+            addView(NexaOverlayTheme.label(service, "━━  ✦  NEXA  ·  LIVE ASSISTANT",
+                palette, 12f, true))
+            addView(NexaOverlayTheme.label(service, "How can I help?", palette, 23f))
+        }
+        detailCard = panel
+        status = NexaOverlayTheme.label(service,
+            "Listening · tell Nexa what to do", palette, 14f).apply {
+            minHeight = px(65)
             gravity = Gravity.CENTER_VERTICAL
-            maxLines = 3
-        }.also { shell.addView(it) }
-        shell.addView(LinearLayout(service).apply {
+            maxLines = 4
+            background = NexaOverlayTheme.inset(service, palette)
+            setPadding(px(12), px(9), px(12), px(9))
+        }.also { panel.addView(it) }
+        panel.addView(LinearLayout(service).apply {
             orientation = LinearLayout.HORIZONTAL
-            addView(action("Stop") { finish("Stopped · Hey Nexa ready") },
-                LinearLayout.LayoutParams(0, px(50), 1f))
-            addView(action("Open Nexa") {
+            addView(action("Battery") { quickCommand("battery") },
+                LinearLayout.LayoutParams(0, px(48), 1f))
+            addView(action("Find GitHub") { quickCommand("find my github app") },
+                LinearLayout.LayoutParams(0, px(48), 1f))
+            addView(action("Tools") {
                 try {
-                    service.startActivity(Intent(service, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    })
-                } catch (_: Exception) { }
-                finish("Nexa opened")
-            }, LinearLayout.LayoutParams(0, px(50), 1f))
+                    service.startService(Intent(service, NexaToolOverlayService::class.java)
+                        .setAction(NexaToolOverlayService.ACTION_SHOW))
+                    showDetail(false)
+                } catch (_: Exception) { showStatus("Android could not open Nexa tools") }
+            }, LinearLayout.LayoutParams(0, px(48), 1f))
         })
+        panel.addView(NexaOverlayTheme.label(service,
+            "Screen access requires consent  ·  Actions need approval",
+            palette, 11f, true))
         approvalRow = LinearLayout(service).apply {
             orientation = LinearLayout.HORIZONTAL
             visibility = View.GONE
@@ -152,25 +169,45 @@ internal class NexaWakeFallbackOverlay(
                 try {
                     service.startService(Intent(service, RealtimeVoiceService::class.java)
                         .setAction(RealtimeVoiceService.ACTION_APPROVE_TOOL))
-                } catch (_: Exception) { status?.text = "Could not approve app action" }
-            }, LinearLayout.LayoutParams(0, px(50), 1f))
+                } catch (_: Exception) { showStatus("Could not approve app action") }
+            }, LinearLayout.LayoutParams(0, px(48), 1f))
             addView(action("Deny") {
                 try {
                     service.startService(Intent(service, RealtimeVoiceService::class.java)
                         .setAction(RealtimeVoiceService.ACTION_DENY_TOOL))
-                } catch (_: Exception) { status?.text = "Could not deny app action" }
-            }, LinearLayout.LayoutParams(0, px(50), 1f))
+                } catch (_: Exception) { showStatus("Could not deny app action") }
+            }, LinearLayout.LayoutParams(0, px(48), 1f))
         }
-        approvalRow?.let { shell.addView(it) }
+        approvalRow?.let { panel.addView(it) }
+        shell.addView(panel)
+        val dock = LinearLayout(service).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(px(8), px(8), px(8), px(8))
+            background = NexaOverlayTheme.card(service, palette, 30)
+            elevation = px(12).toFloat()
+            addView(action("＋") { showDetail(!expanded) },
+                LinearLayout.LayoutParams(px(51), px(50)))
+            addView(NexaOverlayTheme.waveform(service, palette),
+                LinearLayout.LayoutParams(0, px(50), 1f))
+            addView(action("Stop") { finish("Stopped · Hey Nexa ready") },
+                LinearLayout.LayoutParams(px(72), px(50)))
+        }
+        miniStatus = NexaOverlayTheme.label(service, "Listening", palette, 11f, true)
+        shell.addView(dock, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, px(67)).apply {
+            topMargin = px(8)
+        })
+        shell.addView(miniStatus)
         val args = WindowManager.LayoutParams(
-            minOf(px(330), service.resources.displayMetrics.widthPixels - px(20)),
+            minOf(px(360), service.resources.displayMetrics.widthPixels - px(24)),
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT).apply {
                 gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-                y = px(75)
+                y = px(24)
             }
         try { wm.addView(shell, args) }
         catch (_: Exception) {
@@ -198,10 +235,10 @@ internal class NexaWakeFallbackOverlay(
                     })
                     providerManaged = true
                     providerStartedAt = SystemClock.elapsedRealtime()
-                    status?.text = "Connecting to live AI · tap Stop at any time"
+                    showStatus("Connecting to live AI · tap Stop at any time")
                     handler.postDelayed(liveMonitor, 800L)
                 } catch (_: Exception) {
-                    status?.text = "Android blocked live microphone · using offline commands"
+                    showStatus("Android blocked live microphone · using offline commands")
                     initSpeech()
                     handler.postDelayed({ listen() }, 650L)
                 }
@@ -243,7 +280,7 @@ internal class NexaWakeFallbackOverlay(
     private fun speak(result: String) {
         if (!active) return
         handler.removeCallbacks(silence)
-        status?.text = result.take(300)
+        showStatus(result.take(300))
         if (turn >= maxTurns) {
             handler.postDelayed({ finish("Conversation limit reached · Hey Nexa ready") }, 3500L)
             return
@@ -271,7 +308,7 @@ internal class NexaWakeFallbackOverlay(
             return
         }
         recognizer = r
-        status?.text = "Listening · ask your next device command"
+        showStatus("Listening · ask your next device command")
         handler.removeCallbacks(silence)
         handler.postDelayed(silence, 18_000L)
         try {
@@ -280,7 +317,7 @@ internal class NexaWakeFallbackOverlay(
                 override fun onBeginningOfSpeech() { handler.post {
                     if (recognizer === r) {
                         handler.removeCallbacks(silence)
-                        status?.text = "Hearing your request…"
+                        showStatus("Hearing your request…")
                     }
                 } }
                 override fun onRmsChanged(rmsdB: Float) {}
@@ -314,7 +351,7 @@ internal class NexaWakeFallbackOverlay(
                             answer.contains("launch requested") ||
                             answer.startsWith("Android settings opened") ||
                             answer.startsWith("WhatsApp review opened")) {
-                            status?.text = answer.take(220)
+                            showStatus(answer.take(220))
                             handler.postDelayed({ finish("Action dispatched · return to Hey Nexa") }, 2000L)
                         } else speak(answer)
                     }
@@ -364,6 +401,8 @@ internal class NexaWakeFallbackOverlay(
         window = null
         windowManager = null
         status = null
+        miniStatus = null
+        detailCard = null
         closed()
     }
 }
