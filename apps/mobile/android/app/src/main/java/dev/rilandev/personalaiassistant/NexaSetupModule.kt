@@ -58,6 +58,7 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
             data.putBoolean("assistantSelected",
                 manager?.isRoleHeld(RoleManager.ROLE_ASSISTANT) == true)
             data.putBoolean("setupAcknowledged", prefs.getBoolean("acknowledged_v2", false))
+            data.putBoolean("autoStartVoiceOnInvocation", prefs.getBoolean("auto_voice_invocation_v1", false))
             data.putString("versionName", BuildConfig.VERSION_NAME)
             data.putInt("versionCode", BuildConfig.VERSION_CODE)
             data.putInt("sdkLevel", Build.VERSION.SDK_INT)
@@ -77,6 +78,30 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
             .edit().putBoolean("acknowledged_v2", true).commit()
         if (success) p.resolve(true) else
             p.reject("SETUP_WRITE_FAILED", "Could not save local setup preference")
+    }
+
+    /**
+     * Starting cloud speech after a system assistant gesture is optional.
+     * Save only from the visible Setup UI. No microphone is started here.
+     */
+    @ReactMethod fun setAutoStartVoiceOnInvocation(enabled: Boolean, p: Promise) {
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            p.reject("NOT_FOREGROUND", "Change voice activation only from visible Nexa Setup")
+            return
+        }
+        if (enabled && (!granted(Manifest.permission.RECORD_AUDIO) ||
+            (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS)))) {
+            p.reject("VOICE_PERMISSION_MISSING", "Grant voice permissions before enabling automatic conversation")
+            return
+        }
+        if (enabled && AgentJournalModule.openVoiceCredentials(context) == null) {
+            p.reject("VOICE_PROVIDER_MISSING", "Configure OpenAI realtime or Sarvam Voice Agent before enabling this")
+            return
+        }
+        val saved = context.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
+            .edit().putBoolean("auto_voice_invocation_v1", enabled).commit()
+        if (saved) p.resolve(true)
+        else p.reject("SETUP_WRITE_FAILED", "Could not save voice activation preference")
     }
 
     @ReactMethod fun openAppSettings(p: Promise) {
