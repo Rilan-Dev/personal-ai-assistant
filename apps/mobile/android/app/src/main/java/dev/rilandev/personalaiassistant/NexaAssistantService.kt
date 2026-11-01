@@ -288,6 +288,9 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     }
     override fun onShow(args: Bundle?, showFlags: Int) {
         super.onShow(args, showFlags)
+        // Coordinate microphone ownership even for a system-assistant gesture,
+        // not only for a recognized wake phrase or floating-overlay tap.
+        NexaWakeWordService.assistantShown()
         handler.removeCallbacks(refresh)
         handler.removeCallbacks(autoHide)
         handler.post(refresh)

@@ -22,6 +22,7 @@ test('gesture is default and previous wake preference cannot restart microphone 
 test('default-assistant gesture invokes one bounded speech recognizer and self-dismisses',()=>{
   assert.match(assistant,/autoDismissAfterCommand = true/);
   assert.match(assistant,/Android assistant gesture/);
+  assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
   assert.match(assistant,/if \(!commandBusy && label != null\) listenOneDeviceCommand\(\)/);
   assert.match(assistant,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
@@ -34,6 +35,9 @@ test('continuous mode remains opt-in with honest Android microphone disclosure',
   assert.match(module,/protectedHotwordAvailable", false/);
   assert.match(service,/hey nexa/);
   assert.match(service,/Turn off wake listening/);
+  assert.match(service,/assistantSessionVisible/);
+  assert.match(service,/handoffStartedAt/);
+  assert.match(service,/>= 12000L/);
   assert.match(setup,/Disable Hey Nexa · switch to privacy-first mode/);
   assert.match(setup,/green microphone dot/);
   assert.match(setup,/Android's privacy indicator/);
