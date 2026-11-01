@@ -45,9 +45,9 @@ test('overlay actions retain explicit consent and no fraudulent screen awareness
 });
 
 test('configured voice can show the overlay when Android offline recognition is absent', () => {
-  assert.match(fallback, /val offlineReady =/);
+  assert.doesNotMatch(fallback, /val offlineReady =/);
   assert.match(fallback, /val providerReady =/);
-  assert.match(fallback, /!offlineReady && !providerReady/);
+  assert.match(fallback, /!providerReady/);
   assert.match(fallback, /auto_voice_invocation_v1/);
   assert.match(fallback, /openVoiceCredentials\(service\)/);
 });
