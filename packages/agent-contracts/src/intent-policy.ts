@@ -12,10 +12,22 @@ export function normalizeNativeRequest(request: string): string | null {
   // Clauses and negation are never auto-reduced to one side effect.
   if (/[\n;"“”‘’]|(?:\b(?:and|then|also|after|before|while|or|but|without|instead|send|text|message|call|delete|don't|do not|never|not|no)\b)/.test(text))
     return null;
+  // Normalize pragmatic owner instructions without treating arbitrary
+  // sentences as permission. The prompt must still resolve to ONE exact
+  // supported action and the native executor validates it independently.
+  const courtesy = /^(?:would you mind (?:please )?|(?:can|could|would|will) you (?:please )?|please )/;
+  const hadCourtesy = courtesy.test(text);
   text = text.replace(/^would you mind (?:please )?/, "")
     .replace(/^(?:can|could|would|will) you (?:please )?/, "")
     .replace(/^please /, "").trim()
+    .replace(/^i (?:want|need) you to /, "")
+    .replace(/^i would like you to /, "")
+    .replace(/^i'd like you to /, "").trim()
     .replace(/\s+please$/, "").replace(/\s+for me$/, "").trim();
+  // Speech recognition sometimes adds the standalone "I" after "can you
+  // please". Never treat an unprompted "I open WhatsApp" statement as an
+  // action; only correct that token following an explicit request prefix.
+  if (hadCourtesy) text = text.replace(/^i (?=(?:open|launch|start)\b)/, "");
   if (text.startsWith("opening ")) text = "open " + text.slice(8);
   if (text.startsWith("launching ")) text = "launch " + text.slice(10);
   return text;
