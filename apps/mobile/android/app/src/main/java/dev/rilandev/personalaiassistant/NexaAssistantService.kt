@@ -136,7 +136,10 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                 commandFeedback else if (localConversationActive)
                 "Nexa ready for your next command" else when (RealtimeVoiceService.status) {
                 "listening" -> if (RealtimeVoiceService.microphoneMuted)
-                    "Nexa voice active · microphone muted" else "Nexa voice active · microphone in use"
+                    "Nexa voice active · microphone muted"
+                    else if (RealtimeVoiceService.lastToolResult.isNotBlank())
+                    "Last tool result · " + RealtimeVoiceService.lastToolResult.take(130)
+                    else "Nexa voice active · listening for your requests"
                 "connecting" -> "Connecting to the selected voice provider…"
                 "error" -> RealtimeVoiceService.message
                 else -> "Nexa ready"
@@ -353,10 +356,12 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         if (app.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED) {
             feedback("Microphone permission needed · open Nexa Setup")
+            handler.postDelayed({ hide() }, 4500L)
             return
         }
         if (Build.VERSION.SDK_INT < 31 || !SpeechRecognizer.isOnDeviceRecognitionAvailable(app)) {
             feedback("On-device speech recognition is not installed. Configure live AI in Nexa.")
+            handler.postDelayed({ hide() }, 5500L)
             return
         }
         localConversationActive = true
