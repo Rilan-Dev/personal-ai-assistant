@@ -96,6 +96,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private var commandBusy = false
     private var commandFeedback: String? = null
     private var autoDismissAfterCommand = false
+    private var liveVoiceLaunchedFromSession = false
     private val autoHide = Runnable {
         if (autoDismissAfterCommand && !commandBusy) hide()
     }
@@ -142,7 +143,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             panel.addView(it)
         }
         panel.addView(TextView(app).apply {
-            text = "Invoke Nexa with the Android assistant gesture for one voice command. Live AI voice starts separately using Start live voice."
+            text = "Assistant gesture starts one offline device command by default. You can opt in to AI conversation on invocation in Nexa Setup. Live voice sends audio to your configured provider and shows Android microphone privacy controls."
             setTextColor(Color.LTGRAY)
         })
         panel.addView(button("Speak a device command") { listenOneDeviceCommand() })
@@ -283,7 +284,8 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             app.startForegroundService(Intent(app, RealtimeVoiceService::class.java).apply {
                 action = RealtimeVoiceService.ACTION_START
             })
-            label?.text = "Start requested; awaiting provider connection."
+            liveVoiceLaunchedFromSession = true
+            label?.text = "Connecting to live AI · microphone access visible · Stop to end"
         } catch (_: Exception) { label?.text = "Android blocked startup. Open Nexa to retry." }
     }
     override fun onShow(args: Bundle?, showFlags: Int) {
@@ -294,10 +296,17 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         handler.removeCallbacks(refresh)
         handler.removeCallbacks(autoHide)
         handler.post(refresh)
-        // System gesture, user-tapped overlay and opted-in hotword all represent
-        // an explicit invocation. Listen for exactly one bounded command.
-        // No AudioRecord is opened by VoiceInteractionService while idle.
-        autoDismissAfterCommand = true
+        // Only a deliberate, visible Setup opt-in enables provider audio from a
+        // system assistant invocation. Legacy installs default to local recognition.
+        // Neither the role service nor this preference opens an idle microphone.
+        cancelDeviceCommand()
+        val saved = app.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
+            .getBoolean("auto_voice_invocation_v1", false)
+        val hasCredentials = try {
+            AgentJournalModule.openVoiceCredentials(app) != null
+        } catch (_: Exception) { false }
+        val automaticLiveVoice = saved && hasCredentials
+        autoDismissAfterCommand = !automaticLiveVoice
         // Preserve which explicit activation path brought up the session for
         // accessibility, while the on-device recognizer behavior is identical.
         val activationSource = when {
@@ -305,22 +314,45 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             args?.getBoolean("nexa_overlay_tap") == true -> "Nexa overlay"
             else -> "Android assistant gesture"
         }
-        label?.contentDescription = "$activationSource: one on-device voice command"
+        label?.contentDescription = if (automaticLiveVoice)
+            "$activationSource: live AI conversation with configured provider" else
+            "$activationSource: one on-device voice command"
         commandFeedback = null
         feedbackUntil = 0L
         handler.postDelayed({
-            if (!commandBusy && label != null) listenOneDeviceCommand()
+            if (!commandBusy && label != null) {
+                if (automaticLiveVoice) startOwnerVoice()
+                else listenOneDeviceCommand()
+            }
         }, 420L)
     }
     override fun onHide() {
         autoDismissAfterCommand = false
         handler.removeCallbacks(autoHide)
+        // A session-invoked conversation must not keep streaming after its
+        // assistant window is dismissed. App-started sessions are unaffected.
+        if (liveVoiceLaunchedFromSession) {
+            liveVoiceLaunchedFromSession = false
+            try {
+                app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                    action = RealtimeVoiceService.ACTION_STOP
+                })
+            } catch (_: Exception) {}
+        }
         NexaWakeWordService.assistantClosed()
         cancelDeviceCommand()
         handler.removeCallbacks(refresh)
         super.onHide()
     }
     override fun onDestroy() {
+        if (liveVoiceLaunchedFromSession) {
+            liveVoiceLaunchedFromSession = false
+            try {
+                app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                    action = RealtimeVoiceService.ACTION_STOP
+                })
+            } catch (_: Exception) {}
+        }
         autoDismissAfterCommand = false
         handler.removeCallbacks(autoHide)
         NexaWakeWordService.assistantClosed()
