@@ -179,7 +179,7 @@ export default function NexaSetupScreen(props: Props) {
         <Text style={styles.footerCopy}>
           Android allows indicator-free idle hotword detection only through an
           authorized protected system/OEM mechanism. A downloadable Nexa APK
-          cannot provide this mechanism just by being selected as assistant.
+          cannot provide this mechanism just by being selected as assistant or suppress Android's privacy indicator.
           To have no persistent microphone notification or green dot, disable
           continuous Hey Nexa listening and use the assistant gesture.
           That means voice-only wake phrase activation is not available in this mode.
