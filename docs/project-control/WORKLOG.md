@@ -489,3 +489,34 @@
   one-turn Sarvam dictation/TTS through UI and native checks.
   Local source/regression suite: 148/148 PASS; TypeScript PASS.
   Native CI re-validation is still required.
+
+## 2026-11-01 — Post-Sarvam voice reliability and privacy hardening
+- Verified completed run 41255216719 (commit 0c9812b) on GitHub:
+  22 emulator Android tests passed, optimized release compiled, APK
+  Signature Scheme v2 verified, release-test APK artifact uploaded
+  (artifact 13063621896). Remaining live phone/Sarvam provider UAT
+  is intentionally not misrepresented as complete.
+- Audited native voice service lifecycle against the user-started FGS
+  protocol and official Sarvam speech API reference. Fixed two real
+  cancellation defects: late REST work continuing after Cancel/Stop,
+  and the next one-shot request being allowed before the first worker
+  finished. Kept the per-operation lock until cleanup and cancelled
+  actual OkHttp Call objects. Blocked concurrent STT/TTS modes.
+- Fixed false TTS completion after pushing bytes into Android
+  AudioTrack, now checks playbackHeadPosition with a bounded drain.
+  No audio or transcription data is persisted by this integration.
+- Added cross-provider live mic mute/unmute from both Android
+  notification and Voice screen. While muted, only zero PCM frames
+  are transmitted, never microphone content. Mic hardware remains
+  active until Stop (clearly explained to user). Serialized
+  owner mute transitions and voice-frame send; Stop now prevents
+  an additional captured frame from being sent.
+- Added emulator WAV round-trip/malformed format regression and
+  new source security regressions. npm tests, typechecks and export
+  passed on Development. No automatic Actions on Development.
+- Node production audit currently reports 2 high vulnerabilities,
+  from Expo CLI and transitive Zod v3 (<4.6.6). npm audit's suggested
+  fix is to downgrade Expo to SDK 51, which would break the modern
+  SDK58/RN0.88 project. Do not blindly apply --force; track
+  compatible upstream patched versions, minimize public build
+  API exposure, and preserve native app isolation.

@@ -17,6 +17,7 @@ import java.nio.ByteOrder
 import java.util.concurrent.atomic.AtomicBoolean
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Call
 import okhttp3.MultipartBody
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -33,9 +34,15 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
     override fun getName()="PAASarvamSpeech"
     private val client=OkHttpClient.Builder()
         .connectTimeout(12,java.util.concurrent.TimeUnit.SECONDS)
+        // Never forward a private subscription key to a redirected host.
+        .followRedirects(false).followSslRedirects(false)
         .callTimeout(35,java.util.concurrent.TimeUnit.SECONDS).build()
     private val capturing=AtomicBoolean(false)
     private val playing=AtomicBoolean(false)
+    private val cancelCapture=AtomicBoolean(false)
+    private val cancelPlayback=AtomicBoolean(false)
+    @Volatile private var sttCall:Call?=null
+    @Volatile private var ttsCall:Call?=null
     @Volatile private var recorder:AudioRecord?=null
     @Volatile private var output:AudioTrack?=null
 
@@ -48,7 +55,7 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
     private fun writeShort(w:ByteArrayOutputStream,i:Int){
         w.write(i and 255);w.write((i ushr 8) and 255)
     }
-    private fun wav(pcm:ByteArray):ByteArray {
+    internal fun wav(pcm:ByteArray):ByteArray {
         val w=ByteArrayOutputStream(pcm.size+44)
         w.write("RIFF".toByteArray(Charsets.US_ASCII));writeInt(w,pcm.size+36)
         w.write("WAVEfmt ".toByteArray(Charsets.US_ASCII));writeInt(w,16)
@@ -70,12 +77,17 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
         }
         val secret=key()
         if(secret==null){p.reject("SARVAM_KEY_REQUIRED","Select Sarvam AI and save a key");return}
+        if(playing.get()) {
+            p.reject("PLAYBACK_ACTIVE","Stop speech playback before dictation");return
+        }
         if(!capturing.compareAndSet(false,true)){
             p.reject("RECORDING_ACTIVE","Already capturing");return
         }
+        cancelCapture.set(false)
         Thread({
             var record:AudioRecord?=null
             try {
+                if(cancelCapture.get())throw InterruptedException()
                 val bufferSize=maxOf(AudioRecord.getMinBufferSize(16000,
                     AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT),2048)
                 record=AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,
@@ -90,7 +102,8 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                 val start=android.os.SystemClock.elapsedRealtime()
                 var voiced=false
                 var lastVoice=start
-                while(capturing.get() && android.os.SystemClock.elapsedRealtime()-start<9500){
+                while(capturing.get() && !cancelCapture.get() &&
+                    android.os.SystemClock.elapsedRealtime()-start<9500){
                     val got=record.read(data,0,data.size)
                     if(got<=0)break
                     pcm.write(data,0,got)
@@ -107,7 +120,7 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                     if(voiced && now-lastVoice>1100 && now-start>900)break
                 }
                 record.stop();record.release();record=null;recorder=null
-                if(!capturing.get()) {p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
+                if(cancelCapture.get()) {p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
                 val bytes=pcm.toByteArray()
                 if(bytes.size<1600){p.reject("EMPTY_AUDIO","No speech detected");return@Thread}
                 val body=MultipartBody.Builder().setType(MultipartBody.FORM)
@@ -116,8 +129,14 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                         .toRequestBody("audio/wav".toMediaType())).build()
                 val req=Request.Builder().url("https://api.sarvam.ai/speech-to-text")
                     .header("api-subscription-key",secret).post(body).build()
-                client.newCall(req).execute().use { response ->
-                    if(!capturing.get()){p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
+                if(cancelCapture.get()) {p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
+                val call=client.newCall(req)
+                sttCall=call
+                if(cancelCapture.get()){
+                    call.cancel();p.reject("CANCELLED","Voice dictation cancelled");return@Thread
+                }
+                call.execute().use { response ->
+                    if(cancelCapture.get()){p.reject("CANCELLED","Voice dictation cancelled");return@Thread}
                     if(!response.isSuccessful){
                         p.reject("SARVAM_STT_HTTP","Sarvam speech recognition rejected request")
                         return@Thread
@@ -130,8 +149,10 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                     }else p.resolve(transcript)
                 }
             }catch(_:Exception){
-                p.reject("SARVAM_STT_FAILED","Sarvam recognition unavailable")
+                if(cancelCapture.get())p.reject("CANCELLED","Voice dictation cancelled")
+                else p.reject("SARVAM_STT_FAILED","Sarvam recognition unavailable")
             }finally{
+                sttCall=null
                 capturing.set(false)
                 try{record?.stop();record?.release()}catch(_:Exception){}
                 recorder=null
@@ -140,12 +161,15 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
     }
 
     @ReactMethod fun cancelListening(p:Promise){
-        capturing.set(false)
+        cancelCapture.set(true)
+        sttCall?.cancel()
         try{recorder?.stop()}catch(_:Exception){}
+        // Keep capturing=true until the worker's finally block, so a new
+        // session cannot race an old network callback into the new editor.
         p.resolve(true)
     }
 
-    private fun pcmFromWav(bytes:ByteArray):ByteArray? {
+    internal fun pcmFromWav(bytes:ByteArray):ByteArray? {
         if(bytes.size<44 || String(bytes,0,4,Charsets.US_ASCII)!="RIFF" ||
             String(bytes,8,4,Charsets.US_ASCII)!="WAVE")return null
         val buffer=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
@@ -174,14 +198,19 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
         if(language !in listOf("en-IN","hi-IN","ta-IN","te-IN","kn-IN","bn-IN","gu-IN","mr-IN","pa-IN")){
             p.reject("INVALID_LANGUAGE","Select a supported Bulbul language");return
         }
-        if(RealtimeVoiceService.status=="listening"){
+        if(RealtimeVoiceService.status=="listening" ||
+            RealtimeVoiceService.status=="connecting"){
             p.reject("LIVE_VOICE_ACTIVE","Stop live voice before TTS");return
         }
         val secret=key()
         if(secret==null){p.reject("SARVAM_KEY_REQUIRED","Select Sarvam AI and save a key");return}
+        if(capturing.get()){
+            p.reject("RECORDING_ACTIVE","Stop voice dictation before speech playback");return
+        }
         if(!playing.compareAndSet(false,true)){
             p.reject("PLAYBACK_ACTIVE","Already speaking");return
         }
+        cancelPlayback.set(false)
         Thread({
             var track:AudioTrack?=null
             try {
@@ -193,15 +222,22 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                 val request=Request.Builder().url("https://api.sarvam.ai/text-to-speech")
                     .header("api-subscription-key",secret)
                     .post(body.toRequestBody("application/json".toMediaType())).build()
-                val audio=client.newCall(request).execute().use { response->
+                if(cancelPlayback.get()){p.resolve(false);return@Thread}
+                val call=client.newCall(request)
+                ttsCall=call
+                if(cancelPlayback.get()){
+                    call.cancel();p.resolve(false);return@Thread
+                }
+                val audio=call.execute().use { response->
                     if(!response.isSuccessful)throw IllegalStateException()
                     val raw=response.body?.string().orEmpty()
                     if(raw.length>3_500_000)throw IllegalStateException()
                     val base64=JSONObject(raw).getJSONArray("audios").getString(0)
+                    if(base64.length>2_800_000)throw IllegalStateException()
                     val decoded=Base64.decode(base64,Base64.DEFAULT)
                     pcmFromWav(decoded) ?: throw IllegalStateException()
                 }
-                if(!playing.get()){p.resolve(false);return@Thread}
+                if(cancelPlayback.get()){p.resolve(false);return@Thread}
                 val min=AudioTrack.getMinBufferSize(16000,AudioFormat.CHANNEL_OUT_MONO,
                     AudioFormat.ENCODING_PCM_16BIT)
                 track=AudioTrack(AudioManager.STREAM_MUSIC,16000,
@@ -211,19 +247,29 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
                 output=track
                 track.play()
                 var offset=0
-                while(playing.get() && offset<audio.size){
+                while(!cancelPlayback.get() && offset<audio.size){
                     val size=minOf(3200,audio.size-offset)
                     val n=track.write(audio,offset,size)
                     if(n<=0)break
                     offset+=n
                 }
-                // AudioTrack may still hold the final buffered PCM frames.
-                // Allow that small tail to drain before releasing the stream.
-                if(offset==audio.size && playing.get())
-                    Thread.sleep(180)
-                p.resolve(offset==audio.size && playing.get())
-            }catch(_:Exception){p.reject("SARVAM_TTS_FAILED","Sarvam voice playback unavailable")}
+                // write() finishing only means AudioTrack queued PCM. Do not
+                // release or report success until actual playback head drains.
+                val deadline=android.os.SystemClock.elapsedRealtime()+3500L
+                val totalFrames=audio.size/2
+                while(!cancelPlayback.get() && offset==audio.size &&
+                    track.playbackHeadPosition.toLong()<totalFrames &&
+                    android.os.SystemClock.elapsedRealtime()<deadline) {
+                    Thread.sleep(35)
+                }
+                p.resolve(offset==audio.size && !cancelPlayback.get() &&
+                    track.playbackHeadPosition.toLong()>=totalFrames)
+            }catch(_:Exception){
+                if(cancelPlayback.get())p.resolve(false)
+                else p.reject("SARVAM_TTS_FAILED","Sarvam voice playback unavailable")
+            }
             finally{
+                ttsCall=null
                 playing.set(false)
                 try{track?.stop();track?.release()}catch(_:Exception){}
                 output=null
@@ -231,8 +277,11 @@ class SarvamSpeechModule(private val context:ReactApplicationContext):
         },"sarvam-one-turn-tts").start()
     }
     @ReactMethod fun stopSpeaking(p:Promise){
-        playing.set(false)
+        cancelPlayback.set(true)
+        ttsCall?.cancel()
         try{output?.pause();output?.flush()}catch(_:Exception){}
+        // Keep playing=true until worker cleanup, avoiding overlapping audio
+        // sessions and late audio playback after explicit cancellation.
         p.resolve(true)
     }
 }

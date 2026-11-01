@@ -93,3 +93,26 @@ persistent Stop notification are preserved.
   must be verified on a real device.
 - No transcript/local history of live voice is recorded by app; this is not
   a claim about Sarvam backend data retention.
+
+## Post-release stabilization — native voice cancellation and owner mute
+- Fixed one-shot Saaras/Bulbul operation overlap: a cancelled request
+  remains locked until the previous worker finishes cleanup. Active
+  OkHttp REST calls are cancelled on the owner's Stop/Cancel action,
+  rather than merely hiding a result while the network is still
+  transmitting or downloading sensitive audio.
+- Disabled redirect following on all Sarvam speech REST calls so an
+  owner-entered subscription key cannot be forwarded to an arbitrary
+  Location from a remote HTTP response.
+- Added a bounded AudioTrack playback-head drain before reporting
+  finished TTS. A completed audio write is not proof that the speaker
+  finished playing. User cancellation takes priority.
+- Added owner-initiated microphone mute/unmute controls in Voice and
+  in the Android foreground notification. Muted sessions send
+  silence PCM16 frames to preserve server voice-turn timing, **not
+  recorded human speech**. Android microphone capture continues
+  internally while muted; Stop ends microphone recording entirely.
+  Raw PCM sending and mute transitions are synchronized.
+- There are no new background permissions; the existing owner-started,
+  non-exported microphone foreground service remains the entry point.
+- Emulator acceptance tests include synthetic WAV PCM16 round-trip and
+  malformed PCM format rejection without network credentials.

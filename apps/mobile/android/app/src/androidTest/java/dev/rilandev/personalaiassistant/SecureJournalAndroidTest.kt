@@ -128,6 +128,23 @@ class SecureJournalAndroidTest {
         assertNull(AgentJournalModule.openAiVoiceKey(appContext))
     }
 
+    @Test fun sarvamWavCodecRoundTripsAndRejectsUnsupportedFormats() {
+        val bridge=SarvamSpeechModule(BridgeReactContext(appContext))
+        val pcm=ByteArray(3200) { ((it * 13) % 251).toByte() }
+        val wav=bridge.wav(pcm)
+        assertEquals("RIFF",String(wav,0,4,Charsets.US_ASCII))
+        assertEquals("WAVE",String(wav,8,4,Charsets.US_ASCII))
+        assertArrayEquals(pcm,bridge.pcmFromWav(wav))
+        assertNull("Reject compressed or altered header",
+            bridge.pcmFromWav(wav.clone().also{it[0]='X'.code.toByte()}))
+        // Sample rate is stored at WAV offset 24: native output requires
+        // exactly PCM16 mono 16 kHz, never interpret 24 kHz as 16 kHz.
+        assertNull("Reject mismatched sample rate",
+            bridge.pcmFromWav(wav.clone().also{it[24]=0.toByte()}))
+        assertNull("Reject corrupt chunk lengths",
+            bridge.pcmFromWav(wav.clone().also{it[40]=255.toByte();it[41]=255.toByte()}))
+    }
+
     @Test fun sarvamVoiceAgentIdsAndKeyRemainEncryptedAndSeparated() {
         val uniqueKey="synthetic-sarvam-"+UUID.randomUUID().toString()
         val saved=JSONObject().put("version",1).put("provider","sarvam")

@@ -101,7 +101,7 @@ test("live audio remains interruptible with VAD and stops on audio focus loss",(
   // Prior prototype silenced the mic whenever the model was speaking,
   // preventing the server from detecting a natural interruption.
   assert.doesNotMatch(code,/if \(got>0 && !outputSpeaking\)/);
-  assert.match(code,/if \(got>0\)/);
+  assert.match(code,/if \(got>0 && active\.get\(\)\)/);
   assert.match(code,/"input_audio_buffer\.speech_started"/);
   assert.match(code,/interruptedResponse = true/);
   assert.match(code,/audioQueue\.clear\(\)/);

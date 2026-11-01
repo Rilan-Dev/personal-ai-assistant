@@ -14,7 +14,7 @@ import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlash
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
-import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, stopOwnerLiveVoice } from './src/native/liveVoice';
+import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, stopOwnerLiveVoice, setOwnerLiveMicMuted } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig } from './src/native/sarvamVoiceConfig';
 import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
@@ -89,7 +89,7 @@ export default function App() {
   const [sarvamVoiceBusy,setSarvamVoiceBusy]=useState(false);
   const [sarvamVoiceNotice,setSarvamVoiceNotice]=useState('');
   const [liveVoiceStatus,setLiveVoiceStatus] = useState<LiveVoiceStatus>({
-    state:'stopped',message:'No live conversation',microphoneActive:false
+    state:'stopped',message:'No live conversation',microphoneActive:false,microphoneMuted:false
   });
   const [liveVoiceBusy,setLiveVoiceBusy] = useState(false);
   const [screenAssistNotice,setScreenAssistNotice] = useState('');
@@ -211,6 +211,21 @@ export default function App() {
     } catch {
       setVoiceNotice('Android could not start an owner-visible live voice session. Check permissions and battery restrictions.');
     } finally {setLiveVoiceBusy(false);}
+  };
+  const toggleLiveMic=async()=>{
+    if(liveVoiceBusy || liveVoiceStatus.state!=='listening')return;
+    setLiveVoiceBusy(true);
+    try {
+      const desiredMute=!liveVoiceStatus.microphoneMuted;
+      if(await setOwnerLiveMicMuted(desiredMute)){
+        setLiveVoiceStatus(previous=>({...previous,microphoneMuted:desiredMute}));
+        setVoiceNotice(desiredMute
+          ? 'Microphone muted: silence frames only. Android microphone hardware may remain active; Stop ends capture.'
+          : 'Microphone unmuted. Live audio streaming resumed.');
+      }
+    }catch {
+      setVoiceNotice('Microphone mute request failed. Use Stop to immediately end the session.');
+    }finally{setLiveVoiceBusy(false);}
   };
   const stopLiveVoice=async()=>{
     setLiveVoiceBusy(true);
@@ -703,6 +718,14 @@ export default function App() {
               {liveVoiceBusy?'Working…':liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?'■ Stop live voice session':'◉ Start live voice session'}
             </Text>
           </Pressable>
+          {liveVoiceStatus.state==='listening'&&<Pressable accessibilityRole="button"
+            disabled={liveVoiceBusy} style={styles.outlineAction} onPress={toggleLiveMic}>
+            <Text style={styles.outlineActionText}>
+              {liveVoiceStatus.microphoneMuted?'◉ Unmute microphone':'◉ Mute microphone'}
+            </Text>
+          </Pressable>}
+          {liveVoiceStatus.microphoneMuted&&
+            <Text style={styles.warning}>Muted: only silence is transmitted. Android microphone hardware remains open until you stop the session.</Text>}
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Live session limitations</Text>

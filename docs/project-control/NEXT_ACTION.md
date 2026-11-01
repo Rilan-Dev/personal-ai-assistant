@@ -257,3 +257,19 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   candidate must be fast-forward promoted once and native Kotlin,
   instrumented tests and signed APK verified. Do not mark STS live
   provider accepted without owner phone/Sarvam dashboard data.
+
+## Native voice reliability release-gate follow-up
+- Next consolidated main promotion includes hardening: owner mute/
+  unmute in notification and UI (zero-frame transmission), cancelled
+  REST calls, no overlapping STT and TTS workers, playback-head TTS
+  completion check, strict redirect prohibition, and WAV emulator
+  regression. Re-run the native emulator and release-signing workflow.
+- The first signed Sarvam-enabled release-test APK already passed at
+  0c9812b / run 41255216719. Do not send earlier APK as the build
+  that includes these newer reliability changes.
+- Owner's real-device STS speech tests and live Sarvam account
+  credentials cannot be simulated or considered completed. No
+  unapproved ambient mic/screen/background access.
+- Compatible Expo SDK58/Zod vulnerability remediation and production
+  stable signing remain separate release-security gates; audit fix
+  --force is forbidden because it downgrades Expo incompatibly.

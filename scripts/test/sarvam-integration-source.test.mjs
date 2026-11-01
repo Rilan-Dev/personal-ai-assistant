@@ -128,3 +128,47 @@ test("Live streaming and one-turn dictation/playback are mutually exclusive",()=
   assert.match(ui,/liveVoiceBusy\|\|running\|\|listening\|\|speaking/);
   assert.match(ui,/disabled=\{running\|\|liveVoiceBusy\|\|!engine\.live\|\|listening\|\|speaking\}/);
 });
+
+
+test("Sarvam REST audio requests cancel immediately without overlapping sessions",()=>{
+  assert.match(speech,/followRedirects\(false\)/);
+  assert.match(speech,/followSslRedirects\(false\)/);
+  assert.match(speech,/private val cancelCapture=AtomicBoolean\(false\)/);
+  assert.match(speech,/private val cancelPlayback=AtomicBoolean\(false\)/);
+  assert.match(speech,/sttCall\?\.cancel\(\)/);
+  assert.match(speech,/call\.cancel\(\);p\.reject\("CANCELLED"/);
+  assert.match(speech,/ttsCall\?\.cancel\(\)/);
+  assert.match(speech,/call\.cancel\(\);p\.resolve\(false\)/);
+  assert.match(speech,/if\(cancelCapture\.get\(\)\)/);
+  assert.match(speech,/if\(cancelPlayback\.get\(\)\)/);
+  assert.match(speech,/capturing\.set\(false\)/);
+  assert.match(speech,/playing\.set\(false\)/);
+  assert.match(speech,/if\(capturing\.get\(\)\)/);
+  assert.match(speech,/if\(playing\.get\(\)\)/);
+  assert.match(speech,/val deadline=android\.os\.SystemClock\.elapsedRealtime\(\)\+3500L/);
+  assert.match(speech,/track\.playbackHeadPosition\.toLong\(\)>=totalFrames/);
+  assert.doesNotMatch(speech,/Thread\.sleep\(180\)/);
+  assert.match(speech,/internal fun wav\(pcm:ByteArray\):ByteArray/);
+  assert.match(speech,/internal fun pcmFromWav\(bytes:ByteArray\):ByteArray\?/);
+});
+
+test("Owner may mute live audio in notification or Voice UI; never transmit raw microphone while muted",()=>{
+  const controls=read("apps/mobile/src/native/liveVoice.ts");
+  assert.match(controls,/setOwnerLiveMicMuted/);
+  assert.match(controls,/setVoiceMicrophoneMuted/);
+  assert.match(controls,/microphoneMuted:boolean/);
+  assert.match(voice,/const val ACTION_MUTE/);
+  assert.match(voice,/const val ACTION_UNMUTE/);
+  assert.match(voice,/synchronized\(micSendLock\)/);
+  assert.match(voice,/private fun stopWithStatus\(state: String,reason: String\) \{[\s\S]*?synchronized\(micSendLock\)/);
+  assert.match(voice,/if \(got>0 && active\.get\(\)\)/);
+  assert.match(voice,/if\(microphoneMuted\)\s+ByteArray\(got\) else data\.copyOf\(got\)/);
+  assert.match(voice,/if\(microphoneMuted\) "Unmute mic" else "Mute mic"/);
+  assert.match(voice,/data\.putBoolean\("microphoneMuted",RealtimeVoiceService\.microphoneMuted\)/);
+  assert.match(voice,/context\.currentActivity\?\.hasWindowFocus\(\)!=true/);
+  assert.match(voice,/p\.reject\("NOT_FOREGROUND"/);
+  assert.match(voice,/microphoneMuted=false/);
+  assert.match(ui,/toggleLiveMic/);
+  assert.match(ui,/Microphone muted: silence frames only/);
+  assert.match(ui,/Android microphone hardware remains open until you stop the session/);
+});

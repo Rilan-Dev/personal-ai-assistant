@@ -47,6 +47,10 @@ class RealtimeVoiceService : Service() {
     companion object {
         const val ACTION_START = "dev.rilandev.personalaiassistant.VOICE_START"
         const val ACTION_STOP = "dev.rilandev.personalaiassistant.VOICE_STOP"
+        const val ACTION_MUTE = "dev.rilandev.personalaiassistant.VOICE_MUTE"
+        const val ACTION_UNMUTE = "dev.rilandev.personalaiassistant.VOICE_UNMUTE"
+        @Volatile var microphoneMuted = false
+            private set
         private const val CHANNEL = "paa_voice_session_v1"
         private const val NOTIFICATION_ID = 4417
         private const val RATE = 24000
@@ -58,6 +62,7 @@ class RealtimeVoiceService : Service() {
     }
     private val main = Handler(Looper.getMainLooper())
     private val active = AtomicBoolean(false)
+    private val micSendLock = Any()
     private var socket: WebSocket? = null
     private var sarvamTransport: SarvamAudioTransport? = null
     private var selectedProvider = "openai"
@@ -94,6 +99,21 @@ class RealtimeVoiceService : Service() {
             stopWithStatus("stopped","Stopped by owner")
             return START_NOT_STICKY
         }
+        if (intent?.action == ACTION_MUTE || intent?.action == ACTION_UNMUTE) {
+            if (active.get()) {
+                synchronized(micSendLock) {
+                    microphoneMuted = intent.action == ACTION_MUTE
+                }
+                message = if(microphoneMuted)
+                    "Microphone muted: only silence sent to provider"
+                    else "Microphone streaming restored"
+                try {
+                    getSystemService(NotificationManager::class.java).notify(
+                        NOTIFICATION_ID,makeNotification(message))
+                }catch (_:Exception){}
+            }
+            return START_NOT_STICKY
+        }
         if (intent?.action != ACTION_START || active.get()) return START_NOT_STICKY
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             status = "error"
@@ -122,6 +142,7 @@ class RealtimeVoiceService : Service() {
             stopWithStatus("error","Configure a supported voice provider and Voice Agent IDs")
             return START_NOT_STICKY
         }
+        microphoneMuted=false
         selectedProvider=credentials.provider
         activeRate=if(selectedProvider=="sarvam")16000 else RATE
         active.set(true)
@@ -176,6 +197,12 @@ class RealtimeVoiceService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stopPending = PendingIntent.getService(this,14,stop,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val muteAction = Intent(this,RealtimeVoiceService::class.java).apply {
+            action = if(microphoneMuted) ACTION_UNMUTE else ACTION_MUTE
+        }
+        val mutePending = PendingIntent.getService(this,
+            if(microphoneMuted) 16 else 15,muteAction,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this,CHANNEL)
             .setSmallIcon(R.drawable.ic_assistant_tile)
             .setContentTitle("AI voice is active")
@@ -183,6 +210,10 @@ class RealtimeVoiceService : Service() {
             .setContentIntent(openPending)
             .addAction(Notification.Action.Builder(
                 R.drawable.ic_assistant_tile,"Stop voice",stopPending).build())
+            .addAction(Notification.Action.Builder(
+                R.drawable.ic_assistant_tile,
+                if(microphoneMuted) "Unmute mic" else "Mute mic",
+                mutePending).build())
             .setOngoing(true)
             .setCategory(Notification.CATEGORY_SERVICE)
             .build()
@@ -332,16 +363,24 @@ class RealtimeVoiceService : Service() {
                 while (active.get()) {
                     val got = try { recorder?.read(data,0,data.size) ?: break }
                         catch (_: Exception) { break }
-                    if (got>0) {
-                        val bytes=data.copyOf(got)
-                        val sent=if(selectedProvider=="sarvam"){
-                            sarvamTransport?.sendAudio(bytes) ?: false
-                        }else{
-                            val encoded=Base64.encodeToString(bytes,Base64.NO_WRAP)
-                            val ws=socket
-                            ws!=null && ws.queueSize()<=256*1024 && ws.send(JSONObject()
-                                .put("type","input_audio_buffer.append")
-                                .put("audio",encoded).toString())
+                    if (got>0 && active.get()) {
+                        // Serialize state changes with the transmit boundary:
+                        // after a mute action is applied, no new raw PCM
+                        // frames can enter the provider's outgoing queue.
+                        val sent=synchronized(micSendLock) {
+                            if(!active.get()) true else {
+                                val bytes=if(microphoneMuted)
+                                    ByteArray(got) else data.copyOf(got)
+                                if(selectedProvider=="sarvam") {
+                                    sarvamTransport?.sendAudio(bytes) ?: false
+                                } else {
+                                    val encoded=Base64.encodeToString(bytes,Base64.NO_WRAP)
+                                    val ws=socket
+                                    ws!=null && ws.queueSize()<=256*1024 && ws.send(JSONObject()
+                                        .put("type","input_audio_buffer.append")
+                                        .put("audio",encoded).toString())
+                                }
+                            }
                         }
                         if(!sent){
                             main.post {if(active.get())stopWithStatus("error","Voice network too slow")}
@@ -356,7 +395,12 @@ class RealtimeVoiceService : Service() {
     }
 
     private fun stopWithStatus(state: String,reason: String) {
-        active.set(false)
+        // Commit the terminal state at the same boundary as microphone sends.
+        // No raw frame can be queued after Stop is applied.
+        synchronized(micSendLock) {
+            active.set(false)
+            microphoneMuted=false
+        }
         status=state
         message=reason
         main.removeCallbacks(maxSession)
@@ -435,11 +479,32 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
             p.resolve(true)
         }
     }
+    @ReactMethod fun setVoiceMicrophoneMuted(muted: Boolean,p: Promise) {
+        if (RealtimeVoiceService.status!="listening" &&
+            RealtimeVoiceService.status!="connecting") {
+            p.reject("VOICE_NOT_ACTIVE","Start the live voice session before muting")
+            return
+        }
+        if(context.currentActivity?.hasWindowFocus()!=true) {
+            p.reject("NOT_FOREGROUND","Change microphone state from the visible Voice screen")
+            return
+        }
+        try {
+            context.startService(Intent(context,RealtimeVoiceService::class.java).apply {
+                action=if(muted)RealtimeVoiceService.ACTION_MUTE
+                    else RealtimeVoiceService.ACTION_UNMUTE
+            })
+            p.resolve(true)
+        }catch (_:Exception) {
+            p.reject("MIC_MUTE_FAILED","Android rejected microphone mute request")
+        }
+    }
     @ReactMethod fun getVoiceSessionStatus(p: Promise) {
         val data=Arguments.createMap()
         data.putString("state",RealtimeVoiceService.status)
         data.putString("message",RealtimeVoiceService.message)
         data.putBoolean("microphoneActive",RealtimeVoiceService.status=="listening")
+        data.putBoolean("microphoneMuted",RealtimeVoiceService.microphoneMuted)
         p.resolve(data)
     }
 }
