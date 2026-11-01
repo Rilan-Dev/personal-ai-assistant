@@ -147,15 +147,19 @@ export default function NexaSetupScreen(props: Props) {
         <Text style={styles.footerCopy}>
           Experimental, English-first voice trigger. Download an Apache-licensed
           40 MB model once. You must explicitly start microphone listening.
-          Android shows a permanent Stop notification. Detection is local, not
-          streamed to an AI provider. Listening stops after one trigger; arm it
-          again when needed.
+          Android shows a visible microphone indicator and Stop notification while
+          audio is in use. Wake detection stays on this phone. When a command
+          ends, Nexa automatically resumes listening while enabled. Android
+          may require a visible app after reboot or a system interruption.
         </Text>
         <Text style={styles.status}>
           {wakeStatus ? wakeStatus.modelReady
             ? wakeStatus.listening ? '● Listening for Hey Nexa' : '● Model ready · '+wakeStatus.state
             : wakeStatus.installing ? '○ Downloading model' : '○ Offline model not installed'
             : 'Checking offline voice availability'}
+        </Text>
+        <Text style={styles.footerCopy}>Wake preference: {wakeStatus?.enabled ? 'ON (saved across updates/reboot)' : 'OFF'}.
+          The Android green dot indicates real microphone activity; this app cannot hide it.
         </Text>
         {wakeStatus?.message ? <Text style={styles.footerCopy}>{wakeStatus.message}</Text> : null}
         <View style={styles.footerActions}>
@@ -164,12 +168,15 @@ export default function NexaSetupScreen(props: Props) {
             onPress={onWakeDownload}>
             <Text style={styles.secondaryText}>{wakeStatus?.installing ? 'Installing…':'Download offline model'}</Text>
           </Pressable>}
-          {wakeStatus?.modelReady && !wakeStatus.listening && <Pressable accessibilityRole="button"
+          {wakeStatus?.modelReady && !wakeStatus.enabled && <Pressable accessibilityRole="button"
             style={styles.secondary} disabled={busy}
-            onPress={onWakeStart}><Text style={styles.secondaryText}>Enable Hey Nexa listening</Text></Pressable>}
-          {wakeStatus?.listening && <Pressable accessibilityRole="button"
+            onPress={onWakeStart}><Text style={styles.secondaryText}>Enable Hey Nexa (saved setting)</Text></Pressable>}
+          {wakeStatus?.modelReady && wakeStatus.enabled && wakeStatus.restartRequired && <Pressable accessibilityRole="button"
+            style={styles.secondary} disabled={busy}
+            onPress={onWakeStart}><Text style={styles.secondaryText}>Resume wake listening</Text></Pressable>}
+          {wakeStatus?.enabled && <Pressable accessibilityRole="button"
             style={styles.secondary} onPress={onWakeStop}>
-            <Text style={styles.secondaryText}>Stop wake listening</Text>
+            <Text style={styles.secondaryText}>Disable Hey Nexa</Text>
           </Pressable>}
           <Pressable accessibilityRole="button" style={styles.secondary} onPress={onWakeRefresh}>
             <Text style={styles.secondaryText}>Refresh wake status</Text>
