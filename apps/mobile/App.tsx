@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from '@paa/agent-core';
+import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
@@ -586,6 +587,21 @@ export default function App() {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    // Explicit owner text routes only to a local message review UI.
+    // The contact hint cannot resolve an address book or send a message.
+    if (!restore && engine.live && whatsAppDraftAvailable()) {
+      const preview = parseReviewedWhatsAppIntent(request);
+      if (preview) {
+        setInput(""); setEvents([]); append("user", request);
+        setWhatsAppDraft(preview.message);
+        setSelectedContact(null);
+        setWhatsAppDraftNotice("Requested contact: " + preview.contactHint +
+          ". Choose the correct contact using the Android picker. Nothing was sent.");
+        append("assistant", "I prepared the exact WhatsApp text locally. Select the intended contact, review the recipient and message, then open the draft. You still tap Send in WhatsApp.");
+        setTab("tools");
+        return;
+      }
+    }
     setInput(''); setEvents([]); append('user', request);
     const controller = new AbortController(); activeAbort.current = controller;
     setRunning(true);

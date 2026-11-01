@@ -592,3 +592,12 @@
 - Added source security regressions; native emulator and physical UAT remain gates.
 - WhatsApp reviewed draft now rejects national-only phone strings and requires
   an international +country-code contact to avoid ambiguous recipients.
+
+## 2026-11-01 — Explicit Chat to WhatsApp preview routing
+- Added local, deterministic, quoted-message parser to agent-core; model output
+  cannot trigger it. Any unquoted, chained or ambiguous request falls through
+  to the existing safe planner rather than executing a partial send.
+- Chat command supplies the exact message only to the Tools review composer;
+  alias such as Mom remains a hint, never an inferred WhatsApp recipient.
+- User still chooses the single contact in Android picker and taps Send in
+  WhatsApp. No background contact scans, LLM tool sends, or delivery claims.

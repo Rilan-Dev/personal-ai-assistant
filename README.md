@@ -51,6 +51,9 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
 - **Owner-enabled GitHub launcher navigation (source milestone):** separate
   Accessibility grant; owner-initiated scan of default HOME for GitHub icon,
   bounded horizontal swipes, no icon click and no arbitrary app access.
+- **Explicit Chat-to-WhatsApp review:** a quoted message request locally
+  prefills Tools and asks the owner to select the correct contact; no alias
+  inference, automatic dispatch or hidden WhatsApp Send action.
 - **WhatsApp reviewed compose (source milestone):** user selects one contact,
   enters a short message and opens a draft for manual Send in WhatsApp. The
   assistant never asserts that a message was sent or delivered.

@@ -89,3 +89,11 @@ navigation, third-party message send or always-on Hey Nexa activation.
 A reviewed WhatsApp draft additionally rejects contact phone numbers without
 an explicit leading +country code; the owner must correct such numbers in the
 phone contact record before the app can prepare the WhatsApp link.
+
+## Exact Chat command routing
+A quoted user command such as Send a WhatsApp message to my mom \"I will call
+later\" is parsed locally by agent-core (owner-intents). It cannot select Mom
+or send a message. It prefills the exact text in Tools and requires a single
+contact chosen through Android, country-code validation and a manual send.
+Unquoted or chained instructions never trigger this shortcut. It remains
+independent of provider outputs, MCP or live-voice agent tool execution.

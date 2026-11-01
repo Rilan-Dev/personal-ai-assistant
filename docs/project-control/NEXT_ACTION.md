@@ -316,3 +316,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Confirm voice input cancels on Dismiss, while live voice is active, when
   recognition fails, or after the 20-second bound. No unattended wake word.
 - Validate native compilation/instrumentation before labeling as accepted.
+
+## Chat WhatsApp review acceptance
+- On Android, type a message request with exact quoted text and confirm Tools
+  opens with that message prefilled but no contact auto-selected.
+- Confirm ambiguous/unquoted or chained requests do not create draft state.
+- Test contact picker, international +country-code validation, WhatsApp handler
+  and user-driven send on a physical device. Do not simulate third-party delivery.

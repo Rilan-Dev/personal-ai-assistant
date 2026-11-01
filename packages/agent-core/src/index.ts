@@ -10,3 +10,6 @@ export type { DurableActionJournal, SessionCheckpoint, SessionStatus } from "./j
 
 export { PROVIDERS, DIRECT_TOOL_IDS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from "./direct-provider.ts";
 export type { DirectProviderId, DirectProviderSettings, DirectProviderOptions } from "./direct-provider.ts";
+
+export {parseReviewedWhatsAppIntent} from "./owner-intents.ts";
+export type {ReviewedWhatsAppIntent} from "./owner-intents.ts";
