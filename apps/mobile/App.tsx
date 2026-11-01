@@ -194,7 +194,7 @@ export default function App() {
     finally{setSarvamVoiceBusy(false);}
   };
   const startLiveVoice=async()=>{
-    if(!engine.live||liveVoiceBusy||running)return;
+    if(!engine.live||liveVoiceBusy||running||listening||speaking||voiceInProgress.current)return;
     if(!activeProvider||!['openai','sarvam'].includes(activeProvider.provider)){
       setVoiceNotice('For live speech, select Sarvam AI or OpenAI and save its API key in Settings.');
       return;
@@ -424,7 +424,8 @@ export default function App() {
   };
   const stop = () => activeAbort.current?.abort();
   const listenForCommand = async () => {
-    if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current) return;
+    if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current ||
+      liveVoiceStatus.state==='connecting' || liveVoiceStatus.state==='listening') return;
     voiceInProgress.current = true;
     setVoiceNotice('');
     try {
@@ -471,7 +472,8 @@ export default function App() {
     catch { setVoiceNotice('Unable to cancel input. Leaving the app stops the microphone.'); }
   };
   const readLastReply = async () => {
-    if (!voiceEnabled || speaking || listening || voiceInProgress.current || running) return;
+    if (!voiceEnabled || speaking || listening || voiceInProgress.current || running ||
+      liveVoiceStatus.state==='connecting' || liveVoiceStatus.state==='listening') return;
     const last = [...messages].reverse().find(item => item.speaker === 'assistant')?.text ?? '';
     if (!last) {
       setVoiceNotice('No assistant reply to read yet. Ask a question in Chat first.');
@@ -652,12 +654,13 @@ export default function App() {
           <View style={[styles.voiceOrb,listening && styles.voiceOrbActive]}><Text style={styles.voiceOrbGlyph}>{listening ? '◉' : '✦'}</Text></View>
           <Text style={styles.voiceHeadline}>{listening?'Listening…':speaking?'Speaking…':'Speak naturally'}</Text>
           <Text style={styles.voiceSubline}>{activeProvider?.provider==='sarvam'?'Tap to dictate with Sarvam Saaras v4, or start a live audio conversation without on-screen transcripts.':'Tap to speak using Android on-device recognition. Review the result before sending.'}</Text>
-          <Pressable accessibilityRole="button" disabled={running || speaking || (voiceInProgress.current && !listening)}
+          <Pressable accessibilityRole="button" disabled={running || speaking || (voiceInProgress.current && !listening) ||
+              liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
             onPress={listening?cancelListening:listenForCommand}
             style={[styles.voiceBigButton,listening&&styles.voiceStopButton]}>
             <Text style={styles.voiceBigButtonText}>{listening?'■  Stop listening':'◉  Tap to talk'}</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" disabled={running || listening}
+          <Pressable accessibilityRole="button" disabled={running || listening || liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
             style={styles.voiceSecondary} onPress={speaking?cancelSpeaking:readLastReply}>
             <Text style={styles.voiceSecondaryText}>{speaking?'Stop speaking':'Read last reply aloud'}</Text>
           </Pressable>
@@ -693,7 +696,7 @@ export default function App() {
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
-          <Pressable accessibilityRole="button" disabled={running||liveVoiceBusy||!engine.live}
+          <Pressable accessibilityRole="button" disabled={running||liveVoiceBusy||!engine.live||listening||speaking}
             style={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?styles.outlineAction:styles.primaryInline}
             onPress={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?stopLiveVoice:startLiveVoice}>
             <Text style={liveVoiceStatus.state==='listening'||liveVoiceStatus.state==='connecting'?styles.outlineActionText:styles.primaryInlineText}>

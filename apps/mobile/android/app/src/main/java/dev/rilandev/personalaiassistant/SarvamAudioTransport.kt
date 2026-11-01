@@ -39,7 +39,7 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
     @Volatile private var socket:WebSocket?=null
     private var signedCall:Call?=null
 
-    fun connect(cfg:AgentJournalModule.VoiceCredentials) {
+    fun connect(cfg:AgentJournalModule.Companion.VoiceCredentials) {
         val uri=Uri.parse("https://apps.sarvam.ai/api/app-runtime/")
             .buildUpon()
             .appendEncodedPath("orgs/${cfg.orgId}/workspaces/${cfg.workspaceId}/apps/${cfg.appId}/url")

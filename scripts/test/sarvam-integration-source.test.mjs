@@ -121,3 +121,10 @@ test("Android microphone consent identifies the actual selected voice provider",
   assert.match(controls,/your OpenAI realtime provider/);
   assert.match(ui,/startOwnerLiveVoice\(activeProvider\.provider==='sarvam'\?'sarvam':'openai'\)/);
 });
+
+
+test("Live streaming and one-turn dictation/playback are mutually exclusive",()=>{
+  assert.match(ui,/liveVoiceStatus\.state==='connecting' \|\| liveVoiceStatus\.state==='listening'/);
+  assert.match(ui,/liveVoiceBusy\|\|running\|\|listening\|\|speaking/);
+  assert.match(ui,/disabled=\{running\|\|liveVoiceBusy\|\|!engine\.live\|\|listening\|\|speaking\}/);
+});

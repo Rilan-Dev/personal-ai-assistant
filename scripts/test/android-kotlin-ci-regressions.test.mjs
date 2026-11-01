@@ -24,3 +24,12 @@ test("one-shot Accessibility expiry callback has explicit nonrecursive return ty
     "recursively inferred synchronized return type must be explicitly declared");
   assert.match(text,/expiryHandler\.removeCallbacks\(expire\)/);
 });
+
+
+test("Sarvam transport resolves companion-scoped native credential type",()=>{
+  const text=source("SarvamAudioTransport.kt");
+  assert.match(text,/fun connect\(cfg:AgentJournalModule\.Companion\.VoiceCredentials\)/);
+  assert.doesNotMatch(text,/AgentJournalModule\.VoiceCredentials/);
+  assert.match(source("AgentJournalModule.kt"),/internal companion object/);
+  assert.match(source("AgentJournalModule.kt"),/internal data class VoiceCredentials/);
+});

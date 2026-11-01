@@ -247,3 +247,13 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   messages or accessibility controls.
 - Full native integration and live-provider activation remain
   conditional until evidence from manual physical phone test.
+
+## Native Sarvam Kotlin hotfix (2026-11-01)
+- Android main run 41254373222 failed at :app:compileDebugKotlin.
+  Cause: SarvamAudioTransport refered to AgentJournalModule.VoiceCredentials
+  although the type is nested in AgentJournalModule.Companion.
+  Fixed companion-qualified reference on Development with regression.
+- Latest source passes 148/148 tests and typecheck. Main release
+  candidate must be fast-forward promoted once and native Kotlin,
+  instrumented tests and signed APK verified. Do not mark STS live
+  provider accepted without owner phone/Sarvam dashboard data.

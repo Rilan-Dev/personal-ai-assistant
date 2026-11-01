@@ -478,3 +478,14 @@
   TTS UI does not claim playback completed when cancelled. Added source
   regressions. Promoted together so a superseded main pipeline can be
   cancelled by concurrency, avoiding duplicate completed APK builds.
+- New main promotion run 41254373222 failed native Kotlin compilation:
+  SarvamAudioTransport.kt:42 incorrectly referenced the nested
+  companion-scoped VoiceCredentials as AgentJournalModule.VoiceCredentials.
+  Corrected to AgentJournalModule.Companion.VoiceCredentials, matching
+  the actual Kotlin declaration. The other five unresolved member
+  references in the log were cascading symptoms of that type failure.
+  Added regression to prevent repeating this exact Kotlin error.
+- During correction, prevented simultaneous live FGS capture and
+  one-turn Sarvam dictation/TTS through UI and native checks.
+  Local source/regression suite: 148/148 PASS; TypeScript PASS.
+  Native CI re-validation is still required.
