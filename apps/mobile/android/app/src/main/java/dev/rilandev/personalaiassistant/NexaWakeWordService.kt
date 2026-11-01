@@ -71,6 +71,20 @@ class NexaWakeWordService : Service() {
                 handoffPending = true
             }
         }
+        /** Reserve the microphone before an owner-started provider session.
+         * This is separate from the assistant panel: it must not trigger the
+         * OEM-failure overlay timer, nor resume wake capture while voice runs.
+         */
+        fun pauseForLiveVoice() {
+            active?.apply {
+                liveVoiceOwnsMic = true
+                listening = false
+                releaseAudio()
+            }
+        }
+        fun resumeAfterLiveVoice() {
+            active?.liveVoiceOwnsMic = false
+        }
 
         // A legacy wake_enabled flag alone must not restart continuous microphone
         // capture after an APK upgrade. Version 2 requires a fresh user opt-in.
@@ -94,6 +108,7 @@ class NexaWakeWordService : Service() {
 
     private val running = AtomicBoolean(false)
     @Volatile private var handoffPending = false
+    @Volatile private var liveVoiceOwnsMic = false
     @Volatile private var assistantSessionVisible = false
     @Volatile private var handoffStartedAt = 0L
     @Volatile private var audio: AudioRecord? = null
@@ -216,7 +231,7 @@ class NexaWakeWordService : Service() {
                     }
                     // During a voice command, Android's recognizer needs sole
                     // ownership of the microphone. Keep the existing FGS.
-                    if (handoffPending || RealtimeVoiceService.status == "listening" ||
+                    if (handoffPending || liveVoiceOwnsMic || RealtimeVoiceService.status == "listening" ||
                         RealtimeVoiceService.status == "connecting") {
                         listening = false
                         state = "paused"
@@ -283,12 +298,12 @@ class NexaWakeWordService : Service() {
                 listening = true
                 state = "listening"
                 message = "Hey Nexa listening locally · Android microphone indicator is expected"
-                while (running.get() && !handoffPending) {
+                while (running.get() && !handoffPending && !liveVoiceOwnsMic) {
                     if (RealtimeVoiceService.status == "listening" ||
                         RealtimeVoiceService.status == "connecting") break
                     val n = source.read(frame, 0, frame.size)
                     if (n <= 0) {
-                        if (!running.get() || handoffPending) break
+                        if (!running.get() || handoffPending || liveVoiceOwnsMic) break
                         error("Microphone capture interrupted")
                     }
                     val utteranceFinished = recognizer.acceptWaveForm(frame, n)
@@ -300,7 +315,7 @@ class NexaWakeWordService : Service() {
                 }
             }
         } catch (e: Exception) {
-            if (running.get() && !handoffPending) {
+            if (running.get() && !handoffPending && !liveVoiceOwnsMic) {
                 state = "error"
                 message = "Wake capture error: " + (e.message ?: "unknown").take(100)
             }
@@ -327,6 +342,7 @@ class NexaWakeWordService : Service() {
         handoffPending = false
         assistantSessionVisible = false
         handoffStartedAt = 0L
+        liveVoiceOwnsMic = false
         releaseAudio()
         listening = false
         worker?.interrupt()
