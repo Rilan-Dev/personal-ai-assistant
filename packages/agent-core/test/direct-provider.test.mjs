@@ -149,8 +149,15 @@ test("provider prose cannot claim that it executed a hardware or messaging actio
   });
   for(const question of ["Send a WhatsApp message","Open camera","Turn flashlight on"]) {
     const r=await planner.next(question,[]);
-    assert.equal(r.type,"clarify");
-    assert.match(r.question,/No device action was executed/);
+    if (question === "Send a WhatsApp message") {
+      assert.equal(r.type,"clarify");
+      assert.match(r.question,/No device action was executed/);
+    } else {
+      // The owner explicitly requested this safe, supported single action.
+      // A tool plan still needs the mobile permission/approval harness;
+      // no model claim of success is ever accepted.
+      assert.equal(r.type,"tool");
+    }
   }
   // Exact read-only requests bypass unsafe provider prose and use local
   // Android tools instead; neither action is claimed complete in prose.
