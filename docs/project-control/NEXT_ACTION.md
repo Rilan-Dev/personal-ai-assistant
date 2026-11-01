@@ -300,3 +300,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
   These remain **not implemented**, rather than unverified features.
 - Preserve the current no-silent-recording, default-deny tools and one-time
   approval policies while implementing those later capabilities.
+
+## Launcher and WhatsApp acceptance (2026-11-01)
+- Run Android emulator tests, native Kotlin compilation and signed APK on exact commit.
+- Physical launcher gesture, package labels, home folder and screen-resume acceptance pending.
+- WhatsApp contacts and draft link must be tested with owner-selected fixtures; no
+  automatic Send or delivery verification was implemented in this milestone.
+- Hey Nexa always-on custom wake word and voice-device tool routing remain separate
+  open engineering gates requiring offline KWS and real phone privacy evaluation.

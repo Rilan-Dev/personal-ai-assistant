@@ -12,6 +12,9 @@ import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, tr
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
 import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistantRole } from './src/native/androidAssistantRole';
 import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
+import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
+import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
+import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
 import type { NexaAssistantRoleStatus } from './src/native/androidAssistantRole';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
@@ -78,6 +81,9 @@ export default function App() {
   const [nexaPermissionBusy, setNexaPermissionBusy] = useState(false);
   const [githubStatus, setGithubStatus] = useState<AppAvailability | null>(null);
   const [githubNotice, setGithubNotice] = useState('');
+  const [launcherStatus, setLauncherStatus] = useState<LauncherNavigationStatus | null>(null);
+  const [launcherBusy, setLauncherBusy] = useState(false);
+  const [launcherNotice, setLauncherNotice] = useState('');
   useEffect(() => {
     if (!engine.live || !assistantRoleAvailable()) return;
     let mounted = true;
@@ -130,6 +136,34 @@ export default function App() {
       setGithubNotice('Android received the GitHub launch request. Screen opening has not been verified.');
     } catch { setGithubNotice('Android could not launch GitHub.'); }
   };
+  const refreshLauncherStatus = async () => {
+    if (!launcherNavigationAvailable()) return;
+    try {setLauncherStatus(await getLauncherNavigationStatus());}
+    catch {setLauncherNotice('Launcher status not available.');}
+  };
+  useEffect(() => {
+    if (!launcherNavigationAvailable()) return;
+    void refreshLauncherStatus();
+    const listener = AppState.addEventListener('change', state => {
+      if (state === 'active') void refreshLauncherStatus();
+    });
+    return () => listener.remove();
+  }, []);
+  const locateGitHubIcon = async () => {
+    if (launcherBusy) return;
+    setLauncherBusy(true); setLauncherNotice('');
+    try {
+      await findGitHubOnLauncher();
+      setLauncherNotice('Searching home screens. Return to Nexa to read the verified result.');
+      await refreshLauncherStatus();
+    } catch (e) {
+      setLauncherNotice(e instanceof Error ? e.message : 'Launcher navigation was rejected.');
+    } finally { setLauncherBusy(false); }
+  };
+  const cancelGitHubIconSearch = async () => {
+    try {await cancelLauncherNavigation(); await refreshLauncherStatus();}
+    catch {setLauncherNotice('Could not cancel launcher search.');}
+  };
   const [flashNotice, setFlashNotice] = useState('');
   const [flashBusy, setFlashBusy] = useState(false);
   const [backendUrl, setBackendUrl] = useState('');
@@ -163,6 +197,9 @@ export default function App() {
   const [approximateLocation,setApproximateLocation]=useState<OwnerApproximateLocation|null>(null);
   const [privacyToolNotice,setPrivacyToolNotice]=useState('');
   const [privacyToolBusy,setPrivacyToolBusy]=useState(false);
+  const [whatsAppDraft,setWhatsAppDraft]=useState('');
+  const [whatsAppDraftNotice,setWhatsAppDraftNotice]=useState('');
+  const [whatsAppDraftBusy,setWhatsAppDraftBusy]=useState(false);
   const privateObservationDeadline=useRef(0);
   useEffect(()=>{
     if(!screenSnapshot)return;
@@ -209,6 +246,22 @@ export default function App() {
     }catch{
       setPrivacyToolNotice('Could not open/read the Android contact picker. No contact data saved.');
     }finally{setPrivacyToolBusy(false);}
+  };
+  const openSelectedWhatsAppDraft=async()=>{
+    if (!selectedContact || !whatsAppDraft.trim() || whatsAppDraftBusy ||
+        Date.now() > privateObservationDeadline.current) {
+      setWhatsAppDraftNotice('Select one contact again, review the message, then choose Open draft.');
+      return;
+    }
+    setWhatsAppDraftBusy(true);
+    try {
+      await openWhatsAppReviewedDraft(selectedContact, whatsAppDraft);
+      setWhatsAppDraft('');
+      setSelectedContact(null);
+      setWhatsAppDraftNotice('WhatsApp draft launch requested. Message was NOT sent by Nexa. Review the recipient and tap Send in WhatsApp yourself.');
+    } catch(e) {
+      setWhatsAppDraftNotice(e instanceof Error ? e.message : 'Unable to prepare WhatsApp draft.');
+    } finally {setWhatsAppDraftBusy(false);}
   };
   const readPrivateLocation=async()=>{
     if(!engine.live||privacyToolBusy||running)return;
@@ -924,6 +977,18 @@ export default function App() {
             {selectedContact&&<View style={styles.configContents}>
               <Text style={styles.groupLabel}>Selected contact · local preview</Text>
               <Text style={styles.cardText}>{selectedContact.name} · {selectedContact.phone}</Text>
+              {whatsAppDraftAvailable() && <>
+                <Text style={styles.settingHelp}>Compose only. The message will not be sent by Nexa; confirm recipient and tap Send within WhatsApp.</Text>
+                <TextInput style={styles.composerInput} placeholder="WhatsApp message to selected contact"
+                  placeholderTextColor="#7f8ba5" value={whatsAppDraft}
+                  onChangeText={setWhatsAppDraft} multiline maxLength={500}
+                  accessibilityLabel="WhatsApp message preview" />
+                <Pressable accessibilityRole="button" style={styles.primaryInline}
+                  disabled={whatsAppDraftBusy || !whatsAppDraft.trim()}
+                  onPress={openSelectedWhatsAppDraft}>
+                  <Text style={styles.primaryInlineText}>{whatsAppDraftBusy ? 'Preparing…' : 'Open reviewed WhatsApp draft'}</Text>
+                </Pressable>
+              </>}
               <Pressable accessibilityRole="button" onPress={()=>usePrivateObservationInChat('contact')}
                 style={styles.primaryInline}>
                 <Text style={styles.primaryInlineText}>Review contact question in Chat</Text>
@@ -946,6 +1011,7 @@ export default function App() {
             </Pressable>}
           </>}
           {privacyToolNotice!==''&&<Text style={styles.feedback}>{privacyToolNotice}</Text>}
+          {whatsAppDraftNotice!==''&&<Text style={styles.feedback}>{whatsAppDraftNotice}</Text>}
           <Text style={styles.settingHelp}>No background contact tracking, address-book scraping or continuous location access. Voice agents cannot invoke these private tools.</Text>
         </View>
         <View style={styles.sectionCard}>
@@ -1001,6 +1067,29 @@ export default function App() {
               <Text style={styles.primaryInlineText}>Open GitHub</Text>
             </Pressable>}
           </View>}
+          {engine.live && githubStatus?.installed && launcherNavigationAvailable() && <>
+            <Text style={styles.settingHelp}>Nexa Launcher Navigation requires its own Android Accessibility grant. Once enabled, Find GitHub can scan the default home-screen pages only, and perform up to eight horizontal swipes. It does not click icons.</Text>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" style={styles.outlineInline}
+                onPress={openScreenSettings}>
+                <Text style={styles.outlineInlineText}>Accessibility Settings</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={launcherBusy || running}
+                style={styles.primaryInline} onPress={locateGitHubIcon}>
+                <Text style={styles.primaryInlineText}>{launcherBusy ? 'Starting…' : 'Find GitHub icon'}</Text>
+              </Pressable>
+            </View>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" onPress={refreshLauncherStatus} style={styles.outlineInline}>
+                <Text style={styles.outlineInlineText}>Check navigation result</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={cancelGitHubIconSearch} style={styles.outlineInline}>
+                <Text style={styles.outlineInlineText}>Cancel scan</Text>
+              </Pressable>
+            </View>
+            {launcherStatus && <Text style={styles.feedback}>Launcher: {launcherStatus.enabled ? 'enabled' : 'off'} · {launcherStatus.state} · {launcherStatus.swipes} swipes</Text>}
+            {launcherNotice!=='' && <Text style={styles.feedback}>{launcherNotice}</Text>}
+          </>}
           {githubNotice!=='' && <Text style={styles.feedback}>{githubNotice}</Text>}
         </View>
         <View style={styles.sectionCard}>

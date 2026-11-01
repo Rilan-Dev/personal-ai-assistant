@@ -43,6 +43,12 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
   start/stop existing live audio from the panel after granting microphone and
   notification access in the app. This is not a hotword detector, not a hidden
   recording service, and is pending APK/emulator and real-phone acceptance.
+- **Owner-enabled GitHub launcher navigation (source milestone):** separate
+  Accessibility grant; owner-initiated scan of default HOME for GitHub icon,
+  bounded horizontal swipes, no icon click and no arbitrary app access.
+- **WhatsApp reviewed compose (source milestone):** user selects one contact,
+  enters a short message and opens a draft for manual Send in WhatsApp. The
+  assistant never asserts that a message was sent or delivered.
 - **GitHub package lookup (source milestone):** an owner-triggered, allowlisted
   package check for com.github.android and an optional GitHub launch Intent.
   The Android launcher icon page cannot be inferred and is reported unknown.

@@ -572,3 +572,11 @@
 - Android native compilation, signed APK, assistant gestures and real-device
   Sarvam STS are NOT yet verified for this milestone.
 - See docs/architecture/NEXA_BACKGROUND_ASSISTANT.md for gates and limits.
+
+## 2026-11-01 — GitHub launcher navigation and reviewed WhatsApp compose
+- Added separate opt-in launcher accessibility service, default-HOME-package restriction,
+  exact visible GitHub label, eight horizontal gestures maximum, and timeout/cancel.
+- Added status UI, native bridge and instrumentation tests without scanning other apps.
+- Added owner-selected WhatsApp contact and exact-message preview; a bounded, encoded
+  WhatsApp composer Intent is dispatched only after owner action. No send or delivery claim.
+- Read docs/architecture/NEXA_LAUNCHER_WHATSAPP_MILESTONE.md for gates.

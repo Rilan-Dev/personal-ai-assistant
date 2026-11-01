@@ -18,6 +18,10 @@
     <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
     <package android:name="com.whatsapp"/>
     <package android:name="com.github.android"/>
+    <intent>
+      <action android:name="android.intent.action.MAIN"/>
+      <category android:name="android.intent.category.HOME"/>
+    </intent>
     <package android:name="com.whatsapp.w4b"/>
     <intent><action android:name="android.media.action.STILL_IMAGE_CAMERA"/></intent>
     <!-- Support checking for http(s) links via the Linking API -->
@@ -72,6 +76,16 @@
       </intent-filter>
       <meta-data android:name="android.accessibilityservice"
           android:resource="@xml/screen_assist_config"/>
+    </service>
+    <!-- Owner-enabled launcher-only assist. It cannot click or operate other apps. -->
+    <service android:name=".NexaLauncherNavigationService"
+        android:label="Nexa Launcher Navigation"
+        android:description="@string/nexa_launcher_accessibility_description"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        android:exported="true">
+      <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+      <meta-data android:name="android.accessibilityservice"
+          android:resource="@xml/nexa_launcher_navigation_config"/>
     </service>
     <!-- System-owned Quick Settings tile: launches chat; never starts audio. -->
     <service android:name=".AssistantTileService"
