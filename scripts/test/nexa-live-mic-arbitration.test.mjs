@@ -20,6 +20,10 @@ test('wake detector stops capture when live voice claims the microphone', () => 
   assert.match(wake, /@Volatile private var liveVoiceOwnsMic = false/);
   assert.match(wake, /fun pauseForLiveVoice\(\)/);
   assert.match(wake, /fun resumeAfterLiveVoice\(\)/);
+  // Companion 'listening' state belongs to NexaWakeWordService, not an
+  // instance member. Kotlin rejects wake.listening as an unresolved reference.
+  assert.match(wake, /return !listening && !wake\.audioReleasing && wake\.audio == null/);
+  assert.doesNotMatch(wake, /wake\.listening/);
   assert.match(wake, /liveVoiceOwnsMic = true[\s\S]*?releaseAudio\(\)/);
   assert.match(wake, /if \(handoffPending \|\| liveVoiceOwnsMic \|\| RealtimeVoiceService\.status/);
   assert.match(wake, /while \(running\.get\(\) && !handoffPending && !liveVoiceOwnsMic\)/);
