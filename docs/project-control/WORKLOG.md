@@ -760,3 +760,12 @@
 - See docs/architecture/NEXA_PRIVACY_FIRST_ASSISTANT_VOICE_HANDOFF_2026-11-02.md.
 - True no-dot "Hey Nexa" from idle remains OEM/Android 18 access dependent;
   source changes DO NOT claim to solve or hide ongoing microphone use.
+
+## 2026-11-02 — Live speech microphone handoff and regression verification
+- Owner reported a physical-phone crash when starting live voice with the Hey Nexa wake detector armed, and a Sarvam battery question rejected by the provider-action policy.
+- Reviewed current Development source. Deterministic read-only battery/status routing and bounded fallback live-provider activation had already been committed before this pass; installed APK behavior was not verified.
+- Corrected a missing microphone handoff: RealtimeVoiceService claims the wake AudioRecord before opening its provider transport and releases that claim after stopping/releasing live capture and playback.
+- Wake detector now yields capture, exits its read loop safely during live handoff, avoids reporting an error on intentional handoff, and does not trigger the OEM-assistant fallback timeout for app-started sessions.
+- Added scripts/test/nexa-live-mic-arbitration.test.mjs with lifecycle and safety regression assertions.
+- Isolated Linux clone on direct-connected AI-Comms server in /tmp/nexa-ai-review-20261102 (production services unchanged): npm ci succeeded; npm test 222/222 passed; npm run typecheck passed; npm run web:export passed.
+- Android native compilation and physical-phone crash reproduction NOT verified here: home Android machine unavailable via Tailscale; alternate server lacks Android SDK/JDK/ADB. Do not claim native APK, provider session success, or phone acceptance based on source tests.
