@@ -7,7 +7,7 @@ package dev.rilandev.personalaiassistant
  * its microphone privacy indicator and owner Stop notification.
  */
 internal class NexaVoiceIdleGate(
-    private val limitMs: Long = 45_000L,
+    private val limitMs: Long = 120_000L,
     private val sampleThreshold: Int = 650
 ) {
     @Volatile private var lastSpeechMs = 0L
