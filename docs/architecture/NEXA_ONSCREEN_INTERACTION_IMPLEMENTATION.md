@@ -50,3 +50,13 @@
 - No durable persisted UI action journal for overlay-only one-shot navigation. The in-memory approval is consumed before dispatch; process death cannot replay it. Integrating per-action encrypted journal evidence is a future milestone.
 - No multi-step action chains or verified post-action screen transitions, visual grounding confidence calibration, and no general keyboard typing.
 - No APK/emulator/real-phone tests or performance measurements performed in this change set.
+
+
+## Follow-up implementation: durable at-most-once UI action ledger (November 3, 2026)
+
+- Kotlin `NexaUiActionJournal` stores a bounded (40-event) AES-256-GCM Android Keystore-encrypted record in private SharedPreferences; raw package names, target labels, coordinates, screen text and screenshots are not persisted.
+- Native UI tap and scroll controllers now commit an approval-token claim BEFORE `AccessibilityNodeInfo.performAction()`. If the secure claim cannot be committed, the UI action is blocked. Approval tokens are SHA-256 digested, actions cannot be reclaimed, and no retry occurs after an uncertain dispatch.
+- Native action results distinguish Android request acceptance/rejection from business-task success. After Android accepts an action, `NexaUiActionVerifier` performs one delayed, read-only check of the accessible screen package/window and normalized icon geometry. The journal may upgrade the result to `observed_change` or `no_observable_change`; neither signifies completion.
+- The floating Tools overlay includes **Action journal summary**, which displays only aggregate event states, never details from other apps.
+- `NexaUiActionJournalAndroidTest.kt` adds test cases for replay denial, redacted at-rest records, invalid action types, and observed-change transitions. These tests were authored but not run on a real device in this iteration, per owner's acceptance workflow.
+- This follow-up does not grant the voice model any screen-click or scroll tools, does not install new permissions, and does not alter release signing or automatic CI trigger policies.
