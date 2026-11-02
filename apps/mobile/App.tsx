@@ -1538,6 +1538,16 @@ export default function App() {
              {iconScanNotice!==''&&<Text style={styles.feedback}>{iconScanNotice}</Text>}
              {iconScan&&<View style={styles.configContents}>
                <Text style={styles.groupLabel}>{iconScan.icons.length} visible controls in {iconScan.packageName}</Text>
+               <Text style={styles.cardText}>Local summary: {summarizeScreenControls(iconScan,Date.now()).safeNavigationCount} navigation controls, {summarizeScreenControls(iconScan,Date.now()).unknownCount} unlabeled icons. Position descriptions use the captured app-window bounds.</Text>
+               <TextInput style={styles.settingInput} value={iconQuestion} maxLength={100}
+                 onChangeText={v=>{setIconQuestion(v);setIconLocalAnswer('');}}
+                 accessibilityLabel="Ask where a visible icon is"
+                 placeholder="Where is the search icon?" placeholderTextColor="#7f8ba5"/>
+               <Pressable accessibilityRole="button" style={styles.outlineAction}
+                 disabled={iconQuestion.trim().length<5} onPress={askLocalScreenQuestion}>
+                 <Text style={styles.outlineActionText}>Find icon locally · no AI upload</Text>
+               </Pressable>
+               {iconLocalAnswer!==''&&<Text style={styles.feedback}>{iconLocalAnswer}</Text>}
                {iconScan.icons.map(icon=>(
                  <Text key={icon.id} style={styles.cardText}>
                    {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
