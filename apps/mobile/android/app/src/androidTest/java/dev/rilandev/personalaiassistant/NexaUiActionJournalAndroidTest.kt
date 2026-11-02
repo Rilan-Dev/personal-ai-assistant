@@ -26,6 +26,16 @@ class NexaUiActionJournalAndroidTest {
         assertNotNull(NexaUiActionJournal.summary(ctx))
     }
 
+    @Test fun recordedChangeDoesNotCountAsTaskSuccessAndCannotBeReplayed() {
+        val token = "test-" + UUID.randomUUID().toString()
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"scroll_down","com.example.scrolltest"))
+        assertFalse(NexaUiActionJournal.markObservation(ctx,token,"observed_change"))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        assertTrue(NexaUiActionJournal.markObservation(ctx,token,"observed_change"))
+        assertFalse(NexaUiActionJournal.markObservation(ctx,token,"no_observable_change"))
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"scroll_down","com.example.scrolltest"))
+    }
+
     @Test fun unsafeOrMalformedClaimsAreRejected() {
         assertFalse(NexaUiActionJournal.claim(ctx,"short","tap","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),
