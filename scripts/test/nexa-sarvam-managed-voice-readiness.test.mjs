@@ -22,7 +22,7 @@ test('Model API-only realtime voice never requires Samvaad organization/workspac
 test('realtime Saaras v3 and Bulbul WS implement official audio, VAD and barge-in messages',()=>{
   assert.match(direct,/saaras:v3-realtime/);
   assert.match(direct,/speech-to-text-realtime\/ws/);
-  assert.match(direct,/speech-to-text\/ws/);
+  assert.doesNotMatch(direct,/speech-to-text\/ws/);
   assert.match(direct,/appendQueryParameter\("language_code","auto"\)/);
   assert.match(direct,/appendQueryParameter\("stream_type","fast"\)/);
   assert.match(direct,/vad\.speech_start/);
