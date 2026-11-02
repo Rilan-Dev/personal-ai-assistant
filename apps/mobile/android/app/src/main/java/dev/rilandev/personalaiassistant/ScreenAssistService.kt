@@ -71,12 +71,21 @@ internal object ScreenAssistState {
 }
 
 class ScreenAssistService : AccessibilityService() {
-    override fun onServiceConnected() { ScreenAssistState.connected = true }
+    companion object {
+        @Volatile internal var active: ScreenAssistService? = null
+            private set
+    }
+    override fun onServiceConnected() {
+        active = this
+        ScreenAssistState.connected = true
+    }
     override fun onInterrupt() {}
     override fun onDestroy() {
         ScreenAssistState.connected = false
         ScreenAssistState.clear()
         ScreenIconScanState.clear()
+        NexaScreenActions.reset()
+        if (active === this) active = null
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
