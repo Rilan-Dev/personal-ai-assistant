@@ -12,11 +12,20 @@ internal object NexaScreenScroll {
     private data class Target(
         val token: String, val pkg: String, val windowId: Int,
         val classname: String, val resourceId: String, val bounds: IconBox,
-        val forward: Boolean, val expiry: Long
+        val direction: String, val expiry: Long
     )
     private val lock=Any()
     private var pending: Target? = null
     fun cancel() = synchronized(lock) { pending=null }
+    /** Android semantic scroll actions; no guessed XY swipes. */
+    private fun scrollAction(direction:String):Int = when(direction) {
+        "down" -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+        "up" -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        "left" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id
+        "right" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id
+        else -> -1
+    }
+
 
     private fun safeRoot(service: ScreenAssistService): AccessibilityNodeInfo? {
         if (!ScreenAssistState.connected) return null
@@ -33,7 +42,7 @@ internal object NexaScreenScroll {
     }
     fun prepare(service: ScreenAssistService, direction: String): String {
         cancel()
-        if(direction!="up" && direction!="down") return "Unsupported scroll direction."
+        if(direction !in setOf("up","down","left","right")) return "Unsupported scroll direction."
         val root=safeRoot(service) ?: return "No permitted app window to scroll."
         try{
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -48,8 +57,7 @@ internal object NexaScreenScroll {
                     if(node.isScrollable){
                         val rect=Rect()
                         node.getBoundsInScreen(rect)
-                        val action=if(direction=="down") AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                            else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                        val action=scrollAction(direction)
                         val actions=node.actionList.any { it.id==action }
                         val area=rect.width().toLong()*rect.height().toLong()
                         if(actions && area>bestArea && area<500_000_000L && rect.left>=0 && rect.top>=0){
@@ -66,7 +74,7 @@ internal object NexaScreenScroll {
             val tgt=Target(UUID.randomUUID().toString(),root.packageName.toString(),
                 root.windowId,candidate.className?.toString().orEmpty(),
                 candidate.viewIdResourceName.orEmpty(),
-                IconBox(box.left,box.top,box.right,box.bottom),direction=="down",
+                IconBox(box.left,box.top,box.right,box.bottom),direction,
                 SystemClock.elapsedRealtime()+10_000L)
             synchronized(lock){ pending=tgt }
             return "Confirm scroll ${direction} in ${tgt.pkg} within 10 seconds."
@@ -116,11 +124,10 @@ internal object NexaScreenScroll {
                 }
             }
             if(matches!=1 || target==null) return "Scroll target changed or ambiguous. No action requested."
-            val direction=if(approved.forward) "scroll_down" else "scroll_up"
+            val direction="scroll_"+approved.direction
             if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg))
                 return "Secure action journal unavailable or approval already used. No scroll requested."
-            val action=if(approved.forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+            val action=scrollAction(approved.direction)
             val before=NexaUiActionVerifier.fingerprint(root)
             return if(target.performAction(action)) {
                 NexaUiActionVerifier.observeAfter(service,approved.token,before)
