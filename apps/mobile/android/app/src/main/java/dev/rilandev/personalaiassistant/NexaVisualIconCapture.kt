@@ -76,8 +76,17 @@ internal object NexaVisualIconCapture {
                 object : AccessibilityService.TakeScreenshotCallback {
                     override fun onSuccess(screenshot: AccessibilityService.ScreenshotResult) {
                         val buffer = screenshot.hardwareBuffer
+                        var wrapped: Bitmap? = null
                         try {
-                            val bitmap = Bitmap.wrapHardwareBuffer(buffer,screenshot.colorSpace)
+                            // A screenshot callback can arrive after the owner changes apps.
+                            // Never return crops from a different window/package.
+                            val current=service.rootInActiveWindow
+                            val sameWindow=try {
+                                current?.packageName?.toString()==pkg
+                            } finally { current?.recycle() }
+                            if (!sameWindow) { complete(pkg,emptyList()); return }
+                            wrapped=Bitmap.wrapHardwareBuffer(buffer,screenshot.colorSpace)
+                            val bitmap=wrapped
                             if (bitmap == null) { complete(pkg,emptyList()); return }
                             val crops = ArrayList<VisualIconCrop>()
                             targets.forEach { candidate ->
@@ -89,6 +98,7 @@ internal object NexaVisualIconCapture {
                         } catch (_: Exception) {
                             complete(pkg,emptyList())
                         } finally {
+                            wrapped?.recycle()
                             buffer.close()
                         }
                     }
