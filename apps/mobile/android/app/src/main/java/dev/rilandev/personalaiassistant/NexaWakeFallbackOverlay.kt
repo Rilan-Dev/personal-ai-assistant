@@ -234,6 +234,10 @@ internal class NexaWakeFallbackOverlay(
         handler.postDelayed({
             if (!active) return@postDelayed
             if (providerReady && Build.VERSION.SDK_INT >= 26) {
+                // Two-minute cap belongs only to the fallback one-shot offline
+                // recognizer. A consented provider live session owns its own
+                // 120-second idle / 60-minute maximum and visible Stop.
+                handler.removeCallbacks(maximum)
                 try {
                     service.startForegroundService(Intent(service,
                         RealtimeVoiceService::class.java).apply {
