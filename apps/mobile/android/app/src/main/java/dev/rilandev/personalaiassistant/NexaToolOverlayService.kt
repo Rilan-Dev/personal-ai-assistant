@@ -103,6 +103,21 @@ class NexaToolOverlayService : Service() {
     private fun sendLocal(raw: String) {
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
+        // Strict local intent grammar: inspection is read-only; scrolling only
+        // PREPARES a pending confirmation and never fires automatically.
+        when (query.lowercase(java.util.Locale.ROOT).trim().trimEnd('?','.','!')) {
+            "inspect screen", "inspect screen icons", "find screen icons",
+            "what icons are on screen", "what icons are on my screen" -> {
+                section = "tools"
+                inspectVisibleIcons()
+                return
+            }
+            "scroll up", "scroll down" -> {
+                section = "tools"
+                proposeScroll(if (query.lowercase().contains("down")) "down" else "up")
+                return
+            }
+        }
         val result = NexaOverlayCommands.handle(this,query).take(550)
         history.addLast("YOU · $query")
         history.addLast("NEXA LOCAL · $result")
