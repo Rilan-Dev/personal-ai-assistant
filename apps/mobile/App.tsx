@@ -1067,7 +1067,7 @@ export default function App() {
 
       {tab === 'setup' && <NexaSetupScreen
         status={setupStatus} busy={setupBusy} notice={setupNotice}
-        providerReady={Boolean(activeProvider)}
+        providerReady={Boolean(activeProvider || (sarvamVoiceKeySaved && sarvamVoiceSaved && sarvamStreamingConsent))}
         wakeStatus={wakeStatus}
         onWakeDownload={()=>void downloadWakeModel()}
         onWakeStart={()=>void prepareWakeListening()}
