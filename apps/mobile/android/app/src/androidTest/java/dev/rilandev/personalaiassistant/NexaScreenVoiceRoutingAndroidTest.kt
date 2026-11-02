@@ -13,6 +13,9 @@ class NexaScreenVoiceRoutingAndroidTest {
     @Test fun recognizedScreenQuestionsAreExplicitAndDoNotEnableUnrequestedReads() {
         assertTrue(NexaPhoneVoiceTools.wantsVisibleText("Hey Nexa read my screen"))
         assertTrue(NexaPhoneVoiceTools.wantsVisibleText("What is on my screen?"))
+        assertTrue(NexaPhoneVoiceTools.wantsVisibleText("Can you please read my screen?"))
+        assertEquals("down",NexaPhoneVoiceTools.scrollDirection("Could you please scroll down?"))
+        assertEquals("search",NexaPhoneVoiceTools.clickSafeIcon("Would you please click the search icon?"))
         assertTrue(NexaPhoneVoiceTools.wantsScreenOverview("identify screen icons"))
         assertFalse(NexaPhoneVoiceTools.wantsVisibleText("Send a message"))
         assertFalse(NexaPhoneVoiceTools.wantsVisibleText("Read my password"))
