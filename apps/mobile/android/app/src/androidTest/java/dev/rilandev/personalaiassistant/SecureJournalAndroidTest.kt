@@ -162,40 +162,49 @@ class SecureJournalAndroidTest {
             bridge.pcmFromWav(wav.clone().also{it[40]=255.toByte();it[41]=255.toByte()}))
     }
 
-    @Test fun sarvamVoiceAgentIdsAndKeyRemainEncryptedAndSeparated() {
+    @Test fun sarvamModelApiRealtimeRequiresConsentAndDoesNotNeedWorkspaceIds() {
         val uniqueKey="synthetic-sarvam-"+UUID.randomUUID().toString()
         val saved=JSONObject().put("version",1).put("provider","sarvam")
             .put("model","sarvam-105b").put("apiKey",uniqueKey).toString()
-        val org="org_"+UUID.randomUUID().toString()
-        val work="ws_"+UUID.randomUUID().toString()
-        val app="app_"+UUID.randomUUID().toString()
+        val legacyOrg="org_"+UUID.randomUUID().toString()
+        val legacyWork="ws_"+UUID.randomUUID().toString()
+        val legacyApp="app_"+UUID.randomUUID().toString()
         val first=journal()
         try {
             assertEquals(true,invoke { first.saveProviderSettings(saved,it) })
-            assertNull("Sarvam key must not be used as OpenAI",AgentJournalModule.openAiVoiceKey(appContext))
-            assertNull("Voice without owner-saved IDs must fail closed",
+            assertNull("Sarvam must not be reused as OpenAI",
+                AgentJournalModule.openAiVoiceKey(appContext))
+            assertNull("Model API microphone is blocked by default",
                 AgentJournalModule.openVoiceCredentials(appContext))
-            assertEquals(true,invoke { first.saveSarvamVoiceAgent(org,work,app,it) })
-            val loaded=JSONObject(invoke { journal().loadSarvamVoiceAgent(it) } as String)
-            assertEquals(org,loaded.getString("orgId"))
-            assertEquals(work,loaded.getString("workspaceId"))
-            assertEquals(app,loaded.getString("appId"))
-            assertFalse("Do not expose user identifier to JS",loaded.has("userId"))
+            // Legacy identifiers may still exist on upgraded devices,
+            // but the new realtime route MUST ignore them completely.
+            assertEquals(true,invoke {
+                first.saveSarvamVoiceAgent(legacyOrg,legacyWork,legacyApp,it)
+            })
+            assertNull("Saved Samvaad IDs do not grant audio permission",
+                AgentJournalModule.openVoiceCredentials(appContext))
+            assertEquals(true,invoke {
+                first.setSarvamVoiceStreamingConsent(true,it)
+            })
             val credentials=AgentJournalModule.openVoiceCredentials(appContext)
             assertNotNull(credentials)
-            assertEquals("sarvam",credentials!!.provider)
+            assertEquals("sarvam-api",credentials!!.provider)
             assertEquals(uniqueKey,credentials.apiKey)
-            assertEquals(org,credentials.orgId)
-            assertEquals(work,credentials.workspaceId)
-            assertEquals(app,credentials.appId)
-            assertTrue(credentials.userId.length>=4)
+            assertEquals("",credentials.orgId)
+            assertEquals("",credentials.workspaceId)
+            assertEquals("",credentials.appId)
+            assertEquals("",credentials.userId)
             val prefs=appContext.getSharedPreferences("paa_secure_journal_v1",Context.MODE_PRIVATE)
-            assertFalse("Sarvam secrets/IDs should not be plaintext",prefs.all.values.any{
+            assertFalse("Keys and legacy IDs must be encrypted",prefs.all.values.any {
                 val raw=it.toString()
-                raw.contains(uniqueKey)||raw.contains(org)||raw.contains(work)||raw.contains(app)
+                raw.contains(uniqueKey)||raw.contains(legacyOrg)||
+                    raw.contains(legacyWork)||raw.contains(legacyApp)
             })
-            assertEquals(true,invoke { journal().clearSarvamVoiceAgent(it) })
-            assertNull(AgentJournalModule.openVoiceCredentials(appContext))
+            assertEquals(true,invoke {
+                first.setSarvamVoiceStreamingConsent(false,it)
+            })
+            assertNull("Revoked consent terminates new audio authorization",
+                AgentJournalModule.openVoiceCredentials(appContext))
         } finally {
             assertEquals(true,invoke { journal().clearSarvamVoiceAgent(it) })
             assertEquals(true,invoke { journal().clearProviderSettings(it) })
