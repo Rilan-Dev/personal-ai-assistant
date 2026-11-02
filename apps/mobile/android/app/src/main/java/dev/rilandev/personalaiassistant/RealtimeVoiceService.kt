@@ -669,6 +669,22 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
     override fun getName(): String = "PAARealtimeVoice"
 
+    @ReactMethod fun checkSarvamVoiceAuthorization(p: Promise) {
+        // Read-only, explicit foreground owner test. The key stays in native
+        // encrypted storage; React Native sees only safe readiness codes.
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            p.reject("NOT_FOREGROUND", "Open Nexa Voice to test Sarvam credentials")
+            return
+        }
+        SarvamVoiceReadiness.check(context.applicationContext) { result ->
+            val data = Arguments.createMap()
+            data.putBoolean("ready", result.ready)
+            data.putString("code", result.code)
+            data.putString("message", result.explanation)
+            p.resolve(data)
+        }
+    }
+
     @ReactMethod fun startVoiceSession(p: Promise) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             p.reject("UNSUPPORTED_ANDROID","Live voice requires Android 8 or newer")
