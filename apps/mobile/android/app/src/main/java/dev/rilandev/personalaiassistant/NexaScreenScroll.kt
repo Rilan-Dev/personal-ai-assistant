@@ -122,16 +122,18 @@ internal object NexaScreenScroll {
             val action=if(approved.forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                 else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
             val before=NexaUiActionVerifier.fingerprint(root)
+            NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
             return if(target.performAction(action)) {
                 NexaUiActionVerifier.observeAfter(service,approved.token,before)
                 if (!NexaUiActionJournal.finish(service,approved.token,"android_accepted"))
                     "Android accepted scroll; journal outcome uncertain. No automatic retry."
                 else "Android accepted one scroll request. Check the visible result."
             } else {
+                NexaUiActionVerifier.cancel(approved.token)
                 NexaUiActionJournal.finish(service,approved.token,"android_rejected")
                 "Android refused the scroll. No automatic retry."
             }
-        }catch(_:Exception){return "Scroll outcome uncertain; no automatic retry."}
+        }catch(_:Exception){NexaUiActionVerifier.cancel(approved.token);return "Scroll outcome uncertain; no automatic retry."}
         finally{root.recycle()}
     }
 }
