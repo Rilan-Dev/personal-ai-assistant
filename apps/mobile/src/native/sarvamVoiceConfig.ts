@@ -5,6 +5,11 @@ interface SecureVoiceStore{
   saveSarvamVoiceAgent(orgId:string,workspaceId:string,appId:string):Promise<boolean>;
   loadSarvamVoiceAgent():Promise<string|null>;
   clearSarvamVoiceAgent():Promise<boolean>;
+  saveSarvamVoiceWorkspaceKey(key:string):Promise<boolean>;
+  sarvamVoiceWorkspaceKeyPresent():Promise<boolean>;
+  clearSarvamVoiceWorkspaceKey():Promise<boolean>;
+  setSarvamVoiceStreamingConsent(value:boolean):Promise<boolean>;
+  sarvamVoiceStreamingConsentStatus():Promise<boolean>;
 }
 const ID=/^[A-Za-z0-9_-]{4,128}$/;
 export function validateSarvamVoiceConfig(value:unknown):SarvamVoiceAgentConfig{
@@ -33,4 +38,24 @@ export async function readSarvamVoiceConfig():Promise<SarvamVoiceAgentConfig|nul
 }
 export async function deleteSarvamVoiceConfig():Promise<void>{
   if(!await native().clearSarvamVoiceAgent())throw new Error('SARVAM_CLEAR_FAILED');
+}
+
+/** Samvaad workspace keys are exclusively for managed STS, not Chat. */
+const VOICE_KEY=/^sk_samvaad_[A-Za-z0-9_-]{16,500}$/;
+export const validateSamvaadWorkspaceKey=(key:string):boolean=>
+  typeof key==='string' && VOICE_KEY.test(key);
+export async function saveSamvaadWorkspaceKey(key:string):Promise<void>{
+  if(!validateSamvaadWorkspaceKey(key))throw new Error('VOICE_WORKSPACE_KEY_FORMAT');
+  if(!await native().saveSarvamVoiceWorkspaceKey(key))
+    throw new Error('VOICE_WORKSPACE_KEY_SAVE');
+}
+export const samvaadWorkspaceKeyPresent=():Promise<boolean>=>
+  native().sarvamVoiceWorkspaceKeyPresent();
+export const deleteSamvaadWorkspaceKey=():Promise<boolean>=>
+  native().clearSarvamVoiceWorkspaceKey();
+export const samvaadStreamingConsentStatus=():Promise<boolean>=>
+  native().sarvamVoiceStreamingConsentStatus();
+export async function setSamvaadStreamingConsent(value:boolean):Promise<void>{
+  if(!await native().setSarvamVoiceStreamingConsent(value))
+    throw new Error('SARVAM_CONSENT_SAVE');
 }
