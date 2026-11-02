@@ -64,6 +64,8 @@ class RealtimeVoiceService : Service() {
         private const val NOTIFICATION_ID = 4417
         private const val RATE = 24000
         private const val MODEL = "gpt-realtime-2.1-mini"
+        @Volatile var currentProviderId = ""
+            private set
         @Volatile var status = "stopped"
             private set
         @Volatile var message = "No live conversation"
@@ -220,6 +222,7 @@ class RealtimeVoiceService : Service() {
         toolCallsInSession = 0
         idleGate.reset(0L)
         selectedProvider=credentials.provider
+        currentProviderId=selectedProvider
         activeRate=if(selectedProvider=="sarvam-api" || selectedProvider=="sarvam")16000 else RATE
         // Stop the separate offline wake AudioRecord before attempting a
         // second microphone capture. The wake service remains owner-armed,
@@ -741,6 +744,7 @@ class RealtimeVoiceService : Service() {
         }
         status=state
         message=reason
+        currentProviderId=""
         main.removeCallbacks(maxSession)
         main.removeCallbacks(idleCheck)
         main.removeCallbacks(handshakeTimeout)
@@ -895,6 +899,7 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
     @ReactMethod fun getVoiceSessionStatus(p: Promise) {
         val data=Arguments.createMap()
         data.putString("state",RealtimeVoiceService.status)
+        data.putString("provider",RealtimeVoiceService.currentProviderId.ifBlank { null })
         data.putString("message",RealtimeVoiceService.message)
         data.putBoolean("microphoneActive",RealtimeVoiceService.status=="listening")
         data.putBoolean("microphoneMuted",RealtimeVoiceService.microphoneMuted)
