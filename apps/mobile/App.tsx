@@ -1539,12 +1539,24 @@ export default function App() {
                <Text style={styles.groupLabel}>Local images · {visualPreview.packageName}</Text>
                <View style={{flexDirection:'row',flexWrap:'wrap'}}>
                  {visualPreview.crops.map(crop=>(
-                   <View key={crop.iconId} style={{alignItems:'center',padding:6}}>
+                   <Pressable key={crop.iconId} accessibilityRole="button"
+                     accessibilityLabel={'Select '+crop.iconId+' for visual identification'}
+                     onPress={()=>{setSelectedVisionCrop(crop.iconId);setVisionResult('');}}
+                     style={{alignItems:'center',padding:6,borderWidth:selectedVisionCrop===crop.iconId?2:0,
+                       borderColor:'#9daeff',borderRadius:12}}>
                      <Image source={{uri:crop.dataUri}} style={{width:64,height:64,borderRadius:12}}/>
                      <Text style={styles.settingHelp}>{crop.iconId}</Text>
-                   </View>
+                   </Pressable>
                  ))}
                </View>
+               {selectedVisionCrop&&<>
+                 <Text style={styles.cardText}>Optional AI identification sends ONLY the selected cropped icon image to your configured AI provider. The provider may process or retain that image under its terms. AI guesses never authorize screen actions.</Text>
+                 <Pressable accessibilityRole="button" style={styles.primaryInline}
+                   onPress={identifySelectedIcon} disabled={visionBusy}>
+                   <Text style={styles.primaryInlineText}>{visionBusy?'Identifying…':'Send selected icon to AI for identification'}</Text>
+                 </Pressable>
+               </>}
+               {visionResult!==''&&<Text style={styles.feedback}>{visionResult}</Text>}
              </View>}
            </>}
            <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. It is not a screen recording service. Some apps hide content from accessibility.</Text>
