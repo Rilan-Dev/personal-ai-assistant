@@ -17,7 +17,7 @@ internal data class ObservedIcon(
 internal data class IconScanResult(
     val id: String, val sourcePackage: String, val capturedAtWallMs: Long,
     val expiresInMs: Int, val icons: List<ObservedIcon>,
-    val windowBounds: IconBox? = null
+    val windowBounds: IconBox? = null, val windowId: Int? = null
 )
 internal object ScreenIconScanState {
     private val lock = Any()
@@ -28,6 +28,7 @@ internal object ScreenIconScanState {
     private var scan: Pair<String, List<ObservedIcon>>? = null
     private var scanId = ""
     private var capturedWindow: IconBox? = null
+    private var capturedWindowId: Int? = null
     private val expiry = Runnable { clear() }
 
     fun arm(): Boolean = synchronized(lock) {
@@ -40,7 +41,7 @@ internal object ScreenIconScanState {
     fun isArmed(): Boolean = synchronized(lock) {
         armedUntilMs > SystemClock.elapsedRealtime() && scan == null
     }
-    fun capture(sourcePackage: String, items: List<ObservedIcon>, window: IconBox? = null) = synchronized(lock) {
+    fun capture(sourcePackage: String, items: List<ObservedIcon>, window: IconBox? = null, windowId: Int? = null) = synchronized(lock) {
         if (sourcePackage.isBlank() || !isArmed() || scan != null) return@synchronized
         scanId = UUID.randomUUID().toString()
         scan = sourcePackage.take(150) to items.take(64)
@@ -48,6 +49,7 @@ internal object ScreenIconScanState {
             it.right > it.left && it.bottom > it.top && it.right <= 20000 && it.bottom <= 20000 }
         armedUntilMs = 0
         capturedAtMs = SystemClock.elapsedRealtime()
+        capturedWindowId = windowId?.takeIf { it >= 0 }
         capturedWallMs = System.currentTimeMillis()
         handler.removeCallbacks(expiry)
         handler.postDelayed(expiry, 60_000)
@@ -56,7 +58,7 @@ internal object ScreenIconScanState {
         val existing = scan ?: return@synchronized null
         val remaining = (60_000 - (SystemClock.elapsedRealtime() - capturedAtMs)).toInt()
         val out = if (remaining > 0) IconScanResult(scanId, existing.first, capturedWallMs,
-            remaining, existing.second, capturedWindow) else null
+            remaining, existing.second, capturedWindow, capturedWindowId) else null
         clearLocked()
         out
     }
@@ -69,6 +71,7 @@ internal object ScreenIconScanState {
         scan = null
         scanId = ""
         capturedWindow = null
+        capturedWindowId = null
     }
 }
 

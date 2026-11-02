@@ -22,7 +22,11 @@ export const getIconRecognitionStatus = () => bridge().getStatus();
 export const armIconRecognition = () => bridge().armIconScan();
 /** Consumes the snapshot once; returns only whitelisted accessible icon metadata. */
 export async function takeIconRecognition(): Promise<ScreenIconSnapshot | null> {
-  return parseScreenIconSnapshot(await bridge().takeIconScan());
+  const result=parseScreenIconSnapshot(await bridge().takeIconScan());
+  if(!result)return null;
+  return {...result,expiresAtWallMs:Math.min(
+    result.capturedAtWallMs+60_000,Date.now()+result.expiresInMs)};
+
 }
 export const clearIconRecognition = () => bridge().clearIconScan();
 export const openIconRecognitionSettings = () => bridge().openAccessibilitySettings();

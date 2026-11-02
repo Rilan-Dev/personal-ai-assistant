@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, groundVisualIcon, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
@@ -47,20 +47,28 @@ import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Check battery level', 'Turn flashlight on', 'Turn flashlight off', 'Test approval'];
-const makeEngine = () => {
+const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
   (live ? createAndroidTools() : createDemoTools()).forEach(tool => registry.register(tool));
+  if (live) createReadOnlyScreenTools(grant,resolveScreenQuestion).forEach(tool=>registry.register(tool));
   return {
     registry,
-    harness: new AgentHarness(registry, live ? androidIntentPlanner : demoPlanner),
+    harness: new AgentHarness(registry, createScreenAwarePlanner(live ? androidIntentPlanner : demoPlanner,grant,resolveScreenQuestion)),
     toolCount: registry.describe().length,
     live
   };
 };
 
 export default function App() {
-  const engine = useMemo(makeEngine, []);
+  const screenGrant=useMemo(createOwnerScreenGrant,[]);
+  const engine = useMemo(()=>makeEngine(screenGrant),[screenGrant]);
+  useEffect(()=>{
+    const listener=AppState.addEventListener('change',status=>{
+      if(status!=='active')screenGrant.revoke();
+    });
+    return ()=>{listener.remove();screenGrant.revoke();};
+  },[screenGrant]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
@@ -743,7 +751,7 @@ export default function App() {
     setScreenAssistNotice('Screen text discarded from memory.');
   };
   const armIconScanOnce=async()=>{
-    setIconScan(null);
+    setIconScan(null);screenGrant.revoke();
     try {
       await armIconRecognition();
       setScreenArmed(false);setVisualArmed(false);setVisualPreview(null);setIconScanArmed(true);
@@ -761,14 +769,14 @@ export default function App() {
   };
   const discardIcons=async()=>{
     await clearIconRecognition().catch(()=>{});
-    setIconScanArmed(false);setIconScan(null);setIconLocalAnswer('');
+    setIconScanArmed(false);setIconScan(null);setIconLocalAnswer('');screenGrant.revoke();
     setIconScanNotice('Icon scan discarded.');
   };
   const armVisualScan=async()=>{
     setVisualPreview(null);
     try{
       await armVisualIcons();
-      setScreenArmed(false);setIconScanArmed(false);setIconScan(null);setVisualArmed(true);
+      setScreenArmed(false);setIconScanArmed(false);setVisualArmed(true);
       setVisualNotice('Armed for 20 seconds. Open the app containing unlabeled icons, then return to review local image crops.');
     }catch{setVisualNotice('Visual fallback requires Android 11+ and enabled Nexa Screen Assist.');}
   };
@@ -794,8 +802,13 @@ export default function App() {
       const settings=await loadProviderFromVault();
       if(!settings){setVisionResult('Configure an AI provider in Nexa Settings first.');return;}
       const result=await identifyIconCrop(crop.dataUri,settings);
+      const grounding=iconScan && visualPreview
+        ? groundVisualIcon(iconScan,visualPreview,result,crop.iconId,Date.now()) : null;
+      const evidence=grounding
+        ? ' Evidence: '+grounding.status+' ('+grounding.evidenceStrength+').'
+        : ' No correlated accessibility scan available.';
       setVisionResult('Unverified visual guess: '+result.label+' — '+result.meaning+
-        '. No action was executed.');
+        '.'+evidence+' No action was executed or authorized.');
     }catch{
       setVisionResult('Icon identification failed or the selected model does not support images. No action was executed.');
     }finally{setVisionBusy(false);}
@@ -805,6 +818,15 @@ export default function App() {
     if(!iconScan){setIconLocalAnswer('Capture icons first.');return;}
     const observation=resolveScreenQuestion(iconScan,iconQuestion,Date.now());
     setIconLocalAnswer(observation.answer);
+  };
+  const releaseIconsToAgent=()=>{
+    if(!iconScan||!screenGrant.release(iconScan,Date.now())){
+      setIconScanNotice('The icon scan has expired. Capture it again before sharing.');
+      return;
+    }
+    setInput(iconQuestion.trim()||'Where is the search icon?');
+    setTab('chat');
+    setIconScanNotice('Icon metadata released to Nexa for at most 20 seconds. No screenshot shared.');
   };
   const askAboutIcons=()=>{
     if(!iconScan)return;
@@ -985,18 +1007,19 @@ export default function App() {
       const sessionId = engine.live
         ? (restore?.sessionId ?? await newAndroidSessionId())
         : 'local-demo';
-      const harness = activeProvider && engine.live && !remoteActive
-        ? new AgentHarness(engine.registry, createDirectProviderPlanner({
+      const planner=activeProvider && engine.live && !remoteActive
+        ? createDirectProviderPlanner({
             settings: activeProvider,
-            availableToolIds: engine.registry.describe().map(tool => tool.id)
-          }))
+            availableToolIds: engine.registry.describe().map(tool=>tool.id)
+          })
         : remoteActive && engine.live
-        ? new AgentHarness(engine.registry, createRemotePlanner({
-            baseUrl: backendUrl,
-            token: backendToken,
-            availableToolIds: engine.registry.describe().map(tool => tool.id)
-          }))
-        : engine.harness;
+        ? createRemotePlanner({
+            baseUrl: backendUrl,token:backendToken,
+            availableToolIds: engine.registry.describe().map(tool=>tool.id)
+          })
+        : engine.live ? androidIntentPlanner : demoPlanner;
+      const harness=new AgentHarness(engine.registry,
+        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion));
       const result = await harness.run({
         request,
         sessionId,
@@ -1553,6 +1576,10 @@ export default function App() {
                    {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
                  </Text>
                ))}
+               <Pressable accessibilityRole="button" style={styles.outlineInline}
+                 onPress={releaseIconsToAgent}>
+                 <Text style={styles.outlineInlineText}>Release icon metadata to agent (20s)</Text>
+               </Pressable>
                <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={askAboutIcons}>
                  <Text style={styles.outlineInlineText}>Explain icon metadata in Chat</Text>
                </Pressable>

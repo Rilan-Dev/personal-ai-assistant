@@ -61,3 +61,9 @@ test('snapshot summary never includes raw node text, screenshots or unlabeled vi
   assert.equal(JSON.stringify(out).includes('sensitive-data'),false);
   assert.equal(out.packageName,'com.example.app');
 });
+
+test('absolute native expiry is respected even when expiresInMs is remaining time',()=>{
+ const s=snapshot({expiresInMs:20000,expiresAtWallMs:61000});
+ assert.equal(resolveScreenQuestion(s,'find search',45000).status,'found');
+ assert.equal(resolveScreenQuestion(s,'find search',62000).status,'expired');
+});

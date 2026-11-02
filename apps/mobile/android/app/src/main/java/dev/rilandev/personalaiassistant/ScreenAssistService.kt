@@ -123,6 +123,7 @@ class ScreenAssistService : AccessibilityService() {
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event != null) NexaUiActionVerifier.onAccessibilityEvent(event)
         if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) || event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
@@ -135,10 +136,10 @@ class ScreenAssistService : AccessibilityService() {
             val box = android.graphics.Rect()
             root.getBoundsInScreen(box)
             ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root),
-                IconBox(box.left,box.top,box.right,box.bottom))
+                IconBox(box.left,box.top,box.right,box.bottom),root.windowId)
         }
         if (NexaVisualIconCapture.isArmed()) {
-            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root))
+            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),root.windowId)
         }
         if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
@@ -272,6 +273,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             window.putInt("bottom",b.bottom)
             result.putMap("windowBoundsPx",window)
         }
+        snap.windowId?.let { result.putInt("windowId",it) }
         p.resolve(result)
     }
 
@@ -301,6 +303,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         val item = Arguments.createMap()
         item.putString("snapshotId",snap.id)
         item.putString("packageName",snap.packageName)
+        snap.windowId?.let { item.putInt("windowId",it) }
         item.putDouble("capturedAtWallMs",snap.createdAt.toDouble())
         item.putInt("expiresInMs",snap.expiresInMs)
         val images = Arguments.createArray()

@@ -19,3 +19,7 @@ export type {IconVisionHint} from './icon-vision.ts';
 
 export {resolveScreenQuestion, summarizeScreenControls} from './screen-understanding.ts';
 export type {LocalScreenAnswer, ScreenControlSummary} from './screen-understanding.ts';
+
+export {groundVisualIcon, createOwnerScreenGrant, proposeNavigationSteps} from './screen-grounding.ts';
+export type {GroundingResult, GroundingStatus, ReadOnlyNavigationPlan} from './screen-grounding.ts';
+export {createReadOnlyScreenTools, createScreenAwarePlanner} from './screen-agent.ts';

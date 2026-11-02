@@ -36,6 +36,16 @@ class NexaUiActionJournalAndroidTest {
         assertFalse(NexaUiActionJournal.claim(ctx,token,"scroll_down","com.example.scrolltest"))
     }
 
+    @Test fun ownerApprovedHorizontalScrollsHaveAtMostOnceClaims() {
+        for (direction in listOf("scroll_left","scroll_right")) {
+            val token="test-"+UUID.randomUUID().toString()
+            assertTrue(NexaUiActionJournal.claim(ctx,token,direction,"com.example.scrolltest"))
+            assertFalse(NexaUiActionJournal.claim(ctx,token,direction,"com.example.scrolltest"))
+            assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+            assertTrue(NexaUiActionJournal.markObservation(ctx,token,"scroll_event_observed"))
+        }
+    }
+
     @Test fun unsafeOrMalformedClaimsAreRejected() {
         assertFalse(NexaUiActionJournal.claim(ctx,"short","tap","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),

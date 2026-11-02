@@ -129,16 +129,18 @@ internal object NexaScreenScroll {
                 return "Secure action journal unavailable or approval already used. No scroll requested."
             val action=scrollAction(approved.direction)
             val before=NexaUiActionVerifier.fingerprint(root)
+            NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
             return if(target.performAction(action)) {
                 NexaUiActionVerifier.observeAfter(service,approved.token,before)
                 if (!NexaUiActionJournal.finish(service,approved.token,"android_accepted"))
                     "Android accepted scroll; journal outcome uncertain. No automatic retry."
                 else "Android accepted one scroll request. Check the visible result."
             } else {
+                NexaUiActionVerifier.cancel(approved.token)
                 NexaUiActionJournal.finish(service,approved.token,"android_rejected")
                 "Android refused the scroll. No automatic retry."
             }
-        }catch(_:Exception){return "Scroll outcome uncertain; no automatic retry."}
+        }catch(_:Exception){NexaUiActionVerifier.cancel(approved.token);return "Scroll outcome uncertain; no automatic retry."}
         finally{root.recycle()}
     }
 }

@@ -9,8 +9,10 @@ export type VisualIconCrop = {
 export type VisualIconPreview = {
   snapshotId: string;
   packageName: string;
+  windowId?: number;
   capturedAtWallMs: number;
   expiresInMs: number;
+  expiresAtWallMs?: number;
   crops: VisualIconCrop[];
 };
 interface NativeVisualBridge {
@@ -36,6 +38,8 @@ export async function takeVisualIcons(): Promise<VisualIconPreview|null> {
   const src=v as Record<string,unknown>;
   if(typeof src.snapshotId!=='string'||src.snapshotId.length>80 ||
     typeof src.packageName!=='string'||src.packageName.length>150 ||
+    (src.windowId!==undefined && (!Number.isInteger(src.windowId)||
+       (src.windowId as number)<0||(src.windowId as number)>2147483647)) ||
     !Number.isSafeInteger(src.capturedAtWallMs) ||
     !Number.isInteger(src.expiresInMs)||(src.expiresInMs as number)<=0||
     (src.expiresInMs as number)>60000 ||
@@ -56,5 +60,7 @@ export async function takeVisualIcons(): Promise<VisualIconPreview|null> {
       left:b.left as number,top:b.top as number,right:b.right as number,bottom:b.bottom as number}});
   }
   return {snapshotId:src.snapshotId,packageName:src.packageName,
-    capturedAtWallMs:src.capturedAtWallMs as number,expiresInMs:src.expiresInMs as number,crops};
+    ...(src.windowId!==undefined?{windowId:src.windowId as number}:{}),
+    capturedAtWallMs:src.capturedAtWallMs as number,expiresInMs:src.expiresInMs as number,
+    expiresAtWallMs:Math.min((src.capturedAtWallMs as number)+60000,Date.now()+(src.expiresInMs as number)),crops};
 }

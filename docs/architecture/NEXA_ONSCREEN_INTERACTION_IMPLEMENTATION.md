@@ -109,3 +109,19 @@ The next milestone adds deterministic, local icon questions without expanding cr
 ### Next design/acceptance constraints
 
 More capable device action workflows must continue to use fresh native window/target confirmation and the encrypted at-most-once journal, not any visual model description or this read-only answer. Rich per-element visual similarity and OEM-specific accessibility testing remain future work.
+
+
+## Evidence-grounded icon hints, revocable agent access and action verification (2026-11-03)
+
+The next source increment provides four bounded features. These changes are **not** a claim of device acceptance, reliable task completion, or general autonomous Android control.
+
+1. **Visual evidence association:** `groundVisualIcon` compares a manually selected icon crop, the image-model's unverified description, and a separately captured accessibility icon observation. The app, optional Android window ID, capture deadlines, timestamps (max 30 seconds apart), and bidirectional rectangle overlap (at least 85%) must agree. Duplicate candidates, conflicting labels, different windows, expired data and unsupported model labels fail closed. The result is a limited/non-limited *evidence category*, not an invented confidence percentage. It is **always non-executable**.
+2. **Owner-released screen agent interface:** The owner must capture a snapshot and explicitly choose **Release icon metadata to agent (20s)** in Tools. In-memory owner grant expires after at most 20 seconds, or immediately when Android backgrounds the app. Only the whitelisted icon snapshot is shared with deterministic `screen.observe` or `screen.suggest_navigation` tool responses, never screenshots, message text or coordinates. The corresponding deterministic planner recognizes a small set of owner screen questions and safe menu-path requests; other requests follow the existing assistant policy. These tools do not authorize clicks and do not grant a persistent device-wide observation permission.
+3. **Stronger post-action evidence:** Accepted native taps/scrolls first receive an encrypted at-most-once journal claim. A bounded native observer now fingerprints a visible accessibility tree using structure, view class, resource ID, count and geometry (no content/text) and correlates Android `TYPE_VIEW_SCROLLED` or app-window events by package/window within two seconds. Evidence is classified as `scroll_event_observed`, `window_change_observed`, `structural_change_observed`, `no_observable_change`, or `unverified`. The journal preserves these categories, which are **not** proof that a user task succeeded. No automatic replay or retry occurs.
+4. **Expiry correction:** Native `expiresInMs` is the *remaining* lifetime when a scan is consumed. The React Native adapters now attach `expiresAtWallMs`; on-device screen Q&A, agent grants, and visual grounding honor this absolute deadline rather than double-counting scan age.
+
+### Source verification and owner acceptance
+
+Local isolated tests exercised a portable grounding/tool mirror (10 Node tests) and pure Kotlin evidence policy (6 assertions); TypeScript standalone checks on that local mirror completed. These are **not** full-repository CI, Android Gradle compilation, emulator tests or physical-device acceptance. User handles the latter.
+
+Suggested owner acceptance: verify app/window switching, icon crop correlation, long-aged-but-unexpired observations, visual conflicts and duplicates, 20-second agent release expiration, background revocation, scroll event reporting with no visible icon movement, denied/expired tap approvals, Android accessibility revocation and operation across Android/OEM versions. Confirm there are no external sends, call initiation, destructive clicks or payment actions.

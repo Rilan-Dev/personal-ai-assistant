@@ -82,7 +82,7 @@ internal object NexaUiActionJournal {
     fun claim(ctx: Context, approvalToken: String, kind: String, packageName: String): Boolean =
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
-                kind !in setOf("tap","scroll_up","scroll_down") ||
+                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right") ||
                 !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}"))) {
                 return@synchronized false
             }
@@ -130,7 +130,9 @@ internal object NexaUiActionJournal {
      */
     fun markObservation(ctx: Context, approvalToken: String, observation: String): Boolean =
         synchronized(lock) {
-            if (observation !in setOf("observed_change","no_observable_change"))
+            if (observation !in setOf("observed_change","no_observable_change",
+                    "scroll_event_observed","window_change_observed",
+                    "structural_change_observed","unverified"))
                 return@synchronized false
             try {
                 val id=digest(approvalToken)
