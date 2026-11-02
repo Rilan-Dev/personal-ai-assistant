@@ -89,8 +89,9 @@ internal object NexaUiActionVerifier {
             val sameContext=root==null || (
                 root.packageName?.toString()==observation.pkg &&
                 root.windowId==observation.windowId)
-            val after=if(root==null || !sameContext)null else try{fingerprint(root)}
-                catch(_:Exception){null} finally{root.recycle()}
+            val after=try {
+                if(root==null || !sameContext) null else fingerprint(root)
+            }catch(_:Exception){null}finally{root?.recycle()}
             val status=NexaUiActionEvidencePolicy.classify(
                 observation.kind,observation.before,after,
                 observation.scrollEvents,observation.windowEvents,sameContext)
