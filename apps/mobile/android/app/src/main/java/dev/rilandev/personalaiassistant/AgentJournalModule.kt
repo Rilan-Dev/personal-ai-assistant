@@ -94,20 +94,22 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         fun sarvamStreamingConsent(ctx: Context): Boolean = synchronized(lock) {
             readEncrypted(ctx,"sarvam-voice-streaming-consent")=="accepted-v1"
         }
+        /** Voice uses only the owner-selected Model API subscription key.
+         * Workspace/Agent identifiers and old Samvaad keys are NEVER read
+         * by the active realtime pipeline. No silent fallback providers.
+         */
         fun openVoiceCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
-            // A dedicated Samvaad key takes precedence. Declined consent
-            // MUST NOT silently fall back to an OpenAI or Model API key.
-            if(readEncrypted(ctx,"sarvam-voice-key")!=null) {
-                if(!sarvamStreamingConsent(ctx))return@synchronized null
-                return@synchronized openSarvamVoicePreflightCredentials(ctx)
-            }
-            val sarvam=openSarvamVoicePreflightCredentials(ctx)
-            if(sarvam!=null && sarvamStreamingConsent(ctx)) return@synchronized sarvam
             val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
             val data=JSONObject(raw)
-            if(data.optString("provider")!="openai") return@synchronized null
+            val provider=data.optString("provider")
+            if(provider!="sarvam" && provider!="openai") return@synchronized null
             val key=data.optString("apiKey")
-            if(key.length !in 12..512) return@synchronized null
+            if(key.length !in 12..512 || key.startsWith("sk_samvaad_"))
+                return@synchronized null
+            if(provider=="sarvam") {
+                if(!sarvamStreamingConsent(ctx)) return@synchronized null
+                return@synchronized VoiceCredentials("sarvam-api",key)
+            }
             VoiceCredentials("openai",key)
         }
         fun openAiVoiceKey(ctx: Context): String? =
@@ -186,7 +188,9 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             require(key.length in 12..512 && key == key.trim())
             require(!key.startsWith("sk_samvaad_"))
             synchronized(lock) {
+                val old = read(name("private","provider-config"))
                 write(name("private", "provider-config"), data)
+                if(old != data) write(name("private","sarvam-voice-streaming-consent"),"declined")
             }
             // Changes to provider credentials must terminate a session that
             // may still be streaming under the prior configuration.
