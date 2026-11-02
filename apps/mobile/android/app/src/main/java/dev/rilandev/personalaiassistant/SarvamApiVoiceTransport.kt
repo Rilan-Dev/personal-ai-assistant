@@ -257,7 +257,7 @@ internal class SarvamApiVoiceTransport(
                 messages.put(JSONObject().put("role",role).put("content",content))
             }
         }
-        completeModelTurn(turn,body,0)
+        completeModelTurn(turn,body,0,text)
     }
 
     /**
@@ -266,7 +266,7 @@ internal class SarvamApiVoiceTransport(
      * A model-proposed name and arguments are untrusted and validated against
      * NexaSarvamReadTools. The owner-approved app route is kept separate.
      */
-    private fun completeModelTurn(turn:Int, body:JSONObject, round:Int) {
+    private fun completeModelTurn(turn:Int, body:JSONObject, round:Int, ownerUtterance:String) {
         if(!running || turn!=generation.get() || round>1)return
         val request=Request.Builder().url("https://api.sarvam.ai/v1/chat/completions")
             .header("api-subscription-key",apiKey)
@@ -314,7 +314,7 @@ internal class SarvamApiVoiceTransport(
                         // Never execute a tool outside the native read-only
                         // registry. In particular, there is no remote model
                         // gesture, app-launch, send, call or approval function.
-                        val result=NexaSarvamReadTools.execute(context,name,args)
+                        val result=NexaSarvamReadTools.execute(context,name,args,ownerUtterance)
                         val next=JSONObject(body.toString())
                         val history=next.getJSONArray("messages")
                         history.put(JSONObject().put("role","assistant")
@@ -325,7 +325,7 @@ internal class SarvamApiVoiceTransport(
                             .put("content",result))
                         next.remove("tools")
                         next.remove("tool_choice")
-                        completeModelTurn(turn,next,round+1)
+                        completeModelTurn(turn,next,round+1,ownerUtterance)
                         return
                     }
                     val answer=message.optString("content").trim()
