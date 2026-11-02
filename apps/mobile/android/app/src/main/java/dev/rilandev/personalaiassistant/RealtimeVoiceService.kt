@@ -529,6 +529,17 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        val screenOperation = NexaPhoneVoiceTools.wantsVisibleText(transcript) ||
+            NexaPhoneVoiceTools.scrollDirection(transcript)!=null ||
+            NexaPhoneVoiceTools.clickSafeIcon(transcript)!=null ||
+            NexaPhoneVoiceTools.wantsScreenOverview(transcript) ||
+            NexaPhoneVoiceTools.locateIconIntent(transcript)!=null
+        if(screenOperation && (!ScreenAssistState.connected || ScreenAssistService.active==null)) {
+            lastToolResult="Screen Assist is disabled. In Nexa, open Tools and enable Screen Assist in Android Accessibility Settings, then return to your app. No screen action was performed."
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
         if(NexaPhoneVoiceTools.wantsVisibleText(transcript)) {
             pendingAppTool=PendingAppTool("local-sarvam","screen text","read_visible_screen_text")
             pendingAppTool?.let { expirePendingTool(it) }
