@@ -139,9 +139,9 @@ class NexaToolOverlayService : Service() {
                 startGuidedNavigation(query)
                 return
             }
-            "scroll up", "scroll down" -> {
+            "scroll up", "scroll down", "scroll left", "scroll right" -> {
                 section = "tools"
-                proposeScroll(if (query.lowercase().contains("down")) "down" else "up")
+                proposeScroll(query.lowercase().removePrefix("scroll "))
                 return
             }
         }
@@ -494,6 +494,10 @@ class NexaToolOverlayService : Service() {
                             addView(row(
                                 button("Scroll up") { proposeScroll("up") },
                                 button("Scroll down") { proposeScroll("down") }
+                            ))
+                            addView(row(
+                                button("Scroll left") { proposeScroll("left") },
+                                button("Scroll right") { proposeScroll("right") }
                             ))
                         }
                         addView(text("Inspect icons on the app behind this floating panel.",11f,true))
