@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Base64
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import java.util.UUID
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.OkHttpClient
@@ -85,7 +86,9 @@ internal class SarvamAudioTransport(private val callbacks: Callbacks) {
                         return
                     }
                     val url=endpoint.buildUpon()
-                        .appendQueryParameter("user_identifier",cfg.userId)
+                        // Minimize linkability across calls: a fresh anonymous ID each
+                        // time, never a stable phone/contacts/account identifier.
+                        .appendQueryParameter("user_identifier",UUID.randomUUID().toString())
                         .appendQueryParameter("user_identifier_type","custom")
                         .appendQueryParameter("input_sample_rate","16000")
                         .appendQueryParameter("output_sample_rate","16000")
