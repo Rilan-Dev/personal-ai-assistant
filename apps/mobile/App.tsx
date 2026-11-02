@@ -1467,7 +1467,7 @@ export default function App() {
               {screenAssistEnabled?'Enabled':'Off'}
             </Text>
           </View>
-          <Text style={styles.cardText}>Accessibility lets the assistant collect visible text from another app once, for up to 20 seconds after you arm it. It ignores editable/password fields, never clicks anything, and does not upload text automatically. Other visible text could still contain private information; review it before sharing.</Text>
+          <Text style={styles.cardText}>Screen Assist offers separately armed, one-time text, icon metadata, and local icon-image observations. It excludes editable/password fields from metadata and never uploads screen data automatically. The floating Nexa Tools panel can request limited navigation taps or scrolls, but each requires an explicit on-screen confirmation.</Text>
           {engine.live&&screenAssistAvailable()&&<>
             <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={openScreenSettings}>
               <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
@@ -1493,7 +1493,7 @@ export default function App() {
           </>}
           {engine.live&&iconRecognitionAvailable()&&<>
              <Text style={styles.groupLabel}>Read-only icon inspector</Text>
-             <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This does not take screenshots, click icons, or send observations to the agent.</Text>
+             <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This read-only inspector does not take screenshots or click anything. Use the separate floating Tools panel to approve supported navigation actions.</Text>
              <View style={styles.buttonRow}>
                <Pressable accessibilityRole="button" style={styles.primaryInline}
                  disabled={running||screenArmed||iconScanArmed||visualArmed} onPress={armIconScanOnce}>
@@ -1559,7 +1559,7 @@ export default function App() {
                {visionResult!==''&&<Text style={styles.feedback}>{visionResult}</Text>}
              </View>}
            </>}
-           <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. It is not a screen recording service. Some apps hide content from accessibility.</Text>
+           <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. The visual fallback is a single owner-armed screenshot, not continuous recording. Protected apps may refuse inspection. Only the chosen icon crop is sent to an AI provider after you approve that upload.</Text>
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Find an app icon</Text>
