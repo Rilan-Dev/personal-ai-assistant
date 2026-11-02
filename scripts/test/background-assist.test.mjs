@@ -23,7 +23,7 @@ test("background microphone only runs as owner-started notification foreground s
   assert.match(code,/Notification\.Action\.Builder/);
   assert.match(code,/Stop voice/);
   assert.match(code,/START_NOT_STICKY/);
-  assert.match(code,/main\.postDelayed\(maxSession,\s*15\*60\*1000L\)/);
+  assert.match(code,/main\.postDelayed\(maxSession,\s*60\*60\*1000L\)/);
   assert.match(code,/STOP_FOREGROUND_REMOVE/);
   assert.match(js,/PermissionsAndroid\.PERMISSIONS\.RECORD_AUDIO/);
   assert.match(js,/PermissionsAndroid\.PERMISSIONS\.POST_NOTIFICATIONS/);
