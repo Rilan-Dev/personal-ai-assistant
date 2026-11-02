@@ -130,6 +130,7 @@ class ScreenAssistService : AccessibilityService() {
         val pkg = event.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg == packageName || pkg == "com.android.systemui") return
         val root = rootInActiveWindow ?: return
+        try {
         val rootPkg = root.packageName?.toString().orEmpty()
         if (rootPkg != pkg) return
         if (ScreenIconScanState.isArmed()) {
@@ -139,7 +140,10 @@ class ScreenAssistService : AccessibilityService() {
                 IconBox(box.left,box.top,box.right,box.bottom),root.windowId)
         }
         if (NexaVisualIconCapture.isArmed()) {
-            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),root.windowId)
+            val bounds = android.graphics.Rect()
+            root.getBoundsInScreen(bounds)
+            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),
+                root.windowId, IconBox(bounds.left,bounds.top,bounds.right,bounds.bottom))
         }
         if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
@@ -164,6 +168,7 @@ class ScreenAssistService : AccessibilityService() {
             }
         }
         if (text.isNotBlank()) ScreenAssistState.capture(pkg, text.toString())
+        } finally { root.recycle() }
     }
 }
 
