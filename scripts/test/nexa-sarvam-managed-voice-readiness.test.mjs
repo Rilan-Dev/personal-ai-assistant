@@ -35,6 +35,8 @@ test('realtime Saaras v3 and Bulbul WS implement official audio, VAD and barge-i
   assert.match(direct,/type","config"/);
   assert.match(direct,/type","flush"/);
   assert.match(direct,/interruptReply\(\)/);
+  assert.match(direct,/val notify=synchronized\(lock\)/);
+  assert.match(direct,/if\(notify\) callbacks\.connected\(\)/);
 });
 test('continuous voice memory stays bounded, no transcript UI or file writes, no automatic phone tool',()=>{
   assert.match(direct,/ArrayDeque<Pair<String,String>>/);
