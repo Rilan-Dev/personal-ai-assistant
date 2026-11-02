@@ -101,7 +101,7 @@ test("Chat/Voice/Settings support Sarvam user configuration without automatic se
   assert.match(ui,/speakSarvamOnce\(/);
   assert.match(ui,/startOwnerLiveVoice\(/);
   assert.match(ui,/Nexa does not send files, contacts, screen content or NexaHub records/);
-  assert.match(ui,/server-side Sarvam may retain call records|Sarvam performs recognition and reasoning on its servers/i);
+  assert.match(ui,/Sarvam can process and retain speech\/transcripts|Zero-day Voice Agents retention is not currently supported/i);
   assert.doesNotMatch(ui,/send\(dictated\)/);
 });
 
