@@ -34,7 +34,7 @@ const aliases: Readonly<Record<string, IconSemantic[]>> = Object.freeze({
   'share':['share'],
   'delete':['delete']
 });
-const badRequest = /\b(?:tap|click|press|execute|run|swipe|type|send|delete|dial|call|purchase|buy|approve|ignore|override|instead|then|automatically|without)\b/i;
+const badRequest = /\b(?:tap|click|press|execute|run|swipe|type|send|delete|dial|purchase|buy|approve|ignore|override|instead|then|automatically|without)\b/i;
 const safe = (result:LocalScreenAnswer):LocalScreenAnswer => result;
 const answer = (status:LocalScreenAnswer['status'],message:string,elementIds:string[]=[]):LocalScreenAnswer =>
   safe({status,answer:message,elementIds});
