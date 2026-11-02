@@ -41,6 +41,14 @@ internal object NexaLiveToolPolicy {
                     .put("enum", JSONArray(listOf("brave", "github", "whatsapp")))))
                 .put("required", JSONArray(listOf("app")))
                 .put("additionalProperties", false)))
+        tools.put(JSONObject()
+            .put("type","function")
+            .put("name","request_visible_icons")
+            .put("description","Ask the owner for one-time approval to inspect only labeled icons in the current app. Never collects text fields, screenshots or arbitrary page content and cannot tap the screen.")
+            .put("parameters",JSONObject()
+                .put("type","object")
+                .put("properties",JSONObject())
+                .put("additionalProperties",false)))
         return tools
     }
 
@@ -54,6 +62,10 @@ internal object NexaLiveToolPolicy {
                 if (args.length() != 0) Decision.Immediate("Rejected: unexpected arguments")
                 else Decision.Immediate(NexaOverlayCommands.handle(context,
                     if (name == "get_device_status") "device status" else "battery"))
+            }
+            "request_visible_icons" -> {
+                if(args.length()!=0) Decision.Immediate("Rejected: icon overview has no arguments")
+                else Decision.NeedsApproval("visible screen controls", "observe_screen_icons")
             }
             "request_open_app" -> {
                 if (args.length() != 1 || !args.has("app"))

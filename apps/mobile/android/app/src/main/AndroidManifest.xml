@@ -82,7 +82,7 @@
         android:foregroundServiceType="microphone"
         android:exported="false"
         android:stopWithTask="false"/>
-    <!-- Optional user-enabled Accessibility service: read-once visible text only.
+    <!-- Optional owner-armed Accessibility service: one-shot text or icon metadata.
          Android Settings must explicitly enable it. No gestures or continuous scan. -->
     <service android:name=".ScreenAssistService"
         android:label="Nexa Screen Assist"

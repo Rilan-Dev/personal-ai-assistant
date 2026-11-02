@@ -3,6 +3,6 @@
     <string name="assistant_tile_label">Nexa AI</string>
     <string name="nexa_voice_shortcut_short">Nexa Voice</string>
     <string name="nexa_voice_shortcut_long">Open Nexa voice assistant</string>
-    <string name="screen_assist_description">Screen Assist only reads visible text once after you arm it in the app. It excludes password and edit fields, stores text temporarily in memory, and never acts on the screen automatically.</string>
+    <string name="screen_assist_description">Screen Assist can inspect one visible screen after you arm it in Nexa. Text and icon metadata are temporary. An optional Android 11+ screenshot mode returns only small crops of unlabeled icons; it never uploads them automatically. Separate owner confirmation is required for a navigation tap from the floating Nexa panel. Password and editable accessibility subtrees are excluded. Disable anytime in Android Accessibility settings.</string>
     <string name="nexa_launcher_accessibility_description">Only after you tap Find GitHub icon, Nexa inspects the default launcher to look for the GitHub label and can swipe horizontally up to eight times. Never clicks or reads inside other apps. Disable anytime in Android Accessibility settings.</string>
 </resources>

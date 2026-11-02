@@ -143,8 +143,9 @@ class RealtimeVoiceService : Service() {
                 // stale request from an earlier conversation.
                 val age = SystemClock.elapsedRealtime() - pending.createdAtMs
                 val outcome = when {
-                    !approved -> "Denied by owner. No app was opened."
-                    age !in 0..60_000L -> "App approval expired. Request it again."
+                    !approved -> "Denied by owner. No device operation performed."
+                    age !in 0..60_000L -> "Approval expired. Request it again."
+                    pending.command == "observe_screen_icons" -> NexaScreenVoiceOverview.readApproved()
                     pending.installedApp != null ->
                         NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
                     else -> NexaOverlayCommands.handle(this,pending.command)
@@ -407,7 +408,7 @@ class RealtimeVoiceService : Service() {
                 val session = JSONObject()
                     .put("type","realtime")
                     .put("audio",JSONObject().put("input",input).put("output",output))
-                    .put("instructions","You are Nexa, a natural conversational voice assistant. Reply in English, Tamil or Hindi as appropriate. Keep answers brief and grounded, remember prior turns, handle user interruptions, and state tool outcomes precisely. You have three restricted Android function tools: read device status, read battery, and request opening Brave/GitHub/WhatsApp. An app-open request ALWAYS requires a visible human approval. Never claim an app opened unless the result confirms it; intent dispatch does not prove the app screen. You cannot send WhatsApp messages, change arbitrary permissions, control the screen, or access other private data in this mode. Explain limitations rather than inventing actions. Never ask for secrets.")
+                    .put("instructions","You are Nexa, a natural conversational voice assistant. Reply in English, Tamil or Hindi as appropriate. Keep answers brief and grounded, remember prior turns, handle user interruptions, and state tool outcomes precisely. You have four restricted Android function tools: read device status, read battery, request opening Brave/GitHub/WhatsApp, and REQUEST one-time owner-approved read-only inspection of visible icons. Screen inspection never happens until the owner approves in the visible Nexa panel, and never reads text fields or screenshots. An app-open request ALWAYS requires a visible human approval. Never claim an app opened unless the result confirms it; intent dispatch does not prove the app screen. You cannot send WhatsApp messages, change arbitrary permissions, control the screen, or access other private data in this mode. Explain limitations rather than inventing actions. Never ask for secrets.")
                     .put("tools", if (assistantPanelEnabled)
                         NexaLiveToolPolicy.definitions() else org.json.JSONArray())
                     .put("tool_choice", if (assistantPanelEnabled) "auto" else "none")
@@ -515,6 +516,17 @@ class RealtimeVoiceService : Service() {
             sarvamApiTransport?.toolResult(fact)
             return
         }
+        if(NexaPhoneVoiceTools.wantsScreenOverview(transcript)) {
+            pendingAppTool=PendingAppTool("local-sarvam","visible screen controls","observe_screen_icons")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Read labeled icons on the visible screen once? Approve or Deny below."
+            message="Approve screen icon inspection. No screenshot or tap will occur."
+            try {
+                getSystemService(NotificationManager::class.java).notify(
+                    NOTIFICATION_ID,makeNotification("Screen inspection approval pending"))
+            } catch (_: Exception) {}
+            return
+        }
         val known=NexaVoiceIntentGate.appRequest(transcript)
         val discovered=if(known==null)
             NexaPhoneVoiceTools.findLaunchableApp(this,transcript) else null
@@ -582,8 +594,12 @@ class RealtimeVoiceService : Service() {
                 is NexaLiveToolPolicy.Decision.NeedsApproval -> {
                     pendingAppTool = PendingAppTool(id, decision.app, decision.command)
                     pendingAppTool?.let { expirePendingTool(it) }
-                    pendingApprovalSummary = "Open ${decision.app}? Confirm or deny below."
-                    message = "Approval required to open ${decision.app}"
+                    pendingApprovalSummary = if(decision.command=="observe_screen_icons")
+                        "Allow one read-only inspection of visible icon labels? Approve or Deny below."
+                        else "Open ${decision.app}? Confirm or deny below."
+                    message = if(decision.command=="observe_screen_icons")
+                        "Awaiting owner consent to inspect icon labels."
+                        else "Approval required to open ${decision.app}"
                 }
             }
         }

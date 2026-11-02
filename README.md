@@ -27,9 +27,20 @@ a Web demo. Linux, macOS and Windows desktop clients remain future milestones.
   foreground service with Stop notification and OpenAI Realtime audio
   streaming. Can continue while other apps are visible when Android permits;
   not an unattended wake-word listener. Real-device testing pending.
-- **One-time screen text assist**: optional owner-enabled Android Accessibility
-  service; arm for 20 seconds, inspect a single bounded text snapshot from
-  another app, review/discard or explicitly send to AI. Never auto-acts.
+- **Screen understanding (isolated development branch, not accepted)**:
+  optional owner-enabled Android Accessibility service. Text and icon scans
+  are separately armed for one 20-second window; results expire and can be
+  discarded. A separate Android 11+ screenshot fallback returns only small
+  thumbnails of unlabeled icons, not an entire screenshot. One thumbnail may
+  be sent to a configured vision-capable OpenAI, Gemini or OpenRouter model
+  ONLY after the owner selects it and explicitly presses Send. Visual guesses
+  are display-only and cannot authorize an action.
+- **Explicit screen navigation in floating Tools**: manually inspect the app
+  behind Nexa's overlay, select and confirm a supported non-destructive icon
+  tap, or request and confirm one accessibility scroll. Calls, send, delete,
+  arbitrary coordinates and all model-triggered clicks remain disallowed.
+  Separate voice icon inspection requires visible owner approval.
+  Source work still requires Android compilation and real-device acceptance.
 - **In-app AI Configuration**: choose OpenAI, Gemini, Groq or OpenRouter,
   select model, enter a masked API key, test the connection and save encrypted
   settings on Android using Android Keystore. Direct BYOK AI chat works

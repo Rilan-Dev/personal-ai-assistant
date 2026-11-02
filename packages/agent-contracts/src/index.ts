@@ -32,3 +32,6 @@ export type AgentTraceEvent =
   | { type: "completed"; message: string }
   | { type: "stopped"; reason: string };
 export { requestAllowsNativeTool } from "./intent-policy.ts";
+
+export {iconSemanticFromLabel, parseScreenIconSnapshot} from './screen-icons.ts';
+export type {ScreenIconSnapshot, ScreenIcon, IconSemantic, IconRect, IconEvidence} from './screen-icons.ts';
