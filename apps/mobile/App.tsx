@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
@@ -360,6 +360,9 @@ export default function App() {
   const [visualArmed,setVisualArmed] = useState(false);
   const [visualPreview,setVisualPreview] = useState<VisualIconPreview|null>(null);
   const [visualNotice,setVisualNotice] = useState('');
+  const [selectedVisionCrop,setSelectedVisionCrop] = useState<string|null>(null);
+  const [visionBusy,setVisionBusy] = useState(false);
+  const [visionResult,setVisionResult] = useState('');
   const [appSearch,setAppSearch] = useState('');
   const [appMatches,setAppMatches] = useState<LaunchableAppMatch[]>([]);
   const [appSearchNotice,setAppSearchNotice] = useState('');
@@ -370,7 +373,7 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setVisualPreview(null);setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
@@ -761,7 +764,7 @@ export default function App() {
   const reviewVisualScan=async()=>{
     try{
       const result=await takeVisualIcons();
-      setVisualPreview(result);setVisualArmed(false);
+      setVisualPreview(result);setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
       setVisualNotice(result
         ? result.crops.length+' icon crops available. No images have been uploaded.'
         : 'No visual icon capture available. The window may be protected or the scan expired.');
@@ -769,8 +772,22 @@ export default function App() {
   };
   const clearVisualScan=async()=>{
     await discardVisualIcons().catch(()=>{});
-    setVisualPreview(null);setVisualArmed(false);
+    setVisualPreview(null);setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
     setVisualNotice('Visual icon images discarded from memory.');
+  };
+  const identifySelectedIcon=async()=>{
+    const crop=visualPreview?.crops.find(c=>c.iconId===selectedVisionCrop);
+    if(!crop||visionBusy)return;
+    setVisionBusy(true);setVisionResult('');
+    try{
+      const settings=await loadProviderFromVault();
+      if(!settings){setVisionResult('Configure an AI provider in Nexa Settings first.');return;}
+      const result=await identifyIconCrop(crop.dataUri,settings);
+      setVisionResult('Unverified visual guess: '+result.label+' — '+result.meaning+
+        '. No action was executed.');
+    }catch{
+      setVisionResult('Icon identification failed or the selected model does not support images. No action was executed.');
+    }finally{setVisionBusy(false);}
   };
   const askAboutIcons=()=>{
     if(!iconScan)return;
