@@ -49,6 +49,45 @@ class NexaToolOverlayService : Service() {
     private val history = ArrayDeque<String>()
     private var inspectedScreen: OverlayScreenSnapshot? = null
     private val guidedNavigation = NexaGuidedNavigation()
+    private val evidenceHandler=Handler(Looper.getMainLooper())
+    private var activeEvidenceToken: String? = null
+    private fun inspectGuidedOutcome(token: String, attempt: Int = 0) {
+        evidenceHandler.postDelayed({
+            if(activeEvidenceToken != token) return@postDelayed
+            val observation=NexaUiActionJournal.outcomeFor(this,token)
+            val status=guidedNavigation.onActionEvidence(token,observation,
+                android.os.SystemClock.elapsedRealtime())
+            when(status) {
+                "waiting" -> {
+                    if(attempt<3) inspectGuidedOutcome(token,attempt+1)
+                    else {
+                        guidedNavigation.cancel()
+                        activeEvidenceToken=null
+                        note="The screen change could not be verified. Guide stopped; start a new inspection."
+                        render()
+                    }
+                }
+                "advanced" -> {
+                    activeEvidenceToken=null
+                    val next=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+                    note="Android reported a screen change, not task success. "+
+                        "Next: inspect the screen for "+next+" and approve it separately."
+                    render()
+                }
+                "completed" -> {
+                    activeEvidenceToken=null
+                    note="All guide clicks were observed by Android. "+
+                        "Verify the destination yourself; task completion is not confirmed."
+                    render()
+                }
+                else -> {
+                    activeEvidenceToken=null
+                    note="No matching Android screen-change evidence. Guide cancelled; no retry."
+                    render()
+                }
+            }
+        },1_250L)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -105,6 +144,7 @@ class NexaToolOverlayService : Service() {
         inspectedScreen = null
         NexaScreenActions.reset()
         NexaScreenScroll.cancel()
+        activeEvidenceToken=null
         val result = guidedNavigation.start(raw, android.os.SystemClock.elapsedRealtime())
         note = when(result) {
             is NexaGuidedNavigation.StartResult.Started -> result.description
@@ -115,6 +155,7 @@ class NexaToolOverlayService : Service() {
     }
     private fun stopGuidedNavigation() {
         guidedNavigation.cancel()
+        activeEvidenceToken=null
         inspectedScreen = null
         NexaScreenActions.reset()
         note = "Guided navigation cancelled; no additional actions requested."
@@ -309,12 +350,13 @@ class NexaToolOverlayService : Service() {
             NexaScreenActions.confirm(service, snap.token)
         }
         note=outcome
-        if (selected != null && outcome.startsWith("Android accepted") &&
-            guidedNavigation.afterConfirmedClick(selected.semantic,android.os.SystemClock.elapsedRealtime())) {
-            val next=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
-            note += if (next != null) " Next guide step: " + next +
-                ". Inspect the updated screen and approve again."
-                else " All guide taps were requested. Inspect the app to verify the result."
+        if (selected != null && snap != null && outcome.startsWith("Android accepted") &&
+            guidedNavigation.afterAcceptedDispatch(selected.semantic,snap.token,
+                android.os.SystemClock.elapsedRealtime())) {
+            activeEvidenceToken=snap.token
+            note += " Awaiting same-action Android screen evidence. "+
+                "No next step is available until verified."
+            inspectGuidedOutcome(snap.token)
         }
         inspectedScreen = null
         render()
