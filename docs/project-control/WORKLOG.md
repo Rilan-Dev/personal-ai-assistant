@@ -804,3 +804,13 @@
 - Added Kotlin offline instrumentation for malicious signed URLs, safe error codes and no token leaks. Updated existing Kotlin idle gate test; added source tests for readiness, isolation and continuity.
 - Isolated reference checkout: `npm test` passed 239/239; `npm run typecheck` passed; `npm run web:export` passed. Native Kotlin/emulator verification and real authenticated microphone/audio acceptance require separate gates.
 - Full scope and Sarvam managed-vs-standalone model rationale in `docs/design/SARVAM_MANAGED_LIVE_VOICE_ACCEPTANCE.md`.
+
+## 2026-11-02 — Dedicated Samvaad workspace key and hard private voice gate
+- User reported `sk_samvaad_` workspace key being rejected by generic AI Provider card and demanded that Nexa not share private NexaHub/phone data or retain provider conversation data.
+- Root mismatch: generic provider card targets Sarvam Model API Chat Completions; a Samvaad Voice Agents workspace key is **not** a Model API key. No user API key was committed or added to CI.
+- Added separate Android Keystore AES-GCM `sarvam-voice-key`, typed React Native setter/presence-only bridge, dedicated Voice Agent UI and read-only agent preflight; Chat key validation now explicitly rejects voice-only workspace keys with a useful message. Trims only pasted boundary whitespace before secure save.
+- Implemented explicit per-device `sarvam-voice-streaming-consent`, OFF by default. New key resets consent. Clearing or disabling stops service. `openVoiceCredentials` will not fall back to OpenAI if a private Samvaad key exists and consent is denied. No microphone starts merely on key save or auth preflight.
+- Dedicated Samvaad calls suppress transcript-triggered native tool proposals and use a fresh random pseudonymous user identifier for each call, without sending NexaHub records, contacts, messages, screen data or files.
+- Verified Sarvam docs: managed Voice Agents **do not support zero-day data retention**, and workspace data defaults to indefinite until Owner configures data retention. Nexa cannot force provider-side deletion or override managed dashboard agent configuration. The feature warns explicitly and stays disabled by default.
+- Isolated checkout validated `npm test` 243/243; TypeScript and web export passed. Android emulator build/physical-phone/ST S acceptance still require separate verification.
+- Details: `docs/design/SAMVAAD_VOICE_ONLY_PRIVATE_MODE.md`.
