@@ -231,7 +231,7 @@ class RealtimeVoiceService : Service() {
         main.postDelayed(handshakeTimeout,25_000L)
         try {
         if(selectedProvider=="sarvam-api") {
-            val transport=SarvamApiVoiceTransport(credentials.apiKey,
+            val transport=SarvamApiVoiceTransport(applicationContext,credentials.apiKey,
                 object:SarvamApiVoiceTransport.Callbacks {
                     override fun connected() {
                         main.post { if(active.get() && status=="connecting")startAudio() }
