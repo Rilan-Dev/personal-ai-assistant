@@ -17,7 +17,8 @@ internal data class VisualIconCrop(
 )
 internal data class VisualIconResult(
     val id: String, val packageName: String, val createdAt: Long,
-    val expiresInMs: Int, val crops: List<VisualIconCrop>, val windowId: Int? = null
+    val expiresInMs: Int, val crops: List<VisualIconCrop>, val windowId: Int? = null,
+    val observedIcons: List<ObservedIcon> = emptyList(), val windowBounds: IconBox? = null
 )
 internal object NexaVisualIconCapture {
     private val lock = Any()
@@ -42,13 +43,16 @@ internal object NexaVisualIconCapture {
         if (armedUntil <= SystemClock.elapsedRealtime() || busy || result != null) false
         else { busy = true; true }
     }
-    private fun complete(pkg: String, images: List<VisualIconCrop>, windowId: Int) = synchronized(lock) {
+    private fun complete(pkg: String, images: List<VisualIconCrop>, windowId: Int,
+                         observations: List<ObservedIcon>, window: IconBox,
+                         captureWallTime: Long) = synchronized(lock) {
         if (!busy) return@synchronized
         busy = false
         armedUntil = 0
         resultAt = SystemClock.elapsedRealtime()
         result = VisualIconResult(UUID.randomUUID().toString(),pkg.take(150),
-            System.currentTimeMillis(),60_000,images.take(6),windowId.takeIf { it >= 0 })
+            captureWallTime,60_000,images.take(6),windowId.takeIf { it >= 0 },
+            observations.take(64),window)
         handler.removeCallbacks(expiry)
         handler.postDelayed(expiry,60_000)
     }
@@ -67,10 +71,16 @@ internal object NexaVisualIconCapture {
         result = null
         resultAt = 0L
     }
-    fun capture(service: ScreenAssistService, pkg: String, candidates: List<ObservedIcon>, windowId: Int) {
+    fun capture(service: ScreenAssistService, pkg: String, candidates: List<ObservedIcon>,
+                windowId: Int, windowBounds: IconBox) {
         if (Build.VERSION.SDK_INT < 30 || !acquire()) return
-        val targets = candidates.filter { it.semantic == "unknown" }.take(6)
-        if (targets.isEmpty()) { complete(pkg,emptyList(),windowId); return }
+        val captureWallTime = System.currentTimeMillis()
+        // Preserve metadata from this *same* user-armed screen event.
+        val observations = candidates.take(64)
+        val targets = observations.filter { it.semantic == "unknown" && it.clickable }.take(6)
+        fun done(images: List<VisualIconCrop>) =
+            complete(pkg,images,windowId,observations,windowBounds,captureWallTime)
+        if (targets.isEmpty()) { done(emptyList()); return }
         try {
             service.takeScreenshot(Display.DEFAULT_DISPLAY,service.mainExecutor,
                 object : AccessibilityService.TakeScreenshotCallback {
@@ -81,22 +91,32 @@ internal object NexaVisualIconCapture {
                             // A screenshot callback can arrive after the owner changes apps.
                             // Never return crops from a different window/package.
                             val current=service.externalWindowRoot()
-                            val sameWindow=try {
-                                current?.packageName?.toString()==pkg && current.windowId==windowId
+                            val stillSame=try {
+                                if(current?.packageName?.toString()!=pkg || current.windowId!=windowId)
+                                    false
+                                else {
+                                    val fresh=ScreenIconDetector.detect(current)
+                                    targets.all { target ->
+                                        fresh.count { item ->
+                                            item.id==target.id && item.semantic=="unknown" &&
+                                            item.clickable && item.bounds==target.bounds
+                                        }==1
+                                    }
+                                }
                             } finally { current?.recycle() }
-                            if (!sameWindow) { complete(pkg,emptyList(),windowId); return }
+                            if (!stillSame) { done(emptyList()); return }
                             wrapped=Bitmap.wrapHardwareBuffer(buffer,screenshot.colorSpace)
                             val bitmap=wrapped
-                            if (bitmap == null) { complete(pkg,emptyList(),windowId); return }
+                            if (bitmap == null) { done(emptyList()); return }
                             val crops = ArrayList<VisualIconCrop>()
                             targets.forEach { candidate ->
                                 imageCrop(bitmap,candidate)?.let { uri ->
                                     crops.add(VisualIconCrop(candidate.id,candidate.bounds,uri))
                                 }
                             }
-                            complete(pkg,crops,windowId)
+                            done(crops)
                         } catch (_: Exception) {
-                            complete(pkg,emptyList(),windowId)
+                            done(emptyList())
                         } finally {
                             wrapped?.recycle()
                             buffer.close()
