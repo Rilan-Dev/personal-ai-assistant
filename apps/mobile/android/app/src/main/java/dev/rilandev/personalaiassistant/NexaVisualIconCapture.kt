@@ -23,8 +23,17 @@ internal data class VisualIconResult(
 internal object NexaVisualIconCapture {
     private val lock = Any()
     private val handler = Handler(Looper.getMainLooper())
-    private val expiry = Runnable { clear() }
+    private val epochs=NexaCaptureEpoch()
+    private var scheduledExpiry: Runnable? = null
     private var armedUntil = 0L
+    private fun expireAfter(ms: Long, epoch: Long) {
+        scheduledExpiry?.let { handler.removeCallbacks(it) }
+        val expiry=Runnable {
+            synchronized(lock) { if (epochs.current(epoch)) clearLocked() }
+        }
+        scheduledExpiry=expiry
+        handler.postDelayed(expiry,ms)
+    }
     private var busy = false
     private var result: VisualIconResult? = null
     private var resultAt = 0L
@@ -32,29 +41,34 @@ internal object NexaVisualIconCapture {
     fun arm(): Boolean = synchronized(lock) {
         if (!ScreenAssistState.connected || Build.VERSION.SDK_INT < 30) return@synchronized false
         clearLocked()
+        val epoch=epochs.begin()
         armedUntil = SystemClock.elapsedRealtime() + 20_000
-        handler.postDelayed(expiry,20_000)
+        expireAfter(20_000,epoch)
         true
     }
     fun isArmed(): Boolean = synchronized(lock) {
         armedUntil > SystemClock.elapsedRealtime() && !busy
     }
-    private fun acquire(): Boolean = synchronized(lock) {
-        if (armedUntil <= SystemClock.elapsedRealtime() || busy || result != null) false
-        else { busy = true; true }
+    private fun acquire(): Long? = synchronized(lock) {
+        if (armedUntil <= SystemClock.elapsedRealtime() || busy || result != null) null
+        else {
+            busy = true
+            val epoch=epochs.begin()
+            expireAfter(20_000,epoch)
+            epoch
+        }
     }
-    private fun complete(pkg: String, images: List<VisualIconCrop>, windowId: Int,
+    private fun complete(epoch: Long, pkg: String, images: List<VisualIconCrop>, windowId: Int,
                          observations: List<ObservedIcon>, window: IconBox,
                          captureWallTime: Long) = synchronized(lock) {
-        if (!busy) return@synchronized
+        if (!busy || !epochs.current(epoch)) return@synchronized
         busy = false
         armedUntil = 0
         resultAt = SystemClock.elapsedRealtime()
         result = VisualIconResult(UUID.randomUUID().toString(),pkg.take(150),
             captureWallTime,60_000,images.take(6),windowId.takeIf { it >= 0 },
             observations.take(64),window)
-        handler.removeCallbacks(expiry)
-        handler.postDelayed(expiry,60_000)
+        expireAfter(60_000,epoch)
     }
     fun consume(): VisualIconResult? = synchronized(lock) {
         val item = result
@@ -65,7 +79,9 @@ internal object NexaVisualIconCapture {
     }
     fun clear() = synchronized(lock) { clearLocked() }
     private fun clearLocked() {
-        handler.removeCallbacks(expiry)
+        scheduledExpiry?.let { handler.removeCallbacks(it) }
+        scheduledExpiry=null
+        epochs.invalidate()
         armedUntil = 0
         busy = false
         result = null
@@ -73,13 +89,14 @@ internal object NexaVisualIconCapture {
     }
     fun capture(service: ScreenAssistService, pkg: String, candidates: List<ObservedIcon>,
                 windowId: Int, windowBounds: IconBox) {
-        if (Build.VERSION.SDK_INT < 30 || !acquire()) return
+        if (Build.VERSION.SDK_INT < 30) return
+        val epoch=acquire() ?: return
         val captureWallTime = System.currentTimeMillis()
         // Preserve metadata from this *same* user-armed screen event.
         val observations = candidates.take(64)
         val targets = observations.filter { it.semantic == "unknown" && it.clickable }.take(6)
         fun done(images: List<VisualIconCrop>) =
-            complete(pkg,images,windowId,observations,windowBounds,captureWallTime)
+            complete(epoch,pkg,images,windowId,observations,windowBounds,captureWallTime)
         if (targets.isEmpty()) { done(emptyList()); return }
         try {
             service.takeScreenshot(Display.DEFAULT_DISPLAY,service.mainExecutor,
