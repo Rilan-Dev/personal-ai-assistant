@@ -29,6 +29,43 @@ internal object SarvamVoiceReadiness {
         .followSslRedirects(false)
         .build()
 
+    /** Pure response classifier also exercised by Android instrumentation.
+     * Never return the signed URL, interaction ID, or response body to UI.
+     */
+    internal fun classify(status: Int, body: String): Result {
+        if (status !in 200..299) {
+            val (code, explanation) = when (status) {
+                401, 403 -> "AUTH" to "Sarvam rejected this key or workspace access. Rotate and re-enter the key."
+                404 -> "AGENT_NOT_FOUND" to "Agent ID, workspace, organization or committed version not found. Copy the full Agent App ID and publish the agent."
+                422, 400 -> "INVALID_AGENT" to "Sarvam did not accept the Voice Agent configuration or call parameters."
+                429 -> "RATE_LIMIT" to "Sarvam is rate-limiting Voice Agent authorization."
+                else -> "PROVIDER_ERROR" to "Sarvam could not authorize the voice session (HTTP ${status})."
+            }
+            return Result(false, code, explanation)
+        }
+        if (body.length !in 2..8192) {
+            return Result(false, "MALFORMED", "Sarvam returned an invalid signed-session response.")
+        }
+        return try {
+            val json = JSONObject(body)
+            val referenceId = json.optString("reference_id")
+            val signed = json.optString("url")
+            val uri = Uri.parse(signed)
+            val host = uri.host.orEmpty().lowercase()
+            val trusted = uri.scheme == "wss" &&
+                (host == "sarvam.ai" || host.endsWith(".sarvam.ai")) &&
+                (uri.port == -1 || uri.port == 443) &&
+                uri.encodedAuthority?.contains("@") != true
+            if (!trusted || referenceId.isBlank() || referenceId.length > 128)
+                Result(false, "BAD_SIGNED_URL",
+                    "Sarvam did not return a valid trusted signed WebSocket connection.")
+            else Result(true, "AUTHORIZED",
+                "Sarvam issued a signed Voice Agent WebSocket URL. This verifies authorization, not microphone/audio playback.")
+        } catch (_: Exception) {
+            Result(false, "MALFORMED", "Sarvam Voice Agent authorization response could not be processed.")
+        }
+    }
+
     fun check(context: Context, respond: (Result) -> Unit) {
         val cfg = try {
             AgentJournalModule.openVoiceCredentials(context)
@@ -53,38 +90,10 @@ internal object SarvamVoiceReadiness {
             override fun onResponse(call: Call, response: Response) {
                 try {
                     response.use {
-                        if (!it.isSuccessful) {
-                            val (code, explanation) = when (it.code) {
-                                401, 403 -> "AUTH" to "Sarvam rejected this key or workspace access. Rotate and re-enter the key."
-                                404 -> "AGENT_NOT_FOUND" to "Agent ID, workspace, organization or committed version not found. Copy the full Agent App ID and publish the agent."
-                                422, 400 -> "INVALID_AGENT" to "Sarvam did not accept the Voice Agent configuration or call parameters."
-                                429 -> "RATE_LIMIT" to "Sarvam is rate-limiting Voice Agent authorization."
-                                else -> "PROVIDER_ERROR" to "Sarvam could not authorize the voice session (HTTP ${it.code})."
-                            }
-                            respond(Result(false, code, explanation))
-                            return
-                        }
-                        val body = it.body?.string().orEmpty()
-                        if (body.length !in 2..8192) {
-                            respond(Result(false, "MALFORMED", "Sarvam returned an invalid signed-session response."))
-                            return
-                        }
-                        val json = JSONObject(body)
-                        val referenceId = json.optString("reference_id")
-                        val signed = json.optString("url")
-                        val uri = Uri.parse(signed)
-                        val host = uri.host.orEmpty().lowercase()
-                        val trusted = uri.scheme == "wss" &&
-                            (host == "sarvam.ai" || host.endsWith(".sarvam.ai")) &&
-                            (uri.port == -1 || uri.port == 443) &&
-                            uri.encodedAuthority?.contains("@") != true
-                        if (!trusted || referenceId.isBlank() || referenceId.length > 128) {
-                            respond(Result(false, "BAD_SIGNED_URL",
-                                "Sarvam did not return a valid trusted signed WebSocket connection."))
-                            return
-                        }
-                        respond(Result(true, "AUTHORIZED",
-                            "Sarvam issued a signed Voice Agent WebSocket URL. This verifies authorization, not microphone/audio playback."))
+                        // For error responses, never read a body that may
+                        // contain provider account details or debug echoes.
+                        val body = if (it.isSuccessful) it.body?.string().orEmpty() else ""
+                        respond(classify(it.code, body))
                     }
                 } catch (_: Exception) {
                     respond(Result(false, "MALFORMED", "Sarvam Voice Agent authorization response could not be processed."))
