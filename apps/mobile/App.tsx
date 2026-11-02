@@ -143,7 +143,7 @@ export default function App() {
     if (wakeBusy) return;
     setWakeBusy(true);
     try {
-      if (!await prepareOwnerLiveVoicePermissions(activeProvider?.provider==='sarvam'?'sarvam':'openai')) {
+      if (!await prepareOwnerLiveVoicePermissions(sarvamVoiceKeySaved?'sarvam':'openai')) {
         setSetupNotice('Microphone/notification access is needed for local wake listening.');
         return;
       }
@@ -244,7 +244,7 @@ export default function App() {
     setNexaPermissionBusy(true);
     try {
       const allowed = await prepareOwnerLiveVoicePermissions(
-        activeProvider?.provider === 'sarvam' ? 'sarvam' : 'openai');
+        sarvamVoiceKeySaved ? 'sarvam' : 'openai');
       setAssistantRoleNotice(allowed
         ? 'Microphone and notification grants checked. Start live voice only when you choose to.'
         : 'Voice permission denied or unavailable. No microphone session started.');
@@ -1172,7 +1172,7 @@ export default function App() {
           <Text style={styles.eyebrow}>VOICE ASSISTANT</Text>
           <View style={[styles.voiceOrb,listening && styles.voiceOrbActive]}><Text style={styles.voiceOrbGlyph}>{listening ? '◉' : '✦'}</Text></View>
           <Text style={styles.voiceHeadline}>{listening?'Listening…':speaking?'Speaking…':'Speak naturally'}</Text>
-          <Text style={styles.voiceSubline}>{activeProvider?.provider==='sarvam'?'Tap to dictate with Sarvam Saaras v4, or start a live audio conversation without on-screen transcripts.':'Tap to speak using Android on-device recognition. Review the result before sending.'}</Text>
+          <Text style={styles.voiceSubline}>{sarvamVoiceKeySaved?'Samvaad live speech-to-speech uses one managed WebSocket. Chat/dictation uses separate credentials and does not receive the Voice Agents workspace key.':'Use locally controlled speech or configure a Samvaad Voice Agent for live speech.'}</Text>
           <Pressable accessibilityRole="button" disabled={running || speaking || (voiceInProgress.current && !listening) ||
               liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
             onPress={listening?cancelListening:listenForCommand}
@@ -1208,10 +1208,10 @@ export default function App() {
               {liveVoiceStatus.state==='listening'?'LIVE':liveVoiceStatus.state}
             </Text>
           </View>
-          <Text style={styles.cardText}>{activeProvider?.provider==='sarvam'
+          <Text style={styles.cardText}>{sarvamVoiceKeySaved
             ? 'Sarvam managed Voice Agents: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
-            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Only explicitly requested allowlisted device actions can be proposed; each app launch requires your approval in Nexa Voice.'}</Text>
-          <Text style={styles.settingHelp}>{activeProvider?.provider==='sarvam'
+            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Voice calls may be processed and retained under the selected provider’s policy. Device actions require separate owner approval.'}</Text>
+          <Text style={styles.settingHelp}>{sarvamVoiceKeySaved
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
