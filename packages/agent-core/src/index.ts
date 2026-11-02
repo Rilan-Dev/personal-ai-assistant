@@ -26,3 +26,5 @@ export {createReadOnlyScreenTools, createScreenAwarePlanner} from './screen-agen
 
 export {scoreIconEvidence, inspectGuidedScreenPlan} from './screen-confidence.ts';
 export type {IconEvidenceAssessment, GuidedScreenPreview} from './screen-confidence.ts';
+
+export {parsePairedIconObservation} from './paired-icon-capture.ts';
