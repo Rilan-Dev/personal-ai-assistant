@@ -113,7 +113,12 @@ internal object NexaScreenActions {
                         node.getBoundsInScreen(bounds)
                         val sameBounds = bounds.left == icon.bounds.left && bounds.top == icon.bounds.top &&
                             bounds.right == icon.bounds.right && bounds.bottom == icon.bounds.bottom
-                        if (sameBounds && kind?.first == icon.semantic && kind?.second == icon.label) {
+                        val sameResourceId = icon.resourceId.isEmpty() ||
+                            node.viewIdResourceName.orEmpty() == icon.resourceId
+                        val sameWidgetClass = icon.className.isEmpty() ||
+                            node.className?.toString() == icon.className
+                        if (sameBounds && sameResourceId && sameWidgetClass &&
+                            kind?.first == icon.semantic && kind.second == icon.label) {
                             if (matched == null) matched = node else duplicate = true
                         }
                     }
