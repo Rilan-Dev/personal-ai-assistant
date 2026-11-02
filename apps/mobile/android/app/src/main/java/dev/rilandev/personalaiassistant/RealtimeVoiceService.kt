@@ -245,7 +245,10 @@ class RealtimeVoiceService : Service() {
                     // Official Sarvam transcript callback: role=user, content.
                     // Never allow bot text or arbitrary transcript to run tools.
                     main.post { if(active.get() && status=="listening" &&
-                        selectedProvider=="sarvam" && role=="user")
+                        selectedProvider=="sarvam" && role=="user" &&
+                        // Dedicated Samvaad private-STS mode never converts
+                        // provider transcripts into tool execution requests.
+                        !AgentJournalModule.hasSarvamVoiceKey(applicationContext))
                         handleSarvamOwnerRequest(content)
                     }
                 }
