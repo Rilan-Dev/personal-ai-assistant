@@ -393,6 +393,7 @@ class NexaToolOverlayService : Service() {
             NexaScreenActions.reset()
             NexaScreenScroll.cancel()
             guidedNavigation.cancel()
+            activeEvidenceToken=null
         }
         section = name
         render()
@@ -669,6 +670,7 @@ class NexaToolOverlayService : Service() {
         NexaScreenActions.reset()
         NexaScreenScroll.cancel()
         guidedNavigation.cancel()
+        activeEvidenceToken=null
         super.onDestroy()
     }
 }
