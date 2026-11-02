@@ -211,6 +211,15 @@ class NexaToolOverlayService : Service() {
     }
 
 
+    private fun showActionJournalSummary() {
+        val counts=NexaUiActionJournal.summary(this)
+        note=if(counts==null) "Encrypted action journal is unavailable."
+            else if(counts.isEmpty()) "No owner-confirmed UI actions recorded."
+            else "Encrypted UI actions · " + counts.toSortedMap().entries
+                .joinToString(" · ") { it.key.replace('_',' ') + ": " + it.value }.take(280)
+        render()
+    }
+
     private fun inspectVisibleIcons() {
         val service = ScreenAssistService.active
         if (service == null) {
@@ -400,6 +409,8 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(button("Action journal summary") { showActionJournalSummary() })
+                        addView(text("The action log stores encrypted approval fingerprints and result categories, not screen contents.",11f,true))
                         addView(text("Safe owner-confirmed scrolling of the currently visible app.",11f,true))
                         if (NexaScreenScroll.isPending()) {
                             addView(row(
