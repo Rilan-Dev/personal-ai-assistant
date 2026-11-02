@@ -1,5 +1,6 @@
 package dev.rilandev.personalaiassistant
 
+import android.content.Context
 import android.util.Base64
 import android.net.Uri
 import java.util.concurrent.Executors
@@ -28,6 +29,7 @@ import java.io.IOException
  * This is a composed duplex experience, NOT an invented single STS API.
  */
 internal class SarvamApiVoiceTransport(
+    private val context: Context,
     private val apiKey: String,
     private val callbacks: Callbacks
 ) {
@@ -244,7 +246,9 @@ internal class SarvamApiVoiceTransport(
         val turn=generation.incrementAndGet()
         val body=JSONObject().put("model",CHAT_MODEL).put("max_tokens",230)
             .put("messages",JSONArray().put(JSONObject().put("role","system")
-                .put("content","You are Nexa, a concise, kind phone voice assistant. Reply naturally in English, normally 1-3 sentences. Remember the earlier turns provided. Never claim to have opened an app or sent messages; Android requires separate owner approval. Do not request contacts, private files or secrets.")))
+                .put("content","You are Nexa, a concise phone voice assistant. Use provided read-only battery, storage and device-status functions when needed; report their actual results, not guessed values. App launch only follows a separate local owner approval gate. Never claim an app opened or a message was sent. Do not request contacts, private files, secrets or screen content.")))
+            .put("tools",NexaSarvamReadTools.definitions())
+            .put("tool_choice","auto")
         synchronized(lock) {
             turns.addLast("user" to text.take(800))
             while(turns.size>12)turns.removeFirst()
@@ -253,6 +257,17 @@ internal class SarvamApiVoiceTransport(
                 messages.put(JSONObject().put("role",role).put("content",content))
             }
         }
+        completeModelTurn(turn,body,0)
+    }
+
+    /**
+     * A real function-call→native execution→tool result→model reply loop.
+     * One read-only tool per owner utterance; no autonomous UI action.
+     * A model-proposed name and arguments are untrusted and validated against
+     * NexaSarvamReadTools. The owner-approved app route is kept separate.
+     */
+    private fun completeModelTurn(turn:Int, body:JSONObject, round:Int) {
+        if(!running || turn!=generation.get() || round>1)return
         val request=Request.Builder().url("https://api.sarvam.ai/v1/chat/completions")
             .header("api-subscription-key",apiKey)
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
@@ -276,9 +291,44 @@ internal class SarvamApiVoiceTransport(
                     if(raw.length !in 2..140000) {
                         callbacks.failed("Sarvam conversation response was invalid");return
                     }
-                    val answer=JSONObject(raw).optJSONArray("choices")
+                    val message=JSONObject(raw).optJSONArray("choices")
                         ?.optJSONObject(0)?.optJSONObject("message")
-                        ?.optString("content").orEmpty().trim()
+                        ?: run {
+                            callbacks.failed("Sarvam returned no conversation message");return
+                        }
+                    val toolCalls=message.optJSONArray("tool_calls")
+                    if(toolCalls!=null && toolCalls.length()>0) {
+                        if(round>=1 || toolCalls.length()!=1) {
+                            speak("I cannot perform additional actions in this voice turn.")
+                            return
+                        }
+                        val tool=toolCalls.optJSONObject(0)
+                        val id=tool?.optString("id").orEmpty()
+                        val function=tool?.optJSONObject("function")
+                        val name=function?.optString("name").orEmpty()
+                        val args=function?.optString("arguments").orEmpty()
+                        if(!id.matches(Regex("[A-Za-z0-9_-]{1,128}"))) {
+                            speak("That tool request was not valid.")
+                            return
+                        }
+                        // Never execute a tool outside the native read-only
+                        // registry. In particular, there is no remote model
+                        // gesture, app-launch, send, call or approval function.
+                        val result=NexaSarvamReadTools.execute(context,name,args)
+                        val next=JSONObject(body.toString())
+                        val history=next.getJSONArray("messages")
+                        history.put(JSONObject().put("role","assistant")
+                            .put("content",JSONObject.NULL)
+                            .put("tool_calls",JSONArray().put(tool)))
+                        history.put(JSONObject().put("role","tool")
+                            .put("tool_call_id",id)
+                            .put("content",result))
+                        next.remove("tools")
+                        next.remove("tool_choice")
+                        completeModelTurn(turn,next,round+1)
+                        return
+                    }
+                    val answer=message.optString("content").trim()
                     if(answer.isBlank() || answer.length>3000) {
                         callbacks.failed("Sarvam did not return a spoken response");return
                     }
