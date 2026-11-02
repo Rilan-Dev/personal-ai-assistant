@@ -857,3 +857,11 @@
 - Prevented a native vendor BatteryManager/StatFs exception from crashing the realtime WebSocket: device facts now catch exceptions, and `SarvamApiVoiceTransport.onFinal` catches owner-tool callback exceptions before they escape. The exact OEM crash still requires redacted logcat verification.
 - Added native instrumentation covering voice screen grammar and battery no-crash, and source checks for one-time on-overlay approval, sensitive field exclusion, no generic gesture injection and four-way scroll. Updated obsolete background-assist test to reflect previously introduced scoped `flagRetrieveInteractiveWindows`.
 - Source tests 271/271, TypeScript typecheck and web export passed on an isolated AI Comms Agent server checkout; native Android CI, signed APK, and physical phone acceptance remain separate release gates. Did not access AlmaLinux home server or modify AI Comms running services.
+
+## 2026-11-03 — Screen-control finishing pass before main release
+- Extended bounded `NexaScreenScroll` using native `AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT/RIGHT` in addition to vertical scroll actions; no XY gesture dispatch. The floating Tools overlay now offers Scroll left/right with a separate Confirm scroll button.
+- Added natural polite owner-command normalization (e.g., "Could you please scroll down?" / "Can you read my screen?") without relaxing exact command or per-operation approval policies.
+- Fixed the launchable-app filter's raw Kotlin regex: `\\n` and `\\b` incorrectly blocked valid labels containing `n` and failed proper word boundaries. Added emulator assertions for valid app names and compound unsafe requests.
+- Screen voice router now reports `Screen Assist is disabled` immediately if Android Accessibility has not been user-enabled instead of presenting an approval that could never execute.
+- Added `NexaScreenVoiceRoutingAndroidTest` and `nexa-live-screen-voice-routing.test.mjs`, covering owner intent, denied unsafe clicks, four-way scroll, missing permission, crash containment and bounded text capture.
+- Final isolated source checks: 271/271 Node tests, typecheck, web export passed. Native Android CI still required; no physical phone logs were provided to prove the specific source of the reported battery crash.
