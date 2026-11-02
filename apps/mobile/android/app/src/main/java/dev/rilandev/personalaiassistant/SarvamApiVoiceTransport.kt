@@ -134,10 +134,15 @@ internal class SarvamApiVoiceTransport(
     }
 
     private fun maybeReady() {
-        if(running && sttReady && ttsReady && !announced) {
-            announced=true
-            callbacks.connected()
+        // STT and TTS complete their handshakes on different OkHttp threads.
+        // Exactly one callback may start Android AudioRecord/AudioTrack.
+        val notify=synchronized(lock) {
+            if(running && sttReady && ttsReady && !announced) {
+                announced=true
+                true
+            } else false
         }
+        if(notify) callbacks.connected()
     }
 
     private fun openTts() {
