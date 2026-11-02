@@ -124,6 +124,30 @@ internal object NexaUiActionJournal {
             } catch (_: Exception) { false }
         }
 
+    /**
+     * Upgrade an accepted dispatch to a *visual change observation*. Does not
+     * claim that a call, navigation, or user task succeeded.
+     */
+    fun markObservation(ctx: Context, approvalToken: String, observation: String): Boolean =
+        synchronized(lock) {
+            if (observation !in setOf("observed_change","no_observable_change"))
+                return@synchronized false
+            try {
+                val id=digest(approvalToken)
+                val entries=read(ctx)
+                var found=false
+                for (i in 0 until entries.length()) {
+                    val item=entries.getJSONObject(i)
+                    if(item.optString("id")==id && item.optString("status")=="android_accepted") {
+                        item.put("status",observation)
+                        found=true
+                        break
+                    }
+                }
+                found && store(ctx,entries)
+            } catch (_: Exception) { false }
+        }
+
     /** Return only aggregate status counts; the event details stay encrypted. */
     fun summary(ctx: Context): Map<String, Int>? = synchronized(lock) {
         try {
