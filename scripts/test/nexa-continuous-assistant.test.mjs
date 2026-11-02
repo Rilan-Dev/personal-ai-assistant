@@ -51,7 +51,7 @@ test('Realtime tool loop responds to function_call_output and never invokes arbi
   assert.match(policy,/get_battery_level/);
   assert.match(policy,/request_open_app/);
   assert.match(policy,/NeedsApproval/);
-  assert.match(policy,/setOf\("brave", "github", "whatsapp"\)/);
+  assert.match(policy,/listOf\("brave","github","whatsapp"\)/);
   assert.doesNotMatch(policy,/SmsManager|Runtime\.getRuntime|dispatchGesture|ACTION_SET_TEXT/);
   assert.doesNotMatch(realtime,/SmsManager|Runtime\.getRuntime|dispatchGesture|ACTION_SET_TEXT/);
 });

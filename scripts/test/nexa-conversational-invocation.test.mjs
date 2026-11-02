@@ -42,7 +42,7 @@ test('barge-in invalidates buffered output and rejects old response chunks',()=>
   assert.match(audio,/json.optString\("response_id"\) == responseId/);
   assert.match(audio,/responseId = json.optJSONObject\("response"\)/);
   assert.match(audio,/\.put\("interrupt_response",true\)/);
-  assert.match(audio,/Reply in English, Tamil or Hindi/);
-  assert.match(audio,/Never claim an app opened unless the result confirms it/);
+  assert.match(audio,/a conversational Android voice assistant/);
+  assert.match(audio,/Never claim a tap, scroll, app opening, or task succeeded/);
   assert.doesNotMatch(audio,/AudioManager\.setMicrophoneMute|AppOpsManager/);
 });

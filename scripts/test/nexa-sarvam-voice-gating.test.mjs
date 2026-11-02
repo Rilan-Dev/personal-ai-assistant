@@ -58,6 +58,6 @@ test('app-started voice also exposes an owner-review surface, not a silent local
   assert.match(realtime,/data\.putString\("pendingAppApproval",RealtimeVoiceService\.pendingApprovalSummary\)/);
   assert.match(native,/decideOwnerLiveAppAction/);
   assert.match(ui,/pendingAppApproval/);
-  assert.match(ui,/Approve app once/);
+  assert.match(ui,/Approve action once/);
   assert.match(ui,/onPress=\{\(\)=>void reviewLiveAppAction\(false\)\}/);
 });

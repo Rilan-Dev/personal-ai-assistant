@@ -33,5 +33,5 @@ test('direct phone-to-model flow does not transmit contacts, files or NexaHub re
   assert.doesNotMatch(transport,/NexaHub|READ_CONTACTS|getContacts|MediaProjection|uploadFile|device\.open_app/);
   assert.match(transport,/client|audio_input/);
   assert.match(transport,/api\.sarvam\.ai/);
-  assert.match(ui,/NexaHub files, contacts, screen data and device inventory are not sent/);
+  assert.match(ui,/NexaHub files and contacts are not sent automatically/);
 });

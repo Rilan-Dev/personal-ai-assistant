@@ -93,7 +93,7 @@ internal object NexaScreenVoiceOverview {
 
     /** One screen-scroll action after exactly one owner approval. */
     fun scrollApproved(direction:String):String {
-        if(direction !in setOf("up","down"))return "Invalid screen direction."
+        if(direction !in setOf("up","down","left","right"))return "Invalid screen direction."
         val service=ScreenAssistService.active
             ?:return "Enable Nexa Screen Assist in Android Accessibility Settings first."
         val ready=NexaScreenScroll.prepare(service,direction)

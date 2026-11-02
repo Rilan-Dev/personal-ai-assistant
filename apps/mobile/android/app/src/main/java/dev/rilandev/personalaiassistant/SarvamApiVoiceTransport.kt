@@ -23,8 +23,8 @@ import java.io.IOException
  * BYOK, model-API-only, voice conversation. No Samvaad workspace, Agent ID,
  * remote agent dashboard or AI Comms server. One long-running Saaras realtime
  * STT WS + a Bulbul streaming TTS WS, with per-turn Sarvam-105B Conversations
- * HTTPS inference. Speech is continuous to the user; no transcript UI or
- * persistent transcript, journal or server-side Nexa records are created here.
+ * HTTPS inference. Speech is continuous to the user; no provider-side Nexa journal. After the owner enables voice,
+ * recognized turns and assistant replies are encrypted in local custom.db.
  *
  * This is a composed duplex experience, NOT an invented single STS API.
  */
@@ -88,6 +88,7 @@ internal class SarvamApiVoiceTransport(
     private val generation = AtomicInteger(0)
     private val ttsGeneration = AtomicInteger(0)
     private val turns = ArrayDeque<Pair<String,String>>()
+    private val sessionId = "voice-sarvam-" + java.util.UUID.randomUUID().toString()
     private var pendingSpeech: String? = null
     private var recentUtterance = ""
     private var recentUtteranceAt = 0L
@@ -229,6 +230,7 @@ internal class SarvamApiVoiceTransport(
             recentUtterance=text
             recentUtteranceAt=now
         }
+        NexaConversationDb.append(context,sessionId,"voice","sarvam-api","user",text)
         // Native owner-approval is an independent consent boundary. No
         // model instruction or transcript may silently execute a phone tool.
         // Tool execution is never allowed to crash the provider WebSocket
@@ -254,7 +256,7 @@ internal class SarvamApiVoiceTransport(
         val turn=generation.incrementAndGet()
         val body=JSONObject().put("model",CHAT_MODEL).put("max_tokens",230)
             .put("messages",JSONArray().put(JSONObject().put("role","system")
-                .put("content","You are Nexa, a concise phone voice assistant. Use provided read-only battery, storage and device-status functions when needed; report their actual results, not guessed values. App launch only follows a separate local owner approval gate. Never claim an app opened or a message was sent. Do not request contacts, private files, secrets or screen content.")))
+                .put("content","You are Nexa, an Android voice assistant. Live owner-spoken commands for screen labels, scrolling in four directions, safe navigation taps, locating visible icons and opening a named installed app are handled locally with explicit one-time owner approval, only when Android Screen Assist is enabled. These actions are not automatic model tools. Tell the owner how to enable Nexa Screen Assist in Accessibility Settings if needed, and to approve each proposed action in the visible Nexa overlay. You may use read-only battery, storage and device-status tools. Never claim a screen action, app opening or message send succeeded without its verified result. Do not invent private screen data, contact information or permissions.")))
             .put("tools",NexaSarvamReadTools.definitions())
             .put("tool_choice","auto")
         synchronized(lock) {
@@ -342,6 +344,7 @@ internal class SarvamApiVoiceTransport(
                     }
                     synchronized(lock) {
                         if(!running || turn!=generation.get())return
+                        NexaConversationDb.append(context,sessionId,"voice","sarvam-api","assistant",answer.take(3000))
                         turns.addLast("assistant" to answer.take(1000))
                         while(turns.size>12)turns.removeFirst()
                         speak(answer)
@@ -358,6 +361,7 @@ internal class SarvamApiVoiceTransport(
     fun toolResult(result:String) {
         if(!running) return
         val safe=result.take(300)
+        NexaConversationDb.append(context,sessionId,"tool","sarvam-api","tool",safe)
         synchronized(lock){
             turns.addLast("assistant" to safe)
             while(turns.size>12)turns.removeFirst()

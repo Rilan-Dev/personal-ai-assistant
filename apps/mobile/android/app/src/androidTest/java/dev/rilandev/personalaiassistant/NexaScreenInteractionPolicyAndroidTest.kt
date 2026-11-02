@@ -43,9 +43,8 @@ class NexaScreenInteractionPolicyAndroidTest {
             .getApplicationContext<android.content.Context>()
         val request=NexaLiveToolPolicy.decide(ctx,"request_locate_visible_icon",
             JSONObject().put("icon","search").toString())
-        assertTrue(request is NexaLiveToolPolicy.Decision.NeedsApproval)
-        assertEquals("locate_icon:search",
-            (request as NexaLiveToolPolicy.Decision.NeedsApproval).command)
+        assertTrue(request is NexaLiveToolPolicy.Decision.Immediate)
+        assertTrue((request as NexaLiveToolPolicy.Decision.Immediate).result.contains("Screen Assist is OFF"))
         val rejected=NexaLiveToolPolicy.decide(ctx,"request_locate_visible_icon",
             JSONObject().put("icon","send_message").toString())
         assertTrue(rejected is NexaLiveToolPolicy.Decision.Immediate)
@@ -59,7 +58,7 @@ class NexaScreenInteractionPolicyAndroidTest {
         assertTrue((0 until tool.length()).any {tool.getJSONObject(it).optString("name")=="request_visible_icons"})
         val ctx=androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val request=NexaLiveToolPolicy.decide(ctx,"request_visible_icons","{}")
-        assertTrue(request is NexaLiveToolPolicy.Decision.NeedsApproval)
+        assertTrue(request is NexaLiveToolPolicy.Decision.Immediate)
         val rejected=NexaLiveToolPolicy.decide(ctx,"request_visible_icons",JSONObject().put("tap",true).toString())
         assertTrue(rejected is NexaLiveToolPolicy.Decision.Immediate)
     }

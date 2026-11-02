@@ -41,8 +41,8 @@ import org.json.JSONObject
 
 /**
  * Owner-started continuous audio session with a visible system notification.
- * This is an experimental direct OpenAI Realtime transport. It never exposes
- * device tools or starts itself in the background, from boot, or from a model.
+ * The owner-started provider stream exposes permission-gated Android tools.
+ * Model tool requests never bypass Android Accessibility or visible one-time approval.
  * All audio goes directly to the owner's chosen provider over encrypted WSS.
  */
 class RealtimeVoiceService : Service() {
@@ -85,6 +85,7 @@ class RealtimeVoiceService : Service() {
         val createdAtMs: Long = SystemClock.elapsedRealtime()
     )
     private var pendingAppTool: PendingAppTool? = null
+    private var voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
     private var lastLocalUtterance = ""
     private var lastLocalUtteranceAt = 0L
     private val seenCallIds = HashSet<String>()
@@ -147,6 +148,12 @@ class RealtimeVoiceService : Service() {
                 val outcome = try { when {
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
+                    pending.command == "list_installed_apps" ->
+                        NexaPhoneVoiceTools.installedAppsApproved(this)
+                    pending.command.startsWith("tap_visible_label:") ->
+                        ScreenAssistService.active?.let { service ->
+                            NexaScreenLabelTap.approved(service,pending.command.removePrefix("tap_visible_label:"))
+                        } ?: "Screen Assist is disabled. No tap executed."
                     pending.command == "read_visible_screen_text" ->
                         NexaScreenVoiceOverview.readVisibleTextApproved()
                     pending.command.startsWith("scroll_screen:") ->
@@ -225,6 +232,7 @@ class RealtimeVoiceService : Service() {
         pendingAppTool = null
         pendingApprovalSummary = null
         lastToolResult = ""
+        voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
         lastLocalUtterance = ""
         lastLocalUtteranceAt = 0L
         micReleaseRetries = 0
@@ -267,6 +275,9 @@ class RealtimeVoiceService : Service() {
                         if(!assistantPanelEnabled)return false
                         val recognizable=try {
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
+                            NexaPhoneVoiceTools.wantsInstalledApps(text) ||
+                            NexaPhoneVoiceTools.wantsScreenHelp(text) ||
+                            NexaPhoneVoiceTools.tapVisibleLabelIntent(text)!=null ||
                             NexaPhoneVoiceTools.scrollDirection(text)!=null ||
                             NexaPhoneVoiceTools.clickSafeIcon(text)!=null ||
                             NexaPhoneVoiceTools.wantsScreenOverview(text) ||
@@ -427,8 +438,9 @@ class RealtimeVoiceService : Service() {
                     .put("voice","marin")
                 val session = JSONObject()
                     .put("type","realtime")
-                    .put("audio",JSONObject().put("input",input).put("output",output))
-                    .put("instructions","You are Nexa, a natural conversational voice assistant. Reply in English, Tamil or Hindi as appropriate. Keep answers brief and grounded, remember prior turns, handle user interruptions, and state tool outcomes precisely. You have five restricted Android function tools: read device status, read battery, request opening Brave/GitHub/WhatsApp, request one-time owner-approved read-only inspection of visible icons, and request one-time owner-approved read-only location of a named icon. Screen inspection never happens until the owner approves in the visible Nexa panel, and never reads text fields or screenshots. An app-open request ALWAYS requires a visible human approval. Never claim an app opened unless the result confirms it; intent dispatch does not prove the app screen. You cannot send WhatsApp messages, change arbitrary permissions, control the screen, or access other private data in this mode. Explain limitations rather than inventing actions. Never ask for secrets.")
+                    .put("audio",JSONObject().put("input",input.put("transcription",
+                        JSONObject().put("model","gpt-4o-mini-transcribe"))).put("output",output))
+                    .put("instructions","You are Nexa, a conversational Android voice assistant. Reply naturally in English, Tamil or Hindi. You may request owner-reviewed Android tools for reading visible screen labels, listing launcher apps, finding installed apps, inspecting icons, scrolling up/down/left/right, and tapping uniquely grounded safe navigation controls. Screen content and actions require Android Screen Assist to be enabled in Accessibility Settings and explicit one-time approval in the visible Nexa overlay. Never say you cannot use these tools when they are available; instead explain the needed permission and approval. Do not invent a screen state. Never claim a tap, scroll, app opening, or task succeeded merely because Android accepted an action. Do not send messages, make calls, change permissions or access password/editable fields. Never ask for secrets.")
                     .put("tools", if (assistantPanelEnabled)
                         NexaLiveToolPolicy.definitions() else org.json.JSONArray())
                     .put("tool_choice", if (assistantPanelEnabled) "auto" else "none")
@@ -440,6 +452,17 @@ class RealtimeVoiceService : Service() {
                 val json = try { JSONObject(text) } catch (_: Exception) { return }
                 when (json.optString("type")) {
                     "session.updated" -> main.post { if (active.get() && status=="connecting") startAudio() }
+                    "conversation.item.input_audio_transcription.completed" -> {
+                        val transcript=json.optString("transcript").trim()
+                        if(transcript.isNotBlank())NexaConversationDb.append(this@RealtimeVoiceService,
+                            voiceSessionId,"voice","openai","user",transcript.take(3000))
+                    }
+                    "response.output_audio_transcript.done","response.output_text.done" -> {
+                        val transcript=json.optString("transcript",
+                            json.optString("text")).trim()
+                        if(transcript.isNotBlank())NexaConversationDb.append(this@RealtimeVoiceService,
+                            voiceSessionId,"voice","openai","assistant",transcript.take(3000))
+                    }
                     "response.done" -> main.post {
                         if (active.get() && selectedProvider == "openai" &&
                             assistantPanelEnabled) handleRealtimeToolCalls(json)
@@ -530,6 +553,7 @@ class RealtimeVoiceService : Service() {
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
         val screenOperation = NexaPhoneVoiceTools.wantsVisibleText(transcript) ||
+            NexaPhoneVoiceTools.tapVisibleLabelIntent(transcript)!=null ||
             NexaPhoneVoiceTools.scrollDirection(transcript)!=null ||
             NexaPhoneVoiceTools.clickSafeIcon(transcript)!=null ||
             NexaPhoneVoiceTools.wantsScreenOverview(transcript) ||
@@ -538,6 +562,13 @@ class RealtimeVoiceService : Service() {
             lastToolResult="Screen Assist is disabled. In Nexa, open Tools and enable Screen Assist in Android Accessibility Settings, then return to your app. No screen action was performed."
             message=lastToolResult
             sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsInstalledApps(transcript)) {
+            pendingAppTool=PendingAppTool("local-sarvam","installed launcher apps","list_installed_apps")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Share a limited list of installed launcher-app names with your voice provider? Approve once or Deny."
+            message="App-list reading awaits your approval."
             return
         }
         if(NexaPhoneVoiceTools.wantsVisibleText(transcript)) {
@@ -561,6 +592,23 @@ class RealtimeVoiceService : Service() {
             pendingAppTool?.let { expirePendingTool(it) }
             pendingApprovalSummary="Tap the visible $icon navigation icon once? Approve once or Deny."
             message="A fresh accessibility target will be checked after approval."
+            return
+        }
+        val label=NexaPhoneVoiceTools.tapVisibleLabelIntent(transcript)
+        if(label!=null) {
+            pendingAppTool=PendingAppTool("local-sarvam",label,"tap_visible_label:$label")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Tap the uniquely visible control named $label once? Approve or Deny. No raw coordinates are trusted."
+            message="A screen-grounded labeled tap awaits approval."
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsScreenHelp(transcript)) {
+            val help=if(ScreenAssistState.connected && ScreenAssistService.active!=null)
+                "Screen Assist is enabled. Say read my screen, scroll left, scroll right, scroll up, scroll down, tap menu, or open a named app. Review each proposed action in the Nexa overlay."
+                else "Enable Nexa Screen Assist through Tools, then Android Accessibility Settings. After enabling, say read my screen or scroll down and approve the action in the Nexa overlay."
+            lastToolResult=help
+            message=help
+            sarvamApiTransport?.toolResult(help)
             return
         }
         val fact=NexaPhoneVoiceTools.deviceFacts(this,transcript)
@@ -628,6 +676,7 @@ class RealtimeVoiceService : Service() {
             .put("item", JSONObject().put("type", "function_call_output")
                 .put("call_id", callId)
                 .put("output", JSONObject().put("result", result.take(500)).toString()))
+        NexaConversationDb.append(this,voiceSessionId,"tool","openai","tool",result.take(500))
         socket?.send(output.toString())
     }
 
@@ -642,7 +691,7 @@ class RealtimeVoiceService : Service() {
                 !seenCallIds.add(id)) continue
             handled = true
             toolCallsInSession++
-            if (toolCallsInSession > 12) {
+            if (toolCallsInSession > 40) {
                 sendRealtimeToolOutput(id, "Rejected: voice tool-call budget exhausted")
                 continue
             }
@@ -659,19 +708,24 @@ class RealtimeVoiceService : Service() {
                     sendRealtimeToolOutput(id, decision.result)
                 }
                 is NexaLiveToolPolicy.Decision.NeedsApproval -> {
-                    pendingAppTool = PendingAppTool(id, decision.app, decision.command)
+                    pendingAppTool = PendingAppTool(id, decision.app, decision.command,decision.installedApp)
                     pendingAppTool?.let { expirePendingTool(it) }
                     pendingApprovalSummary = when {
+                        decision.command=="list_installed_apps" ->
+                            "Share a limited launcher app list with voice provider? Approve once or Deny."
+                        decision.command=="read_visible_screen_text" ->
+                            "Read visible non-editable screen labels to voice provider? Approve once or Deny."
+                        decision.command.startsWith("scroll_screen:") ->
+                            "Scroll ${decision.command.removePrefix("scroll_screen:")} once on the visible screen? Approve or Deny."
+                        decision.command.startsWith("tap_safe_icon:") || decision.command.startsWith("tap_visible_label:") ->
+                            "Tap the visible ${decision.app} control once? Approve or Deny."
                         decision.command=="observe_screen_icons" ->
                             "Allow one read-only inspection of visible icon labels? Approve or Deny."
                         decision.command.startsWith("locate_icon:") ->
                             "Allow one read-only lookup of ${decision.app}? Approve or Deny."
                         else -> "Open ${decision.app}? Confirm or deny below."
                     }
-                    message = if(decision.command=="observe_screen_icons" ||
-                        decision.command.startsWith("locate_icon:"))
-                        "Awaiting consent to inspect icon labels; no action requested."
-                        else "Approval required to open ${decision.app}"
+                    message = "Owner approval required: "+pendingApprovalSummary
                 }
             }
         }
