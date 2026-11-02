@@ -38,6 +38,22 @@ class NexaScreenInteractionPolicyAndroidTest {
         assertFalse(NexaPhoneVoiceTools.wantsScreenOverview("delete everything"))
     }
 
+    @Test fun targetedVoiceLookupIsReadOnlyAndRequiresApproval() {
+        val ctx=androidx.test.core.app.ApplicationProvider
+            .getApplicationContext<android.content.Context>()
+        val request=NexaLiveToolPolicy.decide(ctx,"request_locate_visible_icon",
+            JSONObject().put("icon","search").toString())
+        assertTrue(request is NexaLiveToolPolicy.Decision.NeedsApproval)
+        assertEquals("locate_icon:search",
+            (request as NexaLiveToolPolicy.Decision.NeedsApproval).command)
+        val rejected=NexaLiveToolPolicy.decide(ctx,"request_locate_visible_icon",
+            JSONObject().put("icon","send_message").toString())
+        assertTrue(rejected is NexaLiveToolPolicy.Decision.Immediate)
+        assertEquals("search",NexaPhoneVoiceTools.locateIconIntent("Where is the search icon?"))
+        assertEquals("video_call",NexaPhoneVoiceTools.locateIconIntent("find the video call button"))
+        assertNull(NexaPhoneVoiceTools.locateIconIntent("tap the search icon"))
+    }
+
     @Test fun voiceIconToolRequiresExplicitApprovalAndEmptyArguments() {
         val tool=NexaLiveToolPolicy.definitions()
         assertTrue((0 until tool.length()).any {tool.getJSONObject(it).optString("name")=="request_visible_icons"})

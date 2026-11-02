@@ -132,7 +132,10 @@ class ScreenAssistService : AccessibilityService() {
         val rootPkg = root.packageName?.toString().orEmpty()
         if (rootPkg != pkg) return
         if (ScreenIconScanState.isArmed()) {
-            ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root))
+            val box = android.graphics.Rect()
+            root.getBoundsInScreen(box)
+            ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root),
+                IconBox(box.left,box.top,box.right,box.bottom))
         }
         if (NexaVisualIconCapture.isArmed()) {
             NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root))
@@ -261,6 +264,14 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             elements.pushMap(item)
         }
         result.putArray("icons", elements)
+        snap.windowBounds?.let { b ->
+            val window=Arguments.createMap()
+            window.putInt("left",b.left)
+            window.putInt("top",b.top)
+            window.putInt("right",b.right)
+            window.putInt("bottom",b.bottom)
+            result.putMap("windowBoundsPx",window)
+        }
         p.resolve(result)
     }
 

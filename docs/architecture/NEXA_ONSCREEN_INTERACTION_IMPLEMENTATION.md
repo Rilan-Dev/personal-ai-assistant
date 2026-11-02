@@ -92,3 +92,20 @@ literal, finite-state guide; it is not an unrestricted multi-step agent.
 No model-generated screen plan can invoke Android actions; the guide is
 owner-directed. A guide finishing only means its requested clicks were
 submitted to Android, not that a business task succeeded.
+
+
+## Local screen understanding and read-only voice lookup (2026-11-03)
+
+The next milestone adds deterministic, local icon questions without expanding cross-app action privileges:
+
+- The one-time icon scan now carries optional, validated `windowBoundsPx` captured with the same accessibility observation. On multiwindow layouts, relative location hints refer to the *observed app window*, not the entire display.
+- `packages/agent-core/src/screen-understanding.ts` resolves a constrained grammar such as "Where is the search icon?", "Find the menu button" and "List visible icons" from a validated short-lived snapshot. It returns named locations (e.g. top-right) only when trustworthy window geometry exists. Repeated matches are ambiguous rather than silently ranked.
+- Action requests, long compound commands and unsupported natural-language instructions are rejected; this module never returns a native action token, click coordinate or executable plan. Unknown visual icons are not treated as verified, and call/send/delete controls remain read-only.
+- React Native Tools now provides a locally evaluated icon-question input plus counts of known navigation controls and unlabeled icons. Nothing is sent to an AI provider by this feature. The existing optional "Explain metadata in Chat" flow remains a separate explicit owner action.
+- OpenAI Realtime adds an explicitly approved `request_locate_visible_icon` tool with an enumerated target; Sarvam Model API voice can recognize exact "Where is the search icon?" phrases. Each request requires a visible owner approval. A fresh external app scan runs only after approval, returns a short spoken relative-location hint, and discards actionable state.
+- New Node and Android test cases were committed for strict read-only grammar, stale snapshots, ambiguity, window geometry, action rejection, voice consent and provider-tool arguments.
+- **Testing status:** source additions only; no APK, emulator or physical phone acceptance claimed. No production deployment, CI automation change or new permission added.
+
+### Next design/acceptance constraints
+
+More capable device action workflows must continue to use fresh native window/target confirmation and the encrypted at-most-once journal, not any visual model description or this read-only answer. Rich per-element visual similarity and OEM-specific accessibility testing remain future work.

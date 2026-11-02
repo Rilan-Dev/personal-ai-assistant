@@ -21,6 +21,8 @@ export type ScreenIconSnapshot = {
   capturedAtWallMs: number;
   expiresInMs: number;
   icons: ScreenIcon[];
+  /** App-window rectangle captured alongside icons. Never a target for actions. */
+  windowBoundsPx?: IconRect;
   /** There is deliberately no screenshot or arbitrary page text in this contract. */
 };
 
@@ -59,6 +61,16 @@ export function parseScreenIconSnapshot(input: unknown): ScreenIconSnapshot | nu
       !Number.isInteger(input.expiresInMs) || (input.expiresInMs as number) <= 0 ||
       (input.expiresInMs as number) > 60_000 ||
       !Array.isArray(input.icons) || input.icons.length > 64) return null;
+  let windowBoundsPx: IconRect | undefined;
+  if (input.windowBoundsPx !== undefined) {
+    const b=input.windowBoundsPx;
+    if (!obj(b) || !coordinate(b.left) || !coordinate(b.top) ||
+        !coordinate(b.right) || !coordinate(b.bottom) ||
+        (b.right as number) <= (b.left as number) ||
+        (b.bottom as number) <= (b.top as number)) return null;
+    windowBoundsPx={left:b.left as number,top:b.top as number,
+      right:b.right as number,bottom:b.bottom as number};
+  }
   const icons: ScreenIcon[] = [];
   const ids = new Set<string>();
   for (const item of input.icons) {
@@ -80,5 +92,6 @@ export function parseScreenIconSnapshot(input: unknown): ScreenIconSnapshot | nu
   }
   return {version: 1, snapshotId: input.snapshotId,
     packageName: input.packageName, capturedAtWallMs: input.capturedAtWallMs as number,
-    expiresInMs: input.expiresInMs as number, icons};
+    expiresInMs: input.expiresInMs as number, icons,
+    ...(windowBoundsPx ? {windowBoundsPx} : {})};
 }

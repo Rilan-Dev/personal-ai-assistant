@@ -34,6 +34,16 @@ internal object NexaPhoneVoiceTools {
             "what buttons are on my screen","inspect screen icons")
     }
 
+    /** Exact local spoken questions only; suggestions always need an owner approval. */
+    fun locateIconIntent(utterance: String): String? {
+        val normalized=utterance.trim().lowercase(Locale.ROOT)
+            .replace(Regex("[?.!]+$"),"").trim()
+            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val match=Regex("^(?:where is|find|locate) (?:the |my )?(search|menu|settings|back|close|call|video call|send|attach|camera|microphone) (?:icon|button|control)$")
+            .matchEntire(normalized) ?: return null
+        return match.groupValues[1].replace(' ','_')
+    }
+
     fun deviceFacts(context: Context, utterance: String): String? {
         val q=utterance.lowercase(Locale.ROOT).trim()
             .replace(Regex("[?.!,]+$"),"").trim()

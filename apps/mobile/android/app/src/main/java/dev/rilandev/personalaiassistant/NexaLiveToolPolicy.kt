@@ -49,6 +49,18 @@ internal object NexaLiveToolPolicy {
                 .put("type","object")
                 .put("properties",JSONObject())
                 .put("additionalProperties",false)))
+        tools.put(JSONObject()
+            .put("type","function")
+            .put("name","request_locate_visible_icon")
+            .put("description","Request owner approval for one read-only lookup of a named visible icon in the active application. No tap, screenshot, arbitrary text or action is performed.")
+            .put("parameters",JSONObject()
+                .put("type","object")
+                .put("properties",JSONObject().put("icon",JSONObject()
+                    .put("type","string")
+                    .put("enum",JSONArray(listOf("menu","search","settings","back","close",
+                        "call","video_call","send","attach","camera","microphone")))))
+                .put("required",JSONArray(listOf("icon")))
+                .put("additionalProperties",false)))
         return tools
     }
 
@@ -66,6 +78,15 @@ internal object NexaLiveToolPolicy {
             "request_visible_icons" -> {
                 if(args.length()!=0) Decision.Immediate("Rejected: icon overview has no arguments")
                 else Decision.NeedsApproval("visible screen controls", "observe_screen_icons")
+            }
+            "request_locate_visible_icon" -> {
+                if(args.length()!=1 || !args.has("icon"))
+                    return Decision.Immediate("Rejected: invalid icon lookup")
+                val target=args.optString("icon")
+                if(target !in setOf("menu","search","settings","back","close","call",
+                        "video_call","send","attach","camera","microphone"))
+                    Decision.Immediate("Rejected: unsupported icon name")
+                else Decision.NeedsApproval("$target icon","locate_icon:$target")
             }
             "request_open_app" -> {
                 if (args.length() != 1 || !args.has("app"))
