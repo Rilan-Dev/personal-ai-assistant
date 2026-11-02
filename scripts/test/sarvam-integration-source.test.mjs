@@ -24,9 +24,9 @@ test("Sarvam voice agent credentials and stable pseudonymous user ID are encrypt
   assert.match(agent,/write\(name\("private","sarvam-voice"\),data\)/);
   assert.match(agent,/UUID\.randomUUID\(\)\.toString\(\)/);
   assert.match(agent,/fun openVoiceCredentials/);
-  assert.match(agent,/data.optString\("provider"\)!="openai"/);
+  assert.match(agent,/provider!="sarvam" && provider!="openai"/);
   assert.match(agent,/VoiceCredentials\("openai",key\)/);
-  assert.match(agent,/VoiceCredentials\("sarvam",key,org,work,app,user\)/);
+  assert.match(agent,/VoiceCredentials\("sarvam-api",key\)/);
   assert.match(agent,/openSarvamApiKey/);
   assert.doesNotMatch(agent,/Log\.d\(|Log\.i\(/);
 });
@@ -56,7 +56,7 @@ test("Sarvam STS uses exact managed Voice Agent audio WebSocket protocol",()=>{
 test("Live Sarvam route is native FGS audio-to-audio with NO transcript handlers",()=>{
   assert.match(voice,/selectedProvider=="sarvam"/);
   assert.match(voice,/SarvamAudioTransport\(/);
-  assert.match(voice,/activeRate=if\(selectedProvider=="sarvam"\)16000 else RATE/);
+  assert.match(voice,/activeRate=if\(selectedProvider=="sarvam-api" \|\| selectedProvider=="sarvam"\)16000 else RATE/);
   assert.match(voice,/sarvamTransport\?\.sendAudio\(bytes\)/);
   assert.match(voice,/sarvamTransport\?\.close\(\)/);
   assert.match(voice,/startForeground\(NOTIFICATION_ID/);
@@ -96,7 +96,7 @@ test("Chat/Voice/Settings support Sarvam user configuration without automatic se
   assert.match(ui,/sarvamVoiceConfigAvailable/);
   assert.match(ui,/saveSarvamVoiceConfig/);
   assert.match(ui,/deleteSarvamVoiceConfig/);
-  assert.match(ui,/Sarvam Voice Agent \(live STS\)/);
+  assert.match(ui,/Sarvam API Realtime Voice/);
   assert.match(ui,/dictateSarvamOnce\(\)/);
   assert.match(ui,/speakSarvamOnce\(/);
   assert.match(ui,/startOwnerLiveVoice\(/);
@@ -121,7 +121,7 @@ test("Android microphone consent identifies the actual selected voice provider",
   assert.match(controls,/provider==='sarvam'/);
   assert.match(controls,/your Sarvam managed Voice Agent/);
   assert.match(controls,/your OpenAI realtime provider/);
-  assert.match(ui,/startOwnerLiveVoice\(useSamvaad\?'sarvam':'openai'\)/);
+  assert.match(ui,/startOwnerLiveVoice\(activeProvider.provider==='sarvam'\?'sarvam':'openai'\)/);
 });
 
 
