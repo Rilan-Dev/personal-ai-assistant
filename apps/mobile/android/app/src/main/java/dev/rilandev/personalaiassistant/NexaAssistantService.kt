@@ -557,7 +557,13 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         val hasCredentials = try {
             AgentJournalModule.openVoiceCredentials(app) != null
         } catch (_: Exception) { false }
-        val automaticLiveVoice = saved && hasCredentials
+        // "Hey Nexa" is itself an explicit owner-armed wake activation.
+        // Do not demand a second assistant-gesture toggle after the wake
+        // model has been deliberately enabled. Generic Android gestures and
+        // overlay taps retain the separate auto-invocation preference.
+        val cameFromWake = args?.getBoolean("nexa_hotword") == true
+        val automaticLiveVoice = hasCredentials && (cameFromWake &&
+            NexaWakeWordService.enabled(app) || saved)
         autoDismissAfterCommand = false
         // Preserve which explicit activation path brought up the session for
         // accessibility, while the on-device recognizer behavior is identical.
@@ -577,7 +583,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                 // second keyword-based command mode. Local tools remain
                 // available only when owner explicitly taps Talk.
                 if (automaticLiveVoice) startOwnerVoice()
-                else feedback("Enable live AI after assistant invocation and configure Sarvam in Nexa Setup.")
+                else feedback("Save a live AI provider key and allow microphone streaming in Nexa Settings. For assistant gestures also enable Auto voice in Setup.")
             }
         }, 420L)
     }
