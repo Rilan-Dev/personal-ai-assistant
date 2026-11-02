@@ -11,7 +11,7 @@ const nativeUi=readFileSync('apps/mobile/src/native/liveVoice.ts','utf8');
 const ui=readFileSync('apps/mobile/App.tsx','utf8');
 
 test('owner tests Sarvam signed Voice Agent authorization locally, without streaming or exposing secrets',()=>{
-  assert.match(readiness,/AgentJournalModule\.openVoiceCredentials\(context\)/);
+  assert.match(readiness,/AgentJournalModule\.openSarvamVoicePreflightCredentials\(context\)/);
   assert.match(readiness,/https:\/\/apps\.sarvam\.ai\/api\/app-runtime\//);
   assert.match(readiness,/header\("X-API-Key", cfg\.apiKey\)/);
   assert.match(readiness,/appendQueryParameter\("interaction_type", "call"\)/);
