@@ -483,3 +483,11 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Run Voice → Verify Sarvam API realtime connection (STT & TTS WS handshakes + synthetic LLM request, no audio) then real 3+ turn conversation, 20+ second speech, barge-in, mute, Stop/restart, wake-to-live and phone tool approval/denial. Capture sanitized device logcat if the voice service crashes.
 - This is compositional STT→LLM→TTS using two continuous vendor WS plus per-turn LLM REST, not a single native speech-to-speech provider endpoint. No provider-side zero-data-retention guarantee is possible merely from app settings.
 - Do not access or execute on the AlmaLinux home server until user gives explicit approval. No production changes to AI Comms server needed.
+
+## 2026-11-03 — Android companion acceptance
+1. Promote exact tested Development revision without force. Run native Android CI: Kotlin compilation, full emulator instrumentation including NexaPhoneVoiceToolsAndroidTest, signed APK. Fix failures before install.
+2. On user's phone, confirm installed git revision and permissions; run Hey Nexa with voice key+consent enabled but assistant-gesture auto toggle OFF. Overlay must show Connecting → Listening automatically, without Live AI tap. Test also disabled consent, which must refuse recording.
+3. Ask spoken battery percentage and free storage; confirm truthful Android values. Ask to open an installed **non-hardcoded** app by its exact label; verify Approve once / Deny on the overlay, 60-second expiry, and no false claim of screen navigation. Compare with WhatsApp app open.
+4. Test Sarvam model function-calling for read-only battery/storage from paraphrases; verify model receives validated tool result and continues conversation. Agent app opening still uses local owner transcript gate.
+5. Do not claim screen OCR, icon recognition, arbitrary swipe/tap/type, phone calls or full autonomous harness are implemented. Follow the phased design doc, explicit permission and Play Accessibility policy constraints.
+6. Capture redacted AndroidRuntime stack trace if OEM phone crashes or native callback fails. No credential, screen content or raw audio in logs.
