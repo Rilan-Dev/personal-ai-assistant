@@ -92,8 +92,8 @@ internal object NexaVisualIconCapture {
                             // Never return crops from a different window/package.
                             val current=service.externalWindowRoot()
                             val stillSame=try {
-                                if(current?.packageName?.toString()!=pkg || current.windowId!=windowId)
-                                    false
+                                if(current == null || current.packageName?.toString()!=pkg ||
+                                    current.windowId!=windowId) false
                                 else {
                                     val fresh=ScreenIconDetector.detect(current)
                                     targets.all { target ->
