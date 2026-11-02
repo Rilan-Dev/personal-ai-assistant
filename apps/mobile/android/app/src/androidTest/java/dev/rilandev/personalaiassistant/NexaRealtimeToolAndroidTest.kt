@@ -36,7 +36,8 @@ class NexaRealtimeToolAndroidTest {
         val silence = ByteArray(1280)
         gate.reset(1000L)
         repeat(6) { gate.observePcm(silence, silence.size, 20_000L + it * 40) }
-        assertTrue(gate.inactive(47_000L))
+        assertFalse(gate.inactive(47_000L))
+        assertTrue(gate.inactive(125_000L))
 
         gate.reset(1000L)
         val speech = ByteArray(1280)
@@ -46,6 +47,7 @@ class NexaRealtimeToolAndroidTest {
         }
         repeat(6) { gate.observePcm(speech, speech.size, 20_000L + it * 40) }
         assertFalse(gate.inactive(60_000L))
-        assertTrue(gate.inactive(70_000L))
+        assertFalse(gate.inactive(70_000L))
+        assertTrue(gate.inactive(145_000L))
     }
 }
