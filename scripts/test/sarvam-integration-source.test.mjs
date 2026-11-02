@@ -60,7 +60,7 @@ test("Live Sarvam route is native FGS audio-to-audio with NO transcript handlers
   assert.match(voice,/sarvamTransport\?\.sendAudio\(bytes\)/);
   assert.match(voice,/sarvamTransport\?\.close\(\)/);
   assert.match(voice,/startForeground\(NOTIFICATION_ID/);
-  assert.match(voice,/15\*60\*1000L/);
+  assert.match(voice,/60\*60\*1000L/);
   assert.doesNotMatch(audio,/transcriptCallback|response\.transcript|append\(.*transcript|textCallback|messages\.add/);
   assert.doesNotMatch(audio,/device\.set_flashlight|device\.open_app|dispatchGesture|performGlobalAction/);
   assert.doesNotMatch(audio,/Log\.|println\(|SharedPreferences|writeFile|FileOutputStream/);
