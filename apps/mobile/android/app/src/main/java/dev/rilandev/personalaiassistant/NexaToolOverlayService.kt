@@ -236,10 +236,29 @@ class NexaToolOverlayService : Service() {
         render()
     }
 
+
+    private fun proposeScroll(direction: String) {
+        inspectedScreen = null
+        NexaScreenActions.reset()
+        note = ScreenAssistService.active?.let { NexaScreenScroll.prepare(it,direction) }
+            ?: "Enable Screen Assist before requesting a scroll."
+        render()
+    }
+    private fun confirmScroll() {
+        note = ScreenAssistService.active?.let { NexaScreenScroll.confirm(it) }
+            ?: "Screen Assist unavailable; no scroll performed."
+        render()
+    }
+    private fun cancelScroll() {
+        NexaScreenScroll.cancel()
+        note = "Scroll cancelled."
+        render()
+    }
     private fun showSection(name: String) {
         if (name != "tools") {
             inspectedScreen = null
             NexaScreenActions.reset()
+            NexaScreenScroll.cancel()
         }
         section = name
         render()
@@ -366,6 +385,18 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(text("Safe owner-confirmed scrolling of the currently visible app.",11f,true))
+                        if (NexaScreenScroll.isPending()) {
+                            addView(row(
+                                button("Confirm scroll") { confirmScroll() },
+                                button("Cancel scroll") { cancelScroll() }
+                            ))
+                        } else {
+                            addView(row(
+                                button("Scroll up") { proposeScroll("up") },
+                                button("Scroll down") { proposeScroll("down") }
+                            ))
+                        }
                         addView(text("Inspect icons on the app behind this floating panel.",11f,true))
                         addView(button("Inspect visible icons") { inspectVisibleIcons() })
                         val snapshot = inspectedScreen
@@ -479,6 +510,7 @@ class NexaToolOverlayService : Service() {
         history.clear()
         inspectedScreen = null
         NexaScreenActions.reset()
+        NexaScreenScroll.cancel()
         super.onDestroy()
     }
 }
