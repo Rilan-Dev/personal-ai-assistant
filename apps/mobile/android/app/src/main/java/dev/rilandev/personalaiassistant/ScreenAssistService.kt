@@ -139,7 +139,7 @@ class ScreenAssistService : AccessibilityService() {
                 IconBox(box.left,box.top,box.right,box.bottom),root.windowId)
         }
         if (NexaVisualIconCapture.isArmed()) {
-            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root))
+            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),root.windowId)
         }
         if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
@@ -303,6 +303,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         val item = Arguments.createMap()
         item.putString("snapshotId",snap.id)
         item.putString("packageName",snap.packageName)
+        snap.windowId?.let { item.putInt("windowId",it) }
         item.putDouble("capturedAtWallMs",snap.createdAt.toDouble())
         item.putInt("expiresInMs",snap.expiresInMs)
         val images = Arguments.createArray()
