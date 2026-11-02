@@ -1,5 +1,7 @@
 import {NativeModules,PermissionsAndroid,Platform} from 'react-native';
 
+export type SarvamVoiceAuthorization = { ready:boolean; code:string; message:string };
+
 export type LiveVoiceStatus={
   state:'stopped'|'connecting'|'listening'|'error';
   message:string;
@@ -14,6 +16,7 @@ interface NativeSession {
   getVoiceSessionStatus():Promise<LiveVoiceStatus>;
   setVoiceMicrophoneMuted(muted:boolean):Promise<boolean>;
   decideVoiceAppAction(approve:boolean):Promise<boolean>;
+  checkSarvamVoiceAuthorization():Promise<SarvamVoiceAuthorization>;
 }
 function module():NativeSession {
   const m=NativeModules.PAARealtimeVoice;
@@ -24,6 +27,7 @@ function module():NativeSession {
 export const liveVoiceAvailable=()=>Platform.OS==='android' &&
   typeof NativeModules.PAARealtimeVoice?.startVoiceSession==='function';
 export const getLiveVoiceStatus=()=>module().getVoiceSessionStatus();
+export const checkSarvamVoiceAuthorization=()=>module().checkSarvamVoiceAuthorization();
 
 export async function prepareOwnerLiveVoicePermissions(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
   if(!liveVoiceAvailable())return false;
