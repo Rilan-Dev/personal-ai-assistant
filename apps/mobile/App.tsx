@@ -35,7 +35,7 @@ import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwn
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
-import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig } from './src/native/sarvamVoiceConfig';
+import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
 import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
@@ -335,6 +335,9 @@ export default function App() {
   const [sarvamWorkspaceId,setSarvamWorkspaceId]=useState('');
   const [sarvamAppId,setSarvamAppId]=useState('');
   const [sarvamVoiceSaved,setSarvamVoiceSaved]=useState(false);
+  const [sarvamVoiceKeyInput,setSarvamVoiceKeyInput]=useState('');
+  const [sarvamVoiceKeySaved,setSarvamVoiceKeySaved]=useState(false);
+  const [sarvamStreamingConsent,setSarvamStreamingConsent]=useState(false);
   const [sarvamVoiceBusy,setSarvamVoiceBusy]=useState(false);
   const [sarvamVoiceNotice,setSarvamVoiceNotice]=useState('');
   const [liveVoiceStatus,setLiveVoiceStatus] = useState<LiveVoiceStatus>({
@@ -530,6 +533,9 @@ export default function App() {
   useEffect(()=>{
     if(!engine.live||!sarvamVoiceConfigAvailable())return;
     let mounted=true;
+    void Promise.all([samvaadWorkspaceKeyPresent(),samvaadStreamingConsentStatus()])
+      .then(([hasKey,consent])=>{if(mounted){setSarvamVoiceKeySaved(hasKey);setSarvamStreamingConsent(consent);}})
+      .catch(()=>{});
     readSarvamVoiceConfig().then(saved=>{
       if(!mounted||!saved)return;
       setSarvamOrgId(saved.orgId);
@@ -547,7 +553,7 @@ export default function App() {
         orgId:sarvamOrgId.trim(),workspaceId:sarvamWorkspaceId.trim(),appId:sarvamAppId.trim()
       });
       setSarvamVoiceSaved(true);
-      setSarvamVoiceNotice('Voice Agent IDs securely saved. Select Sarvam AI and save its API key above.');
+      setSarvamVoiceNotice('Voice Agent IDs saved on-device. Save the separate Samvaad Voice Agent key below; the AI Chat provider key is not required.');
     } catch {
       setSarvamVoiceNotice('Invalid Sarvam Voice Agent IDs or encrypted storage unavailable. Use IDs shown in your Sarvam dashboard.');
     } finally{setSarvamVoiceBusy(false);}
@@ -558,8 +564,43 @@ export default function App() {
     try {
       await deleteSarvamVoiceConfig();
       setSarvamOrgId('');setSarvamWorkspaceId('');setSarvamAppId('');
-      setSarvamVoiceSaved(false);setSarvamVoiceNotice('Voice Agent configuration erased.');
+      setSarvamVoiceSaved(false);setSarvamVoiceKeySaved(false);setSarvamStreamingConsent(false);
+      setSarvamVoiceKeyInput('');setSarvamVoiceNotice('Voice Agent IDs, workspace key, and streaming consent erased from Nexa.');
     }catch{setSarvamVoiceNotice('Unable to erase Voice Agent configuration.');}
+    finally{setSarvamVoiceBusy(false);}
+  };
+  const saveSarvamVoiceWorkspace=async()=>{
+    if(!engine.live||sarvamVoiceBusy)return;
+    setSarvamVoiceBusy(true);setSarvamVoiceNotice('');
+    try{
+      await saveSamvaadWorkspaceKey(sarvamVoiceKeyInput);
+      setSarvamVoiceKeySaved(true);setSarvamStreamingConsent(false);setSarvamVoiceKeyInput('');
+      setSarvamVoiceNotice('Samvaad workspace key encrypted on this phone. Audio remains disabled until you explicitly accept remote processing and retention risk.');
+    }catch{
+      setSarvamVoiceNotice('Use a Samvaad workspace key beginning sk_samvaad_. This is separate from the Sarvam Model API chat key.');
+    }finally{setSarvamVoiceBusy(false);}
+  };
+  const changeSarvamStreamingConsent=async()=>{
+    if(sarvamVoiceBusy)return;
+    setSarvamVoiceBusy(true);
+    try {
+      const next=!sarvamStreamingConsent;
+      await setSamvaadStreamingConsent(next);
+      setSarvamStreamingConsent(next);
+      setSarvamVoiceNotice(next
+        ? 'Sarvam speech processing enabled by your choice. Voice Agents may retain recordings and transcripts. This does not guarantee zero provider retention.'
+        : 'Sarvam audio streaming disabled. No new Sarvam voice session may start.');
+    }catch{setSarvamVoiceNotice('Could not update private voice consent. Streaming remains blocked unless stored consent is valid.');}
+    finally{setSarvamVoiceBusy(false);}
+  };
+  const removeSarvamVoiceWorkspace=async()=>{
+    if(sarvamVoiceBusy)return;
+    setSarvamVoiceBusy(true);
+    try{
+      await deleteSamvaadWorkspaceKey();
+      setSarvamVoiceKeySaved(false);setSarvamStreamingConsent(false);setSarvamVoiceKeyInput('');
+      setSarvamVoiceNotice('Samvaad voice key and consent cleared from device storage. This does not delete past Sarvam provider records.');
+    }catch{setSarvamVoiceNotice('Could not clear Samvaad credentials.');}
     finally{setSarvamVoiceBusy(false);}
   };
   const testSarvamVoice=async()=>{
@@ -577,17 +618,18 @@ export default function App() {
   };
   const startLiveVoice=async()=>{
     if(!engine.live||liveVoiceBusy||running||listening||speaking||voiceInProgress.current)return;
-    if(!activeProvider||!['openai','sarvam'].includes(activeProvider.provider)){
-      setVoiceNotice('For live speech, select Sarvam AI or OpenAI and save its API key in Settings.');
+    const useSamvaad=sarvamVoiceKeySaved;
+    if(useSamvaad && (!sarvamVoiceSaved || !sarvamStreamingConsent)){
+      setVoiceNotice('Samvaad live voice needs saved Voice Agent IDs and your explicit speech-processing consent. Sarvam does not currently guarantee zero Voice Agent retention.');
       return;
     }
-    if(activeProvider.provider==='sarvam'&&!sarvamVoiceSaved){
-      setVoiceNotice('For Sarvam live voice, save organization, workspace and committed Voice Agent IDs in Settings.');
+    if(!useSamvaad && (!activeProvider || activeProvider.provider!=='openai')){
+      setVoiceNotice('Save a dedicated Samvaad workspace key for live STS. A Sarvam Model API chat key is not a Voice Agent workspace key.');
       return;
     }
     setLiveVoiceBusy(true);setVoiceNotice('');
     try {
-      const success=await startOwnerLiveVoice(activeProvider.provider==='sarvam'?'sarvam':'openai');
+      const success=await startOwnerLiveVoice(useSamvaad?'sarvam':'openai');
       if(!success)setVoiceNotice('Live microphone permission was declined. No session started.');
       else setVoiceNotice('Session requested. Check connection status below; Android notification has Stop.');
     } catch {
@@ -728,7 +770,7 @@ export default function App() {
       setProviderKeyInput('');
       setProviderNotice('AI provider saved securely and enabled. Ask a question below to use it.');
     } catch {
-      setProviderNotice('Could not save AI settings. Check provider, model and key (12+ characters). No key was saved.');
+      setProviderNotice('Chat Provider accepts Model API keys, not sk_samvaad_ Voice Agent workspace keys. Put the Samvaad key in the dedicated Voice Agent card below. No chat key was saved.');
     } finally { setProviderBusy(false); }
   };
   const testAiConnection = async () => {
@@ -748,7 +790,9 @@ export default function App() {
         INVALID_RESPONSE: 'Provider responded but not in the supported AI format.',
         NETWORK_OR_TIMEOUT: 'Could not connect. Check internet, provider and connection.'
       };
-      setProviderNotice(explanation[code] ?? 'Connection test failed. Verify model name, provider and API key.');
+      setProviderNotice(code==='SAMVAAD_VOICE_KEY_ONLY'
+        ? 'This is a Voice Agents workspace key, not a Chat Model API key. Use the separate Samvaad Voice Agent field.'
+        : explanation[code] ?? 'Connection test failed. Verify model name, provider and API key.');
     } finally { setProviderBusy(false); }
   };
   const clearAiSettings = async () => {
@@ -1171,13 +1215,13 @@ export default function App() {
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
-          {activeProvider?.provider==='sarvam' &&
+          {sarvamVoiceKeySaved &&
             <Pressable accessibilityRole="button"
               disabled={liveVoiceBusy||liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
               style={styles.outlineAction} onPress={()=>void testSarvamVoice()}>
               <Text style={styles.outlineActionText}>Verify Sarvam Voice Agent connection</Text>
             </Pressable>}
-          {activeProvider?.provider==='sarvam' &&
+          {sarvamVoiceKeySaved &&
             <Text style={styles.settingHelp}>This checks the saved key, exact agent IDs and signed WebSocket authorization. It does not start the microphone or prove audio playback. Saaras model selection belongs to the managed agent configuration.</Text>}
           {Boolean(liveVoiceStatus.pendingAppApproval) && <View style={styles.actionCard}>
             <Text style={styles.actionTitle}>Voice tool approval needed</Text>
@@ -1482,8 +1526,37 @@ export default function App() {
               {sarvamVoiceSaved?'Saved':'Not configured'}
             </Text>
           </View>
-          <Text style={styles.cardText}>For direct audio-to-audio live conversations with Sarvam, create and commit a Voice Agent in the Sarvam dashboard. Enter its organization, workspace and application IDs. These are encrypted on-device; the Sarvam API key is saved in AI Configuration above.</Text>
-          <Text style={styles.settingHelp}>The live session sends PCM16 microphone audio over a signed Sarvam WebSocket and plays returned PCM audio. No transcript is displayed, sent to Chat, or saved locally. Sarvam performs recognition and reasoning on its servers and may retain call records under your Sarvam account policy.</Text>
+          <Text style={styles.cardText}>Samvaad Voice Agents uses a separate workspace key. Nexa keeps that key and Agent IDs encrypted on this phone. They do not enable the Chat provider or sync NexaHub data.</Text>
+          <Text style={styles.fieldLabel}>SAMVAAD WORKSPACE KEY (VOICE ONLY)</Text>
+          <TextInput accessibilityLabel="Samvaad Voice Agent workspace key" style={styles.settingInput}
+            value={sarvamVoiceKeyInput} onChangeText={setSarvamVoiceKeyInput}
+            autoCapitalize="none" autoCorrect={false} autoComplete="off"
+            secureTextEntry editable={!sarvamVoiceBusy}
+            placeholder={sarvamVoiceKeySaved?'Samvaad key saved on phone · enter replacement':'sk_samvaad_…'}
+            placeholderTextColor="#8190a8"/>
+          <View style={styles.buttonRow}>
+            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||!sarvamVoiceKeyInput}
+              onPress={()=>void saveSarvamVoiceWorkspace()} style={styles.primaryInline}>
+              <Text style={styles.primaryInlineText}>Save voice workspace key</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||!sarvamVoiceKeySaved}
+              onPress={()=>void removeSarvamVoiceWorkspace()} style={styles.outlineInline}>
+              <Text style={styles.outlineInlineText}>Clear voice key</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.warning}>Strict privacy notice: Sarvam receives live microphone audio for managed speech processing and may store call transcripts, recordings and operational logs. Zero-day Voice Agents retention is not currently supported. Nexa cannot override that provider behavior or its managed Agent settings.</Text>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked:sarvamStreamingConsent}}
+            disabled={sarvamVoiceBusy||!sarvamVoiceKeySaved}
+            onPress={()=>void changeSarvamStreamingConsent()} style={styles.settingRow}>
+            <View style={styles.settingText}>
+              <Text style={styles.settingTitle}>Allow Sarvam voice streaming</Text>
+              <Text style={styles.settingHelp}>Off by default. Turning on explicitly accepts remote voice processing and possible provider retention. No contacts, device files, messages or NexaHub content are added.</Text>
+            </View>
+            <View style={[styles.toggleTrack,sarvamStreamingConsent&&styles.toggleOn]}>
+              <View style={[styles.toggleThumb,sarvamStreamingConsent&&styles.toggleThumbOn]}/>
+            </View>
+          </Pressable>
+          <Text style={styles.settingHelp}>Only microphone audio and required anonymous session metadata are transmitted for the live STS call. Nexa does not send files, contacts, screen content or NexaHub records. Sarvam can process and retain speech/transcripts; voice calls stay disabled until explicit opt-in.</Text>
           <Text style={styles.fieldLabel}>SARVAM ORGANIZATION ID</Text>
           <TextInput accessibilityLabel="Sarvam organization ID" style={styles.settingInput}
             value={sarvamOrgId} onChangeText={v=>{setSarvamOrgId(v);setSarvamVoiceSaved(false);}}
