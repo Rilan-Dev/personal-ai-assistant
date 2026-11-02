@@ -38,3 +38,9 @@ test('navigation steps are bounded suggestions requiring separate inspection and
  assert.equal(proposeNavigationSteps('tap send',snap(),3000).status,'unsupported');
  assert.equal(proposeNavigationSteps('open settings',snap(),80000).status,'expired');
 });
+
+test('same-package screenshots from different Android windows never match',()=>{
+ assert.equal(groundVisualIcon(snap({windowId:10}),image({windowId:11}),guess,'v0',6000).status,'source_mismatch');
+ assert.equal(groundVisualIcon(snap({windowId:10}),image(),guess,'v0',6000).status,'source_mismatch');
+ assert.equal(groundVisualIcon(snap({windowId:10}),image({windowId:10}),guess,'v0',6000).status,'geometry_matched');
+});
