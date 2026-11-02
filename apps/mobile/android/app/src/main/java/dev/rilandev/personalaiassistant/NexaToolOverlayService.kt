@@ -48,6 +48,7 @@ class NexaToolOverlayService : Service() {
     private var note = "Local tools only. Full AI chat is available through Open full Chat."
     private val history = ArrayDeque<String>()
     private var inspectedScreen: OverlayScreenSnapshot? = null
+    private val guidedNavigation = NexaGuidedNavigation()
 
     override fun onBind(intent: Intent?): IBinder? = null
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -100,6 +101,25 @@ class NexaToolOverlayService : Service() {
         render()
     }
 
+    private fun startGuidedNavigation(raw: String) {
+        inspectedScreen = null
+        NexaScreenActions.reset()
+        NexaScreenScroll.cancel()
+        val result = guidedNavigation.start(raw, android.os.SystemClock.elapsedRealtime())
+        note = when(result) {
+            is NexaGuidedNavigation.StartResult.Started -> result.description
+            is NexaGuidedNavigation.StartResult.Rejected -> result.reason
+        }
+        section = "tools"
+        render()
+    }
+    private fun stopGuidedNavigation() {
+        guidedNavigation.cancel()
+        inspectedScreen = null
+        NexaScreenActions.reset()
+        note = "Guided navigation cancelled; no additional actions requested."
+        render()
+    }
     private fun sendLocal(raw: String) {
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
@@ -110,6 +130,13 @@ class NexaToolOverlayService : Service() {
             "what icons are on screen", "what icons are on my screen" -> {
                 section = "tools"
                 inspectVisibleIcons()
+                return
+            }
+            "find search in menu", "open search from menu", "find search from menu",
+            "open settings from menu", "find settings in menu",
+            "find search", "open search", "open menu", "find menu",
+            "find settings", "open settings" -> {
+                startGuidedNavigation(query)
                 return
             }
             "scroll up", "scroll down" -> {
@@ -235,6 +262,13 @@ class NexaToolOverlayService : Service() {
 
     private fun selectVisibleIcon(id: String) {
         val snap = inspectedScreen
+        val selected=snap?.icons?.singleOrNull { it.id==id }
+        val expected=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+        if (expected != null && selected?.semantic != expected) {
+            note="Guide is waiting for the " + expected + " control. Cancel guide to choose another."
+            render()
+            return
+        }
         val item = if (snap != null) NexaScreenActions.select(snap.token, id) else null
         note = if (item == null) "Icon selection expired. Inspect again."
             else "Confirm one tap on ${item.label} in ${snap?.packageName}? This action cannot be undone."
@@ -244,10 +278,27 @@ class NexaToolOverlayService : Service() {
     private fun confirmVisibleIcon() {
         val snap = inspectedScreen
         val service = ScreenAssistService.active
-        note = if (snap == null || service == null) {
+        val selected = NexaScreenActions.selected()
+        val expected=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+        if (expected != null && selected?.semantic != expected) {
+            note = "Guide target changed. Re-inspect the " + expected + " icon."
+            inspectedScreen = null
+            NexaScreenActions.reset()
+            render()
+            return
+        }
+        val outcome = if (snap == null || service == null) {
             "No current screen target. Inspect again."
         } else {
             NexaScreenActions.confirm(service, snap.token)
+        }
+        note=outcome
+        if (selected != null && outcome.startsWith("Android accepted") &&
+            guidedNavigation.afterConfirmedClick(selected.semantic,android.os.SystemClock.elapsedRealtime())) {
+            val next=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+            note += if (next != null) " Next guide step: " + next +
+                ". Inspect the updated screen and approve again."
+                else " All guide taps were requested. Inspect the app to verify the result."
         }
         inspectedScreen = null
         render()
@@ -283,6 +334,7 @@ class NexaToolOverlayService : Service() {
             inspectedScreen = null
             NexaScreenActions.reset()
             NexaScreenScroll.cancel()
+            guidedNavigation.cancel()
         }
         section = name
         render()
@@ -409,6 +461,17 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(text("Owner-guided navigation: one approved tap at each step.",11f,true))
+                        addView(row(
+                            button("Menu → Search") { startGuidedNavigation("find search in menu") },
+                            button("Menu → Settings") { startGuidedNavigation("open settings from menu") }
+                        ))
+                        val expectedGuide=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+                        if (expectedGuide != null) {
+                            addView(text("Guided step: find " + expectedGuide +
+                                " · inspect, choose and confirm. No auto-taps.",12f))
+                            addView(button("Cancel navigation guide") { stopGuidedNavigation() })
+                        }
                         addView(button("Action journal summary") { showActionJournalSummary() })
                         addView(text("The action log stores encrypted approval fingerprints and result categories, not screen contents.",11f,true))
                         addView(text("Safe owner-confirmed scrolling of the currently visible app.",11f,true))
@@ -440,14 +503,20 @@ class NexaToolOverlayService : Service() {
                                 snapshot.icons.take(12).forEach { item ->
                                     addView(row(
                                         button(item.label.take(18)) {
-                                            if (NexaScreenActionPolicy.permits(item)) selectVisibleIcon(item.id)
+                                            if (NexaScreenActionPolicy.permits(item) &&
+                                                (expectedGuide==null || item.semantic==expectedGuide))
+                                                selectVisibleIcon(item.id)
                                             else {
                                                 note = "Read-only control. Calls, messages and destructive actions are blocked."
                                                 render()
                                             }
                                         },
-                                        button(if (NexaScreenActionPolicy.permits(item)) "Select" else "Read only") {
-                                            if (NexaScreenActionPolicy.permits(item)) selectVisibleIcon(item.id)
+                                        button(if (NexaScreenActionPolicy.permits(item) &&
+                                            (expectedGuide==null || item.semantic==expectedGuide))
+                                            "Select" else "Read only") {
+                                            if (NexaScreenActionPolicy.permits(item) &&
+                                                (expectedGuide==null || item.semantic==expectedGuide))
+                                                selectVisibleIcon(item.id)
                                             else {
                                                 note = "This icon cannot be acted on by the screen assistant."
                                                 render()
@@ -537,6 +606,7 @@ class NexaToolOverlayService : Service() {
         inspectedScreen = null
         NexaScreenActions.reset()
         NexaScreenScroll.cancel()
+        guidedNavigation.cancel()
         super.onDestroy()
     }
 }
