@@ -54,4 +54,6 @@ test('private voice-only transport receives mic audio but no phone data or trans
   const transport=readFileSync(dir+'SarvamAudioTransport.kt','utf8');
   assert.doesNotMatch(transport,/NexaHub|nexahub|READ_CONTACTS|\.getContacts|MediaProjection|uploadFile|device\.open_app/);
   assert.match(transport,/client\.media\.audio_chunk/);
+  assert.match(transport,/user_identifier",UUID\.randomUUID\(\)\.toString\(\)/);
+  assert.doesNotMatch(transport,/user_identifier",cfg\.userId/);
 });
