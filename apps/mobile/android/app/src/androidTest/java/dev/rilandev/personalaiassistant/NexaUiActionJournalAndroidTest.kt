@@ -46,6 +46,18 @@ class NexaUiActionJournalAndroidTest {
         }
     }
 
+    @Test fun latestResultShowsOnlyActionTypeAndObservedAndroidEvidence() {
+        val token="test-"+UUID.randomUUID().toString()
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"scroll_right","com.example.privacytest"))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        assertTrue(NexaUiActionJournal.markObservation(ctx,token,"scroll_event_observed"))
+        val latest=NexaUiActionJournal.latestOutcome(ctx)
+        assertEquals("scroll_right",latest?.first)
+        assertEquals("scroll_event_observed",latest?.second)
+        assertFalse(latest.toString().contains("com.example.privacytest"))
+        assertFalse(latest.toString().contains(token))
+    }
+
     @Test fun unsafeOrMalformedClaimsAreRejected() {
         assertFalse(NexaUiActionJournal.claim(ctx,"short","tap","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),
