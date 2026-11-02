@@ -17,7 +17,7 @@ test('legacy Samvaad keys remain forbidden as Model API keys',()=>{
 test('user-selected Sarvam Model API key stays Android Keystore encrypted and old agent IDs are not used',()=>{
   assert.match(vault,/readEncrypted\(ctx,"provider-config"\)/);
   assert.match(vault,/fun openSarvamApiKey\(ctx: Context\)/);
-  assert.match(runtime,/SarvamApiVoiceTransport\(credentials\.apiKey/);
+  assert.match(runtime,/SarvamApiVoiceTransport\(applicationContext,credentials\.apiKey/);
   assert.doesNotMatch(transport,/sarvam-voice|sarvam-voice-key|cfg\.orgId|cfg\.workspaceId|cfg\.appId/);
   assert.doesNotMatch(transport,/writeFile|FileOutputStream|Log\.|println\(/);
 });
