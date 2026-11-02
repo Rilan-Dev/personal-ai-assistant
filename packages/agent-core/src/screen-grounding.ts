@@ -1,5 +1,5 @@
 import type {ScreenIconSnapshot, IconRect} from '../../agent-contracts/src/screen-icons.ts';
-type VisualIconPreview={snapshotId:string;packageName:string;windowId?:number;capturedAtWallMs:number;expiresInMs:number;crops:{iconId:string;boundsPx:IconRect}[]};
+type VisualIconPreview={snapshotId:string;packageName:string;windowId?:number;capturedAtWallMs:number;expiresInMs:number;expiresAtWallMs?:number;crops:{iconId:string;boundsPx:IconRect}[]};
 import type {IconVisionHint} from './icon-vision.ts';
 
 export type GroundingStatus='geometry_matched'|'source_mismatch'|'expired'|'ambiguous'|'conflicting'|'unknown'|'unmatched';
@@ -14,9 +14,12 @@ const semantics:Readonly<Record<string,string>>=Object.freeze({
  send:'send',delete:'delete',call:'call',camera:'camera',share:'share',
  attach:'attach','more options':'more_options',microphone:'microphone'
 });
-const validTime=(created:number,ttl:number,now:number)=>
- Number.isSafeInteger(created)&&Number.isFinite(now)&&Number.isInteger(ttl)&&
- ttl>0&&ttl<=60000&&now>=created&&now<created+ttl;
+const validTime=(created:number,ttl:number,now:number,expiresAt?:number)=>{
+ const cutoff=expiresAt??created+ttl;
+ return Number.isSafeInteger(created)&&Number.isFinite(now)&&Number.isInteger(ttl)&&
+  ttl>0&&ttl<=60000&&Number.isSafeInteger(cutoff)&&
+  cutoff<=created+60000&&cutoff>created&&now>=created&&now<cutoff;
+};
 const validRect=(r:IconRect)=>[r.left,r.top,r.right,r.bottom]
  .every(n=>Number.isInteger(n)&&n>=0&&n<=20000)&&r.right>r.left&&r.bottom>r.top;
 const overlap=(a:IconRect,b:IconRect)=>{
@@ -39,8 +42,8 @@ const result=(status:GroundingStatus,matchedIconId?:string):GroundingResult=>({
 export function groundVisualIcon(
  snapshot:ScreenIconSnapshot,visual:VisualIconPreview,hint:IconVisionHint,cropId:string,now:number
 ):GroundingResult{
- if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now)||
-    !validTime(visual.capturedAtWallMs,visual.expiresInMs,now)||
+ if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now,snapshot.expiresAtWallMs)||
+    !validTime(visual.capturedAtWallMs,visual.expiresInMs,now,visual.expiresAtWallMs)||
     Math.abs(snapshot.capturedAtWallMs-visual.capturedAtWallMs)>30000)return result('expired');
  if(snapshot.packageName!==visual.packageName ||
     (snapshot.windowId !== undefined || visual.windowId !== undefined) &&
@@ -67,16 +70,16 @@ export function createOwnerScreenGrant(){
  return {
   release(snapshot:ScreenIconSnapshot,now:number):boolean{
    released=null;until=0;
-   if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now)||
+   if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now,snapshot.expiresAtWallMs)||
       snapshot.icons.length>64||snapshot.version!==1)return false;
-   const remaining=Math.min(20000,snapshot.capturedAtWallMs+snapshot.expiresInMs-now);
+   const remaining=Math.min(20000,(snapshot.expiresAtWallMs??snapshot.capturedAtWallMs+snapshot.expiresInMs)-now);
    if(remaining<=0)return false;
    released={...snapshot,icons:snapshot.icons.map(i=>({...i,boundsPx:{...i.boundsPx}})),
     ...(snapshot.windowBoundsPx?{windowBoundsPx:{...snapshot.windowBoundsPx}}:{})};
    until=now+remaining;return true;
   },
   read(now:number):ScreenIconSnapshot|null{
-   if(!released||now>=until||!validTime(released.capturedAtWallMs,released.expiresInMs,now)){
+   if(!released||now>=until||!validTime(released.capturedAtWallMs,released.expiresInMs,now,released.expiresAtWallMs)){
     released=null;return null;
    }
    return released;
@@ -90,7 +93,7 @@ export function proposeNavigationSteps(
 ):ReadOnlyNavigationPlan{
  const none=(status:ReadOnlyNavigationPlan['status'],message:string):ReadOnlyNavigationPlan=>
   ({status,executable:false,steps:[],message});
- if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now))
+ if(!validTime(snapshot.capturedAtWallMs,snapshot.expiresInMs,now,snapshot.expiresAtWallMs))
   return none('expired','Screen observation expired; request a new one.');
  const templates:Record<string,Array<'menu'|'search'|'settings'>>=Object.freeze({
   'find search in menu':['menu','search'],
