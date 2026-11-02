@@ -63,6 +63,10 @@ internal object NexaPhoneVoiceTools {
             "scroll down the page","move down the page" -> "down"
             "scroll up","scroll up on my screen","scroll this screen up",
             "scroll up the page","move up the page" -> "up"
+            "scroll left","scroll left on my screen","scroll the screen left",
+            "swipe left","swipe left on this page" -> "left"
+            "scroll right","scroll right on my screen","scroll the screen right",
+            "swipe right","swipe right on this page" -> "right"
             else -> null
         }
     }
