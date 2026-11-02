@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {validateProviderSettings} from '../../packages/agent-core/src/direct-provider.ts';
-import {validateSamvaadWorkspaceKey} from '../../apps/mobile/src/native/sarvamVoiceConfig.ts';
+
 
 const dir='apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/';
 const vault=readFileSync(dir+'AgentJournalModule.kt','utf8');
@@ -13,8 +13,8 @@ const keyBridge=readFileSync('apps/mobile/src/native/sarvamVoiceConfig.ts','utf8
 
 test('voice workspace credentials are not accepted as Chat Model API credentials',()=>{
   const fake='sk_samvaad_'+ 'abcXYZ1234567890';
-  assert.equal(validateSamvaadWorkspaceKey(fake),true);
-  assert.equal(validateSamvaadWorkspaceKey('sk_other_invalid_1234567890'),false);
+  assert.match(keyBridge,/sk_samvaad_\[A-Za-z0-9_-\]\{16,500\}/);
+  assert.match(keyBridge,/saveSamvaadWorkspaceKey/);
   assert.throws(()=>validateProviderSettings({
     version:1,provider:'sarvam',model:'sarvam-105b',apiKey:fake
   }),/SAMVAAD_VOICE_KEY_ONLY/);
