@@ -19,8 +19,10 @@ export function parsePairedIconObservation(value:unknown):ScreenIconSnapshot|nul
  if(!value||typeof value!=='object'||Array.isArray(value))return null;
  const pair=value as Partial<PairedCapture>;
  if(typeof pair.snapshotId!=='string'||typeof pair.packageName!=='string'||
-  !Number.isInteger(pair.windowId)||!Number.isSafeInteger(pair.capturedAtWallMs)||
-  !Number.isInteger(pair.expiresInMs)||!Array.isArray(pair.crops)||
+  typeof pair.windowId!=='number'||!Number.isInteger(pair.windowId)||
+  typeof pair.capturedAtWallMs!=='number'||!Number.isSafeInteger(pair.capturedAtWallMs)||
+  typeof pair.expiresInMs!=='number'||!Number.isInteger(pair.expiresInMs)||
+  !Array.isArray(pair.crops)||
   pair.crops.length>6)return null;
  const snapshot=parseScreenIconSnapshot(pair.observation);
  if(!snapshot ||snapshot.snapshotId!==pair.snapshotId ||
