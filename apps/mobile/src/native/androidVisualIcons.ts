@@ -12,6 +12,7 @@ export type VisualIconPreview = {
   windowId?: number;
   capturedAtWallMs: number;
   expiresInMs: number;
+  expiresAtWallMs?: number;
   crops: VisualIconCrop[];
 };
 interface NativeVisualBridge {
@@ -60,5 +61,6 @@ export async function takeVisualIcons(): Promise<VisualIconPreview|null> {
   }
   return {snapshotId:src.snapshotId,packageName:src.packageName,
     ...(src.windowId!==undefined?{windowId:src.windowId as number}:{}),
-    capturedAtWallMs:src.capturedAtWallMs as number,expiresInMs:src.expiresInMs as number,crops};
+    capturedAtWallMs:src.capturedAtWallMs as number,expiresInMs:src.expiresInMs as number,
+    expiresAtWallMs:Math.min((src.capturedAtWallMs as number)+60000,Date.now()+(src.expiresInMs as number)),crops};
 }
