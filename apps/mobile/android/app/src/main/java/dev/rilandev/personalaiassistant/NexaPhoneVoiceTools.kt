@@ -44,7 +44,46 @@ internal object NexaPhoneVoiceTools {
         return match.groupValues[1].replace(' ','_')
     }
 
+    /** Conservative owner-spoken screen commands, not provider-invented actions. */
+    fun wantsVisibleText(utterance:String):Boolean {
+        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
+            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        return q in setOf("read my screen","read the screen","read screen",
+            "read screen contents","read my screen contents",
+            "what is on my screen","what's on my screen",
+            "what does my screen say","tell me what is on my screen",
+            "describe what is on my screen","describe the current screen")
+    }
+
+    fun scrollDirection(utterance:String):String? {
+        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
+            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        return when(q) {
+            "scroll down","scroll down on my screen","scroll this screen down",
+            "scroll down the page","move down the page" -> "down"
+            "scroll up","scroll up on my screen","scroll this screen up",
+            "scroll up the page","move up the page" -> "up"
+            else -> null
+        }
+    }
+
+    /** Only harmless navigation semantics; no arbitrary coordinates or send/call. */
+    fun clickSafeIcon(utterance:String):String? {
+        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
+            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val match=Regex("^(?:tap|click|press) (?:on )?(?:the )?(search|menu|settings|back|close) (?:icon|button|control)?$")
+            .matchEntire(q) ?:return null
+        return match.groupValues[1]
+    }
+
     fun deviceFacts(context: Context, utterance: String): String? {
+        // Device vendors can throw from BatteryManager/StatFs and local
+        // status APIs. No exception may escape into the Sarvam WS listener.
+        return try { deviceFactsSafe(context,utterance) }
+        catch (_: Exception) { "Android device information is temporarily unavailable." }
+    }
+
+    private fun deviceFactsSafe(context: Context, utterance: String): String? {
         val q=utterance.lowercase(Locale.ROOT).trim()
             .replace(Regex("[?.!,]+$"),"").trim()
         if(q in setOf("battery","battery status","battery level","battery percentage",
