@@ -724,11 +724,11 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
             p.reject("NOT_FOREGROUND", "Open Nexa Voice to test Sarvam credentials")
             return
         }
-        SarvamVoiceReadiness.check(context.applicationContext) { result ->
+        SarvamModelApiReadiness.check(context.applicationContext) { ready,code,explanation ->
             val data = Arguments.createMap()
-            data.putBoolean("ready", result.ready)
-            data.putString("code", result.code)
-            data.putString("message", result.explanation)
+            data.putBoolean("ready", ready)
+            data.putString("code", code)
+            data.putString("message", explanation)
             p.resolve(data)
         }
     }
