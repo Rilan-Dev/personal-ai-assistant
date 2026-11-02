@@ -240,10 +240,16 @@ class NexaToolOverlayService : Service() {
 
     private fun showActionJournalSummary() {
         val counts=NexaUiActionJournal.summary(this)
+        val last=NexaUiActionJournal.latestOutcome(this)
         note=if(counts==null) "Encrypted action journal is unavailable."
             else if(counts.isEmpty()) "No owner-confirmed UI actions recorded."
-            else "Encrypted UI actions · " + counts.toSortedMap().entries
-                .joinToString(" · ") { it.key.replace('_',' ') + ": " + it.value }.take(280)
+            else {
+                val latest=if(last==null) "Last action unavailable"
+                    else "Latest: "+last.first.replace('_',' ')+" — "+
+                        last.second.replace('_',' ')+" (not proof of task success)"
+                (latest+" · Events: "+counts.toSortedMap().entries
+                    .joinToString(", ") { it.key.replace('_',' ') + ": " + it.value }).take(350)
+            }
         render()
     }
 

@@ -150,6 +150,26 @@ internal object NexaUiActionJournal {
             } catch (_: Exception) { false }
         }
 
+    /** Most recent native action evidence, without icon, package, token or geometry. */
+    fun latestOutcome(ctx: Context): Pair<String,String>? = synchronized(lock) {
+        try {
+            val events=read(ctx)
+            if(events.length()==0) null
+            else {
+                val event=events.getJSONObject(events.length()-1)
+                val kind=event.optString("kind")
+                val status=event.optString("status")
+                if(kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right") ||
+                    status !in setOf("claimed","android_accepted","android_rejected",
+                        "unknown","observed_change","no_observable_change",
+                        "scroll_event_observed","window_change_observed",
+                        "structural_change_observed","unverified","context_changed_unverified"))
+                    null
+                else kind to status
+            }
+        } catch (_: Exception) { null }
+    }
+
     /** Return only aggregate status counts; the event details stay encrypted. */
     fun summary(ctx: Context): Map<String, Int>? = synchronized(lock) {
         try {

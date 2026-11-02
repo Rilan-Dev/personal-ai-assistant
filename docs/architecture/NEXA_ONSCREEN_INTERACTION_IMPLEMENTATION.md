@@ -139,3 +139,21 @@ This increment refines the existing opt-in screen assistant without increasing a
 - Source-level regression tests cover duplicate icons, unknown labels, conflicting windows, expiring consent, cross-request result replay, navigation ambiguity and post-action window switches. Device/Gradle acceptance remains owner-managed.
 
 No auto-send, calls, arbitrary coordinate taps, unrestricted gestures, new Android privileges, release APK, or production deployment were added.
+
+
+## Paired visual and accessibility evidence capture (November 3, 2026)
+
+### Why this follow-up was necessary
+The previous visual-screenshot capture and accessibility-icon scan were separate, mutually exclusive arming flows. Consequently, the UI commonly could not correlate the two observations, and a visual confidence index had little real-world input.
+
+### Source changes
+- A **single owner-armed visual capture** now records bounded icon metadata alongside the six-or-fewer unknown clickable icon thumbnails. The same package, Android window ID, snapshot UUID, observation timestamp and per-icon geometry accompany the crop bundle. Full-screen screenshots, raw text and editable fields are not returned to the React Native bridge.
+- The native screenshot callback rechecks the current external app/window and confirms that every selected unknown clickable icon still has its original bounds and ID. If this check fails, no thumbnails are retained.
+- `takeVisualIcons` rejects incomplete or mismatched pairs through `parsePairedIconObservation`, which validates the native icon snapshot and requires each crop to match **exactly one unknown clickable icon** with identical bounds. A wrong window, app, expiry, ID or duplicate bounds fails closed.
+- React Native Tools now loads both the visual crop set and its paired metadata from the same capture, allowing the earlier evidence scorer to provide a justified **tentative** geometry match. A model guess alone does not independently corroborate the icon label; strong `corroborated` status requires separate recognized accessibility semantics. No score can authorize a click.
+- Clearing a visual scan now clears paired metadata and revokes owner-released agent screen access. The visual timeout clears its corresponding metadata snapshot. The app explicitly requires user selection and consent before a cropped image is uploaded to a provider.
+- The native floating Tools overlay can now show the most recent encrypted action category and evidence status, without revealing package names, raw content, approval tokens or coordinates. This remains evidence of Android events, not task completion.
+- Tests were added to reject cross-app/window swaps, stale timestamps, duplicate and mismatched crop rectangles, recognized-icon substitution and missing metadata; Android journal tests cover the latest evidence display. The user performs device/Gradle acceptance.
+
+### Outstanding practical limitations
+This is source implementation, not a verified production-ready Android build. Screen capture may be blocked by secure apps or OEM restrictions. Window/Accessibility observations can change before screenshots; in such cases the system rejects the pair rather than fabricating a successful match. Unknown-only crops cannot supply an independently validated semantic label on their own. Autonomous multi-app task completion and calibrated probability-based vision accuracy are not implemented.

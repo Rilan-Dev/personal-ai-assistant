@@ -130,6 +130,7 @@ class ScreenAssistService : AccessibilityService() {
         val pkg = event.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg == packageName || pkg == "com.android.systemui") return
         val root = rootInActiveWindow ?: return
+        try {
         val rootPkg = root.packageName?.toString().orEmpty()
         if (rootPkg != pkg) return
         if (ScreenIconScanState.isArmed()) {
@@ -139,7 +140,10 @@ class ScreenAssistService : AccessibilityService() {
                 IconBox(box.left,box.top,box.right,box.bottom),root.windowId)
         }
         if (NexaVisualIconCapture.isArmed()) {
-            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),root.windowId)
+            val bounds = android.graphics.Rect()
+            root.getBoundsInScreen(bounds)
+            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),
+                root.windowId, IconBox(bounds.left,bounds.top,bounds.right,bounds.bottom))
         }
         if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
@@ -164,6 +168,7 @@ class ScreenAssistService : AccessibilityService() {
             }
         }
         if (text.isNotBlank()) ScreenAssistState.capture(pkg, text.toString())
+        } finally { root.recycle() }
     }
 }
 
@@ -320,6 +325,41 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             images.pushMap(image)
         }
         item.putArray("crops",images)
+        // The paired read-only icon metadata was collected from the SAME
+        // Accessibility event that armed these crops, not a later re-scan.
+        val observation=Arguments.createMap()
+        observation.putInt("version",1)
+        observation.putString("snapshotId",snap.id)
+        observation.putString("packageName",snap.packageName)
+        observation.putDouble("capturedAtWallMs",snap.createdAt.toDouble())
+        observation.putInt("expiresInMs",snap.expiresInMs)
+        snap.windowId?.let { observation.putInt("windowId",it) }
+        snap.windowBounds?.let { r ->
+            val box=Arguments.createMap()
+            box.putInt("left",r.left)
+            box.putInt("top",r.top)
+            box.putInt("right",r.right)
+            box.putInt("bottom",r.bottom)
+            observation.putMap("windowBoundsPx",box)
+        }
+        val controls=Arguments.createArray()
+        for (icon in snap.observedIcons.take(64)) {
+            val control=Arguments.createMap()
+            control.putString("id",icon.id)
+            control.putString("label",icon.label.take(48))
+            control.putString("semantic",icon.semantic)
+            control.putBoolean("clickable",icon.clickable)
+            control.putString("evidence","accessibility")
+            val bounds=Arguments.createMap()
+            bounds.putInt("left",icon.bounds.left)
+            bounds.putInt("top",icon.bounds.top)
+            bounds.putInt("right",icon.bounds.right)
+            bounds.putInt("bottom",icon.bounds.bottom)
+            control.putMap("boundsPx",bounds)
+            controls.pushMap(control)
+        }
+        observation.putArray("icons",controls)
+        item.putMap("observation",observation)
         p.resolve(item)
     }
     @ReactMethod fun clearVisualScan(p: Promise) {
