@@ -173,3 +173,12 @@ The guide now holds the step under the exact one-time action approval token and 
 Observations remain **Android event/structure evidence, not a guarantee that search/settings was opened**. The owner must inspect the next screen and separately confirm each subsequent tap. This implementation intentionally favors stopping on ambiguous native results over incorrectly assuming task success.
 
 Test source covers out-of-order targets, exact-token pairing, blocked/no-change outcomes, deadlines, and successful advancement only after independent observed change. The pure Kotlin state-machine source was compiled in an isolated smoke harness with 17 assertions passing; no Android Gradle, emulator, physical device or release build was run. Owner device acceptance remains pending.
+
+
+## Owner-reviewed visual confidence feedback (2026-11-03)
+
+Visual icon evidence scores remain heuristic and **are not calibrated probabilities**. To begin collecting explicit reliability observations without uploading more screen data, Nexa now allows the owner to review an AI-described icon label after the owner has separately elected to send that small icon crop to their configured provider.
+
+The native/React Native interface offers **Label looks correct** and **Label looks incorrect** only for nonblocked, time-valid evidence associated with the currently selected screenshot/crop pair. Reviews are a one-time action per crop; changing scans or crops, capture expiry, backgrounding and leaving Tools revoke pending review access. `createIconReviewSession` stores only ephemeral per-session counts (reviewed/accepted/rejected). It has no storage API, does not persist provider content, screenshots, coordinates or messages, and transmits no feedback to an AI provider. Duplicate votes, late reviews, invalid model labels and unsupported evidence statuses fail closed. User feedback does not alter native tap permissions or convert a model guess to a verified Android action.
+
+This is a foundation for future accuracy measurement, **not** a statistically valid calibration dataset or an autonomous learning system. Isolated Node tests for owner review, expiry, replay prevention, invalid provider output and in-memory deletion ran with 5/5 passing; standalone TypeScript checking passed. Full repository/Android build and physical-device acceptance have not been run and remain with the owner.

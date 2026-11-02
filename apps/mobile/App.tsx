@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
@@ -62,13 +62,14 @@ const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
 
 export default function App() {
   const screenGrant=useMemo(createOwnerScreenGrant,[]);
+  const iconReviews=useMemo(createIconReviewSession,[]);
   const engine = useMemo(()=>makeEngine(screenGrant),[screenGrant]);
   useEffect(()=>{
     const listener=AppState.addEventListener('change',status=>{
-      if(status!=='active')screenGrant.revoke();
+      if(status!=='active'){screenGrant.revoke();iconReviews.clear();setVisionFeedbackTarget(null);setVisionFeedbackCounts(iconReviews.summary());}
     });
-    return ()=>{listener.remove();screenGrant.revoke();};
-  },[screenGrant]);
+    return ()=>{listener.remove();screenGrant.revoke();iconReviews.clear();};
+  },[screenGrant,iconReviews]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
@@ -383,6 +384,9 @@ export default function App() {
   const [selectedVisionCrop,setSelectedVisionCrop] = useState<string|null>(null);
   const [visionBusy,setVisionBusy] = useState(false);
   const [visionResult,setVisionResult] = useState('');
+  const [visionFeedbackTarget,setVisionFeedbackTarget]=useState<{snapshotId:string;cropId:string}|null>(null);
+  const [visionFeedbackNotice,setVisionFeedbackNotice]=useState('');
+  const [visionFeedbackCounts,setVisionFeedbackCounts]=useState({reviewed:0,accepted:0,rejected:0});
   const [appSearch,setAppSearch] = useState('');
   const [appMatches,setAppMatches] = useState<LaunchableAppMatch[]>([]);
   const [appSearchNotice,setAppSearchNotice] = useState('');
@@ -393,13 +397,14 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());setAppMatches([]);}
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
     const timeout=setTimeout(()=>{
       setVisualPreview(null);
       setIconScan(prev=>prev?.snapshotId===visualPreview.snapshotId?null:prev);
+      setVisionFeedbackTarget(null);
     },Math.max(1,Math.min(visualPreview.expiresInMs,60_000)));
     return ()=>clearTimeout(timeout);
   },[visualPreview]);
@@ -778,6 +783,7 @@ export default function App() {
   };
   const armVisualScan=async()=>{
     setVisualPreview(null);setIconScan(null);setIconLocalAnswer('');screenGrant.revoke();
+    setVisionFeedbackTarget(null);setVisionFeedbackNotice('');iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());
     try{
       await armVisualIcons();
       setScreenArmed(false);setIconScanArmed(false);setVisualArmed(true);
@@ -789,7 +795,7 @@ export default function App() {
       const result=await takeVisualIcons();
       setVisualPreview(result);setIconScan(result?.observation??null);
       setIconLocalAnswer('');setGuidedPlanNotice('');
-      setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
+      setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');setVisionFeedbackTarget(null);
       setVisualNotice(result
         ? result.crops.length+' local icon crops and paired accessibility metadata captured. No images uploaded.'
         : 'No visual icon capture available. The window may be protected or the scan expired.');
@@ -798,13 +804,14 @@ export default function App() {
   const clearVisualScan=async()=>{
     await discardVisualIcons().catch(()=>{});
     setVisualPreview(null);setIconScan(null);screenGrant.revoke();
-    setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
+    setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');setVisionFeedbackTarget(null);
+    iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());
     setVisualNotice('Visual crops and their paired observations discarded from memory.');
   };
   const identifySelectedIcon=async()=>{
     const crop=visualPreview?.crops.find(c=>c.iconId===selectedVisionCrop);
     if(!crop||visionBusy)return;
-    setVisionBusy(true);setVisionResult('');
+    setVisionBusy(true);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');
     try{
       const settings=await loadProviderFromVault();
       if(!settings){setVisionResult('Configure an AI provider in Nexa Settings first.');return;}
@@ -815,11 +822,31 @@ export default function App() {
         ? ' Heuristic evidence: '+evidence.status+' ('+evidence.score+'/85, not a probability). '+
           evidence.reasons.join('; ')+'.'
         : ' No correlated accessibility scan available.';
+      const reviewable=Boolean(evidence&&visualPreview&&
+        iconReviews.offer({
+          snapshotId:visualPreview.snapshotId,cropId:crop.iconId,modelLabel:result.label,
+          evidenceStatus:evidence.status,score:evidence.score,
+          expiresAtWallMs:visualPreview.expiresAtWallMs??Date.now()
+        },Date.now()));
+      setVisionFeedbackTarget(reviewable&&visualPreview
+        ? {snapshotId:visualPreview.snapshotId,cropId:crop.iconId}:null);
       setVisionResult('Unverified visual guess: '+result.label+' — '+result.meaning+
         '.'+explanation+' No action was executed or authorized.');
     }catch{
       setVisionResult('Icon identification failed or the selected model does not support images. No action was executed.');
     }finally{setVisionBusy(false);}
+  };
+  const reviewVisualGuess=(choice:'accurate'|'inaccurate')=>{
+    const current=visionFeedbackTarget;
+    if(!current||visualPreview?.snapshotId!==current.snapshotId) {
+      setVisionFeedbackNotice('The icon review expired. Capture and identify it again.');return;
+    }
+    const outcome=iconReviews.vote(current.snapshotId,current.cropId,choice,Date.now());
+    setVisionFeedbackNotice(outcome.status==='recorded'
+      ? 'Owner feedback kept in this app session only. No action or upload was performed.'
+      : 'This review is no longer valid. Nothing was recorded.');
+    setVisionFeedbackCounts(iconReviews.summary());
+    setVisionFeedbackTarget(null);
   };
   /** Deterministic, on-device read-only answer. No provider call or native UI action. */
   const askLocalScreenQuestion=()=>{
@@ -1627,7 +1654,7 @@ export default function App() {
                  {visualPreview.crops.map(crop=>(
                    <Pressable key={crop.iconId} accessibilityRole="button"
                      accessibilityLabel={'Select '+crop.iconId+' for visual identification'}
-                     onPress={()=>{setSelectedVisionCrop(crop.iconId);setVisionResult('');}}
+                     onPress={()=>{setSelectedVisionCrop(crop.iconId);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');}}
                      style={{alignItems:'center',padding:6,borderWidth:selectedVisionCrop===crop.iconId?2:0,
                        borderColor:'#9daeff',borderRadius:12}}>
                      <Image source={{uri:crop.dataUri}} style={{width:64,height:64,borderRadius:12}}/>
@@ -1643,6 +1670,18 @@ export default function App() {
                  </Pressable>
                </>}
                {visionResult!==''&&<Text style={styles.feedback}>{visionResult}</Text>}
+               {visionFeedbackTarget&&<View style={styles.buttonRow}>
+                 <Pressable accessibilityRole="button" style={styles.outlineInline}
+                   onPress={()=>reviewVisualGuess('accurate')}>
+                   <Text style={styles.outlineInlineText}>Label looks correct</Text>
+                 </Pressable>
+                 <Pressable accessibilityRole="button" style={styles.outlineInline}
+                   onPress={()=>reviewVisualGuess('inaccurate')}>
+                   <Text style={styles.outlineInlineText}>Label looks incorrect</Text>
+                 </Pressable>
+               </View>}
+               {visionFeedbackNotice!==''&&<Text style={styles.feedback}>{visionFeedbackNotice}</Text>}
+               <Text style={styles.settingHelp}>Local owner reviews this session: {visionFeedbackCounts.reviewed} · accepted {visionFeedbackCounts.accepted} · rejected {visionFeedbackCounts.rejected}. Not a calibrated confidence probability or permission to tap.</Text>
              </View>}
            </>}
            <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. The visual fallback is a single owner-armed screenshot, not continuous recording. Protected apps may refuse inspection. Only the chosen icon crop is sent to an AI provider after you approve that upload.</Text>
