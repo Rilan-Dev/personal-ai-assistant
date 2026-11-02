@@ -43,7 +43,10 @@ internal class NexaGuidedNavigation {
         return steps[next]
     }
 
-    fun canSelect(semantic: String, now: Long): Boolean = expected(now) == semantic
+    fun canSelect(semantic: String, now: Long): Boolean {
+        val target = expected(now) ?: return false
+        return semantic == target || (target == "menu" && semantic == "more_options")
+    }
 
     /** Only call after the native controller ACCEPTED the owner's one-time tap. */
     fun afterConfirmedClick(semantic: String, now: Long): Boolean {
