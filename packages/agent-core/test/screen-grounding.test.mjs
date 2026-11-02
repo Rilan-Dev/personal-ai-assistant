@@ -44,3 +44,13 @@ test('same-package screenshots from different Android windows never match',()=>{
  assert.equal(groundVisualIcon(snap({windowId:10}),image(),guess,'v0',6000).status,'source_mismatch');
  assert.equal(groundVisualIcon(snap({windowId:10}),image({windowId:10}),guess,'v0',6000).status,'geometry_matched');
 });
+
+test('native remaining milliseconds can be normalized without cutting valid scans short',()=>{
+ const s=snap({expiresInMs:20000,expiresAtWallMs:61000,windowId:10});
+ const p=image({expiresInMs:20000,expiresAtWallMs:65000,windowId:10});
+ assert.equal(groundVisualIcon(s,p,guess,'v0',45000).status,'geometry_matched');
+ const grant=createOwnerScreenGrant();
+ assert.equal(grant.release(s,45000),true);
+ assert.ok(grant.read(45001));
+ assert.equal(grant.read(61000),null);
+});
