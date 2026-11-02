@@ -22,7 +22,7 @@ internal object NexaScreenScroll {
         if (!ScreenAssistState.connected) return null
         val guard=service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if (guard?.isKeyguardLocked==true) return null
-        val root=service.rootInActiveWindow ?: return null
+        val root=service.externalWindowRoot() ?: return null
         val pkg=root.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg==service.packageName || pkg=="com.android.systemui" ||
             pkg=="android" || pkg.startsWith("com.google.android.inputmethod")) {
