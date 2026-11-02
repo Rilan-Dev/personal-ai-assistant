@@ -16,3 +16,6 @@ export type {ReviewedWhatsAppIntent} from "./owner-intents.ts";
 
 export {identifyIconCrop, validateIconCrop} from './icon-vision.ts';
 export type {IconVisionHint} from './icon-vision.ts';
+
+export {resolveScreenQuestion, summarizeScreenControls} from './screen-understanding.ts';
+export type {LocalScreenAnswer, ScreenControlSummary} from './screen-understanding.ts';
