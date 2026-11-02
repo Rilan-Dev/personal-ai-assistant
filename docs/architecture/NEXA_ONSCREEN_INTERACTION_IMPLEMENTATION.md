@@ -162,3 +162,14 @@ This is source implementation, not a verified production-ready Android build. Sc
 ## Screenshot callback race hardening
 
 A visual capture may finish asynchronously after the owner discards it, re-arms a scan or leaves the screen. An earlier implementation checked only a shared `busy` flag, which could incorrectly accept a delayed callback belonging to a previous scan. `NexaCaptureEpoch` now assigns a fresh monotonic generation to every arming and acquisition, invalidating the previous generation on clear, expiry or consume. Completion callbacks are accepted only when their generation still matches. Expiry runnables also capture the generation so an old timeout cannot erase newer capture data. Instrumentation test source covers stale callbacks after cancellation/re-arming and repeated callbacks. Device/Gradle acceptance is still outstanding.
+
+
+## Guided navigation: evidence-gated progression (2026-11-03)
+
+A guided Menu → Search or Menu → Settings flow formerly marked its current step complete as soon as Android `performAction(ACTION_CLICK)` returned `true`. That value means the OS accepted dispatch, **not** that the target window changed. This could cause a guide to offer its next step despite a no-op tap.
+
+The guide now holds the step under the exact one-time action approval token and waits for the encrypted UI action journal to report `window_change_observed` or `structural_change_observed` for the same token. `claimed` and `android_accepted` remain pending, never sufficient to advance. A different token cannot advance the guide. Negative, missing, switched-window, inaccessible or timed-out observations cancel the guide without automatic replay. The native overlay visibly labels the waiting state, prevents a second guided click while waiting, and clears pending evidence when the guide, Tools panel or service is closed.
+
+Observations remain **Android event/structure evidence, not a guarantee that search/settings was opened**. The owner must inspect the next screen and separately confirm each subsequent tap. This implementation intentionally favors stopping on ambiguous native results over incorrectly assuming task success.
+
+Test source covers out-of-order targets, exact-token pairing, blocked/no-change outcomes, deadlines, and successful advancement only after independent observed change. The pure Kotlin state-machine source was compiled in an isolated smoke harness with 17 assertions passing; no Android Gradle, emulator, physical device or release build was run. Owner device acceptance remains pending.

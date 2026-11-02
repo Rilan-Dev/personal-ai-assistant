@@ -15,6 +15,8 @@ internal class NexaGuidedNavigation {
     private var next = 0
     private var expiry = 0L
     private var boundPackage: String? = null
+    private var pendingToken: String? = null
+    private var pendingUntil = 0L
 
     fun start(raw: String, now: Long): StartResult {
         cancel()
@@ -58,16 +60,55 @@ internal class NexaGuidedNavigation {
 
     fun canSelect(semantic: String, now: Long): Boolean {
         val target = expected(now) ?: return false
+        if(pendingToken != null) return false
         return semantic == target || (target == "menu" && semantic == "more_options")
     }
 
-    /** Only call after the native controller ACCEPTED the owner's one-time tap. */
-    fun afterConfirmedClick(semantic: String, now: Long): Boolean {
-        if (!canSelect(semantic,now)) return false
-        next++
+    /** Android acceptance is not proof the screen changed: hold this guide here. */
+    fun afterAcceptedDispatch(semantic: String, token: String, now: Long): Boolean {
+        if (!canSelect(semantic,now) || token.length !in 16..128) return false
+        pendingToken=token
+        pendingUntil=minOf(expiry,now+3_500L)
         return true
     }
 
+    fun isAwaitingEvidence(now: Long): Boolean =
+        expected(now) != null && pendingToken != null && now < pendingUntil
+
+    /**
+     * Advance exactly one step only after OS evidence for the SAME approved
+     * token. Structural/window changes are not proof of business-task success.
+     * Any missing/negative outcome or timeout ends the guide; never retry.
+     */
+    fun onActionEvidence(token: String, status: String?, now: Long): String {
+        val original=pendingToken ?: return "ignored"
+        if(now>=pendingUntil || now>=expiry) {
+            cancel()
+            return "blocked"
+        }
+        if(token!=original) return "waiting"
+        return when(status) {
+            "claimed","android_accepted" -> "waiting"
+            "window_change_observed","structural_change_observed","observed_change" -> {
+                pendingToken=null
+                pendingUntil=0L
+                next++
+                if(next>=steps.size) "completed" else "advanced"
+            }
+            else -> {
+                cancel()
+                "blocked"
+            }
+        }
+    }
+
     fun completed(): Boolean = steps.isNotEmpty() && next >= steps.size
-    fun cancel() { steps = emptyList(); next = 0; expiry = 0L; boundPackage = null }
+    fun cancel() {
+        steps = emptyList()
+        next = 0
+        expiry = 0L
+        boundPackage = null
+        pendingToken = null
+        pendingUntil = 0L
+    }
 }
