@@ -899,7 +899,7 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
     @ReactMethod fun getVoiceSessionStatus(p: Promise) {
         val data=Arguments.createMap()
         data.putString("state",RealtimeVoiceService.status)
-        data.putString("provider",RealtimeVoiceService.currentProviderId.ifBlank { null })
+        data.putString("provider",RealtimeVoiceService.currentProviderId.takeIf { it.isNotBlank() })
         data.putString("message",RealtimeVoiceService.message)
         data.putBoolean("microphoneActive",RealtimeVoiceService.status=="listening")
         data.putBoolean("microphoneMuted",RealtimeVoiceService.microphoneMuted)
