@@ -525,10 +525,16 @@ class NexaToolOverlayService : Service() {
                             button("Menu → Search") { startGuidedNavigation("find search in menu") },
                             button("Menu → Settings") { startGuidedNavigation("open settings from menu") }
                         ))
-                        val expectedGuide=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
+                        val now=android.os.SystemClock.elapsedRealtime()
+                        val expectedGuide=guidedNavigation.expected(now)
+                        val awaitingGuideEvidence=guidedNavigation.isAwaitingEvidence(now)
                         if (expectedGuide != null) {
-                            addView(text("Guided step: find " + expectedGuide +
-                                " · inspect, choose and confirm. No auto-taps.",12f))
+                            if (awaitingGuideEvidence) {
+                                addView(text("Android accepted a click request. Waiting for matching screen-change evidence; no next step or retry is permitted.",12f))
+                            } else {
+                                addView(text("Guided step: find " + expectedGuide +
+                                    " · inspect, choose and confirm. No auto-taps.",12f))
+                            }
                             addView(button("Cancel navigation guide") { stopGuidedNavigation() })
                         }
                         addView(button("Action journal summary") { showActionJournalSummary() })
