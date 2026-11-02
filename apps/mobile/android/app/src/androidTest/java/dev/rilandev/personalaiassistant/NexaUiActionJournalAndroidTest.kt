@@ -58,6 +58,19 @@ class NexaUiActionJournalAndroidTest {
         assertFalse(latest.toString().contains(token))
     }
 
+    @Test fun actionEvidenceLookupIsBoundToExactApprovalToken() {
+        val token="test-"+UUID.randomUUID().toString()
+        val other="test-"+UUID.randomUUID().toString()
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"tap","com.example.navigation"))
+        assertEquals("claimed",NexaUiActionJournal.outcomeFor(ctx,token))
+        assertNull(NexaUiActionJournal.outcomeFor(ctx,other))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        assertEquals("android_accepted",NexaUiActionJournal.outcomeFor(ctx,token))
+        assertTrue(NexaUiActionJournal.markObservation(ctx,token,"structural_change_observed"))
+        assertEquals("structural_change_observed",NexaUiActionJournal.outcomeFor(ctx,token))
+        assertNull(NexaUiActionJournal.outcomeFor(ctx,other))
+    }
+
     @Test fun unsafeOrMalformedClaimsAreRejected() {
         assertFalse(NexaUiActionJournal.claim(ctx,"short","tap","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),
