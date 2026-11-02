@@ -144,15 +144,23 @@ class RealtimeVoiceService : Service() {
                 // A visible approval tap authorizes ONE bounded action, not a
                 // stale request from an earlier conversation.
                 val age = SystemClock.elapsedRealtime() - pending.createdAtMs
-                val outcome = when {
+                val outcome = try { when {
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
+                    pending.command == "read_visible_screen_text" ->
+                        NexaScreenVoiceOverview.readVisibleTextApproved()
+                    pending.command.startsWith("scroll_screen:") ->
+                        NexaScreenVoiceOverview.scrollApproved(pending.command.removePrefix("scroll_screen:"))
+                    pending.command.startsWith("tap_safe_icon:") ->
+                        NexaScreenVoiceOverview.tapSafeApproved(pending.command.removePrefix("tap_safe_icon:"))
                     pending.command == "observe_screen_icons" -> NexaScreenVoiceOverview.readApproved()
                     pending.command.startsWith("locate_icon:") ->
                         NexaScreenVoiceOverview.findApproved(pending.command.removePrefix("locate_icon:"))
                     pending.installedApp != null ->
                         NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
                     else -> NexaOverlayCommands.handle(this,pending.command)
+                } } catch (_:Exception) {
+                    "Android refused the approved screen action. No automatic retry."
                 }
                 lastToolResult = outcome.take(320)
                 message = lastToolResult
@@ -257,9 +265,16 @@ class RealtimeVoiceService : Service() {
                     }
                     override fun ownerRequest(text:String):Boolean {
                         if(!assistantPanelEnabled)return false
-                        val recognizable=NexaVoiceIntentGate.appRequest(text)!=null ||
+                        val recognizable=try {
+                            NexaPhoneVoiceTools.wantsVisibleText(text) ||
+                            NexaPhoneVoiceTools.scrollDirection(text)!=null ||
+                            NexaPhoneVoiceTools.clickSafeIcon(text)!=null ||
+                            NexaPhoneVoiceTools.wantsScreenOverview(text) ||
+                            NexaPhoneVoiceTools.locateIconIntent(text)!=null ||
+                            NexaVoiceIntentGate.appRequest(text)!=null ||
                             NexaPhoneVoiceTools.deviceFacts(this@RealtimeVoiceService,text)!=null ||
                             NexaPhoneVoiceTools.findLaunchableApp(this@RealtimeVoiceService,text)!=null
+                        }catch (_:Exception){false}
                         if(!recognizable)return false
                         main.post {
                             if(active.get() && selectedProvider=="sarvam-api")
@@ -514,6 +529,29 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        if(NexaPhoneVoiceTools.wantsVisibleText(transcript)) {
+            pendingAppTool=PendingAppTool("local-sarvam","screen text","read_visible_screen_text")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Read visible app labels and share the result with your voice provider? Approve once or Deny."
+            message="Screen reading awaits your approval. Text fields and passwords are excluded."
+            return
+        }
+        val scroll=NexaPhoneVoiceTools.scrollDirection(transcript)
+        if(scroll!=null) {
+            pendingAppTool=PendingAppTool("local-sarvam","scroll $scroll","scroll_screen:$scroll")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Scroll $scroll once in the visible app? Approve once or Deny."
+            message="One accessibility scroll request awaits approval."
+            return
+        }
+        val icon=NexaPhoneVoiceTools.clickSafeIcon(transcript)
+        if(icon!=null) {
+            pendingAppTool=PendingAppTool("local-sarvam","$icon control","tap_safe_icon:$icon")
+            pendingAppTool?.let { expirePendingTool(it) }
+            pendingApprovalSummary="Tap the visible $icon navigation icon once? Approve once or Deny."
+            message="A fresh accessibility target will be checked after approval."
+            return
+        }
         val fact=NexaPhoneVoiceTools.deviceFacts(this,transcript)
         if(fact!=null) {
             lastToolResult=fact.take(320)
