@@ -39,18 +39,6 @@ internal object SarvamModelApiReadiness {
                 http.connectionPool.evictAll()
             }
         }
-        fun probeTts() {
-            http.newWebSocket(Request.Builder().url(SarvamApiVoiceTransport.ttsUrl())
-                .header("api-subscription-key",key).build(),object:WebSocketListener() {
-                override fun onOpen(ws:WebSocket,response:Response) {
-                    ws.close(1000,"authorization-probe")
-                    probeChat()
-                }
-                override fun onFailure(ws:WebSocket,t:Throwable,response:Response?) {
-                    finish(false,"TTS_AUTH","Bulbul streaming TTS authorization failed; verify Model API key and access.")
-                }
-            })
-        }
         fun probeChat() {
             val body=JSONObject().put("model",SarvamApiVoiceTransport.CHAT_MODEL)
                 .put("max_tokens",12).put("messages",JSONArray()
@@ -69,6 +57,18 @@ internal object SarvamModelApiReadiness {
                         else finish(false,"MODEL_AUTH",
                             "Sarvam Conversations returned HTTP ${it.code}; verify the Model API key, quota or model access.")
                     }
+                }
+            })
+        }
+        fun probeTts() {
+            http.newWebSocket(Request.Builder().url(SarvamApiVoiceTransport.ttsUrl())
+                .header("api-subscription-key",key).build(),object:WebSocketListener() {
+                override fun onOpen(ws:WebSocket,response:Response) {
+                    ws.close(1000,"authorization-probe")
+                    probeChat()
+                }
+                override fun onFailure(ws:WebSocket,t:Throwable,response:Response?) {
+                    finish(false,"TTS_AUTH","Bulbul streaming TTS authorization failed; verify Model API key and access.")
                 }
             })
         }
