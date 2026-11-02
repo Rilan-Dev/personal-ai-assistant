@@ -74,6 +74,7 @@ class RealtimeVoiceService : Service() {
     private val micSendLock = Any()
     private var socket: WebSocket? = null
     private var sarvamTransport: SarvamAudioTransport? = null
+    private var sarvamApiTransport: SarvamApiVoiceTransport? = null
     private var selectedProvider = "openai"
     @Volatile private var assistantPanelEnabled = false
     private data class PendingAppTool(val callId: String, val app: String, val command: String)
@@ -139,6 +140,9 @@ class RealtimeVoiceService : Service() {
                     else "Denied by owner. No app was opened."
                 lastToolResult = outcome.take(320)
                 message = lastToolResult
+                if (selectedProvider == "sarvam-api") {
+                    sarvamApiTransport?.toolResult(lastToolResult)
+                }
                 if (selectedProvider == "openai") {
                     sendRealtimeToolOutput(pending.callId, lastToolResult)
                     socket?.send(JSONObject().put("type", "response.create").toString())
@@ -204,18 +208,55 @@ class RealtimeVoiceService : Service() {
         toolCallsInSession = 0
         idleGate.reset(0L)
         selectedProvider=credentials.provider
-        activeRate=if(selectedProvider=="sarvam")16000 else RATE
+        activeRate=if(selectedProvider=="sarvam-api" || selectedProvider=="sarvam")16000 else RATE
         // Stop the separate offline wake AudioRecord before attempting a
         // second microphone capture. The wake service remains owner-armed,
         // but may not record concurrently with the live session.
         NexaWakeWordService.pauseForLiveVoice()
         active.set(true)
         status="connecting"
-        message="Connecting to "+(if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
+        message="Connecting to "+(if(selectedProvider=="sarvam-api")"Sarvam API realtime voice" else if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
         main.postDelayed(maxSession,60*60*1000L)
         main.postDelayed(handshakeTimeout,25_000L)
         try {
-        if(selectedProvider=="sarvam") {
+        if(selectedProvider=="sarvam-api") {
+            val transport=SarvamApiVoiceTransport(credentials.apiKey,
+                object:SarvamApiVoiceTransport.Callbacks {
+                    override fun connected() {
+                        main.post { if(active.get() && status=="connecting")startAudio() }
+                    }
+                    override fun audio(pcm16:ByteArray) {
+                        if(!active.get())return
+                        idleGate.reset(SystemClock.elapsedRealtime())
+                        val chunk=PlaybackChunk(playbackTurn.get(),pcm16)
+                        if(!audioQueue.offer(chunk)) {
+                            audioQueue.poll()
+                            audioQueue.offer(chunk)
+                        }
+                    }
+                    override fun interrupted() {
+                        idleGate.reset(SystemClock.elapsedRealtime())
+                        interruptSpeakerPlayback()
+                    }
+                    override fun ownerRequest(text:String):Boolean {
+                        if(!assistantPanelEnabled || NexaVoiceIntentGate.appRequest(text)==null)
+                            return false
+                        main.post {
+                            if(active.get() && selectedProvider=="sarvam-api")
+                                handleSarvamOwnerRequest(text)
+                        }
+                        return true
+                    }
+                    override fun failed(reason:String) {
+                        main.post { if(active.get())stopWithStatus("error",reason) }
+                    }
+                    override fun ended() {
+                        main.post { if(active.get())stopWithStatus("stopped","Saaras realtime session ended") }
+                    }
+                })
+            sarvamApiTransport=transport
+            transport.connect()
+        } else if(selectedProvider=="sarvam") {
             val transport=SarvamAudioTransport(object:SarvamAudioTransport.Callbacks{
                 override fun connected() {
                     main.post {if(active.get() && status=="connecting")startAudio()}
@@ -588,7 +629,9 @@ class RealtimeVoiceService : Service() {
                             if(!active.get()) true else {
                                 val bytes=if(microphoneMuted)
                                     ByteArray(got) else data.copyOf(got)
-                                if(selectedProvider=="sarvam") {
+                                if(selectedProvider=="sarvam-api") {
+                                    sarvamApiTransport?.sendAudio(bytes) ?: false
+                                } else if(selectedProvider=="sarvam") {
                                     sarvamTransport?.sendAudio(bytes) ?: false
                                 } else {
                                     val encoded=Base64.encodeToString(bytes,Base64.NO_WRAP)
@@ -646,6 +689,8 @@ class RealtimeVoiceService : Service() {
         // Resume detection only after both live capture and playback release;
         // an already-visible assistant panel still keeps the wake mic paused.
         NexaWakeWordService.resumeAfterLiveVoice()
+        try { sarvamApiTransport?.close() } catch (_: Exception) {}
+        sarvamApiTransport=null
         try { sarvamTransport?.close() } catch (_: Exception) {}
         sarvamTransport=null
         pendingAppTool = null
