@@ -92,7 +92,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             value != null && value.matches(Regex("sk_samvaad_[A-Za-z0-9_-]{16,500}"))
         }
         fun sarvamStreamingConsent(ctx: Context): Boolean = synchronized(lock) {
-            readEncrypted(ctx,"sarvam-voice-streaming-consent")=="accepted-v1"
+            readEncrypted(ctx,"sarvam-voice-streaming-consent")=="accepted-model-api-v1"
         }
         /** Voice uses only the owner-selected Model API subscription key.
          * Workspace/Agent identifiers and old Samvaad keys are NEVER read
@@ -239,7 +239,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         try {
             synchronized(lock) {
                 write(name("private","sarvam-voice-streaming-consent"),
-                    if(accepted) "accepted-v1" else "declined")
+                    if(accepted) "accepted-model-api-v1" else "declined")
             }
             if(!accepted) reactApplicationContext.stopService(
                 android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
