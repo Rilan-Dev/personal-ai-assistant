@@ -66,7 +66,7 @@ export default function App() {
   const engine = useMemo(()=>makeEngine(screenGrant),[screenGrant]);
   useEffect(()=>{
     const listener=AppState.addEventListener('change',status=>{
-      if(status!=='active'){screenGrant.revoke();iconReviews.clear();setVisionFeedbackTarget(null);}
+      if(status!=='active'){screenGrant.revoke();iconReviews.clear();setVisionFeedbackTarget(null);setVisionFeedbackCounts(iconReviews.summary());}
     });
     return ()=>{listener.remove();screenGrant.revoke();iconReviews.clear();};
   },[screenGrant,iconReviews]);
@@ -397,13 +397,14 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setVisionFeedbackTarget(null);iconReviews.clear();setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());setAppMatches([]);}
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
     const timeout=setTimeout(()=>{
       setVisualPreview(null);
       setIconScan(prev=>prev?.snapshotId===visualPreview.snapshotId?null:prev);
+      setVisionFeedbackTarget(null);
     },Math.max(1,Math.min(visualPreview.expiresInMs,60_000)));
     return ()=>clearTimeout(timeout);
   },[visualPreview]);
@@ -782,7 +783,7 @@ export default function App() {
   };
   const armVisualScan=async()=>{
     setVisualPreview(null);setIconScan(null);setIconLocalAnswer('');screenGrant.revoke();
-    setVisionFeedbackTarget(null);iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());
+    setVisionFeedbackTarget(null);setVisionFeedbackNotice('');iconReviews.clear();setVisionFeedbackCounts(iconReviews.summary());
     try{
       await armVisualIcons();
       setScreenArmed(false);setIconScanArmed(false);setVisualArmed(true);
