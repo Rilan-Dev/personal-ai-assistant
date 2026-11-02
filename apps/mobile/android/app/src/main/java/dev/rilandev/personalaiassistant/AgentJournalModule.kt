@@ -95,6 +95,12 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             readEncrypted(ctx,"sarvam-voice-streaming-consent")=="accepted-v1"
         }
         fun openVoiceCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
+            // A dedicated Samvaad key takes precedence. Declined consent
+            // MUST NOT silently fall back to an OpenAI or Model API key.
+            if(readEncrypted(ctx,"sarvam-voice-key")!=null) {
+                if(!sarvamStreamingConsent(ctx))return@synchronized null
+                return@synchronized openSarvamVoicePreflightCredentials(ctx)
+            }
             val sarvam=openSarvamVoicePreflightCredentials(ctx)
             if(sarvam!=null && sarvamStreamingConsent(ctx)) return@synchronized sarvam
             val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
