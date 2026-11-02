@@ -264,7 +264,7 @@ class NexaToolOverlayService : Service() {
         val snap = inspectedScreen
         val selected=snap?.icons?.singleOrNull { it.id==id }
         val expected=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
-        if (expected != null && selected?.semantic != expected) {
+        if (expected != null && (selected == null || !guidedNavigation.canSelect(selected.semantic,android.os.SystemClock.elapsedRealtime()))) {
             note="Guide is waiting for the " + expected + " control. Cancel guide to choose another."
             render()
             return
@@ -280,7 +280,7 @@ class NexaToolOverlayService : Service() {
         val service = ScreenAssistService.active
         val selected = NexaScreenActions.selected()
         val expected=guidedNavigation.expected(android.os.SystemClock.elapsedRealtime())
-        if (expected != null && selected?.semantic != expected) {
+        if (expected != null && (selected == null || !guidedNavigation.canSelect(selected.semantic,android.os.SystemClock.elapsedRealtime()))) {
             note = "Guide target changed. Re-inspect the " + expected + " icon."
             inspectedScreen = null
             NexaScreenActions.reset()
@@ -504,7 +504,7 @@ class NexaToolOverlayService : Service() {
                                     addView(row(
                                         button(item.label.take(18)) {
                                             if (NexaScreenActionPolicy.permits(item) &&
-                                                (expectedGuide==null || item.semantic==expectedGuide))
+                                                (expectedGuide==null || guidedNavigation.canSelect(item.semantic,android.os.SystemClock.elapsedRealtime())))
                                                 selectVisibleIcon(item.id)
                                             else {
                                                 note = "Read-only control. Calls, messages and destructive actions are blocked."
@@ -512,10 +512,10 @@ class NexaToolOverlayService : Service() {
                                             }
                                         },
                                         button(if (NexaScreenActionPolicy.permits(item) &&
-                                            (expectedGuide==null || item.semantic==expectedGuide))
+                                            (expectedGuide==null || guidedNavigation.canSelect(item.semantic,android.os.SystemClock.elapsedRealtime())))
                                             "Select" else "Read only") {
                                             if (NexaScreenActionPolicy.permits(item) &&
-                                                (expectedGuide==null || item.semantic==expectedGuide))
+                                                (expectedGuide==null || guidedNavigation.canSelect(item.semantic,android.os.SystemClock.elapsedRealtime())))
                                                 selectVisibleIcon(item.id)
                                             else {
                                                 note = "This icon cannot be acted on by the screen assistant."
