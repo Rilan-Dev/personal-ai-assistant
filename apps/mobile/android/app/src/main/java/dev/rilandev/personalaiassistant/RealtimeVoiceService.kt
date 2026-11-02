@@ -77,7 +77,11 @@ class RealtimeVoiceService : Service() {
     private var sarvamApiTransport: SarvamApiVoiceTransport? = null
     private var selectedProvider = "openai"
     @Volatile private var assistantPanelEnabled = false
-    private data class PendingAppTool(val callId: String, val app: String, val command: String)
+    private data class PendingAppTool(
+        val callId: String, val app: String, val command: String,
+        val installedApp: NexaPhoneVoiceTools.AppChoice? = null,
+        val createdAtMs: Long = SystemClock.elapsedRealtime()
+    )
     private var pendingAppTool: PendingAppTool? = null
     private var lastLocalUtterance = ""
     private var lastLocalUtteranceAt = 0L
@@ -135,9 +139,16 @@ class RealtimeVoiceService : Service() {
                 pendingAppTool = null
                 pendingApprovalSummary = null
                 val approved = intent.action == ACTION_APPROVE_TOOL
-                val outcome = if (approved)
-                    NexaOverlayCommands.handle(this, pending.command)
-                    else "Denied by owner. No app was opened."
+                // A visible approval tap authorizes ONE bounded action, not a
+                // stale request from an earlier conversation.
+                val age = SystemClock.elapsedRealtime() - pending.createdAtMs
+                val outcome = when {
+                    !approved -> "Denied by owner. No app was opened."
+                    age !in 0..60_000L -> "App approval expired. Request it again."
+                    pending.installedApp != null ->
+                        NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
+                    else -> NexaOverlayCommands.handle(this,pending.command)
+                }
                 lastToolResult = outcome.take(320)
                 message = lastToolResult
                 if (selectedProvider == "sarvam-api") {
@@ -239,8 +250,11 @@ class RealtimeVoiceService : Service() {
                         interruptSpeakerPlayback()
                     }
                     override fun ownerRequest(text:String):Boolean {
-                        if(!assistantPanelEnabled || NexaVoiceIntentGate.appRequest(text)==null)
-                            return false
+                        if(!assistantPanelEnabled)return false
+                        val recognizable=NexaVoiceIntentGate.appRequest(text)!=null ||
+                            NexaPhoneVoiceTools.deviceFacts(this@RealtimeVoiceService,text)!=null ||
+                            NexaPhoneVoiceTools.findLaunchableApp(this@RealtimeVoiceService,text)!=null
+                        if(!recognizable)return false
                         main.post {
                             if(active.get() && selectedProvider=="sarvam-api")
                                 handleSarvamOwnerRequest(text)
@@ -464,23 +478,47 @@ class RealtimeVoiceService : Service() {
      */
     private fun handleSarvamOwnerRequest(transcript: String) {
         if (!assistantPanelEnabled || pendingAppTool != null) return
-        val intent = NexaVoiceIntentGate.appRequest(transcript) ?: return
         val now = SystemClock.elapsedRealtime()
-        if (intent.command == lastLocalUtterance &&
+        if (transcript == lastLocalUtterance &&
             now - lastLocalUtteranceAt < 12_000L) return
         if (++toolCallsInSession > 12) {
             lastToolResult = "Voice device-action limit reached"
             message = lastToolResult
             return
         }
-        lastLocalUtterance = intent.command
+        lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
-        pendingAppTool = PendingAppTool("local-sarvam", intent.app, intent.command)
-        pendingApprovalSummary = "Open ${intent.app}? Confirm or deny below."
-        message = "Nexa local device approval required to open ${intent.app}"
+        val fact=NexaPhoneVoiceTools.deviceFacts(this,transcript)
+        if(fact!=null) {
+            lastToolResult=fact.take(320)
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(fact)
+            return
+        }
+        val known=NexaVoiceIntentGate.appRequest(transcript)
+        val discovered=if(known==null)
+            NexaPhoneVoiceTools.findLaunchableApp(this,transcript) else null
+        if(known!=null) {
+            pendingAppTool=PendingAppTool("local-sarvam",known.app,known.command)
+        } else when(discovered) {
+            is NexaPhoneVoiceTools.Decision.Immediate -> {
+                lastToolResult=discovered.result.take(320)
+                message=lastToolResult
+                sarvamApiTransport?.toolResult(lastToolResult)
+                return
+            }
+            is NexaPhoneVoiceTools.Decision.NeedsApproval -> {
+                pendingAppTool=PendingAppTool("local-sarvam",discovered.app.label,
+                    "open",discovered.app)
+            }
+            else -> return
+        }
+        val requested=pendingAppTool?.app ?: return
+        pendingApprovalSummary = "Open $requested? Tap Approve once or Deny here."
+        message = "Approval needed to open $requested · no app has been opened yet"
         try {
             getSystemService(NotificationManager::class.java).notify(
-                NOTIFICATION_ID, makeNotification("App approval pending · open Nexa Voice"))
+                NOTIFICATION_ID, makeNotification("App approval pending · tap Nexa overlay"))
         } catch (_: Exception) {}
     }
 
