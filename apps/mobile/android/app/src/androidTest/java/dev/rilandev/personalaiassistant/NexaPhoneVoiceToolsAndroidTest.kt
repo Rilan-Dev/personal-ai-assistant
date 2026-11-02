@@ -51,6 +51,6 @@ class NexaPhoneVoiceToolsAndroidTest {
         assertTrue(NexaSarvamReadTools.execute(app,"get_storage_usage","{}","How much storage is left?").contains("GB"))
         assertTrue(NexaSarvamReadTools.execute(app,"get_battery_level","{}","What is my battery percentage?").isNotBlank())
         assertTrue(NexaSarvamReadTools.execute(app,"dispatch_gesture","{}","Please tap the screen").startsWith("Rejected"))
-        assertTrue(NexaSarvamReadTools.execute(app,"get_storage_usage","{\"path\":\"/secret\"}").startsWith("Rejected"))
+        assertTrue(NexaSarvamReadTools.execute(app,"get_storage_usage","{\"path\":\"/secret\"}","How much storage?").startsWith("Rejected"))
     }
 }
