@@ -23,6 +23,17 @@ internal object NexaPhoneVoiceTools {
         data class NeedsApproval(val app: AppChoice): Decision()
     }
 
+    /** Local transcript intent only. A match MUST still show owner approval. */
+    fun wantsScreenOverview(utterance: String): Boolean {
+        val q=utterance.lowercase(Locale.ROOT).trim()
+            .replace(Regex("[?.!,]+$"),"").trim()
+            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        return q in setOf("what icons are on my screen","what icons are on screen",
+            "describe the icons on my screen","describe icons on screen",
+            "identify my screen icons","identify screen icons",
+            "what buttons are on my screen","inspect screen icons")
+    }
+
     fun deviceFacts(context: Context, utterance: String): String? {
         val q=utterance.lowercase(Locale.ROOT).trim()
             .replace(Regex("[?.!,]+$"),"").trim()
