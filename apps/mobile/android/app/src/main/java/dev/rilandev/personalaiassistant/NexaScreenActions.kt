@@ -36,7 +36,7 @@ internal object NexaScreenActions {
         if (!ScreenAssistState.connected) return null to "Enable Nexa Screen Assist in Android Accessibility Settings."
         val keyguard = service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if (keyguard?.isKeyguardLocked == true) return null to "Unlock your phone before inspecting."
-        val root = service.rootInActiveWindow ?: return null to "No inspectable active window."
+        val root = service.externalWindowRoot() ?: return null to "No inspectable external application window."
         try {
             val pkg = root.packageName?.toString().orEmpty()
             if (pkg.isBlank() || pkg == service.packageName ||
@@ -92,7 +92,7 @@ internal object NexaScreenActions {
         if (!ScreenAssistState.connected) return "Screen Assist was disabled. No action requested."
         val keyguard = service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if (keyguard?.isKeyguardLocked == true) return "Screen locked. No action requested."
-        val root = service.rootInActiveWindow ?: return "Screen unavailable. No action requested."
+        val root = service.externalWindowRoot() ?: return "External screen unavailable. No action requested."
         try {
             if (root.packageName?.toString() != snapshot.packageName ||
                 root.windowId != snapshot.windowId) return "Screen changed. No action requested."
@@ -113,7 +113,12 @@ internal object NexaScreenActions {
                         node.getBoundsInScreen(bounds)
                         val sameBounds = bounds.left == icon.bounds.left && bounds.top == icon.bounds.top &&
                             bounds.right == icon.bounds.right && bounds.bottom == icon.bounds.bottom
-                        if (sameBounds && kind?.first == icon.semantic && kind?.second == icon.label) {
+                        val sameResourceId = icon.resourceId.isEmpty() ||
+                            node.viewIdResourceName.orEmpty() == icon.resourceId
+                        val sameWidgetClass = icon.className.isEmpty() ||
+                            node.className?.toString() == icon.className
+                        if (sameBounds && sameResourceId && sameWidgetClass &&
+                            kind?.first == icon.semantic && kind.second == icon.label) {
                             if (matched == null) matched = node else duplicate = true
                         }
                     }

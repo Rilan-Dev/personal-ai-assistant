@@ -11,7 +11,8 @@ import java.util.UUID
 internal data class IconBox(val left: Int, val top: Int, val right: Int, val bottom: Int)
 internal data class ObservedIcon(
     val id: String, val label: String, val semantic: String,
-    val bounds: IconBox, val clickable: Boolean
+    val bounds: IconBox, val clickable: Boolean,
+    val resourceId: String = "", val className: String = ""
 )
 internal data class IconScanResult(
     val id: String, val sourcePackage: String, val capturedAtWallMs: Long,
@@ -91,7 +92,9 @@ internal object ScreenIconDetector {
                             rect.right <= 20000 && rect.bottom <= 20000) {
                             val (semantic, label) = actionLabel ?: ("unknown" to "Unknown icon")
                             matches.add(ObservedIcon("icon-${matches.size}", label, semantic,
-                                IconBox(rect.left, rect.top, rect.right, rect.bottom), node.isClickable))
+                                IconBox(rect.left, rect.top, rect.right, rect.bottom), node.isClickable,
+                                node.viewIdResourceName.orEmpty().take(160),
+                                kind.take(160)))
                         }
                     }
                 }
