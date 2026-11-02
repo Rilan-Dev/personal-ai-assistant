@@ -26,6 +26,9 @@ class NexaPhoneVoiceToolsAndroidTest {
 
     @Test fun installedAppDiscoveryDoesNotExecuteAnythingOrGuessCommands() {
         assertNull(NexaPhoneVoiceTools.findLaunchableApp(app,"open whatsapp and send a message"))
+        // "n" in a legitimate app name must not be interpreted as a newline.
+        val linkedin=NexaPhoneVoiceTools.findLaunchableApp(app,"open linkedin")
+        assertNotNull("App discovery must return a verified candidate or a clarification",linkedin)
         assertNull(NexaPhoneVoiceTools.findLaunchableApp(app,"delete all my photos"))
         assertNull(NexaPhoneVoiceTools.findLaunchableApp(app,"open settings"))
         assertNull(NexaPhoneVoiceTools.findLaunchableApp(app,"open app"))

@@ -54,7 +54,10 @@ test("Accessibility reads only one explicitly armed bounded text snapshot",()=>{
   assert.match(manifest,/android\.permission\.BIND_ACCESSIBILITY_SERVICE/);
   assert.match(xml,/canRetrieveWindowContent="true"/);
   assert.match(xml,/canPerformGestures="false"/);
-  assert.doesNotMatch(xml,/typeAllMask|flagRetrieveInteractiveWindows/);
+  // The floating approval panel must inspect the external app behind it.
+  // Retrieve interactive windows, but keep generic gesture injection disabled.
+  assert.match(xml,/flagRetrieveInteractiveWindows/);
+  assert.doesNotMatch(xml,/typeAllMask/);
   assert.match(code,/fun arm\(\): Boolean/);
   assert.match(code,/elapsedRealtime\(\) \+ 20_000/);
   assert.match(code,/snapshot = text\.take\(2000\)/);

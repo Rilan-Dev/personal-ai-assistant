@@ -23,11 +23,21 @@ internal object NexaPhoneVoiceTools {
         data class NeedsApproval(val app: AppChoice): Decision()
     }
 
+    private fun normalizedVoice(utterance:String):String {
+        var q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!').trim()
+        q=q.removePrefix("hey nexa,").removePrefix("hey nexa ").trim()
+        val polite=listOf("can you please ","could you please ","would you please ",
+            "can you ","could you ","would you ","please ",
+            "i want you to ","i need you to ")
+        for(prefix in polite) {
+            if(q.startsWith(prefix)){q=q.removePrefix(prefix).trim();break}
+        }
+        return q
+    }
+
     /** Local transcript intent only. A match MUST still show owner approval. */
     fun wantsScreenOverview(utterance: String): Boolean {
-        val q=utterance.lowercase(Locale.ROOT).trim()
-            .replace(Regex("[?.!,]+$"),"").trim()
-            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val q=normalizedVoice(utterance)
         return q in setOf("what icons are on my screen","what icons are on screen",
             "describe the icons on my screen","describe icons on screen",
             "identify my screen icons","identify screen icons",
@@ -36,9 +46,7 @@ internal object NexaPhoneVoiceTools {
 
     /** Exact local spoken questions only; suggestions always need an owner approval. */
     fun locateIconIntent(utterance: String): String? {
-        val normalized=utterance.trim().lowercase(Locale.ROOT)
-            .replace(Regex("[?.!]+$"),"").trim()
-            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val normalized=normalizedVoice(utterance)
         val match=Regex("^(?:where is|find|locate) (?:the |my )?(search|menu|settings|back|close|call|video call|send|attach|camera|microphone) (?:icon|button|control)$")
             .matchEntire(normalized) ?: return null
         return match.groupValues[1].replace(' ','_')
@@ -46,8 +54,7 @@ internal object NexaPhoneVoiceTools {
 
     /** Conservative owner-spoken screen commands, not provider-invented actions. */
     fun wantsVisibleText(utterance:String):Boolean {
-        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
-            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val q=normalizedVoice(utterance)
         return q in setOf("read my screen","read the screen","read screen",
             "read screen contents","read my screen contents",
             "what is on my screen","what's on my screen",
@@ -56,21 +63,23 @@ internal object NexaPhoneVoiceTools {
     }
 
     fun scrollDirection(utterance:String):String? {
-        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
-            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val q=normalizedVoice(utterance)
         return when(q) {
             "scroll down","scroll down on my screen","scroll this screen down",
             "scroll down the page","move down the page" -> "down"
             "scroll up","scroll up on my screen","scroll this screen up",
             "scroll up the page","move up the page" -> "up"
+            "scroll left","scroll left on my screen","scroll the screen left",
+            "swipe left","swipe left on this page" -> "left"
+            "scroll right","scroll right on my screen","scroll the screen right",
+            "swipe right","swipe right on this page" -> "right"
             else -> null
         }
     }
 
     /** Only harmless navigation semantics; no arbitrary coordinates or send/call. */
     fun clickSafeIcon(utterance:String):String? {
-        val q=utterance.lowercase(Locale.ROOT).trim().trimEnd('?','.','!')
-            .removePrefix("hey nexa ").removePrefix("please ").trim()
+        val q=normalizedVoice(utterance)
         val match=Regex("^(?:tap|click|press) (?:on )?(?:the )?(search|menu|settings|back|close) (?:icon|button|control)?$")
             .matchEntire(q) ?:return null
         return match.groupValues[1]
@@ -121,7 +130,7 @@ internal object NexaPhoneVoiceTools {
     fun findLaunchableApp(context: Context, utterance: String): Decision? {
         val q=utterance.lowercase(Locale.ROOT).trim()
             .replace(Regex("[.?!]+$"),"").trim()
-        if(q.length !in 5..150 || Regex("""[;\\n"“”]|\\b(and|then|send|text|message|call|dial|delete|remove|install|settings|without|don't|not)\\b""")
+        if(q.length !in 5..150 || Regex("""[;\n"“”]|\b(and|then|send|text|message|call|dial|delete|remove|install|settings|without|don't|not)\b""")
                 .containsMatchIn(q)) return null
         val match=Regex("^(?:(?:can|could|would) you (?:please )?|please |i (?:want|need) you to )?(?:open|launch|start|find) (?:my |the )?([a-z0-9][a-z0-9 ._+-]{1,55})(?: app)?$")
             .matchEntire(q) ?: return null
