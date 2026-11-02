@@ -99,6 +99,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private val handler = Handler(Looper.getMainLooper())
     private var label: TextView? = null
     private var approvalRow: LinearLayout? = null
+    private var approvalBanner: TextView? = null
     private var commandRecognizer: SpeechRecognizer? = null
     private var commandBusy = false
     private var commandFeedback: String? = null
@@ -128,8 +129,12 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
     private var feedbackUntil = 0L
     private val refresh = object : Runnable {
         override fun run() {
-            approvalRow?.visibility =
-                if (RealtimeVoiceService.pendingApprovalSummary != null) View.VISIBLE else View.GONE
+            val pending = RealtimeVoiceService.pendingApprovalSummary
+            approvalRow?.visibility = if (pending != null) View.VISIBLE else View.GONE
+            approvalBanner?.visibility = if (pending != null) View.VISIBLE else View.GONE
+            approvalBanner?.text = if (pending != null)
+                "APPROVAL REQUIRED · " + pending.take(180)
+                else ""
             label?.text = if (RealtimeVoiceService.pendingApprovalSummary != null)
                 RealtimeVoiceService.pendingApprovalSummary else if (commandBusy) "Listening · tell me what to do…" else if
                 (commandFeedback != null && SystemClock.elapsedRealtime() < feedbackUntil)
@@ -188,6 +193,30 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             it.background = NexaOverlayTheme.inset(app, p)
             panel.addView(it)
         }
+        approvalBanner = NexaOverlayTheme.label(app,
+            "APPROVAL REQUIRED", p, 14f, true).also {
+            it.visibility = View.GONE
+            it.setPadding(pad, pad, pad, NexaOverlayTheme.dp(app, 4))
+            panel.addView(it)
+        }
+        approvalRow = row(
+            button("Approve once") {
+                try {
+                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_APPROVE_TOOL
+                    })
+                } catch (_: Exception) { feedback("Android blocked action approval") }
+            },
+            button("Deny") {
+                try {
+                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_DENY_TOOL
+                    })
+                } catch (_: Exception) { feedback("Could not reject pending action") }
+            }
+        )
+        approvalRow?.visibility = View.GONE
+        approvalRow?.let { panel.addView(it) }
         panel.addView(row(
             button("Battery") {
                 feedback(NexaOverlayCommands.handle(app, "battery").take(250))
@@ -217,24 +246,6 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                 } catch (_: Exception) { label?.text = "Unable to open Nexa" }
             }
         ))
-        approvalRow = row(
-            button("Approve app") {
-                try {
-                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
-                        action = RealtimeVoiceService.ACTION_APPROVE_TOOL
-                    })
-                } catch (_: Exception) { feedback("Android blocked action approval") }
-            },
-            button("Deny") {
-                try {
-                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
-                        action = RealtimeVoiceService.ACTION_DENY_TOOL
-                    })
-                } catch (_: Exception) { feedback("Could not reject pending action") }
-            }
-        )
-        approvalRow?.visibility = View.GONE
-        approvalRow?.let { panel.addView(it) }
         outer.addView(panel)
         val dock = LinearLayout(app).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -634,6 +645,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         handler.removeCallbacks(refresh)
         label = null
         approvalRow = null
+        approvalBanner = null
         super.onDestroy()
     }
 }
