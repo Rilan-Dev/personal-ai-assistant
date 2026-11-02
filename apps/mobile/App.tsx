@@ -31,7 +31,7 @@ import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlash
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
-import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction } from './src/native/liveVoice';
+import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
@@ -561,6 +561,19 @@ export default function App() {
       setSarvamVoiceSaved(false);setSarvamVoiceNotice('Voice Agent configuration erased.');
     }catch{setSarvamVoiceNotice('Unable to erase Voice Agent configuration.');}
     finally{setSarvamVoiceBusy(false);}
+  };
+  const testSarvamVoice=async()=>{
+    if(!engine.live || liveVoiceBusy || liveVoiceStatus.state==='connecting' || liveVoiceStatus.state==='listening')return;
+    setLiveVoiceBusy(true);
+    setVoiceNotice('Checking Sarvam authorization without starting the microphone…');
+    try {
+      const result=await checkSarvamVoiceAuthorization();
+      setVoiceNotice(result.message);
+    } catch {
+      setVoiceNotice('Unable to run Sarvam authorization check. Open Nexa Voice and verify your saved configuration.');
+    } finally {
+      setLiveVoiceBusy(false);
+    }
   };
   const startLiveVoice=async()=>{
     if(!engine.live||liveVoiceBusy||running||listening||speaking||voiceInProgress.current)return;
@@ -1158,6 +1171,14 @@ export default function App() {
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
+          {activeProvider?.provider==='sarvam' &&
+            <Pressable accessibilityRole="button"
+              disabled={liveVoiceBusy||liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
+              style={styles.outlineAction} onPress={()=>void testSarvamVoice()}>
+              <Text style={styles.outlineActionText}>Verify Sarvam Voice Agent connection</Text>
+            </Pressable>}
+          {activeProvider?.provider==='sarvam' &&
+            <Text style={styles.settingHelp}>This checks the saved key, exact agent IDs and signed WebSocket authorization. It does not start the microphone or prove audio playback. Saaras model selection belongs to the managed agent configuration.</Text>}
           {Boolean(liveVoiceStatus.pendingAppApproval) && <View style={styles.actionCard}>
             <Text style={styles.actionTitle}>Voice tool approval needed</Text>
             <Text style={styles.actionDescription}>{liveVoiceStatus.pendingAppApproval}</Text>
