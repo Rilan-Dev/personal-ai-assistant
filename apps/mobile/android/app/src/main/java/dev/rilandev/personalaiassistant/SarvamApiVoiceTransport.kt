@@ -231,7 +231,15 @@ internal class SarvamApiVoiceTransport(
         }
         // Native owner-approval is an independent consent boundary. No
         // model instruction or transcript may silently execute a phone tool.
-        if(callbacks.ownerRequest(text)) {
+        // Tool execution is never allowed to crash the provider WebSocket
+        // callback thread or the whole Android app. Return a spoken failure
+        // rather than an uncaught OEM BatteryManager/Accessibility exception.
+        val locallyHandled=try { callbacks.ownerRequest(text) }
+            catch (_:Exception) {
+                speak("Android could not process that device request. You can retry after checking Nexa permissions.")
+                true
+            }
+        if(locallyHandled) {
             synchronized(lock) {
                 turns.addLast("user" to text.take(800))
                 while(turns.size>12)turns.removeFirst()
