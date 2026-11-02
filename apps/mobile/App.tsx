@@ -397,7 +397,10 @@ export default function App() {
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
-    const timeout=setTimeout(()=>setVisualPreview(null),Math.max(1,Math.min(visualPreview.expiresInMs,60_000)));
+    const timeout=setTimeout(()=>{
+      setVisualPreview(null);
+      setIconScan(prev=>prev?.snapshotId===visualPreview.snapshotId?null:prev);
+    },Math.max(1,Math.min(visualPreview.expiresInMs,60_000)));
     return ()=>clearTimeout(timeout);
   },[visualPreview]);
   const [selectedContact,setSelectedContact]=useState<OwnerSelectedContact|null>(null);
@@ -774,7 +777,7 @@ export default function App() {
     setIconScanNotice('Icon scan discarded.');
   };
   const armVisualScan=async()=>{
-    setVisualPreview(null);
+    setVisualPreview(null);setIconScan(null);setIconLocalAnswer('');screenGrant.revoke();
     try{
       await armVisualIcons();
       setScreenArmed(false);setIconScanArmed(false);setVisualArmed(true);
@@ -784,16 +787,19 @@ export default function App() {
   const reviewVisualScan=async()=>{
     try{
       const result=await takeVisualIcons();
-      setVisualPreview(result);setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
+      setVisualPreview(result);setIconScan(result?.observation??null);
+      setIconLocalAnswer('');setGuidedPlanNotice('');
+      setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
       setVisualNotice(result
-        ? result.crops.length+' icon crops available. No images have been uploaded.'
+        ? result.crops.length+' local icon crops and paired accessibility metadata captured. No images uploaded.'
         : 'No visual icon capture available. The window may be protected or the scan expired.');
     }catch{setVisualNotice('Unable to retrieve visual icon crops.');}
   };
   const clearVisualScan=async()=>{
     await discardVisualIcons().catch(()=>{});
-    setVisualPreview(null);setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
-    setVisualNotice('Visual icon images discarded from memory.');
+    setVisualPreview(null);setIconScan(null);screenGrant.revoke();
+    setVisualArmed(false);setSelectedVisionCrop(null);setVisionResult('');
+    setVisualNotice('Visual crops and their paired observations discarded from memory.');
   };
   const identifySelectedIcon=async()=>{
     const crop=visualPreview?.crops.find(c=>c.iconId===selectedVisionCrop);
@@ -1601,7 +1607,7 @@ export default function App() {
            </>}
            {engine.live&&visualIconCaptureAvailable()&&<>
              <Text style={styles.groupLabel}>Visual fallback — unknown icons only</Text>
-             <Text style={styles.cardText}>Arm a one-time screenshot for up to six small unlabeled button crops. Only these thumbnails return to Nexa; the full screenshot is never passed to React Native or AI.</Text>
+             <Text style={styles.cardText}>Arm a one-time screenshot for up to six unlabeled icon crops. Nexa also reads matching accessibility icon metadata from the same app window and capture event for evidence checks. Only selected crops can be uploaded to AI.</Text>
              <View style={styles.buttonRow}>
                <Pressable accessibilityRole="button" style={styles.primaryInline}
                  disabled={running||visualArmed||screenArmed||iconScanArmed} onPress={armVisualScan}>
