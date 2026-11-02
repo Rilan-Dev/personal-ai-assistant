@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, groundVisualIcon, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
@@ -376,6 +376,7 @@ export default function App() {
   const [iconScanNotice,setIconScanNotice] = useState('');
   const [iconQuestion,setIconQuestion] = useState('');
   const [iconLocalAnswer,setIconLocalAnswer] = useState('');
+  const [guidedPlanNotice,setGuidedPlanNotice] = useState('');
   const [visualArmed,setVisualArmed] = useState(false);
   const [visualPreview,setVisualPreview] = useState<VisualIconPreview|null>(null);
   const [visualNotice,setVisualNotice] = useState('');
@@ -392,7 +393,7 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
@@ -761,7 +762,7 @@ export default function App() {
   const reviewIcons=async()=>{
     try{
       const result=await takeIconRecognition();
-      setIconScan(result);setIconScanArmed(false);setIconLocalAnswer('');
+      setIconScan(result);setIconScanArmed(false);setIconLocalAnswer('');setGuidedPlanNotice('');
       setIconScanNotice(result
         ? 'Control metadata captured locally. No action has been performed.'
         : 'No icon scan available. It may have expired or the screen may be protected.');
@@ -769,7 +770,7 @@ export default function App() {
   };
   const discardIcons=async()=>{
     await clearIconRecognition().catch(()=>{});
-    setIconScanArmed(false);setIconScan(null);setIconLocalAnswer('');screenGrant.revoke();
+    setIconScanArmed(false);setIconScan(null);setIconLocalAnswer('');setGuidedPlanNotice('');screenGrant.revoke();
     setIconScanNotice('Icon scan discarded.');
   };
   const armVisualScan=async()=>{
@@ -802,13 +803,14 @@ export default function App() {
       const settings=await loadProviderFromVault();
       if(!settings){setVisionResult('Configure an AI provider in Nexa Settings first.');return;}
       const result=await identifyIconCrop(crop.dataUri,settings);
-      const grounding=iconScan && visualPreview
-        ? groundVisualIcon(iconScan,visualPreview,result,crop.iconId,Date.now()) : null;
-      const evidence=grounding
-        ? ' Evidence: '+grounding.status+' ('+grounding.evidenceStrength+').'
+      const evidence=iconScan && visualPreview
+        ? scoreIconEvidence(iconScan,visualPreview,result,crop.iconId,Date.now()) : null;
+      const explanation=evidence
+        ? ' Heuristic evidence: '+evidence.status+' ('+evidence.score+'/85, not a probability). '+
+          evidence.reasons.join('; ')+'.'
         : ' No correlated accessibility scan available.';
       setVisionResult('Unverified visual guess: '+result.label+' — '+result.meaning+
-        '.'+evidence+' No action was executed or authorized.');
+        '.'+explanation+' No action was executed or authorized.');
     }catch{
       setVisionResult('Icon identification failed or the selected model does not support images. No action was executed.');
     }finally{setVisionBusy(false);}
@@ -818,6 +820,13 @@ export default function App() {
     if(!iconScan){setIconLocalAnswer('Capture icons first.');return;}
     const observation=resolveScreenQuestion(iconScan,iconQuestion,Date.now());
     setIconLocalAnswer(observation.answer);
+  };
+  const previewGuidedNavigation=()=>{
+    if(!iconScan){setGuidedPlanNotice('Capture current screen controls first.');return;}
+    const preview=inspectGuidedScreenPlan(iconQuestion,iconScan,Date.now());
+    const steps=preview.steps.map(s=>s.semantic).join(' → ');
+    setGuidedPlanNotice((steps?steps+'. ':'')+preview.message+
+      ' No click or scroll was performed.');
   };
   const releaseIconsToAgent=()=>{
     if(!iconScan||!screenGrant.release(iconScan,Date.now())){
@@ -1563,7 +1572,7 @@ export default function App() {
                <Text style={styles.groupLabel}>{iconScan.icons.length} visible controls in {iconScan.packageName}</Text>
                <Text style={styles.cardText}>Local summary: {summarizeScreenControls(iconScan,Date.now()).safeNavigationCount} navigation controls, {summarizeScreenControls(iconScan,Date.now()).unknownCount} unlabeled icons. Position descriptions use the captured app-window bounds.</Text>
                <TextInput style={styles.settingInput} value={iconQuestion} maxLength={100}
-                 onChangeText={v=>{setIconQuestion(v);setIconLocalAnswer('');}}
+                 onChangeText={v=>{setIconQuestion(v);setIconLocalAnswer('');setGuidedPlanNotice('');}}
                  accessibilityLabel="Ask where a visible icon is"
                  placeholder="Where is the search icon?" placeholderTextColor="#7f8ba5"/>
                <Pressable accessibilityRole="button" style={styles.outlineAction}
@@ -1571,6 +1580,11 @@ export default function App() {
                  <Text style={styles.outlineActionText}>Find icon locally · no AI upload</Text>
                </Pressable>
                {iconLocalAnswer!==''&&<Text style={styles.feedback}>{iconLocalAnswer}</Text>}
+               <Pressable accessibilityRole="button" style={styles.outlineInline}
+                 onPress={previewGuidedNavigation}>
+                 <Text style={styles.outlineInlineText}>Preview owner-approved navigation steps</Text>
+               </Pressable>
+               {guidedPlanNotice!==''&&<Text style={styles.feedback}>{guidedPlanNotice}</Text>}
                {iconScan.icons.map(icon=>(
                  <Text key={icon.id} style={styles.cardText}>
                    {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
