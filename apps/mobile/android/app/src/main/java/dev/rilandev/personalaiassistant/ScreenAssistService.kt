@@ -84,12 +84,13 @@ class ScreenAssistService : AccessibilityService() {
         ScreenAssistState.connected = false
         ScreenAssistState.clear()
         ScreenIconScanState.clear()
+        NexaVisualIconCapture.clear()
         NexaScreenActions.reset()
         if (active === this) active = null
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed()) || event == null) return
+        if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) || event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -99,6 +100,9 @@ class ScreenAssistService : AccessibilityService() {
         if (rootPkg != pkg) return
         if (ScreenIconScanState.isArmed()) {
             ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root))
+        }
+        if (NexaVisualIconCapture.isArmed()) {
+            NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root))
         }
         if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
@@ -135,6 +139,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         value.putBoolean("enabled", ScreenAssistState.connected)
         value.putBoolean("armed", ScreenAssistState.isArmed())
         value.putBoolean("iconScanArmed", ScreenIconScanState.isArmed())
+        value.putBoolean("visualScanArmed", NexaVisualIconCapture.isArmed())
         p.resolve(value)
     }
 
@@ -159,6 +164,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             return
         }
         ScreenIconScanState.clear()
+        NexaVisualIconCapture.clear()
         if (!ScreenAssistState.arm()) {
             p.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
             return
@@ -185,6 +191,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             return
         }
         ScreenAssistState.clear()
+        NexaVisualIconCapture.clear()
         if (!ScreenIconScanState.arm()) {
             p.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
             return
@@ -229,6 +236,49 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         p.resolve(true)
     }
 
+
+    /** Consent is separate from text/icon metadata capture. Image crops stay in memory. */
+    @ReactMethod fun armVisualScan(p: Promise) {
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            p.reject("NOT_FOREGROUND", "Start screenshot fallback from visible Nexa")
+            return
+        }
+        ScreenAssistState.clear()
+        ScreenIconScanState.clear()
+        if (!NexaVisualIconCapture.arm()) {
+            p.reject("VISUAL_UNAVAILABLE", "Android 11+ and Screen Assist permission required")
+            return
+        }
+        p.resolve(true)
+    }
+    @ReactMethod fun takeVisualScan(p: Promise) {
+        val snap = NexaVisualIconCapture.consume()
+        if (snap == null) { p.resolve(null); return }
+        val item = Arguments.createMap()
+        item.putString("snapshotId",snap.id)
+        item.putString("packageName",snap.packageName)
+        item.putDouble("capturedAtWallMs",snap.createdAt.toDouble())
+        item.putInt("expiresInMs",snap.expiresInMs)
+        val images = Arguments.createArray()
+        for (crop in snap.crops) {
+            val image = Arguments.createMap()
+            image.putString("iconId",crop.iconId)
+            image.putString("dataUri",crop.dataUri)
+            val box = Arguments.createMap()
+            box.putInt("left",crop.bounds.left)
+            box.putInt("top",crop.bounds.top)
+            box.putInt("right",crop.bounds.right)
+            box.putInt("bottom",crop.bounds.bottom)
+            image.putMap("boundsPx",box)
+            images.pushMap(image)
+        }
+        item.putArray("crops",images)
+        p.resolve(item)
+    }
+    @ReactMethod fun clearVisualScan(p: Promise) {
+        NexaVisualIconCapture.clear()
+        p.resolve(true)
+    }
     @ReactMethod fun clear(p: Promise) {
         ScreenAssistState.clear()
         p.resolve(true)
