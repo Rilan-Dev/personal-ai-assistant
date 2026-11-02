@@ -28,3 +28,6 @@ export {scoreIconEvidence, inspectGuidedScreenPlan} from './screen-confidence.ts
 export type {IconEvidenceAssessment, GuidedScreenPreview} from './screen-confidence.ts';
 
 export {parsePairedIconObservation} from './paired-icon-capture.ts';
+
+export {createIconReviewSession} from './icon-review.ts';
+export type {IconReviewOffer,IconReviewResult,IconReviewSummary} from './icon-review.ts';
