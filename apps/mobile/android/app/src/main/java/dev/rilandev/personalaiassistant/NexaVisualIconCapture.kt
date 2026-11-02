@@ -80,7 +80,7 @@ internal object NexaVisualIconCapture {
                         try {
                             // A screenshot callback can arrive after the owner changes apps.
                             // Never return crops from a different window/package.
-                            val current=service.rootInActiveWindow
+                            val current=service.externalWindowRoot()
                             val sameWindow=try {
                                 current?.packageName?.toString()==pkg
                             } finally { current?.recycle() }
