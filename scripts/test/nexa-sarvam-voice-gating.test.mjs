@@ -25,7 +25,7 @@ test('user transcriptions are validated and require a visible owner approval bef
   assert.match(realtime,/pendingApprovalSummary = "Open/);
   assert.match(realtime,/if \(active\.get\(\) && assistantPanelEnabled && pending != null\)/);
   assert.match(realtime,/if \(selectedProvider == "openai"\) \{/);
-  assert.match(assistant,/Approve app/);
+  assert.match(assistant,/Approve once/);
   assert.match(wake,/Approve app/);
 });
 test('Hey Nexa is wake-only and cannot silently revert to local speech commands',()=>{
