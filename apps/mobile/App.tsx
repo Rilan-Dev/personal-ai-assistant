@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
@@ -366,6 +366,8 @@ export default function App() {
   const [iconScanArmed,setIconScanArmed] = useState(false);
   const [iconScan,setIconScan] = useState<ScreenIconSnapshot|null>(null);
   const [iconScanNotice,setIconScanNotice] = useState('');
+  const [iconQuestion,setIconQuestion] = useState('');
+  const [iconLocalAnswer,setIconLocalAnswer] = useState('');
   const [visualArmed,setVisualArmed] = useState(false);
   const [visualPreview,setVisualPreview] = useState<VisualIconPreview|null>(null);
   const [visualNotice,setVisualNotice] = useState('');
@@ -382,7 +384,7 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setIconLocalAnswer('');setVisualPreview(null);setSelectedVisionCrop(null);setVisionResult('');setAppMatches([]);}
   },[tab]);
   useEffect(()=>{
     if(!visualPreview)return;
@@ -751,7 +753,7 @@ export default function App() {
   const reviewIcons=async()=>{
     try{
       const result=await takeIconRecognition();
-      setIconScan(result);setIconScanArmed(false);
+      setIconScan(result);setIconScanArmed(false);setIconLocalAnswer('');
       setIconScanNotice(result
         ? 'Control metadata captured locally. No action has been performed.'
         : 'No icon scan available. It may have expired or the screen may be protected.');
@@ -759,7 +761,7 @@ export default function App() {
   };
   const discardIcons=async()=>{
     await clearIconRecognition().catch(()=>{});
-    setIconScanArmed(false);setIconScan(null);
+    setIconScanArmed(false);setIconScan(null);setIconLocalAnswer('');
     setIconScanNotice('Icon scan discarded.');
   };
   const armVisualScan=async()=>{
@@ -797,6 +799,12 @@ export default function App() {
     }catch{
       setVisionResult('Icon identification failed or the selected model does not support images. No action was executed.');
     }finally{setVisionBusy(false);}
+  };
+  /** Deterministic, on-device read-only answer. No provider call or native UI action. */
+  const askLocalScreenQuestion=()=>{
+    if(!iconScan){setIconLocalAnswer('Capture icons first.');return;}
+    const observation=resolveScreenQuestion(iconScan,iconQuestion,Date.now());
+    setIconLocalAnswer(observation.answer);
   };
   const askAboutIcons=()=>{
     if(!iconScan)return;
