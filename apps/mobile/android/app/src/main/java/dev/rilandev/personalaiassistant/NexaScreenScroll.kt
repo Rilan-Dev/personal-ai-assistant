@@ -116,10 +116,19 @@ internal object NexaScreenScroll {
                 }
             }
             if(matches!=1 || target==null) return "Scroll target changed or ambiguous. No action requested."
+            val direction=if(approved.forward) "scroll_down" else "scroll_up"
+            if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg))
+                return "Secure action journal unavailable or approval already used. No scroll requested."
             val action=if(approved.forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
                 else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-            return if(target.performAction(action)) "Android accepted one scroll request. Check the visible result."
-                else "Android refused the scroll. No automatic retry."
+            return if(target.performAction(action)) {
+                if (!NexaUiActionJournal.finish(service,approved.token,"android_accepted"))
+                    "Android accepted scroll; journal outcome uncertain. No automatic retry."
+                else "Android accepted one scroll request. Check the visible result."
+            } else {
+                NexaUiActionJournal.finish(service,approved.token,"android_rejected")
+                "Android refused the scroll. No automatic retry."
+            }
         }catch(_:Exception){return "Scroll outcome uncertain; no automatic retry."}
         finally{root.recycle()}
     }
