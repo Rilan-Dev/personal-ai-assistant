@@ -30,8 +30,8 @@ test('user transcriptions are validated and require a visible owner approval bef
 });
 test('Hey Nexa is wake-only and cannot silently revert to local speech commands',()=>{
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else feedback\("Enable live AI after assistant invocation/);
-  assert.match(wake,/!providerReady\) return false/);
+  assert.match(assistant,/else feedback\("Save a live AI provider key/);
+  assert.match(wake,/if \(providerReady && Build.VERSION.SDK_INT >= 26\)/);
   assert.doesNotMatch(wake,/switching to offline commands/);
   assert.match(wake,/Live AI unavailable|Live conversation ended|Voice could not start/);
 });
