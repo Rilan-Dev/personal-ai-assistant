@@ -477,6 +477,26 @@ class RealtimeVoiceService : Service() {
      * Sarvam-managed webhooks are not client-device tools. This local bridge
      * does NOT feed results into Sarvam's remote LLM conversation.
      */
+    /** Pending approvals expire without leaving a call or action blocked.
+     * Only the exact current instance may expire itself; Stop and replacement
+     * invalidate it. An expiry is a rejection, never an automatic action.
+     */
+    private fun expirePendingTool(tool:PendingAppTool) {
+        main.postDelayed({
+            if(!active.get() || pendingAppTool !== tool)return@postDelayed
+            pendingAppTool=null
+            pendingApprovalSummary=null
+            lastToolResult="Approval expired after 60 seconds. Nothing was opened."
+            message=lastToolResult
+            if(selectedProvider=="sarvam-api") {
+                sarvamApiTransport?.toolResult(lastToolResult)
+            } else if(selectedProvider=="openai") {
+                sendRealtimeToolOutput(tool.callId,lastToolResult)
+                socket?.send(JSONObject().put("type","response.create").toString())
+            }
+        },60_000L)
+    }
+
     private fun handleSarvamOwnerRequest(transcript: String) {
         if (!assistantPanelEnabled || pendingAppTool != null) return
         val now = SystemClock.elapsedRealtime()
@@ -498,6 +518,7 @@ class RealtimeVoiceService : Service() {
         }
         if(NexaPhoneVoiceTools.wantsScreenOverview(transcript)) {
             pendingAppTool=PendingAppTool("local-sarvam","visible screen controls","observe_screen_icons")
+            pendingAppTool?.let { expirePendingTool(it) }
             pendingApprovalSummary="Read labeled icons on the visible screen once? Approve or Deny below."
             message="Approve screen icon inspection. No screenshot or tap will occur."
             try {
@@ -524,7 +545,9 @@ class RealtimeVoiceService : Service() {
             }
             else -> return
         }
-        val requested=pendingAppTool?.app ?: return
+        val pending=pendingAppTool ?: return
+        expirePendingTool(pending)
+        val requested=pending.app
         pendingApprovalSummary = "Open $requested? Tap Approve once or Deny here."
         message = "Approval needed to open $requested · no app has been opened yet"
         try {
@@ -570,6 +593,7 @@ class RealtimeVoiceService : Service() {
                 }
                 is NexaLiveToolPolicy.Decision.NeedsApproval -> {
                     pendingAppTool = PendingAppTool(id, decision.app, decision.command)
+                    pendingAppTool?.let { expirePendingTool(it) }
                     pendingApprovalSummary = if(decision.command=="observe_screen_icons")
                         "Allow one read-only inspection of visible icon labels? Approve or Deny below."
                         else "Open ${decision.app}? Confirm or deny below."

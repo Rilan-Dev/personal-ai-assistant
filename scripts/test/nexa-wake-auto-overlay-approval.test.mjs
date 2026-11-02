@@ -29,6 +29,10 @@ test('pending one-time app approval is shown in native assistant overlay above s
   assert.match(assistant,/button\("Deny"\)/);
   assert.match(assistant,/approvalBanner\?\.visibility = if \(pending != null\) View\.VISIBLE else View\.GONE/);
   assert.match(voice,/age !in 0\.\.60_000L/);
+  assert.match(voice,/private fun expirePendingTool\(tool:PendingAppTool\)/);
+  assert.match(voice,/Approval expired after 60 seconds/);
+  assert.match(voice,/if\(!active.get\(\) \|\| pendingAppTool !== tool\)return@postDelayed/);
+
   assert.match(voice,/Approved|ACTION_APPROVE_TOOL/);
 });
 test('phone tool additions are narrowly scoped and keep arbitrary app launches review-only',()=>{
