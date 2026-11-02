@@ -1,7 +1,7 @@
 import type {Tool,Planner} from './runtime.ts';
 import type {ToolInput} from '../../agent-contracts/src/index.ts';
 import type {ScreenIconSnapshot} from '../../agent-contracts/src/screen-icons.ts';
-import {proposeNavigationSteps} from './screen-grounding.ts';
+import {inspectGuidedScreenPlan} from './screen-confidence.ts';
 import type {createOwnerScreenGrant} from './screen-grounding.ts';
 
 type Grant=ReturnType<typeof createOwnerScreenGrant>;
@@ -37,7 +37,7 @@ export function createReadOnlyScreenTools(
    const now=clock(),snap=grant.read(now);
    if(!snap)return {status:'blocked',reason:'Owner screen release missing or expired'};
    const response=resolve(snap,input.question as string,now);
-   return {status:'success',data:{answer:response.answer,status:response.status,actionEligible:false}};
+   return {status:'success',data:{answer:response.answer,status:response.status,snapshotId:snap.snapshotId,actionEligible:false}};
   }
  };
  const suggest:Tool={
@@ -49,8 +49,8 @@ export function createReadOnlyScreenTools(
    if(!suggest.validateInput(input))return {status:'blocked',reason:'Unsupported navigation suggestion'};
    const now=clock(),snap=grant.read(now);
    if(!snap)return {status:'blocked',reason:'Owner screen release missing or expired'};
-   const proposal=proposeNavigationSteps(input.request as string,snap,now);
-   return {status:'success',data:{...proposal,actionEligible:false,answer:proposal.message}};
+   const proposal=inspectGuidedScreenPlan(input.request as string,snap,now);
+   return {status:'success',data:{...proposal,snapshotId:snap.snapshotId,actionEligible:false,answer:proposal.message}};
   }
  };
  return [observe,suggest];
@@ -68,7 +68,19 @@ export function createScreenAwarePlanner(
    const last=observations[observations.length-1];
    if(!['screen.observe','screen.suggest_navigation'].includes(last.call.toolId))
     return base.next(request,observations,signal);
+   // Explicit owner release is rechecked BEFORE returning an observation.
+   // Do not replay another question's result into this request or continue
+   // after revocation/backgrounding/expiry.
+   const expectedTool=plan?'screen.suggest_navigation':'screen.observe';
+   const expectedInput=plan?{request:normalized}:{question:request};
+   const current=grant.read(clock());
    const data=last.outcome.status==='success'?last.outcome.data:null;
+   if(observations.length!==1 || !current ||
+      last.call.toolId!==expectedTool ||
+      JSON.stringify(last.call.input)!==JSON.stringify(expectedInput) ||
+      !data || typeof data!=='object' || !('snapshotId' in data) ||
+      data.snapshotId!==current.snapshotId)
+    return {type:'clarify',question:'Screen consent expired or observation context changed. Scan and release the current screen again.'};
    const message=data&&typeof data==='object'&&'answer' in data&&typeof data.answer==='string'
     ?data.answer:'Screen observation was unavailable. No action was taken.';
    return {type:'done',response:message};

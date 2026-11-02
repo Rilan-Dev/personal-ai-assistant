@@ -132,7 +132,7 @@ internal object NexaUiActionJournal {
         synchronized(lock) {
             if (observation !in setOf("observed_change","no_observable_change",
                     "scroll_event_observed","window_change_observed",
-                    "structural_change_observed","unverified"))
+                    "structural_change_observed","context_changed_unverified","unverified"))
                 return@synchronized false
             try {
                 val id=digest(approvalToken)

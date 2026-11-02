@@ -30,7 +30,7 @@ test('agent invokes deterministic read-only screen tool without consulting model
  const first=await p.next('Where is the search icon?',[]);
  assert.equal(first.type,'tool');assert.equal(first.call.toolId,'screen.observe');assert.equal(calls,0);
  const second=await p.next('Where is the search icon?',[
-  {call:first.call,outcome:{status:'success',data:{answer:'Search is top right',actionEligible:false}}}]);
+  {call:first.call,outcome:{status:'success',data:{answer:'Search is top right',snapshotId:'s1',actionEligible:false}}}]);
  assert.equal(second.type,'done');assert.equal(second.response,'Search is top right');assert.equal(calls,0);
 });
 test('unrelated actions use original policy while explicit menu plan is non-executable',async()=>{
@@ -42,4 +42,46 @@ test('unrelated actions use original policy while explicit menu plan is non-exec
  assert.equal((await p.next('open search from menu',[])).call.toolId,'screen.suggest_navigation');
  const absent=createScreenAwarePlanner(base,createOwnerScreenGrant(),resolver,()=>2001);
  assert.equal((await absent.next('Where is the search icon?',[])).type,'clarify');
+});
+
+test('old or wrong-request screen observations cannot be replayed into current conversation',async()=>{
+ const grant=createOwnerScreenGrant();grant.release(snapshot,2000);
+ const base={next:async()=>({type:'done',response:'BASE'})};
+ const p=createScreenAwarePlanner(base,grant,resolver,()=>2001);
+ const foreign={call:{callId:'bad',toolId:'screen.observe',input:{question:'find menu'}},
+   outcome:{status:'success',data:{answer:'STALE PRIVATE ANSWER',actionEligible:false}}};
+ const result=await p.next('Where is the search icon?',[foreign]);
+ assert.equal(result.type,'clarify');
+ assert.equal(JSON.stringify(result).includes('STALE PRIVATE ANSWER'),false);
+ grant.revoke();
+ const revoked=await p.next('Where is the search icon?',[
+  {call:{callId:'screen-observe-1',toolId:'screen.observe',
+   input:{question:'Where is the search icon?'}},outcome:{status:'success',
+    data:{answer:'STALE PRIVATE ANSWER',actionEligible:false}}}]);
+ assert.equal(revoked.type,'clarify');
+});
+test('menu plan describes ambiguous first step and does not promise execution',async()=>{
+ const grant=createOwnerScreenGrant();
+ const current={...snapshot,icons:[
+  {id:'a',label:'Menu',semantic:'menu',clickable:true,evidence:'accessibility',boundsPx:{left:0,top:0,right:50,bottom:50}},
+  {id:'b',label:'Menu',semantic:'menu',clickable:true,evidence:'accessibility',boundsPx:{left:100,top:0,right:150,bottom:50}}]};
+ grant.release(current,2000);
+ const tools=createReadOnlyScreenTools(grant,resolver,()=>2001);
+ const tool=tools.find(t=>t.id==='screen.suggest_navigation');
+ const outcome=await tool.execute({request:'find search in menu'},{sessionId:'s'});
+ assert.equal(outcome.data.status,'ambiguous');
+ assert.equal(outcome.data.actionEligible,false);
+ assert.match(outcome.data.answer,/multiple/i);
+});
+
+test('screen result is rejected when source snapshot no longer matches current release',async()=>{
+ const grant=createOwnerScreenGrant();grant.release(snapshot,2000);
+ const base={next:async()=>({type:'done',response:'BASE'})};
+ const p=createScreenAwarePlanner(base,grant,resolver,()=>2001);
+ const decision=await p.next('Where is the search icon?',[]);
+ const forged=[{call:decision.call,outcome:{status:'success',
+  data:{answer:'CROSS SCREEN DATA',snapshotId:'other-scan',actionEligible:false}}}];
+ const after=await p.next('Where is the search icon?',forged);
+ assert.equal(after.type,'clarify');
+ assert.equal(JSON.stringify(after).includes('CROSS SCREEN DATA'),false);
 });
