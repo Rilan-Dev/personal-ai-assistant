@@ -51,6 +51,80 @@ internal object NexaScreenVoiceOverview {
             ". This is a read-only location hint. No tap, call, message or other action was performed.").take(350)
     }
 
+    /**
+     * The owner has just tapped the visible overlay's "Approve once" button.
+     * Reads bounded *non-editable* accessibility labels from one external
+     * foreground application window, never passwords, input values or a
+     * screenshot. The returned labels are spoken/sent to the voice provider,
+     * and the approval UI must make that transmission explicit.
+     */
+    fun readVisibleTextApproved():String {
+        val service=ScreenAssistService.active
+            ?:return "Enable Nexa Screen Assist in Android Accessibility Settings first."
+        val root=service.externalWindowRoot()
+            ?:return "The current external app does not expose readable screen content."
+        try {
+            val pkg=root.packageName?.toString().orEmpty()
+            if(pkg.isBlank() || pkg==service.packageName)
+                return "This window is not available for screen reading."
+            val queue=java.util.ArrayDeque<android.view.accessibility.AccessibilityNodeInfo>()
+            queue.add(root)
+            val labels=LinkedHashSet<String>()
+            var inspected=0
+            while(queue.isNotEmpty() && inspected<130 && labels.size<16) {
+                val node=queue.removeFirst()
+                inspected++
+                if(!node.isVisibleToUser || node.isPassword || node.isEditable)continue
+                val content=node.text?.toString()?.takeIf{it.isNotBlank()}
+                    ?:node.contentDescription?.toString().orEmpty()
+                val clean=content.replace(Regex("[\\p{Cntrl}]+")," ").trim().take(85)
+                if(clean.isNotBlank() && clean.length>=2)labels.add(clean)
+                for(i in 0 until node.childCount)
+                    node.getChild(i)?.let{ queue.addLast(it) }
+            }
+            if(labels.isEmpty())return "No readable, non-editable labels were exposed by the current app."
+            return ("Visible screen labels from "+pkg+": "+
+                labels.joinToString("; ").take(630)+
+                ". Read-only observation. No tap or edit occurred.").take(800)
+        }catch (_:Exception) {
+            return "Android blocked screen reading. No screen information was shared."
+        }finally {root.recycle()}
+    }
+
+    /** One screen-scroll action after exactly one owner approval. */
+    fun scrollApproved(direction:String):String {
+        if(direction !in setOf("up","down"))return "Invalid screen direction."
+        val service=ScreenAssistService.active
+            ?:return "Enable Nexa Screen Assist in Android Accessibility Settings first."
+        val ready=NexaScreenScroll.prepare(service,direction)
+        if(!NexaScreenScroll.isPending())return ready
+        return NexaScreenScroll.confirm(service)
+    }
+
+    /** Only harmless navigation icons, freshly matched against current nodes. */
+    fun tapSafeApproved(target:String):String {
+        if(target !in setOf("menu","search","settings","back","close"))
+            return "Unsafe or unknown icon. No action was performed."
+        val service=ScreenAssistService.active
+            ?:return "Enable Nexa Screen Assist before requesting a tap."
+        val (snap,description)=NexaScreenActions.inspect(service)
+        if(snap==null)return description
+        val matches=snap.icons.filter{
+            it.semantic==target || (target=="menu" && it.semantic=="more_options")
+        }.filter{NexaScreenActionPolicy.permits(it)}
+        if(matches.size!=1) {
+            NexaScreenActions.reset()
+            return if(matches.isEmpty())
+                "The requested $target navigation icon is not uniquely visible."
+            else "Multiple $target icons are visible. Please select one manually."
+        }
+        if(NexaScreenActions.select(snap.token,matches.single().id)==null) {
+            NexaScreenActions.reset()
+            return "The icon changed before the approved tap. No action occurred."
+        }
+        return NexaScreenActions.confirm(service,snap.token)
+    }
+
     fun readApproved(): String {
         val service=ScreenAssistService.active
             ?:return "Nexa Screen Assist is not enabled. Open Android Accessibility settings first."
