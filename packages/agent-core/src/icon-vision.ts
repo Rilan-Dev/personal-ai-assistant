@@ -53,10 +53,10 @@ export async function identifyIconCrop(
     const raw=await response.text();
     if(raw.length>20000)throw Error('VISION_RESPONSE_TOO_LARGE');
     const envelope=JSON.parse(raw) as {choices?:Array<{message?:{content?:unknown}}>} ;
-    let content=envelope.choices?.[0]?.message?.content;
-    if(typeof content!=='string')throw Error('VISION_INVALID_RESPONSE');
+    const rawContent=envelope.choices?.[0]?.message?.content;
+    if(typeof rawContent!=='string')throw Error('VISION_INVALID_RESPONSE');
     // Some OpenAI-compatible endpoints wrap JSON inside a markdown fence.
-    content=content.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g,'').trim();
+    const content=rawContent.replace(/^\s*```(?:json)?\s*|\s*```\s*$/g,'').trim();
     let parsed:unknown;
     try {parsed=JSON.parse(content)} catch {throw Error('VISION_INVALID_RESPONSE')}
     if(!parsed || typeof parsed!=='object'||Array.isArray(parsed))throw Error('VISION_INVALID_RESPONSE');
