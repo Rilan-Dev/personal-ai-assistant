@@ -30,7 +30,7 @@ test('fallback voice uses a bounded on-device speech loop with truthful action s
   assert.match(overlay,/TextToSpeech/);
 });
 test('wake fallback honors owner live-voice opt-in and never auto-approves tool actions',()=>{
-  assert.match(overlay,/getBoolean\("auto_voice_invocation_v1", false\)/);
+  assert.match(overlay,/NexaWakeWordService\.enabled\(service\)/);
   assert.match(overlay,/openVoiceCredentials\(service\)/);
   assert.match(overlay,/RealtimeVoiceService\.ACTION_START/);
   assert.match(overlay,/RealtimeVoiceService\.EXTRA_ASSISTANT_PANEL, true/);
