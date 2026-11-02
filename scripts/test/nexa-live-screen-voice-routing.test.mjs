@@ -15,6 +15,8 @@ test('Sarvam voice routes explicit screen request to native visible single-use o
   assert.match(service,/NexaPhoneVoiceTools\.scrollDirection\(text\)/);
   assert.match(service,/NexaPhoneVoiceTools\.clickSafeIcon\(text\)/);
   assert.match(service,/read_visible_screen_text/);
+  assert.match(service,/screenOperation && \(!ScreenAssistState\.connected \|\| ScreenAssistService\.active==null\)/);
+  assert.match(service,/Screen Assist is disabled/);
   assert.match(service,/scroll_screen:/);
   assert.match(service,/tap_safe_icon:/);
   assert.match(service,/pendingApprovalSummary="Read visible app labels and share the result with your voice provider/);
