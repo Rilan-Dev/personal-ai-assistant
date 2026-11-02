@@ -45,8 +45,11 @@ const VOICE_KEY=/^sk_samvaad_[A-Za-z0-9_-]{16,500}$/;
 export const validateSamvaadWorkspaceKey=(key:string):boolean=>
   typeof key==='string' && VOICE_KEY.test(key);
 export async function saveSamvaadWorkspaceKey(key:string):Promise<void>{
-  if(!validateSamvaadWorkspaceKey(key))throw new Error('VOICE_WORKSPACE_KEY_FORMAT');
-  if(!await native().saveSarvamVoiceWorkspaceKey(key))
+  // Keyboard paste may include a surrounding newline or space; never alter
+  // the credential bytes other than removing such boundary whitespace.
+  const safe=key.trim();
+  if(!validateSamvaadWorkspaceKey(safe))throw new Error('VOICE_WORKSPACE_KEY_FORMAT');
+  if(!await native().saveSarvamVoiceWorkspaceKey(safe))
     throw new Error('VOICE_WORKSPACE_KEY_SAVE');
 }
 export const samvaadWorkspaceKeyPresent=():Promise<boolean>=>
