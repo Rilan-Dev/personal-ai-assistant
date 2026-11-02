@@ -13,3 +13,6 @@ export type { DirectProviderId, DirectProviderSettings, DirectProviderOptions } 
 
 export {parseReviewedWhatsAppIntent} from "./owner-intents.ts";
 export type {ReviewedWhatsAppIntent} from "./owner-intents.ts";
+
+export {identifyIconCrop, validateIconCrop} from './icon-vision.ts';
+export type {IconVisionHint} from './icon-vision.ts';
