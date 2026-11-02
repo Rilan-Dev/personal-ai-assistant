@@ -16,6 +16,7 @@ test('explicit offline Hey Nexa wake can start consented AI without assistant ge
   assert.match(fallback,/val providerReady = try \{/);
   assert.match(fallback,/NexaWakeWordService\.enabled\(service\)/);
   assert.match(fallback,/if \(providerReady && Build\.VERSION\.SDK_INT >= 26\)/);
+  assert.match(fallback,/handler\.removeCallbacks\(maximum\)/);
   assert.doesNotMatch(fallback,/val optedIn = service\.getSharedPreferences/);
   assert.match(assistant,/AgentJournalModule\.openVoiceCredentials\(app\)/);
 });
