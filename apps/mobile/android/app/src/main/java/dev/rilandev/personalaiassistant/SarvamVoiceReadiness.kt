@@ -68,7 +68,7 @@ internal object SarvamVoiceReadiness {
 
     fun check(context: Context, respond: (Result) -> Unit) {
         val cfg = try {
-            AgentJournalModule.openVoiceCredentials(context)
+            AgentJournalModule.openSarvamVoicePreflightCredentials(context)
         } catch (_: Exception) { null }
         if (cfg == null || cfg.provider != "sarvam") {
             respond(Result(false, "MISSING_CONFIG",
