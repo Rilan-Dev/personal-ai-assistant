@@ -4,6 +4,8 @@ export type SarvamVoiceAuthorization = { ready:boolean; code:string; message:str
 
 export type LiveVoiceStatus={
   state:'stopped'|'connecting'|'listening'|'error';
+  /** Returned by the running Android service, not inferred from UI labels. */
+  provider?:'sarvam-api'|'openai'|null;
   message:string;
   microphoneActive:boolean;
   microphoneMuted:boolean;
@@ -29,15 +31,17 @@ export const liveVoiceAvailable=()=>Platform.OS==='android' &&
 export const getLiveVoiceStatus=()=>module().getVoiceSessionStatus();
 export const checkSarvamVoiceAuthorization=()=>module().checkSarvamVoiceAuthorization();
 
-export async function prepareOwnerLiveVoicePermissions(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
+export async function prepareOwnerLiveVoicePermissions(provider:'sarvam'|'openai'|'device'='device'):Promise<boolean> {
   if(!liveVoiceAvailable())return false;
   const mic=PermissionsAndroid.PERMISSIONS.RECORD_AUDIO;
   const granted=await PermissionsAndroid.check(mic) ||
     await PermissionsAndroid.request(mic,{
       title:'Live voice microphone access',
-      message:'When you choose Start live voice, microphone audio streams to '+(provider==='sarvam'
-        ? 'your Sarvam managed Voice Agent'
-        : 'your OpenAI realtime provider')+', even while another app is visible. A persistent notification lets you stop it. Only start when you want a live conversation.',
+      message:provider==='device'
+        ? 'Hey Nexa wake detection uses the microphone locally. After an authorized wake, Nexa may start your separately consented live AI provider. Android shows a notification with Stop.'
+        : 'When you start live voice, microphone audio streams to '+(provider==='sarvam'
+          ? 'Sarvam Model API (Saaras realtime recognition)'
+          : 'your configured OpenAI realtime account')+'. Android shows a notification with Stop. Voice streaming requires your permission.',
       buttonPositive:'Allow microphone',
       buttonNegative:'Cancel'
     })===PermissionsAndroid.RESULTS.GRANTED;
@@ -53,7 +57,7 @@ export async function prepareOwnerLiveVoicePermissions(provider:'sarvam'|'openai
   return true;
 }
 
-export async function startOwnerLiveVoice(provider:'sarvam'|'openai'='openai'):Promise<boolean> {
+export async function startOwnerLiveVoice(provider:'sarvam'|'openai'):Promise<boolean> {
   if(!await prepareOwnerLiveVoicePermissions(provider))return false;
   return module().startVoiceSession();
 }
