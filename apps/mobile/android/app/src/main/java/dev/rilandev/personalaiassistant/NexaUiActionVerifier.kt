@@ -28,7 +28,7 @@ internal object NexaUiActionVerifier {
             // a state. The existing Android-accepted evidence remains.
             if (!ScreenAssistState.connected || ScreenAssistService.active !== service)
                 return@postDelayed
-            val root=try { service.rootInActiveWindow } catch (_:Exception) { null }
+            val root=try { service.externalWindowRoot() } catch (_:Exception) { null }
                 ?: return@postDelayed
             val result=try {
                 if (fingerprint(root)!=prior) "observed_change"
