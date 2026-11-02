@@ -70,7 +70,7 @@ export function inspectGuidedScreenPlan(
   return {status:plan.status,executable:false,steps:[],message:plan.message};
  }
  const next=plan.steps[0]?.semantic;
- const target=next==='menu'?['menu','more_options']:[next];
+ const target:readonly string[]=next==='menu'?['menu','more_options']:next?[next]:[];
  const matches=snapshot.icons.filter(i=>i.clickable&&target.includes(i.semantic));
  const steps=plan.steps.map(s=>({...s}));
  if(matches.length===0)return {status:'needs_new_scan',executable:false,
