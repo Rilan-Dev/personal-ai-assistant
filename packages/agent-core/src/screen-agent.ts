@@ -37,7 +37,7 @@ export function createReadOnlyScreenTools(
    const now=clock(),snap=grant.read(now);
    if(!snap)return {status:'blocked',reason:'Owner screen release missing or expired'};
    const response=resolve(snap,input.question as string,now);
-   return {status:'success',data:{answer:response.answer,status:response.status,actionEligible:false}};
+   return {status:'success',data:{answer:response.answer,status:response.status,snapshotId:snap.snapshotId,actionEligible:false}};
   }
  };
  const suggest:Tool={
@@ -50,7 +50,7 @@ export function createReadOnlyScreenTools(
    const now=clock(),snap=grant.read(now);
    if(!snap)return {status:'blocked',reason:'Owner screen release missing or expired'};
    const proposal=inspectGuidedScreenPlan(input.request as string,snap,now);
-   return {status:'success',data:{...proposal,actionEligible:false,answer:proposal.message}};
+   return {status:'success',data:{...proposal,snapshotId:snap.snapshotId,actionEligible:false,answer:proposal.message}};
   }
  };
  return [observe,suggest];
@@ -73,11 +73,14 @@ export function createScreenAwarePlanner(
    // after revocation/backgrounding/expiry.
    const expectedTool=plan?'screen.suggest_navigation':'screen.observe';
    const expectedInput=plan?{request:normalized}:{question:request};
-   if(observations.length!==1 || !grant.read(clock()) ||
-      last.call.toolId!==expectedTool ||
-      JSON.stringify(last.call.input)!==JSON.stringify(expectedInput))
-    return {type:'clarify',question:'Screen consent expired or observation context changed. Scan and release the current screen again.'};
+   const current=grant.read(clock());
    const data=last.outcome.status==='success'?last.outcome.data:null;
+   if(observations.length!==1 || !current ||
+      last.call.toolId!==expectedTool ||
+      JSON.stringify(last.call.input)!==JSON.stringify(expectedInput) ||
+      !data || typeof data!=='object' || !('snapshotId' in data) ||
+      data.snapshotId!==current.snapshotId)
+    return {type:'clarify',question:'Screen consent expired or observation context changed. Scan and release the current screen again.'};
    const message=data&&typeof data==='object'&&'answer' in data&&typeof data.answer==='string'
     ?data.answer:'Screen observation was unavailable. No action was taken.';
    return {type:'done',response:message};
