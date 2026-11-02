@@ -17,7 +17,7 @@ internal data class VisualIconCrop(
 )
 internal data class VisualIconResult(
     val id: String, val packageName: String, val createdAt: Long,
-    val expiresInMs: Int, val crops: List<VisualIconCrop>
+    val expiresInMs: Int, val crops: List<VisualIconCrop>, val windowId: Int? = null
 )
 internal object NexaVisualIconCapture {
     private val lock = Any()
@@ -42,13 +42,13 @@ internal object NexaVisualIconCapture {
         if (armedUntil <= SystemClock.elapsedRealtime() || busy || result != null) false
         else { busy = true; true }
     }
-    private fun complete(pkg: String, images: List<VisualIconCrop>) = synchronized(lock) {
+    private fun complete(pkg: String, images: List<VisualIconCrop>, windowId: Int) = synchronized(lock) {
         if (!busy) return@synchronized
         busy = false
         armedUntil = 0
         resultAt = SystemClock.elapsedRealtime()
         result = VisualIconResult(UUID.randomUUID().toString(),pkg.take(150),
-            System.currentTimeMillis(),60_000,images.take(6))
+            System.currentTimeMillis(),60_000,images.take(6),windowId.takeIf { it >= 0 })
         handler.removeCallbacks(expiry)
         handler.postDelayed(expiry,60_000)
     }
@@ -67,10 +67,10 @@ internal object NexaVisualIconCapture {
         result = null
         resultAt = 0L
     }
-    fun capture(service: ScreenAssistService, pkg: String, candidates: List<ObservedIcon>) {
+    fun capture(service: ScreenAssistService, pkg: String, candidates: List<ObservedIcon>, windowId: Int) {
         if (Build.VERSION.SDK_INT < 30 || !acquire()) return
         val targets = candidates.filter { it.semantic == "unknown" }.take(6)
-        if (targets.isEmpty()) { complete(pkg,emptyList()); return }
+        if (targets.isEmpty()) { complete(pkg,emptyList(),windowId); return }
         try {
             service.takeScreenshot(Display.DEFAULT_DISPLAY,service.mainExecutor,
                 object : AccessibilityService.TakeScreenshotCallback {
@@ -82,30 +82,30 @@ internal object NexaVisualIconCapture {
                             // Never return crops from a different window/package.
                             val current=service.externalWindowRoot()
                             val sameWindow=try {
-                                current?.packageName?.toString()==pkg
+                                current?.packageName?.toString()==pkg && current.windowId==windowId
                             } finally { current?.recycle() }
-                            if (!sameWindow) { complete(pkg,emptyList()); return }
+                            if (!sameWindow) { complete(pkg,emptyList(),windowId); return }
                             wrapped=Bitmap.wrapHardwareBuffer(buffer,screenshot.colorSpace)
                             val bitmap=wrapped
-                            if (bitmap == null) { complete(pkg,emptyList()); return }
+                            if (bitmap == null) { complete(pkg,emptyList(),windowId); return }
                             val crops = ArrayList<VisualIconCrop>()
                             targets.forEach { candidate ->
                                 imageCrop(bitmap,candidate)?.let { uri ->
                                     crops.add(VisualIconCrop(candidate.id,candidate.bounds,uri))
                                 }
                             }
-                            complete(pkg,crops)
+                            complete(pkg,crops,windowId)
                         } catch (_: Exception) {
-                            complete(pkg,emptyList())
+                            complete(pkg,emptyList(),windowId)
                         } finally {
                             wrapped?.recycle()
                             buffer.close()
                         }
                     }
-                    override fun onFailure(errorCode: Int) { complete(pkg,emptyList()) }
+                    override fun onFailure(errorCode: Int) { complete(pkg,emptyList(),windowId) }
                 })
         } catch (_: Exception) {
-            complete(pkg,emptyList())
+            complete(pkg,emptyList(),windowId)
         }
     }
 
