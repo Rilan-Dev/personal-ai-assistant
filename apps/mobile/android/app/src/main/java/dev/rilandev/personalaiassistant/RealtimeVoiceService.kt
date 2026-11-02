@@ -100,14 +100,14 @@ class RealtimeVoiceService : Service() {
     private var captureThread: Thread? = null
     private var playbackThread: Thread? = null
     private data class PlaybackChunk(val turn: Long, val pcm: ByteArray)
-    private val audioQueue = ArrayBlockingQueue<PlaybackChunk>(32)
+    private val audioQueue = ArrayBlockingQueue<PlaybackChunk>(96)
     private val playbackTurn = AtomicLong(0L)
     private val playbackLock = Any()
     @Volatile private var responseId = ""
     // Keep sending AEC-filtered mic input while the model speaks; otherwise
     // the server VAD never hears the owner interrupting (broken barge-in).
     @Volatile private var interruptedResponse = false
-    private val maxSession = Runnable { stopWithStatus("stopped","15-minute session limit reached") }
+    private val maxSession = Runnable { stopWithStatus("stopped","60-minute session limit reached") }
     private val idleGate = NexaVoiceIdleGate()
     private val idleCheck = object : Runnable {
         override fun run() {
@@ -119,7 +119,7 @@ class RealtimeVoiceService : Service() {
     }
     private val handshakeTimeout = Runnable {
         if (active.get() && status=="connecting")
-            stopWithStatus("error","Live voice provider did not accept session within 15 seconds")
+            stopWithStatus("error","Live voice provider did not accept session within 25 seconds")
     }
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -212,7 +212,7 @@ class RealtimeVoiceService : Service() {
         active.set(true)
         status="connecting"
         message="Connecting to "+(if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
-        main.postDelayed(maxSession,15*60*1000L)
+        main.postDelayed(maxSession,60*60*1000L)
         main.postDelayed(handshakeTimeout,25_000L)
         try {
         if(selectedProvider=="sarvam") {
@@ -221,8 +221,21 @@ class RealtimeVoiceService : Service() {
                     main.post {if(active.get() && status=="connecting")startAudio()}
                 }
                 override fun audio(bytes:ByteArray) {
-                    if(!audioQueue.offer(PlaybackChunk(playbackTurn.get(),bytes)))
-                        main.post {if(active.get())stopWithStatus("error","Voice playback buffer overloaded")}
+                    if (!active.get()) return
+                    // A long spoken answer is still an active conversation.
+                    // Local idle detection must not stop a 60-second response.
+                    idleGate.reset(SystemClock.elapsedRealtime())
+                    val chunk = PlaybackChunk(playbackTurn.get(), bytes)
+                    if (!audioQueue.offer(chunk)) {
+                        // Prefer the newest audio when the output device falls
+                        // behind instead of crashing/ending the live call.
+                        audioQueue.poll()
+                        if (!audioQueue.offer(chunk)) {
+                            main.post {
+                                if (active.get()) message = "Speaker buffering · conversation still active"
+                            }
+                        }
+                    }
                 }
                 override fun interrupted() {
                     idleGate.reset(SystemClock.elapsedRealtime())
