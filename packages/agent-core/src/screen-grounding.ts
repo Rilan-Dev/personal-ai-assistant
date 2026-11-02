@@ -1,5 +1,5 @@
 import type {ScreenIconSnapshot, IconRect} from '../../agent-contracts/src/screen-icons.ts';
-import type {VisualIconPreview} from '../../../apps/mobile/src/native/androidVisualIcons.ts';
+type VisualIconPreview={snapshotId:string;packageName:string;capturedAtWallMs:number;expiresInMs:number;crops:{iconId:string;boundsPx:IconRect}[]};
 import type {IconVisionHint} from './icon-vision.ts';
 
 export type GroundingStatus='geometry_matched'|'source_mismatch'|'expired'|'ambiguous'|'conflicting'|'unknown'|'unmatched';
