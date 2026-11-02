@@ -29,7 +29,7 @@ export function createReadOnlyScreenTools(
 ):Tool[]{
  const observe:Tool={
   id:'screen.observe',description:'Read a short-lived, owner-released icon snapshot; no Android action.',
-  capabilities:['device.observe'],risk:'low',hasExternalSideEffect:false,
+  capabilities:[],risk:'low',hasExternalSideEffect:false,
   validateInput:(input:unknown):input is ToolInput=>
    exact(input,'question')&&permittedQuestion(input.question as string),
   execute:async(input)=>{
@@ -42,7 +42,7 @@ export function createReadOnlyScreenTools(
  };
  const suggest:Tool={
   id:'screen.suggest_navigation',description:'Suggest an owner-confirmed non-executable menu path.',
-  capabilities:['device.observe'],risk:'low',hasExternalSideEffect:false,
+  capabilities:[],risk:'low',hasExternalSideEffect:false,
   validateInput:(input:unknown):input is ToolInput=>
    exact(input,'request')&&navigationTemplates.has((input.request as string).toLowerCase().trim()),
   execute:async(input)=>{
