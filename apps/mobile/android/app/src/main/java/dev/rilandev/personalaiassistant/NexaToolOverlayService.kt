@@ -47,6 +47,7 @@ class NexaToolOverlayService : Service() {
     private var section = "chat"
     private var note = "Local tools only. Full AI chat is available through Open full Chat."
     private val history = ArrayDeque<String>()
+    private var inspectedScreen: OverlayScreenSnapshot? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
@@ -194,7 +195,52 @@ class NexaToolOverlayService : Service() {
         }, 450L)
     }
 
+
+    private fun inspectVisibleIcons() {
+        val service = ScreenAssistService.active
+        if (service == null) {
+            inspectedScreen = null
+            note = "Enable Nexa Screen Assist in Android Accessibility settings before inspecting."
+        } else {
+            val result = NexaScreenActions.inspect(service)
+            inspectedScreen = result.first
+            note = result.second
+        }
+        render()
+    }
+
+    private fun selectVisibleIcon(id: String) {
+        val snap = inspectedScreen
+        val item = if (snap != null) NexaScreenActions.select(snap.token, id) else null
+        note = if (item == null) "Icon selection expired. Inspect again."
+            else "Confirm one tap on ${item.label} in ${snap?.packageName}? This action cannot be undone."
+        render()
+    }
+
+    private fun confirmVisibleIcon() {
+        val snap = inspectedScreen
+        val service = ScreenAssistService.active
+        note = if (snap == null || service == null) {
+            "No current screen target. Inspect again."
+        } else {
+            NexaScreenActions.confirm(service, snap.token)
+        }
+        inspectedScreen = null
+        render()
+    }
+
+    private fun cancelVisibleIcon() {
+        inspectedScreen = null
+        NexaScreenActions.reset()
+        note = "Screen action cancelled. No click requested."
+        render()
+    }
+
     private fun showSection(name: String) {
+        if (name != "tools") {
+            inspectedScreen = null
+            NexaScreenActions.reset()
+        }
         section = name
         render()
     }
@@ -320,6 +366,42 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(text("Inspect icons on the app behind this floating panel.",11f,true))
+                        addView(button("Inspect visible icons") { inspectVisibleIcons() })
+                        val snapshot = inspectedScreen
+                        if (snapshot != null && android.os.SystemClock.elapsedRealtime() < snapshot.expiresAt) {
+                            addView(text("Screen: " + snapshot.packageName + " · expires in " +
+                                ((snapshot.expiresAt - android.os.SystemClock.elapsedRealtime()) / 1000) + "s",11f,true))
+                            val chosen = NexaScreenActions.selected()
+                            if (chosen != null) {
+                                addView(text("Approve one tap: " + chosen.label,13f))
+                                addView(row(
+                                    button("Confirm tap") { confirmVisibleIcon() },
+                                    button("Cancel") { cancelVisibleIcon() }
+                                ))
+                            } else {
+                                snapshot.icons.take(12).forEach { item ->
+                                    addView(row(
+                                        button(item.label.take(18)) {
+                                            if (NexaScreenActionPolicy.permits(item)) selectVisibleIcon(item.id)
+                                            else {
+                                                note = "Read-only control. Calls, messages and destructive actions are blocked."
+                                                render()
+                                            }
+                                        },
+                                        button(if (NexaScreenActionPolicy.permits(item)) "Select" else "Read only") {
+                                            if (NexaScreenActionPolicy.permits(item)) selectVisibleIcon(item.id)
+                                            else {
+                                                note = "This icon cannot be acted on by the screen assistant."
+                                                render()
+                                            }
+                                        }
+                                    ))
+                                }
+                            }
+                            addView(button("Discard inspected screen") { cancelVisibleIcon() })
+                        }
+                        addView(text("Only navigation controls can be tapped, once, after confirmation. No AI or automatic gestures.",11f,true))
                         addView(text("Messages require recipient review in full Nexa.",11f,true))
                     }
                     else -> {
@@ -395,6 +477,8 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        inspectedScreen = null
+        NexaScreenActions.reset()
         super.onDestroy()
     }
 }
