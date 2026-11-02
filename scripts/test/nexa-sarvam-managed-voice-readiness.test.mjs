@@ -1,51 +1,60 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-
-const native='apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/';
-const readiness=readFileSync(native+'SarvamVoiceReadiness.kt','utf8');
-const transport=readFileSync(native+'SarvamAudioTransport.kt','utf8');
-const realtime=readFileSync(native+'RealtimeVoiceService.kt','utf8');
-const idleGate=readFileSync(native+'NexaVoiceIdleGate.kt','utf8');
-const nativeUi=readFileSync('apps/mobile/src/native/liveVoice.ts','utf8');
+const root='apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/';
+const native=readFileSync(root+'AgentJournalModule.kt','utf8');
+const runtime=readFileSync(root+'RealtimeVoiceService.kt','utf8');
+const direct=readFileSync(root+'SarvamApiVoiceTransport.kt','utf8');
+const probe=readFileSync(root+'SarvamModelApiReadiness.kt','utf8');
 const ui=readFileSync('apps/mobile/App.tsx','utf8');
 
-test('owner tests Sarvam signed Voice Agent authorization locally, without streaming or exposing secrets',()=>{
-  assert.match(readiness,/AgentJournalModule\.openSarvamVoicePreflightCredentials\(context\)/);
-  assert.match(readiness,/https:\/\/apps\.sarvam\.ai\/api\/app-runtime\//);
-  assert.match(readiness,/header\("X-API-Key", cfg\.apiKey\)/);
-  assert.match(readiness,/appendQueryParameter\("interaction_type", "call"\)/);
-  assert.match(readiness,/reference_id/);
-  assert.match(readiness,/uri\.scheme == "wss"/);
-  assert.match(readiness,/host\.endsWith\("\.sarvam\.ai"\)/);
-  assert.match(readiness,/response\.use/);
-  assert.match(readiness,/401, 403/);
-  assert.match(readiness,/404/);
-  assert.doesNotMatch(readiness,/Log\.|println\(|toString\(\).*apiKey|WebSocketListener|startRecording/);
-  assert.match(realtime,/fun checkSarvamVoiceAuthorization\(p: Promise\)/);
-  assert.match(realtime,/context\.currentActivity\?\.hasWindowFocus\(\) != true/);
-  assert.match(nativeUi,/checkSarvamVoiceAuthorization/);
-  assert.match(ui,/Verify Sarvam Voice Agent connection/);
+test('Model API-only realtime voice never requires Samvaad organization/workspace/agent IDs',()=>{
+  assert.match(native,/VoiceCredentials\("sarvam-api",key\)/);
+  assert.match(native,/if\(!sarvamStreamingConsent\(ctx\)\) return@synchronized null/);
+  assert.match(runtime,/selectedProvider=="sarvam-api"/);
+  assert.match(runtime,/SarvamApiVoiceTransport\(credentials\.apiKey/);
+  assert.match(runtime,/sarvamApiTransport\?\.sendAudio\(bytes\)/);
+  assert.match(runtime,/sarvamApiTransport\?\.close\(\)/);
+  assert.doesNotMatch(direct,/app-runtime|workspaceId|orgId|cfg\.appId|SamvaadVoiceAgent/);
+  assert.match(ui,/Sarvam API Realtime Voice/);
+  assert.doesNotMatch(ui,/Sarvam Voice Agent \(live STS\)/);
 });
-
-test('continuous managed conversation does not terminate for an ordinary 45-second pause or a long spoken answer',()=>{
-  assert.match(idleGate,/limitMs: Long = 120_000L/);
-  assert.match(realtime,/main\.postDelayed\(maxSession,60\*60\*1000L\)/);
-  assert.match(realtime,/override fun audio\(bytes:ByteArray\) \{[\s\S]*idleGate\.reset\(SystemClock\.elapsedRealtime\(\)\)/);
-  assert.match(realtime,/ArrayBlockingQueue<PlaybackChunk>\(96\)/);
-  assert.match(realtime,/audioQueue\.poll\(\)/);
-  assert.doesNotMatch(realtime,/Voice playback buffer overloaded/);
-  assert.match(realtime,/sarvamTransport\?\.sendAudio\(bytes\)/);
-  assert.match(transport,/server\.event\.user_interrupt/);
-  assert.match(transport,/server\.action\.interaction_connected/);
-  assert.match(transport,/server\.action\.interaction_end/);
+test('realtime Saaras v3 and Bulbul WS implement official audio, VAD and barge-in messages',()=>{
+  assert.match(direct,/saaras:v3-realtime/);
+  assert.match(direct,/speech-to-text-realtime\/ws/);
+  assert.match(direct,/speech-to-text\/ws/);
+  assert.match(direct,/appendQueryParameter\("language_code","auto"\)/);
+  assert.match(direct,/appendQueryParameter\("stream_type","fast"\)/);
+  assert.match(direct,/vad\.speech_start/);
+  assert.match(direct,/transcript\.final/);
+  assert.match(direct,/audio_input/);
+  assert.match(direct,/event","ping"/);
+  assert.match(direct,/bulbul:v4-flash/);
+  assert.match(direct,/text-to-speech\/ws/);
+  assert.match(direct,/output_audio_codec","linear16"/);
+  assert.match(direct,/type","config"/);
+  assert.match(direct,/type","flush"/);
+  assert.match(direct,/interruptReply\(\)/);
 });
-
-test('managed Sarvam audio-to-audio does not reroute voice into one-shot dictation or synthesizer',()=>{
-  assert.match(transport,/client\.media\.audio_chunk/);
-  assert.match(transport,/server\.media\.audio_chunk/);
-  assert.match(transport,/audio\/wav/);
-  assert.match(realtime,/activeRate=if\(selectedProvider=="sarvam"\)16000 else RATE/);
-  assert.doesNotMatch(transport,/speech-to-text-realtime\/ws|text-to-speech\/ws/);
-  assert.doesNotMatch(readiness,/api-subscription-key|\.apiKey\.toString\(/);
+test('continuous voice memory stays bounded, no transcript UI or file writes, no automatic phone tool',()=>{
+  assert.match(direct,/ArrayDeque<Pair<String,String>>/);
+  assert.match(direct,/while\(turns\.size>12\)turns\.removeFirst\(\)/);
+  assert.match(direct,/fun toolResult\(result:String\)/);
+  assert.match(direct,/callbacks\.ownerRequest\(text\)/);
+  assert.match(direct,/modelCall\?\.cancel\(\)/);
+  assert.match(direct,/60\*60\*1000L|generation\.incrementAndGet\(\)/);
+  assert.doesNotMatch(direct,/Log\.|println\(|SharedPreferences|FileOutputStream|openFileOutput|device\.open_app|NexaHub/);
+  assert.match(runtime,/pendingAppTool = PendingAppTool/);
+  assert.match(ui,/Enable realtime voice streaming/);
+  assert.match(ui,/Zero|retention|vendor/i);
+});
+test('read-only authorization probes STT/TTS and conversation API with a synthetic prompt, not microphone',()=>{
+  assert.match(probe,/openSarvamApiKey/);
+  assert.match(probe,/SarvamApiVoiceTransport\.sttUrl\(\)/);
+  assert.match(probe,/SarvamApiVoiceTransport\.ttsUrl\(\)/);
+  assert.match(probe,/https:\/\/api\.sarvam\.ai\/v1\/chat\/completions/);
+  assert.match(probe,/Reply OK only/);
+  assert.doesNotMatch(probe,/AudioRecord|MediaRecorder|startRecording|FileOutputStream|println\(|Log\./);
+  assert.match(runtime,/SarvamModelApiReadiness\.check/);
+  assert.match(ui,/Verify Sarvam API realtime connection/);
 });
