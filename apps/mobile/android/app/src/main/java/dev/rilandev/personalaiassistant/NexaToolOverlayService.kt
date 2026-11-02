@@ -254,8 +254,18 @@ class NexaToolOverlayService : Service() {
             note = "Enable Nexa Screen Assist in Android Accessibility settings before inspecting."
         } else {
             val result = NexaScreenActions.inspect(service)
-            inspectedScreen = result.first
-            note = result.second
+            val now=android.os.SystemClock.elapsedRealtime()
+            val expected=guidedNavigation.expected(now)
+            if (expected != null && result.first != null &&
+                !guidedNavigation.bindPackage(result.first.packageName,now)) {
+                inspectedScreen = null
+                NexaScreenActions.reset()
+                note = "Guided navigation is bound to its original application. " +
+                    "Return to that app or cancel this guide."
+            } else {
+                inspectedScreen = result.first
+                note = result.second
+            }
         }
         render()
     }
