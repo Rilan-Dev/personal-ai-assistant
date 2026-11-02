@@ -22,7 +22,7 @@ test('user-selected Sarvam Model API key stays Android Keystore encrypted and ol
   assert.doesNotMatch(transport,/writeFile|FileOutputStream|Log\.|println\(/);
 });
 test('microphone streaming consent defaults off, changing API key revokes consent',()=>{
-  assert.match(vault,/readEncrypted\(ctx,"sarvam-voice-streaming-consent"\)=="accepted-v1"/);
+  assert.match(vault,/readEncrypted\(ctx,"sarvam-voice-streaming-consent"\)=="accepted-model-api-v1"/);
   assert.match(vault,/if\(!sarvamStreamingConsent\(ctx\)\) return@synchronized null/);
   assert.match(vault,/old != data/);
   assert.match(vault,/write\(name\("private","sarvam-voice-streaming-consent"\),"declined"\)/);
