@@ -26,7 +26,7 @@ test('live voice from assistant gesture defaults off and needs visible explicit 
 
 test('system invocation routes to live provider only when configured and opted in',()=>{
   assert.match(assistant,/getBoolean\("auto_voice_invocation_v1", false\)/);
-  assert.match(assistant,/val automaticLiveVoice = saved && hasCredentials/);
+  assert.match(assistant,/val automaticLiveVoice = hasCredentials && \\(cameFromWake &&/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
   assert.match(assistant,/else feedback\("Enable live AI after assistant invocation/);
   assert.match(assistant,/liveVoiceLaunchedFromSession/);
