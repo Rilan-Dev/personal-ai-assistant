@@ -65,14 +65,14 @@ internal object NexaPhoneVoiceTools {
                 .containsMatchIn(q)) return null
         val match=Regex("^(?:(?:can|could|would) you (?:please )?|please |i (?:want|need) you to )?(?:open|launch|start|find) (?:my |the )?([a-z0-9][a-z0-9 ._+-]{1,55})(?: app)?$")
             .matchEntire(q) ?: return null
-        val target=match.groupValues[1].trim()
+        val target=match.groupValues[1].trim().removeSuffix(" app").trim()
         if(target in setOf("app","an app","settings","launcher","the app") || target.length<2)
             return null
         val pm=context.packageManager
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val entries=try {
             @Suppress("DEPRECATION")
-            pm.queryIntentActivities(intent,PackageManager.MATCH_DEFAULT_ONLY)
+            pm.queryIntentActivities(intent,0)
         }catch (_:Exception){emptyList()}
         val candidates=entries.asSequence().mapNotNull { resolved ->
             val pkg=resolved.activityInfo?.packageName.orEmpty()
