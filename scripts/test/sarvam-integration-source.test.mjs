@@ -119,8 +119,8 @@ test("Android microphone consent identifies the actual selected voice provider",
   const controls=read("apps/mobile/src/native/liveVoice.ts");
   assert.match(controls,/startOwnerLiveVoice\(provider:'sarvam'\|'openai'/);
   assert.match(controls,/provider==='sarvam'/);
-  assert.match(controls,/your Sarvam managed Voice Agent/);
-  assert.match(controls,/your OpenAI realtime provider/);
+  assert.match(controls,/Sarvam Model API \(Saaras realtime recognition\)/);
+  assert.match(controls,/your configured OpenAI realtime account/);
   assert.match(ui,/startOwnerLiveVoice\(activeProvider.provider==='sarvam'\?'sarvam':'openai'\)/);
 });
 
