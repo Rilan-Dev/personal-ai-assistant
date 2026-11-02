@@ -32,6 +32,8 @@ export function validateProviderSettings(value: unknown): DirectProviderSettings
       typeof obj.model !== "string" || !/^[A-Za-z0-9._:/-]{2,96}$/.test(obj.model) ||
       typeof obj.apiKey !== "string" || obj.apiKey.length < 12 || obj.apiKey.length > 512 ||
       obj.apiKey.trim() !== obj.apiKey) throw new Error("Provider, model, or API key is invalid");
+  if (typeof obj.apiKey === "string" && obj.apiKey.startsWith("sk_samvaad_"))
+    throw new Error("SAMVAAD_VOICE_KEY_ONLY");
   return obj as DirectProviderSettings;
 }
 
