@@ -29,7 +29,7 @@ test('voice plate is compact and has visible direct control of pending tool appr
   assert.match(session,/WindowManager\.LayoutParams\.WRAP_CONTENT/);
   assert.match(session,/FLAG_NOT_TOUCH_MODAL/);
   assert.doesNotMatch(session,/Assistant gesture starts one offline device command by default/);
-  assert.match(session,/Approve app/);
+  assert.match(session,/Approve once/);
   assert.match(session,/Deny/);
   assert.match(session,/RealtimeVoiceService\.pendingApprovalSummary/);
 });
