@@ -71,6 +71,39 @@ internal object ScreenAssistState {
 }
 
 class ScreenAssistService : AccessibilityService() {
+    /**
+     * Find the topmost real third-party APPLICATION window behind Nexa's
+     * floating overlay. No keyguard, Android system surface, keyboard or Nexa
+     * window is returned. Caller owns the returned node and must recycle it.
+     */
+    internal fun externalWindowRoot(): AccessibilityNodeInfo? {
+        if (!ScreenAssistState.connected) return null
+        val locked = (getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+            ?.isKeyguardLocked == true
+        if (locked) return null
+        val allWindows = try { windows.orEmpty() } catch (_: Exception) { emptyList() }
+        for (window in allWindows.sortedByDescending { it.layer }) {
+            if (window.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION)
+                continue
+            val candidate = try { window.root } catch (_: Exception) { null } ?: continue
+            if (isPermittedExternalWindow(candidate.packageName?.toString().orEmpty()))
+                return candidate
+            candidate.recycle()
+        }
+        // On devices that do not expose interactive windows, only fall back
+        // to an active root if it is independently known to be external.
+        val root = try { rootInActiveWindow } catch (_: Exception) { null } ?: return null
+        if (isPermittedExternalWindow(root.packageName?.toString().orEmpty())) return root
+        root.recycle()
+        return null
+    }
+
+    private fun isPermittedExternalWindow(pkg: String): Boolean =
+        pkg.isNotBlank() && pkg != packageName && pkg != "android" &&
+        pkg != "com.android.systemui" &&
+        !pkg.startsWith("com.google.android.inputmethod") &&
+        !pkg.startsWith("com.android.inputmethod")
+
     companion object {
         @Volatile internal var active: ScreenAssistService? = null
             private set
