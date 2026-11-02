@@ -60,3 +60,35 @@
 - The floating Tools overlay includes **Action journal summary**, which displays only aggregate event states, never details from other apps.
 - `NexaUiActionJournalAndroidTest.kt` adds test cases for replay denial, redacted at-rest records, invalid action types, and observed-change transitions. These tests were authored but not run on a real device in this iteration, per owner's acceptance workflow.
 - This follow-up does not grant the voice model any screen-click or scroll tools, does not install new permissions, and does not alter release signing or automatic CI trigger policies.
+
+
+## Next milestone — bounded owner-guided navigation and external app window resolution
+
+The native floating overlay now supports **Menu → Search** and **Menu → Settings**
+guides, plus direct Menu, Search and Settings guides. This is a strictly
+literal, finite-state guide; it is not an unrestricted multi-step agent.
+
+- Every guide is limited to one or two known non-destructive icon semantics.
+- The active guide expires after 90 seconds, is bound to the first inspected
+  app package, and is cancelled when leaving Tools or closing the overlay.
+- Each step requires a fresh screen inspection, explicit target selection and
+  separately confirmed action. The next step is only suggested after Android
+  reports accepting the previous action; no automatic tap or retry follows.
+- Both `menu` and `more_options` are accepted as menu icon semantics.
+- The screen reader now requests Android's interactive-window listing, selects
+  a permitted external application window beneath Nexa's application overlay
+  and declines protected/system/keyboard/Nexa windows. This addresses the
+  previous issue where an overlay-owned active window could hide the target app.
+- The native click-target match now also compares bounded view resource IDs
+  and widget class names when Android exposes them, in addition to
+  package/window/semantic label/bounds.
+- The action and scroll executor, delayed verifier and visual-crop callback
+  use the external-app window resolver to reduce accidental inspection of
+  Nexa's floating interface.
+- Automated Android test source is added for action ordering, timeouts,
+  package mismatch and unsupported commands. User-owned device testing and
+  APK compilation remain explicitly pending.
+
+No model-generated screen plan can invoke Android actions; the guide is
+owner-directed. A guide finishing only means its requested clicks were
+submitted to Android, not that a business task succeeded.
