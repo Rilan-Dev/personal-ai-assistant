@@ -123,6 +123,7 @@ class ScreenAssistService : AccessibilityService() {
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event != null) NexaUiActionVerifier.onAccessibilityEvent(event)
         if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) || event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
