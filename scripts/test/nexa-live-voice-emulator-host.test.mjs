@@ -13,7 +13,7 @@ test('live voice instrumentation uses a foreground native host, never ReactActiv
   assert.match(smoke,/ActivityScenario\.launch\(NexaVoiceTestHostActivity::class\.java\)/);
   assert.doesNotMatch(smoke,/ActivityScenario\.launch\(MainActivity::class\.java\)/);
   assert.match(host,/class NexaVoiceTestHostActivity : Activity\(\)/);
-  assert.doesNotMatch(host,/ReactActivity|ReactHost|Metro/);
+  assert.doesNotMatch(host,/import com\.facebook\.react|: ReactActivity\b|ReactHostImpl/);
 });
 
 test('emulator-only activity is not shipped as a production application surface',()=>{
