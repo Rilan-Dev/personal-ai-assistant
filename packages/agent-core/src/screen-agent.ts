@@ -1,7 +1,7 @@
 import type {Tool,Planner} from './runtime.ts';
 import type {ToolInput} from '../../agent-contracts/src/index.ts';
 import type {ScreenIconSnapshot} from '../../agent-contracts/src/screen-icons.ts';
-import {proposeNavigationSteps} from './screen-grounding.ts';
+import {inspectGuidedScreenPlan} from './screen-confidence.ts';
 import type {createOwnerScreenGrant} from './screen-grounding.ts';
 
 type Grant=ReturnType<typeof createOwnerScreenGrant>;
@@ -49,7 +49,7 @@ export function createReadOnlyScreenTools(
    if(!suggest.validateInput(input))return {status:'blocked',reason:'Unsupported navigation suggestion'};
    const now=clock(),snap=grant.read(now);
    if(!snap)return {status:'blocked',reason:'Owner screen release missing or expired'};
-   const proposal=proposeNavigationSteps(input.request as string,snap,now);
+   const proposal=inspectGuidedScreenPlan(input.request as string,snap,now);
    return {status:'success',data:{...proposal,actionEligible:false,answer:proposal.message}};
   }
  };
@@ -68,6 +68,15 @@ export function createScreenAwarePlanner(
    const last=observations[observations.length-1];
    if(!['screen.observe','screen.suggest_navigation'].includes(last.call.toolId))
     return base.next(request,observations,signal);
+   // Explicit owner release is rechecked BEFORE returning an observation.
+   // Do not replay another question's result into this request or continue
+   // after revocation/backgrounding/expiry.
+   const expectedTool=plan?'screen.suggest_navigation':'screen.observe';
+   const expectedInput=plan?{request:normalized}:{question:request};
+   if(observations.length!==1 || !grant.read(clock()) ||
+      last.call.toolId!==expectedTool ||
+      JSON.stringify(last.call.input)!==JSON.stringify(expectedInput))
+    return {type:'clarify',question:'Screen consent expired or observation context changed. Scan and release the current screen again.'};
    const data=last.outcome.status==='success'?last.outcome.data:null;
    const message=data&&typeof data==='object'&&'answer' in data&&typeof data.answer==='string'
     ?data.answer:'Screen observation was unavailable. No action was taken.';
