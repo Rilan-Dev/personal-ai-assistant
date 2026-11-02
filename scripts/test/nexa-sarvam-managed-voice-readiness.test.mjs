@@ -12,7 +12,7 @@ test('Model API-only realtime voice never requires Samvaad organization/workspac
   assert.match(native,/VoiceCredentials\("sarvam-api",key\)/);
   assert.match(native,/if\(!sarvamStreamingConsent\(ctx\)\) return@synchronized null/);
   assert.match(runtime,/selectedProvider=="sarvam-api"/);
-  assert.match(runtime,/SarvamApiVoiceTransport\(credentials\.apiKey/);
+  assert.match(runtime,/SarvamApiVoiceTransport\(applicationContext,credentials\.apiKey/);
   assert.match(runtime,/sarvamApiTransport\?\.sendAudio\(bytes\)/);
   assert.match(runtime,/sarvamApiTransport\?\.close\(\)/);
   assert.doesNotMatch(direct,/app-runtime|workspaceId|orgId|cfg\.appId|SamvaadVoiceAgent/);
