@@ -30,7 +30,7 @@ test('agent invokes deterministic read-only screen tool without consulting model
  const first=await p.next('Where is the search icon?',[]);
  assert.equal(first.type,'tool');assert.equal(first.call.toolId,'screen.observe');assert.equal(calls,0);
  const second=await p.next('Where is the search icon?',[
-  {call:first.call,outcome:{status:'success',data:{answer:'Search is top right',actionEligible:false}}}]);
+  {call:first.call,outcome:{status:'success',data:{answer:'Search is top right',snapshotId:'s1',actionEligible:false}}}]);
  assert.equal(second.type,'done');assert.equal(second.response,'Search is top right');assert.equal(calls,0);
 });
 test('unrelated actions use original policy while explicit menu plan is non-executable',async()=>{
@@ -72,4 +72,16 @@ test('menu plan describes ambiguous first step and does not promise execution',a
  assert.equal(outcome.data.status,'ambiguous');
  assert.equal(outcome.data.actionEligible,false);
  assert.match(outcome.data.answer,/multiple/i);
+});
+
+test('screen result is rejected when source snapshot no longer matches current release',async()=>{
+ const grant=createOwnerScreenGrant();grant.release(snapshot,2000);
+ const base={next:async()=>({type:'done',response:'BASE'})};
+ const p=createScreenAwarePlanner(base,grant,resolver,()=>2001);
+ const decision=await p.next('Where is the search icon?',[]);
+ const forged=[{call:decision.call,outcome:{status:'success',
+  data:{answer:'CROSS SCREEN DATA',snapshotId:'other-scan',actionEligible:false}}}];
+ const after=await p.next('Where is the search icon?',forged);
+ assert.equal(after.type,'clarify');
+ assert.equal(JSON.stringify(after).includes('CROSS SCREEN DATA'),false);
 });
