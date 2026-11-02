@@ -23,6 +23,8 @@ export type ScreenIconSnapshot = {
   icons: ScreenIcon[];
   /** App-window rectangle captured alongside icons. Never a target for actions. */
   windowBoundsPx?: IconRect;
+  /** Captured external application window identity, never an action token. */
+  windowId?: number;
   /** There is deliberately no screenshot or arbitrary page text in this contract. */
 };
 
@@ -60,7 +62,9 @@ export function parseScreenIconSnapshot(input: unknown): ScreenIconSnapshot | nu
       !Number.isSafeInteger(input.capturedAtWallMs) ||
       !Number.isInteger(input.expiresInMs) || (input.expiresInMs as number) <= 0 ||
       (input.expiresInMs as number) > 60_000 ||
-      !Array.isArray(input.icons) || input.icons.length > 64) return null;
+      !Array.isArray(input.icons) || input.icons.length > 64 ||
+      (input.windowId !== undefined && (!Number.isInteger(input.windowId) ||
+        (input.windowId as number) < 0 || (input.windowId as number) > 2147483647))) return null;
   let windowBoundsPx: IconRect | undefined;
   if (input.windowBoundsPx !== undefined) {
     const b=input.windowBoundsPx;
@@ -93,5 +97,6 @@ export function parseScreenIconSnapshot(input: unknown): ScreenIconSnapshot | nu
   return {version: 1, snapshotId: input.snapshotId,
     packageName: input.packageName, capturedAtWallMs: input.capturedAtWallMs as number,
     expiresInMs: input.expiresInMs as number, icons,
-    ...(windowBoundsPx ? {windowBoundsPx} : {})};
+    ...(windowBoundsPx ? {windowBoundsPx} : {}),
+    ...(input.windowId !== undefined ? {windowId:input.windowId as number} : {})};
 }
