@@ -18,6 +18,12 @@
   <queries>
     <intent><action android:name="android.speech.RecognitionService"/></intent>
     <intent><action android:name="android.intent.action.TTS_SERVICE"/></intent>
+    <!-- Query only launchable app labels for a specifically spoken target.
+         No QUERY_ALL_PACKAGES or inventory upload to the model. -->
+    <intent>
+      <action android:name="android.intent.action.MAIN"/>
+      <category android:name="android.intent.category.LAUNCHER"/>
+    </intent>
     <package android:name="com.whatsapp"/>
     <package android:name="com.github.android"/>
     <package android:name="com.brave.browser"/>
