@@ -24,9 +24,9 @@ test("Sarvam voice agent credentials and stable pseudonymous user ID are encrypt
   assert.match(agent,/write\(name\("private","sarvam-voice"\),data\)/);
   assert.match(agent,/UUID\.randomUUID\(\)\.toString\(\)/);
   assert.match(agent,/fun openVoiceCredentials/);
-  assert.match(agent,/provider != "openai" && provider != "sarvam"/);
-  assert.match(agent,/if \(provider=="openai"\)/);
-  assert.match(agent,/VoiceCredentials\(provider,key,org,work,app,user\)/);
+  assert.match(agent,/data.optString\("provider"\)!="openai"/);
+  assert.match(agent,/VoiceCredentials\("openai",key\)/);
+  assert.match(agent,/VoiceCredentials\("sarvam",key,org,work,app,user\)/);
   assert.match(agent,/openSarvamApiKey/);
   assert.doesNotMatch(agent,/Log\.d\(|Log\.i\(/);
 });
@@ -100,7 +100,7 @@ test("Chat/Voice/Settings support Sarvam user configuration without automatic se
   assert.match(ui,/dictateSarvamOnce\(\)/);
   assert.match(ui,/speakSarvamOnce\(/);
   assert.match(ui,/startOwnerLiveVoice\(/);
-  assert.match(ui,/No transcript is displayed, sent to Chat, or saved locally/);
+  assert.match(ui,/Nexa does not send files, contacts, screen content or NexaHub records/);
   assert.match(ui,/server-side Sarvam may retain call records|Sarvam performs recognition and reasoning on its servers/i);
   assert.doesNotMatch(ui,/send\(dictated\)/);
 });
@@ -121,7 +121,7 @@ test("Android microphone consent identifies the actual selected voice provider",
   assert.match(controls,/provider==='sarvam'/);
   assert.match(controls,/your Sarvam managed Voice Agent/);
   assert.match(controls,/your OpenAI realtime provider/);
-  assert.match(ui,/startOwnerLiveVoice\(activeProvider\.provider==='sarvam'\?'sarvam':'openai'\)/);
+  assert.match(ui,/startOwnerLiveVoice\(useSamvaad\?'sarvam':'openai'\)/);
 });
 
 
