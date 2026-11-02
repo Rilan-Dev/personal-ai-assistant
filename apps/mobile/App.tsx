@@ -100,8 +100,8 @@ export default function App() {
   const [events, setEvents] = useState<AgentTraceEvent[]>([]);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [showProvider, setShowProvider] = useState(false);
-  const [providerChoice, setProviderChoice] = useState<DirectProviderId>('openai');
-  const [providerModel, setProviderModel] = useState(PROVIDERS.openai.defaultModel);
+  const [providerChoice, setProviderChoice] = useState<DirectProviderId>('sarvam');
+  const [providerModel, setProviderModel] = useState(PROVIDERS.sarvam.defaultModel);
   const [providerKeyInput, setProviderKeyInput] = useState('');
   const [activeProvider, setActiveProvider] = useState<DirectProviderSettings | null>(null);
   const [providerBusy, setProviderBusy] = useState(false);
@@ -149,7 +149,7 @@ export default function App() {
     if (wakeBusy) return;
     setWakeBusy(true);
     try {
-      if (!await prepareOwnerLiveVoicePermissions(sarvamVoiceKeySaved?'sarvam':'openai')) {
+      if (!await prepareOwnerLiveVoicePermissions('device')) {
         setSetupNotice('Microphone/notification access is needed for local wake listening.');
         return;
       }
@@ -250,7 +250,7 @@ export default function App() {
     setNexaPermissionBusy(true);
     try {
       const allowed = await prepareOwnerLiveVoicePermissions(
-        sarvamVoiceKeySaved ? 'sarvam' : 'openai');
+        'device');
       setAssistantRoleNotice(allowed
         ? 'Microphone and notification grants checked. Start live voice only when you choose to.'
         : 'Voice permission denied or unavailable. No microphone session started.');
@@ -350,6 +350,15 @@ export default function App() {
     state:'stopped',message:'No live conversation',microphoneActive:false,microphoneMuted:false
   });
   const [liveVoiceBusy,setLiveVoiceBusy] = useState(false);
+  const voiceSessionRunning=liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening';
+  const configuredVoiceProvider=activeProvider?.provider==='sarvam'?'Sarvam AI (Model API)'
+    : activeProvider?.provider==='openai'?'OpenAI Realtime':null;
+  const runningVoiceProvider=liveVoiceStatus.provider==='sarvam-api'?'Sarvam AI (Model API)'
+    : liveVoiceStatus.provider==='openai'?'OpenAI Realtime':null;
+  const voiceProviderDisplay=voiceSessionRunning
+    ? (runningVoiceProvider??'Provider status unavailable — check installed APK')
+    : (configuredVoiceProvider??'No supported live provider configured');
+
   const [screenAssistNotice,setScreenAssistNotice] = useState('');
   const [screenAssistEnabled,setScreenAssistEnabled] = useState(false);
   const [screenArmed,setScreenArmed] = useState(false);
@@ -651,7 +660,7 @@ export default function App() {
   const startLiveVoice=async()=>{
     if(!engine.live||liveVoiceBusy||running||listening||speaking||voiceInProgress.current)return;
     if(!activeProvider || !['sarvam','openai'].includes(activeProvider.provider)){
-      setVoiceNotice('Save your Sarvam Model API key under AI Provider. No workspace or Voice Agent ID is needed.');
+      setVoiceNotice('Select and save Sarvam AI or OpenAI in Settings → AI Configuration. Live voice never silently switches providers.');
       return;
     }
     if(activeProvider.provider==='sarvam' && !sarvamStreamingConsent){
@@ -662,7 +671,7 @@ export default function App() {
     try {
       const success=await startOwnerLiveVoice(activeProvider.provider==='sarvam'?'sarvam':'openai');
       if(!success)setVoiceNotice('Live microphone permission was declined. No session started.');
-      else setVoiceNotice('Session requested. Check connection status below; Android notification has Stop.');
+      else setVoiceNotice('Session requested from '+(activeProvider.provider==='sarvam'?'Sarvam Model API':'OpenAI Realtime')+'. Verify the active provider and connection state below. Android notification has Stop.');
     } catch {
       setVoiceNotice('Android could not start an owner-visible live voice session. Check permissions and battery restrictions.');
     } finally {setLiveVoiceBusy(false);}
@@ -877,8 +886,11 @@ export default function App() {
       setProviderKeyInput('');
       // Native vault revokes Sarvam audio consent on any provider change.
       // Keep the React Native toggle synchronized with that fail-closed state.
-      setSarvamStreamingConsent(false);
-      setProviderNotice('AI provider saved in Android Keystore. Re-enable realtime voice consent explicitly if you changed your Sarvam API key.');
+      const consent = config.provider==='sarvam' ? await samvaadStreamingConsentStatus().catch(()=>false) : false;
+      setSarvamStreamingConsent(consent);
+      setProviderNotice('AI provider saved in Android Keystore. '+(config.provider==='sarvam'
+        ? 'Sarvam is selected for both chat and realtime voice. '+(consent?'Existing streaming consent remains enabled.':'Enable realtime voice streaming separately before live audio.')
+        : config.provider==='openai'?'OpenAI is selected for chat and live voice. Its own OpenAI API key is required.':'This provider supports chat only; live voice requires Sarvam or OpenAI.'));
     } catch {
       setProviderNotice('Could not save the Model API key. Select Sarvam AI and enter a valid API subscription key (not a Samvaad workspace key).');
     } finally { setProviderBusy(false); }
@@ -911,6 +923,7 @@ export default function App() {
     try {
       await clearProviderFromVault();
       setActiveProvider(null);
+      setSarvamStreamingConsent(false);
       setProviderKeyInput('');
       setProviderNotice('AI provider credentials deleted from device storage. Local planner is active.');
     } catch {
@@ -1318,12 +1331,20 @@ export default function App() {
               {liveVoiceStatus.state==='listening'?'LIVE':liveVoiceStatus.state}
             </Text>
           </View>
-          <Text style={styles.cardText}>{sarvamVoiceKeySaved
-            ? 'Sarvam API-only realtime conversations: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
-            : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Voice calls may be processed and retained under the selected provider’s policy. Device actions require separate owner approval.'}</Text>
-          <Text style={styles.settingHelp}>{sarvamVoiceKeySaved
-            ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
-            : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
+          <Text style={styles.settingTitle}>
+            {voiceSessionRunning?'Android active provider: ':'Provider for next session: '}{voiceProviderDisplay}
+          </Text>
+          <Text style={styles.cardText}>{activeProvider?.provider==='sarvam'
+            ? 'Sarvam Model API live voice: Saaras v3 Realtime continuously recognizes speech over WebSocket, Sarvam-105B Conversations responds to turns, and Bulbul streams speech over WebSocket. Your Android Keystore-saved Sarvam key is used only after you enable streaming consent. No Samvaad workspace or OpenAI key is needed.'
+            : activeProvider?.provider==='openai'
+              ? 'OpenAI Realtime uses your separately saved OpenAI API key and a live speech WebSocket. Nexa never substitutes a Sarvam key for an OpenAI key. Android provides visible microphone controls and Stop.'
+              : 'Live voice is not configured. Open Settings → AI Configuration, select Sarvam AI or OpenAI, and save that provider’s own API key. Sarvam is recommended for the API-only voice mode.'}</Text>
+          <Text style={styles.settingHelp}>{activeProvider?.provider==='sarvam'
+            ? 'Sarvam AI · Saaras v3 Realtime + Sarvam-105B Conversations + Bulbul streaming TTS · usage may be billed by Sarvam.'
+            : activeProvider?.provider==='openai'
+              ? 'OpenAI Realtime · native model gpt-realtime-2.1-mini · usage may be billed by OpenAI.'
+              : 'No live model selected. There is no automatic OpenAI fallback or shared API key.'}</Text>
+          <Text style={styles.settingHelp}>To switch providers, open Settings → AI Configuration, select the provider and save its own API key. A Sarvam connection test only tests Sarvam; it never changes the saved provider or starts a microphone session.</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
           {activeProvider?.provider==='sarvam' &&
             <Pressable accessibilityRole="button"
@@ -1368,7 +1389,7 @@ export default function App() {
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Live session limitations</Text>
-          <Text style={styles.cardText}>Live conversation requires a configured Sarvam Voice Agent or OpenAI realtime account. It starts from an explicit Voice action or an assistant invocation mode you enable in Setup. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
+          <Text style={styles.cardText}>Live conversation uses the saved Sarvam Model API or OpenAI provider key. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
         </View>
         <Text style={styles.mutedSmall}>Offline Hey Nexa listening and cloud live voice are separate features. Both must respect Android microphone disclosures and Stop controls. Nexa cannot hide the green microphone indicator or guarantee uninterrupted background listening on every phone.</Text>
       </ScrollView>}
