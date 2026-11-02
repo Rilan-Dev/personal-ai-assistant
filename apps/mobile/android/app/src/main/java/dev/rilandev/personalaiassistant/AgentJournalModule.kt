@@ -57,14 +57,10 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             if(data.optString("provider")!="sarvam" || key.length !in 12..512)
                 null else key
         }
-        fun openVoiceCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
-            val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
-            val data=JSONObject(raw)
-            val provider=data.optString("provider")
-            if (provider != "openai" && provider != "sarvam") return@synchronized null
-            val key=data.optString("apiKey")
-            if (key.length !in 12..512) return@synchronized null
-            if (provider=="openai") return@synchronized VoiceCredentials(provider,key)
+        /** Read-only authorization never starts microphone and does not
+         * require consent. Audio start must explicitly require consent.
+         */
+        fun openSarvamVoicePreflightCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
             val voiceRaw=readEncrypted(ctx,"sarvam-voice") ?: return@synchronized null
             val voice=JSONObject(voiceRaw)
             val org=voice.optString("orgId")
@@ -73,7 +69,40 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             val user=voice.optString("userId")
             if (listOf(org,work,app,user).any { !it.matches(Regex("[A-Za-z0-9_-]{4,128}")) })
                 return@synchronized null
-            VoiceCredentials(provider,key,org,work,app,user)
+            // Voice Agents workspace credentials are not interchangeable with
+            // a Model API chat-completion subscription key.
+            val dedicated=readEncrypted(ctx,"sarvam-voice-key")
+            val legacy=if(dedicated==null) {
+                val saved=readEncrypted(ctx,"provider-config")
+                saved?.let {
+                    val p=JSONObject(it)
+                    p.optString("apiKey").takeIf { key ->
+                        p.optString("provider")=="sarvam" &&
+                        key.length in 12..512 &&
+                        !key.startsWith("sk_samvaad_")
+                    }
+                }
+            } else null
+            val key=dedicated ?: legacy ?: return@synchronized null
+            if (key.length !in 12..512) return@synchronized null
+            VoiceCredentials("sarvam",key,org,work,app,user)
+        }
+        fun hasSarvamVoiceKey(ctx: Context): Boolean = synchronized(lock) {
+            val value=readEncrypted(ctx,"sarvam-voice-key")
+            value != null && value.matches(Regex("sk_samvaad_[A-Za-z0-9_-]{16,500}"))
+        }
+        fun sarvamStreamingConsent(ctx: Context): Boolean = synchronized(lock) {
+            readEncrypted(ctx,"sarvam-voice-streaming-consent")=="accepted-v1"
+        }
+        fun openVoiceCredentials(ctx: Context): VoiceCredentials? = synchronized(lock) {
+            val sarvam=openSarvamVoicePreflightCredentials(ctx)
+            if(sarvam!=null && sarvamStreamingConsent(ctx)) return@synchronized sarvam
+            val raw=readEncrypted(ctx,"provider-config") ?: return@synchronized null
+            val data=JSONObject(raw)
+            if(data.optString("provider")!="openai") return@synchronized null
+            val key=data.optString("apiKey")
+            if(key.length !in 12..512) return@synchronized null
+            VoiceCredentials("openai",key)
         }
         fun openAiVoiceKey(ctx: Context): String? =
             openVoiceCredentials(ctx)?.takeIf { it.provider=="openai" }?.apiKey
@@ -149,6 +178,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             require(model.matches(Regex("[A-Za-z0-9._:/-]{2,96}")))
             val key = obj.getString("apiKey")
             require(key.length in 12..512 && key == key.trim())
+            require(!key.startsWith("sk_samvaad_"))
             synchronized(lock) {
                 write(name("private", "provider-config"), data)
             }
@@ -175,6 +205,52 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                 android.content.Intent(reactApplicationContext, RealtimeVoiceService::class.java))
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "PROVIDER_SETTINGS_CLEAR", e) }
+    }
+
+    /** Samvaad workspace key: device-only, never exposed back to JavaScript. */
+    @ReactMethod fun saveSarvamVoiceWorkspaceKey(key: String, p: Promise) {
+        try {
+            require(key.matches(Regex("sk_samvaad_[A-Za-z0-9_-]{16,500}")))
+            synchronized(lock) {
+                write(name("private","sarvam-voice-key"),key)
+                // A replacement key requires renewed streaming consent.
+                write(name("private","sarvam-voice-streaming-consent"),"declined")
+            }
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
+            p.resolve(true)
+        } catch(e: Exception) { rejectSafe(p,"SARVAM_WORKSPACE_KEY_SAVE",e) }
+    }
+    @ReactMethod fun sarvamVoiceWorkspaceKeyPresent(p: Promise) {
+        try { p.resolve(hasSarvamVoiceKey(reactApplicationContext)) }
+        catch(e: Exception) { rejectSafe(p,"SARVAM_WORKSPACE_KEY_READ",e) }
+    }
+    @ReactMethod fun setSarvamVoiceStreamingConsent(accepted: Boolean, p: Promise) {
+        try {
+            synchronized(lock) {
+                write(name("private","sarvam-voice-streaming-consent"),
+                    if(accepted) "accepted-v1" else "declined")
+            }
+            if(!accepted) reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
+            p.resolve(true)
+        } catch(e: Exception) { rejectSafe(p,"SARVAM_CONSENT_SAVE",e) }
+    }
+    @ReactMethod fun sarvamVoiceStreamingConsentStatus(p: Promise) {
+        try { p.resolve(sarvamStreamingConsent(reactApplicationContext)) }
+        catch(e: Exception) { rejectSafe(p,"SARVAM_CONSENT_READ",e) }
+    }
+    @ReactMethod fun clearSarvamVoiceWorkspaceKey(p: Promise) {
+        try {
+            synchronized(lock) {
+                check(prefs.edit()
+                    .remove(name("private","sarvam-voice-key"))
+                    .remove(name("private","sarvam-voice-streaming-consent")).commit())
+            }
+            reactApplicationContext.stopService(
+                android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
+            p.resolve(true)
+        } catch(e: Exception) { rejectSafe(p,"SARVAM_WORKSPACE_KEY_CLEAR",e) }
     }
 
     /** Sarvam managed Voice Agent IDs are kept AES-GCM encrypted, separate
@@ -217,7 +293,10 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
     @ReactMethod fun clearSarvamVoiceAgent(p: Promise) {
         try {
             synchronized(lock) {
-                check(prefs.edit().remove(name("private","sarvam-voice")).commit())
+                check(prefs.edit()
+                    .remove(name("private","sarvam-voice"))
+                    .remove(name("private","sarvam-voice-key"))
+                    .remove(name("private","sarvam-voice-streaming-consent")).commit())
             }
             reactApplicationContext.stopService(
                 android.content.Intent(reactApplicationContext,RealtimeVoiceService::class.java))
