@@ -39,6 +39,8 @@ import type {LaunchableAppMatch} from './src/native/androidAppCatalogue';
 import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
+import {historyAvailable,appendConversation,recentConversations,copyConversationHistory,shareConversationHistory} from './src/native/conversationHistory';
+import type {NexaConversationEntry} from './src/native/conversationHistory';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
@@ -104,6 +106,21 @@ export default function App() {
     return ()=>sub.remove();
   },[tab]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const chatLogSession=useRef('chat-'+Date.now());
+  const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
+  const [historyNotice,setHistoryNotice]=useState('');
+  const refreshHistory=async()=>{
+    try {setHistoryEntries(await recentConversations(120));setHistoryNotice('Local encrypted custom.db · last 120 records');}
+    catch {setHistoryNotice('Could not read local conversation history on this device.');}
+  };
+  const copyHistory=async()=>{
+    try {await copyConversationHistory();setHistoryNotice('Copied local history JSON. Clipboard is visible to other apps you paste into.');}
+    catch {setHistoryNotice('Could not copy conversation history.');}
+  };
+  const exportHistory=async()=>{
+    try {await shareConversationHistory();setHistoryNotice('Choose where to save or share the JSON export.');}
+    catch {setHistoryNotice('Could not open the JSON export chooser.');}
+  };
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<AgentTraceEvent[]>([]);
@@ -896,6 +913,8 @@ export default function App() {
   };
   const append = (speaker: ChatMessage['speaker'], text: string) => {
     setMessages(prev => [...prev, { id: counter.current++, speaker, text }]);
+    if(historyAvailable()) void appendConversation(chatLogSession.current,'chat',
+      activeProvider?.provider??'local',speaker,text).catch(()=>{});
   };
   const toggle = (cap: Capability) => {
     setCapabilities(prev => prev.includes(cap) ? prev.filter(c => c !== cap) : [...prev, cap]);
@@ -1256,7 +1275,7 @@ export default function App() {
         {tab === 'chat' ?
           <Pressable accessibilityRole="button" accessibilityLabel="Start a new conversation"
             disabled={running || Boolean(pendingApproval) || Boolean(recovered)}
-            onPress={() => {setMessages([]);setInput('');setEvents([]);}}
+            onPress={() => {chatLogSession.current='chat-'+Date.now();setMessages([]);setInput('');setEvents([]);}}
             style={styles.headerAction}><Text style={styles.headerActionText}>＋</Text></Pressable>
           : <View style={styles.headerStatus}><View style={[styles.statusDot, engine.live ? styles.statusDotOn : null]}/><Text style={styles.statusLabel}>{engine.live ? 'Android' : 'Demo'}</Text></View>}
       </View>
@@ -1434,7 +1453,7 @@ export default function App() {
             <View style={styles.buttonRow}>
               <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
                 style={styles.primaryInline} onPress={()=>void reviewLiveAppAction(true)}>
-                <Text style={styles.primaryInlineText}>Approve app once</Text>
+                <Text style={styles.primaryInlineText}>Approve action once</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
                 style={styles.outlineInline} onPress={()=>void reviewLiveAppAction(false)}>
@@ -1461,8 +1480,28 @@ export default function App() {
             <Text style={styles.warning}>Muted: only silence is transmitted. Android microphone hardware remains open until you stop the session.</Text>}
         </View>
         <View style={styles.sectionCard}>
-          <Text style={styles.cardHeading}>Live session limitations</Text>
-          <Text style={styles.cardText}>Live conversation uses the saved Sarvam Model API or OpenAI provider key. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
+          <Text style={styles.cardHeading}>Live session permissions and limitations</Text>
+          <Text style={styles.cardText}>Nexa live voice can request one-time approved Accessibility screen reading, safe visible-control taps, four-direction scrolling, icon detection and app opening. Enable Screen Assist in Tools → Accessibility Settings and review each action in the floating overlay. Unavailable Accessibility permissions never grant themselves. Live conversation uses the saved Sarvam Model API or OpenAI provider key. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
+        </View>
+        <View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Private conversation history · custom.db</Text>
+          <Text style={styles.cardText}>Nexa saves new Chat and live voice transcripts in an Android-private SQLite database, with message text encrypted using Android Keystore. No cloud sync or Prisma/PostgreSQL connection is enabled. Only explicitly exporting or pasting a copy shares your private history. Existing older ephemeral conversations cannot be recovered.</Text>
+          <View style={styles.buttonRow}>
+            <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={()=>void refreshHistory()}>
+              <Text style={styles.outlineInlineText}>View recent history</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={()=>void copyHistory()}>
+              <Text style={styles.outlineInlineText}>Copy JSON</Text>
+            </Pressable>
+          </View>
+          <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={()=>void exportHistory()}>
+            <Text style={styles.outlineActionText}>Export conversations as JSON</Text>
+          </Pressable>
+          {historyNotice!==''&&<Text style={styles.settingHelp}>{historyNotice}</Text>}
+          {historyEntries.slice(-25).map(item=><View key={item.id} style={styles.actionCard}>
+            <Text style={styles.settingHelp}>{new Date(item.createdAt).toLocaleString()} · {item.channel} · {item.role} · {item.provider}</Text>
+            <Text style={styles.cardText} selectable>{item.text}</Text>
+          </View>)}
         </View>
         <Text style={styles.mutedSmall}>Offline Hey Nexa listening and cloud live voice are separate features. Both must respect Android microphone disclosures and Stop controls. Nexa cannot hide the green microphone indicator or guarantee uninterrupted background listening on every phone.</Text>
       </ScrollView>}
@@ -1771,7 +1810,7 @@ export default function App() {
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Safety</Text>
-          <Text style={styles.cardText}>Device permissions do not allow unattended messages, calls, contact reads, screenshots or accessibility gestures. Each additional capability needs its own system grant and owner authorization.</Text>
+          <Text style={styles.cardText}>Nexa does not perform unattended messages or calls. Screen Assist can perform owner-approved, one-time accessibility reading, safe navigation taps and scrolling. Enable the Android service and approve each request in the visible overlay.</Text>
         </View>
       </ScrollView>}
 
@@ -1847,13 +1886,13 @@ export default function App() {
             </Text>
           </View>
           <Text style={styles.cardText}>One API key, no workspace and no Samvaad Voice Agent. Saaras v3 Realtime continuously listens over WebSocket, Sarvam-105B Conversations maintains the in-session dialogue, and Bulbul v4 Flash streams replies. Nexa never shows a separate transcription screen for this mode.</Text>
-          <Text style={styles.settingHelp}>All transcripts stay in volatile Nexa conversation memory, not its chat/journal. Audio and recognized text are sent to Sarvam Model APIs only while you actively authorize streaming. NexaHub files, contacts, screen data and device inventory are not sent. Sarvam processing or retention is controlled by the vendor, not by Nexa.</Text>
+          <Text style={styles.settingHelp}>After voice starts, recognized transcripts and model replies are retained in encrypted local custom.db and can be explicitly exported from Voice. Older sessions from past APKs cannot be recovered. Audio and recognized text are sent to Sarvam Model APIs only while you actively authorize streaming. NexaHub files and contacts are not sent automatically. One-time approved screen or app-list observations may be sent to the active voice provider for that request. Sarvam processing or retention is controlled by the vendor, not by Nexa.</Text>
           <Pressable accessibilityRole="switch" accessibilityState={{checked:sarvamStreamingConsent}}
             disabled={sarvamVoiceBusy||activeProvider?.provider!=='sarvam'}
             onPress={()=>void changeSarvamStreamingConsent()} style={styles.settingRow}>
             <View style={styles.settingText}>
               <Text style={styles.settingTitle}>Enable realtime voice streaming</Text>
-              <Text style={styles.settingHelp}>OFF by default. Enabling authorizes sending microphone PCM and in-memory conversation text to Sarvam until you press Stop; it does not enable remote phone tools.</Text>
+              <Text style={styles.settingHelp}>OFF by default. Enabling authorizes sending microphone PCM and in-memory conversation text to Sarvam until you press Stop; it allows locally checked voice requests to prompt separate, one-time Android screen and app approvals when corresponding permissions are enabled.</Text>
             </View>
             <View style={[styles.toggleTrack,sarvamStreamingConsent&&styles.toggleOn]}>
               <View style={[styles.toggleThumb,sarvamStreamingConsent&&styles.toggleThumbOn]}/>

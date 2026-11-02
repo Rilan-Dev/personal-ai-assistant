@@ -35,54 +35,91 @@ internal object NexaPhoneVoiceTools {
         return q
     }
 
-    /** Local transcript intent only. A match MUST still show owner approval. */
-    fun wantsScreenOverview(utterance: String): Boolean {
+    /** Screen content is accessed only after a visible one-time approval. */
+    fun wantsScreenOverview(utterance:String):Boolean {
         val q=normalizedVoice(utterance)
         return q in setOf("what icons are on my screen","what icons are on screen",
             "describe the icons on my screen","describe icons on screen",
             "identify my screen icons","identify screen icons",
-            "what buttons are on my screen","inspect screen icons")
+            "what buttons are on my screen","inspect screen icons",
+            "show screen controls","list visible buttons") ||
+            (q.contains("screen") && Regex("""\b(icon|icons|buttons|controls)\b""").containsMatchIn(q))
     }
-
-    /** Exact local spoken questions only; suggestions always need an owner approval. */
-    fun locateIconIntent(utterance: String): String? {
-        val normalized=normalizedVoice(utterance)
-        val match=Regex("^(?:where is|find|locate) (?:the |my )?(search|menu|settings|back|close|call|video call|send|attach|camera|microphone) (?:icon|button|control)$")
-            .matchEntire(normalized) ?: return null
+    fun locateIconIntent(utterance:String):String? {
+        val q=normalizedVoice(utterance)
+        val match=Regex("^(?:where is|find|locate|show me) (?:the |my )?(search|menu|settings|back|close|call|video call|send|attach|camera|microphone) (?:icon|button|control)$")
+            .matchEntire(q) ?:return null
         return match.groupValues[1].replace(' ','_')
     }
-
-    /** Conservative owner-spoken screen commands, not provider-invented actions. */
     fun wantsVisibleText(utterance:String):Boolean {
         val q=normalizedVoice(utterance)
         return q in setOf("read my screen","read the screen","read screen",
-            "read screen contents","read my screen contents",
-            "what is on my screen","what's on my screen",
-            "what does my screen say","tell me what is on my screen",
-            "describe what is on my screen","describe the current screen")
+            "read screen contents","read my screen contents","what is on my screen",
+            "what's on my screen","what does my screen say",
+            "tell me what is on my screen","describe what is on my screen",
+            "describe the current screen","check my screen","check the screen",
+            "inspect my screen","inspect the current app","read the current app",
+            "check app","check the app","check current app","check the current app",
+            "read current screen","tell me about the current app",
+            "what can you see on my screen") ||
+            (Regex("""\b(screen|current app|display)\b""").containsMatchIn(q) &&
+             Regex("""\b(read|describe|check|inspect|see|show|look at|understand|analy[sz]e)\b""")
+                .containsMatchIn(q) &&
+             !Regex("""\b(icon|icons|buttons|controls)\b""").containsMatchIn(q))
     }
-
     fun scrollDirection(utterance:String):String? {
         val q=normalizedVoice(utterance)
-        return when(q) {
-            "scroll down","scroll down on my screen","scroll this screen down",
-            "scroll down the page","move down the page" -> "down"
-            "scroll up","scroll up on my screen","scroll this screen up",
-            "scroll up the page","move up the page" -> "up"
-            "scroll left","scroll left on my screen","scroll the screen left",
-            "swipe left","swipe left on this page" -> "left"
-            "scroll right","scroll right on my screen","scroll the screen right",
-            "swipe right","swipe right on this page" -> "right"
-            else -> null
-        }
+        val match=Regex("""^(?:scroll|swipe|slide|move) (?:the |my |this )?(?:screen |page |view )?(up|down|left|right)(?: (?:on |in |of )?(?:my |the |this )?(?:screen|page|view|app))?$""")
+            .matchEntire(q)
+        if(match!=null)return match.groupValues[1]
+        val original=Regex("""^(?:scroll|swipe|slide|move) (up|down|left|right)(?: (?:the |this )?page)?$""")
+            .matchEntire(q)
+        return original?.groupValues?.get(1)
     }
-
-    /** Only harmless navigation semantics; no arbitrary coordinates or send/call. */
     fun clickSafeIcon(utterance:String):String? {
         val q=normalizedVoice(utterance)
         val match=Regex("^(?:tap|click|press) (?:on )?(?:the )?(search|menu|settings|back|close)(?: (?:icon|button|control))?$")
             .matchEntire(q) ?:return null
         return match.groupValues[1]
+    }
+    /** A grounded text-label request, never a free-form XY action. */
+    fun tapVisibleLabelIntent(utterance:String):String? {
+        val q=normalizedVoice(utterance)
+        val match=Regex("""^(?:tap|click|press) (?:on )?(?:the |my )?(?:visible )?([a-z0-9][a-z0-9 _-]{1,45})(?: (?:button|control))?$""")
+            .matchEntire(q) ?:return null
+        val name=match.groupValues[1].trim().removeSuffix(" button").trim()
+        if(name in setOf("screen","here","there","anything","somewhere","the screen") ||
+            Regex("""\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|otp|sign out|logout)\b""")
+                .containsMatchIn(name)) return null
+        return name.takeIf { it.length in 2..45 }
+    }
+    fun wantsInstalledApps(utterance:String):Boolean {
+        val q=normalizedVoice(utterance)
+        return q in setOf("list installed apps","show installed apps",
+            "what apps are installed","what apps are on my phone",
+            "check my installed apps","list my apps","show my apps",
+            "show my installed applications")
+    }
+    fun wantsScreenHelp(utterance:String):Boolean {
+        val q=normalizedVoice(utterance)
+        return Regex("""\b(screen|scroll|swipe|tap|click|installed apps|navigate|accessibility)\b""")
+            .containsMatchIn(q) &&
+            Regex("""\b(can|could|why|how|access|interact|navigate|control|permissions|permission|help)\b""")
+            .containsMatchIn(q)
+    }
+    /** Bounded launcher labels, shared with the provider only after approval. */
+    fun installedAppsApproved(context:Context):String {
+        return try {
+            val query=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            @Suppress("DEPRECATION")
+            val apps=context.packageManager.queryIntentActivities(query,0)
+                .mapNotNull { it.loadLabel(context.packageManager)?.toString()?.trim() }
+                .filter { it.isNotBlank() && it.length<=60 }
+                .distinct().sorted().take(24)
+            if(apps.isEmpty()) "No launcher app labels are visible to Nexa on this device."
+            else ("Installed launcher apps visible to Nexa: "+apps.joinToString(", ")+
+                ". This is a limited launcher list, not all installed packages.").take(950)
+        }catch (_:Exception){ "Android did not allow reading installed launcher labels." }
     }
 
     fun deviceFacts(context: Context, utterance: String): String? {

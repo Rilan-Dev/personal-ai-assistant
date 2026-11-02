@@ -100,7 +100,7 @@ test("Chat/Voice/Settings support Sarvam user configuration without automatic se
   assert.match(ui,/dictateSarvamOnce\(\)/);
   assert.match(ui,/speakSarvamOnce\(/);
   assert.match(ui,/startOwnerLiveVoice\(/);
-  assert.match(ui,/NexaHub files, contacts, screen data and device inventory are not sent/);
+  assert.match(ui,/One-time approved screen or app-list observations may be sent/);
   assert.match(ui,/Sarvam processing or retention is controlled by the vendor|Nexa cannot guarantee provider-side zero retention/i);
   assert.doesNotMatch(ui,/send\(dictated\)/);
 });

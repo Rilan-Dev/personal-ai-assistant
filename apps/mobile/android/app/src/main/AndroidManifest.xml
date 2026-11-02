@@ -82,8 +82,8 @@
         android:foregroundServiceType="microphone"
         android:exported="false"
         android:stopWithTask="false"/>
-    <!-- Optional owner-armed Accessibility service: one-shot text or icon metadata.
-         Android Settings must explicitly enable it. No gestures or continuous scan. -->
+    <!-- Owner-enabled Accessibility service: approved visible text, semantic clicks,
+         and bounded scroll actions. Android Settings must explicitly enable it. -->
     <service android:name=".ScreenAssistService"
         android:label="Nexa Screen Assist"
         android:description="@string/screen_assist_description"
@@ -134,5 +134,11 @@
         <action android:name="android.service.quicksettings.action.QS_TILE"/>
       </intent-filter>
     </service>
+    <provider android:name="androidx.core.content.FileProvider"
+        android:authorities="${applicationId}.conversationprovider"
+        android:exported="false" android:grantUriPermissions="true">
+      <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/nexa_conversation_paths"/>
+    </provider>
   </application>
 </manifest>
