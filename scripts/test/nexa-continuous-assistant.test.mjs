@@ -19,7 +19,7 @@ test('manual offline command controls remain bounded; automatic wake uses live A
   assert.match(session,/TextToSpeech\.QUEUE_FLUSH/);
   assert.match(session,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(session,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(session,/else feedback\("Enable live AI after assistant invocation/);
+  assert.match(session,/else feedback\("Save a live AI provider key/);
   assert.match(session,/NexaWakeWordService\.assistantClosed\(\)/);
   assert.match(session,/stopConversation\(\)/);
 });
@@ -46,7 +46,7 @@ test('Realtime tool loop responds to function_call_output and never invokes arbi
   assert.match(realtime,/pendingAppTool != null/);
   assert.match(realtime,/ACTION_APPROVE_TOOL/);
   assert.match(realtime,/ACTION_DENY_TOOL/);
-  assert.match(realtime,/NexaOverlayCommands\.handle\(this, pending\.command\)/);
+  assert.match(realtime,/NexaOverlayCommands\.handle\(this,\s*pending\.command\)/);
   assert.match(policy,/get_device_status/);
   assert.match(policy,/get_battery_level/);
   assert.match(policy,/request_open_app/);
