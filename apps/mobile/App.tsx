@@ -31,6 +31,10 @@ import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlash
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
+import {iconRecognitionAvailable, armIconRecognition, takeIconRecognition, clearIconRecognition} from './src/native/androidIconRecognition';
+import {appCatalogueAvailable, findLaunchableApps} from './src/native/androidAppCatalogue';
+import type {LaunchableAppMatch} from './src/native/androidAppCatalogue';
+import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
 import type {LiveVoiceStatus} from './src/native/liveVoice';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
@@ -348,6 +352,12 @@ export default function App() {
   const [screenAssistEnabled,setScreenAssistEnabled] = useState(false);
   const [screenArmed,setScreenArmed] = useState(false);
   const [screenSnapshot,setScreenSnapshot] = useState<{text:string;packageName:string}|null>(null);
+  const [iconScanArmed,setIconScanArmed] = useState(false);
+  const [iconScan,setIconScan] = useState<ScreenIconSnapshot|null>(null);
+  const [iconScanNotice,setIconScanNotice] = useState('');
+  const [appSearch,setAppSearch] = useState('');
+  const [appMatches,setAppMatches] = useState<LaunchableAppMatch[]>([]);
+  const [appSearchNotice,setAppSearchNotice] = useState('');
   const [selectedContact,setSelectedContact]=useState<OwnerSelectedContact|null>(null);
   const [approximateLocation,setApproximateLocation]=useState<OwnerApproximateLocation|null>(null);
   const [privacyToolNotice,setPrivacyToolNotice]=useState('');
@@ -678,6 +688,7 @@ export default function App() {
     setScreenSnapshot(null);
     try {
       await armScreenReadOnce();
+      setIconScanArmed(false);setIconScan(null);
       setScreenArmed(true);
       setScreenAssistNotice('Armed for 20 seconds. Switch to the app you want to read, then come back and review. No screen text is sent to AI automatically.');
     } catch {
@@ -696,6 +707,36 @@ export default function App() {
     await clearScreenRead().catch(()=>{});
     setScreenArmed(false);setScreenSnapshot(null);
     setScreenAssistNotice('Screen text discarded from memory.');
+  };
+  const armIconScanOnce=async()=>{
+    setIconScan(null);
+    try {
+      await armIconRecognition();
+      setScreenArmed(false);setIconScanArmed(true);
+      setIconScanNotice('Armed for 20 seconds. Open the target application, then return to review visible controls. Nothing is sent to AI.');
+    }catch{setIconScanNotice('Enable Screen Assist in Android Accessibility settings before scanning icons.');}
+  };
+  const reviewIcons=async()=>{
+    try{
+      const result=await takeIconRecognition();
+      setIconScan(result);setIconScanArmed(false);
+      setIconScanNotice(result
+        ? 'Control metadata captured locally. No action has been performed.'
+        : 'No icon scan available. It may have expired or the screen may be protected.');
+    }catch{setIconScanNotice('Unable to review the icon scan.');}
+  };
+  const discardIcons=async()=>{
+    await clearIconRecognition().catch(()=>{});
+    setIconScanArmed(false);setIconScan(null);
+    setIconScanNotice('Icon scan discarded.');
+  };
+  const searchAppCatalogue=async()=>{
+    setAppMatches([]);
+    try{
+      const matches=await findLaunchableApps(appSearch);
+      setAppMatches(matches);
+      setAppSearchNotice(matches.length ? 'Matching launchable apps on this device:' : 'No matching launchable app found.');
+    }catch{setAppSearchNotice('App search requires a 2–60 character name and the visible Android app.');}
   };
   const composeScreenQuestion=()=>{
     if(!screenSnapshot)return;
@@ -1365,7 +1406,7 @@ export default function App() {
               <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
             </Pressable>
             <Pressable accessibilityRole="button" style={styles.primaryInline}
-              onPress={armScreenRead} disabled={running||screenArmed}>
+              onPress={armScreenRead} disabled={running||screenArmed||iconScanArmed}>
               <Text style={styles.primaryInlineText}>{screenArmed?'Capture armed · switch apps':'Arm one screen read'}</Text>
             </Pressable>
             <View style={styles.buttonRow}>
