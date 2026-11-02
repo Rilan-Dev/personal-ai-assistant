@@ -606,7 +606,7 @@ export default function App() {
   const testSarvamVoice=async()=>{
     if(!engine.live || liveVoiceBusy || liveVoiceStatus.state==='connecting' || liveVoiceStatus.state==='listening')return;
     setLiveVoiceBusy(true);
-    setVoiceNotice('Checking Sarvam authorization without starting the microphone…');
+    setVoiceNotice('Checking Sarvam API-only realtime STT, streaming TTS and conversation model without microphone audio…');
     try {
       const result=await checkSarvamVoiceAuthorization();
       setVoiceNotice(result.message);
@@ -618,18 +618,17 @@ export default function App() {
   };
   const startLiveVoice=async()=>{
     if(!engine.live||liveVoiceBusy||running||listening||speaking||voiceInProgress.current)return;
-    const useSamvaad=sarvamVoiceKeySaved;
-    if(useSamvaad && (!sarvamVoiceSaved || !sarvamStreamingConsent)){
-      setVoiceNotice('Samvaad live voice needs saved Voice Agent IDs and your explicit speech-processing consent. Sarvam does not currently guarantee zero Voice Agent retention.');
+    if(!activeProvider || !['sarvam','openai'].includes(activeProvider.provider)){
+      setVoiceNotice('Save your Sarvam Model API key under AI Provider. No workspace or Voice Agent ID is needed.');
       return;
     }
-    if(!useSamvaad && (!activeProvider || activeProvider.provider!=='openai')){
-      setVoiceNotice('Save a dedicated Samvaad workspace key for live STS. A Sarvam Model API chat key is not a Voice Agent workspace key.');
+    if(activeProvider.provider==='sarvam' && !sarvamStreamingConsent){
+      setVoiceNotice('Enable Sarvam API realtime voice streaming in Settings before starting. The vendor processes your audio and transcript.');
       return;
     }
     setLiveVoiceBusy(true);setVoiceNotice('');
     try {
-      const success=await startOwnerLiveVoice(useSamvaad?'sarvam':'openai');
+      const success=await startOwnerLiveVoice(activeProvider.provider==='sarvam'?'sarvam':'openai');
       if(!success)setVoiceNotice('Live microphone permission was declined. No session started.');
       else setVoiceNotice('Session requested. Check connection status below; Android notification has Stop.');
     } catch {
@@ -770,7 +769,7 @@ export default function App() {
       setProviderKeyInput('');
       setProviderNotice('AI provider saved securely and enabled. Ask a question below to use it.');
     } catch {
-      setProviderNotice('Chat Provider accepts Model API keys, not sk_samvaad_ Voice Agent workspace keys. Put the Samvaad key in the dedicated Voice Agent card below. No chat key was saved.');
+      setProviderNotice('Could not save the Model API key. Select Sarvam AI and enter a valid API subscription key (not a Samvaad workspace key).');
     } finally { setProviderBusy(false); }
   };
   const testAiConnection = async () => {
@@ -1067,7 +1066,7 @@ export default function App() {
 
       {tab === 'setup' && <NexaSetupScreen
         status={setupStatus} busy={setupBusy} notice={setupNotice}
-        providerReady={Boolean(activeProvider || (sarvamVoiceKeySaved && sarvamVoiceSaved && sarvamStreamingConsent))}
+        providerReady={Boolean(activeProvider)}
         wakeStatus={wakeStatus}
         onWakeDownload={()=>void downloadWakeModel()}
         onWakeStart={()=>void prepareWakeListening()}
@@ -1209,20 +1208,20 @@ export default function App() {
             </Text>
           </View>
           <Text style={styles.cardText}>{sarvamVoiceKeySaved
-            ? 'Sarvam managed Voice Agents: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
+            ? 'Sarvam API-only realtime conversations: microphone PCM16 streams over a signed encrypted WebSocket and the agent returns spoken audio. No voice transcripts appear in this app. A visible Android notification includes Stop. Server-side Sarvam may still process and retain call data under your account settings.'
             : 'Owner-started OpenAI realtime speech. Microphone audio streams over encrypted WebSocket. Android notification includes Stop. Voice calls may be processed and retained under the selected provider’s policy. Device actions require separate owner approval.'}</Text>
           <Text style={styles.settingHelp}>{sarvamVoiceKeySaved
             ? 'Sarvam Voice Agent · 16 kHz PCM · audio-to-audio WebSocket · paid usage may apply'
             : 'OpenAI realtime · gpt-realtime-2.1-mini · paid usage may apply'}</Text>
           <Text style={styles.feedback}>{liveVoiceStatus.message}</Text>
-          {sarvamVoiceKeySaved &&
+          {activeProvider?.provider==='sarvam' &&
             <Pressable accessibilityRole="button"
               disabled={liveVoiceBusy||liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
               style={styles.outlineAction} onPress={()=>void testSarvamVoice()}>
-              <Text style={styles.outlineActionText}>Verify Sarvam Voice Agent connection</Text>
+              <Text style={styles.outlineActionText}>Verify Sarvam API realtime connection</Text>
             </Pressable>}
-          {sarvamVoiceKeySaved &&
-            <Text style={styles.settingHelp}>This checks the saved key, exact agent IDs and signed WebSocket authorization. It does not start the microphone or prove audio playback. Saaras model selection belongs to the managed agent configuration.</Text>}
+          {activeProvider?.provider==='sarvam' &&
+            <Text style={styles.settingHelp}>Checks Saaras v3 Realtime and Bulbul streaming WebSocket authorization plus a synthetic Sarvam-105B Conversations request. No microphone audio is sent by this test.</Text>}
           {Boolean(liveVoiceStatus.pendingAppApproval) && <View style={styles.actionCard}>
             <Text style={styles.actionTitle}>Voice tool approval needed</Text>
             <Text style={styles.actionDescription}>{liveVoiceStatus.pendingAppApproval}</Text>
@@ -1501,7 +1500,7 @@ export default function App() {
               autoCorrect={false} autoComplete="off" secureTextEntry editable={!running&&!providerBusy}
               placeholder={activeProvider?.provider===providerChoice?'Key saved securely · enter a replacement':'Paste your API key'}
               placeholderTextColor="#8190a8"/>
-            <Text style={styles.settingHelp}>Stored using Android Keystore. Chat requests are sent to your chosen provider over HTTPS. Sarvam uses sarvam-105b for chat; Saaras v4 for one-shot dictation; Bulbul v4 Flash for speech playback. Live audio uses a separately configured Sarvam Voice Agent. Usage may be billed.</Text>
+            <Text style={styles.settingHelp}>Stored in Android Keystore. Sarvam Model API key supports Chat and API-only live voice: Saaras v3 Realtime (continuous STT) + Sarvam-105B Conversations (dialogue) + Bulbul v4 Flash (streamed TTS). No workspace, Agent ID or Samvaad dashboard is required. Vendor processing and billing apply.</Text>
             <View style={styles.buttonRow}>
               <Pressable accessibilityRole="button" disabled={running||providerBusy}
                 onPress={testAiConnection} style={styles.outlineInline}>
@@ -1521,67 +1520,24 @@ export default function App() {
         </View>
         {engine.live&&<View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
-            <Text style={styles.cardHeading}>Sarvam Voice Agent (live STS)</Text>
-            <Text style={[styles.sectionTag,sarvamVoiceSaved&&styles.sectionTagActive]}>
-              {sarvamVoiceSaved?'Saved':'Not configured'}
+            <Text style={styles.cardHeading}>Sarvam API Realtime Voice</Text>
+            <Text style={[styles.sectionTag,activeProvider?.provider==='sarvam'&&styles.sectionTagActive]}>
+              {activeProvider?.provider==='sarvam'?'Model API key saved':'Key needed'}
             </Text>
           </View>
-          <Text style={styles.cardText}>Samvaad Voice Agents uses a separate workspace key. Nexa keeps that key and Agent IDs encrypted on this phone. They do not enable the Chat provider or sync NexaHub data.</Text>
-          <Text style={styles.fieldLabel}>SAMVAAD WORKSPACE KEY (VOICE ONLY)</Text>
-          <TextInput accessibilityLabel="Samvaad Voice Agent workspace key" style={styles.settingInput}
-            value={sarvamVoiceKeyInput} onChangeText={setSarvamVoiceKeyInput}
-            autoCapitalize="none" autoCorrect={false} autoComplete="off"
-            secureTextEntry editable={!sarvamVoiceBusy}
-            placeholder={sarvamVoiceKeySaved?'Samvaad key saved on phone · enter replacement':'sk_samvaad_…'}
-            placeholderTextColor="#8190a8"/>
-          <View style={styles.buttonRow}>
-            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||!sarvamVoiceKeyInput}
-              onPress={()=>void saveSarvamVoiceWorkspace()} style={styles.primaryInline}>
-              <Text style={styles.primaryInlineText}>Save voice workspace key</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||!sarvamVoiceKeySaved}
-              onPress={()=>void removeSarvamVoiceWorkspace()} style={styles.outlineInline}>
-              <Text style={styles.outlineInlineText}>Clear voice key</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.warning}>Strict privacy notice: Sarvam receives live microphone audio for managed speech processing and may store call transcripts, recordings and operational logs. Zero-day Voice Agents retention is not currently supported. Nexa cannot override that provider behavior or its managed Agent settings.</Text>
+          <Text style={styles.cardText}>One API key, no workspace and no Samvaad Voice Agent. Saaras v3 Realtime continuously listens over WebSocket, Sarvam-105B Conversations maintains the in-session dialogue, and Bulbul v4 Flash streams replies. Nexa never shows a separate transcription screen for this mode.</Text>
+          <Text style={styles.settingHelp}>All transcripts stay in volatile Nexa conversation memory, not its chat/journal. Audio and recognized text are sent to Sarvam Model APIs only while you actively authorize streaming. NexaHub files, contacts, screen data and device inventory are not sent. Sarvam processing or retention is controlled by the vendor, not by Nexa.</Text>
           <Pressable accessibilityRole="switch" accessibilityState={{checked:sarvamStreamingConsent}}
-            disabled={sarvamVoiceBusy||!sarvamVoiceKeySaved}
+            disabled={sarvamVoiceBusy||activeProvider?.provider!=='sarvam'}
             onPress={()=>void changeSarvamStreamingConsent()} style={styles.settingRow}>
             <View style={styles.settingText}>
-              <Text style={styles.settingTitle}>Allow Sarvam voice streaming</Text>
-              <Text style={styles.settingHelp}>Off by default. Turning on explicitly accepts remote voice processing and possible provider retention. No contacts, device files, messages or NexaHub content are added.</Text>
+              <Text style={styles.settingTitle}>Enable realtime voice streaming</Text>
+              <Text style={styles.settingHelp}>OFF by default. Enabling authorizes sending microphone PCM and in-memory conversation text to Sarvam until you press Stop; it does not enable remote phone tools.</Text>
             </View>
             <View style={[styles.toggleTrack,sarvamStreamingConsent&&styles.toggleOn]}>
               <View style={[styles.toggleThumb,sarvamStreamingConsent&&styles.toggleThumbOn]}/>
             </View>
           </Pressable>
-          <Text style={styles.settingHelp}>Only microphone audio and required anonymous session metadata are transmitted for the live STS call. Nexa does not send files, contacts, screen content or NexaHub records. Sarvam can process and retain speech/transcripts; voice calls stay disabled until explicit opt-in.</Text>
-          <Text style={styles.fieldLabel}>SARVAM ORGANIZATION ID</Text>
-          <TextInput accessibilityLabel="Sarvam organization ID" style={styles.settingInput}
-            value={sarvamOrgId} onChangeText={v=>{setSarvamOrgId(v);setSarvamVoiceSaved(false);}}
-            placeholder="Organization ID" placeholderTextColor="#8190a8"
-            autoCapitalize="none" autoCorrect={false}/>
-          <Text style={styles.fieldLabel}>WORKSPACE ID</Text>
-          <TextInput accessibilityLabel="Sarvam workspace ID" style={styles.settingInput}
-            value={sarvamWorkspaceId} onChangeText={v=>{setSarvamWorkspaceId(v);setSarvamVoiceSaved(false);}}
-            placeholder="Workspace ID" placeholderTextColor="#8190a8"
-            autoCapitalize="none" autoCorrect={false}/>
-          <Text style={styles.fieldLabel}>VOICE AGENT APP ID</Text>
-          <TextInput accessibilityLabel="Sarvam Voice Agent app ID" style={styles.settingInput}
-            value={sarvamAppId} onChangeText={v=>{setSarvamAppId(v);setSarvamVoiceSaved(false);}}
-            placeholder="App ID (committed voice agent)" placeholderTextColor="#8190a8"
-            autoCapitalize="none" autoCorrect={false}/>
-          <View style={styles.buttonRow}>
-            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||running}
-              style={styles.primaryInline} onPress={saveSarvamAgent}>
-              <Text style={styles.primaryInlineText}>{sarvamVoiceBusy?'Working…':'Save Sarvam Voice Agent'}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" disabled={sarvamVoiceBusy||running}
-              style={styles.outlineInline} onPress={removeSarvamAgent}>
-              <Text style={styles.outlineInlineText}>Clear</Text>
-            </Pressable>
-          </View>
           {sarvamVoiceNotice!==''&&<Text style={styles.feedback}>{sarvamVoiceNotice}</Text>}
         </View>}
         {engine.live&&<View style={styles.sectionCard}>
