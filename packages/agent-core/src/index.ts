@@ -23,3 +23,6 @@ export type {LocalScreenAnswer, ScreenControlSummary} from './screen-understandi
 export {groundVisualIcon, createOwnerScreenGrant, proposeNavigationSteps} from './screen-grounding.ts';
 export type {GroundingResult, GroundingStatus, ReadOnlyNavigationPlan} from './screen-grounding.ts';
 export {createReadOnlyScreenTools, createScreenAwarePlanner} from './screen-agent.ts';
+
+export {scoreIconEvidence, inspectGuidedScreenPlan} from './screen-confidence.ts';
+export type {IconEvidenceAssessment, GuidedScreenPreview} from './screen-confidence.ts';
