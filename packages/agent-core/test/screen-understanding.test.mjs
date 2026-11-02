@@ -39,6 +39,10 @@ test('reports ambiguity rather than guessing between duplicated icon labels',()=
 });
 test('uses a strict supported local grammar, identifies read-only sensitive icon',()=>{
   assert.equal(resolveScreenQuestion(snapshot(),'where is the call icon',2000).status,'found');
+  const sensitive={...snapshot(),icons:[{...snapshot().icons[2],label:'Send',semantic:'send'}]};
+  const lookup=resolveScreenQuestion(sensitive,'where is the send icon',2000);
+  assert.equal(lookup.status,'found');
+  assert.match(lookup.answer,/not eligible for general screen automation/);
   assert.equal(resolveScreenQuestion(snapshot(),'what is my bank balance',2000).status,'unsupported');
   assert.equal(resolveScreenQuestion(snapshot(),'find the menu icon',2000).status,'found');
 });
