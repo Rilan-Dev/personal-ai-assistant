@@ -14,6 +14,7 @@ internal class NexaGuidedNavigation {
     private var steps: List<String> = emptyList()
     private var next = 0
     private var expiry = 0L
+    private var boundPackage: String? = null
 
     fun start(raw: String, now: Long): StartResult {
         cancel()
@@ -43,6 +44,18 @@ internal class NexaGuidedNavigation {
         return steps[next]
     }
 
+    /** Refuse silently following the guide into a different application. */
+    fun bindPackage(pkg: String, now: Long): Boolean {
+        if (expected(now) == null || !pkg.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))
+            return false
+        val current=boundPackage
+        if (current == null) {
+            boundPackage=pkg
+            return true
+        }
+        return current==pkg
+    }
+
     fun canSelect(semantic: String, now: Long): Boolean {
         val target = expected(now) ?: return false
         return semantic == target || (target == "menu" && semantic == "more_options")
@@ -56,5 +69,5 @@ internal class NexaGuidedNavigation {
     }
 
     fun completed(): Boolean = steps.isNotEmpty() && next >= steps.size
-    fun cancel() { steps = emptyList(); next = 0; expiry = 0L }
+    fun cancel() { steps = emptyList(); next = 0; expiry = 0L; boundPackage = null }
 }
