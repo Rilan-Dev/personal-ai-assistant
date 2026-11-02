@@ -80,7 +80,7 @@ internal object NexaPhoneVoiceTools {
     /** Only harmless navigation semantics; no arbitrary coordinates or send/call. */
     fun clickSafeIcon(utterance:String):String? {
         val q=normalizedVoice(utterance)
-        val match=Regex("^(?:tap|click|press) (?:on )?(?:the )?(search|menu|settings|back|close) (?:icon|button|control)?$")
+        val match=Regex("^(?:tap|click|press) (?:on )?(?:the )?(search|menu|settings|back|close)(?: (?:icon|button|control))?$")
             .matchEntire(q) ?:return null
         return match.groupValues[1]
     }
