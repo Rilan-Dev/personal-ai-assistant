@@ -76,10 +76,11 @@ class ScreenAssistService : AccessibilityService() {
     override fun onDestroy() {
         ScreenAssistState.connected = false
         ScreenAssistState.clear()
+        ScreenIconScanState.clear()
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!ScreenAssistState.isArmed() || event == null) return
+        if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed()) || event == null) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -87,6 +88,10 @@ class ScreenAssistService : AccessibilityService() {
         val root = rootInActiveWindow ?: return
         val rootPkg = root.packageName?.toString().orEmpty()
         if (rootPkg != pkg) return
+        if (ScreenIconScanState.isArmed()) {
+            ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root))
+        }
+        if (!ScreenAssistState.isArmed()) return
         val text = StringBuilder()
         val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
         pending.add(root)
@@ -120,6 +125,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         val value = Arguments.createMap()
         value.putBoolean("enabled", ScreenAssistState.connected)
         value.putBoolean("armed", ScreenAssistState.isArmed())
+        value.putBoolean("iconScanArmed", ScreenIconScanState.isArmed())
         p.resolve(value)
     }
 
@@ -143,6 +149,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             p.reject("NOT_FOREGROUND", "Arm capture from the visible app")
             return
         }
+        ScreenIconScanState.clear()
         if (!ScreenAssistState.arm()) {
             p.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
             return
@@ -162,6 +169,57 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             p.resolve(result)
         }
     }
+    /** User explicitly arms one 20-second, read-only icon scan. */
+    @ReactMethod fun armIconScan(p: Promise) {
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            p.reject("NOT_FOREGROUND", "Start icon scanning from the visible Nexa app")
+            return
+        }
+        ScreenAssistState.clear()
+        if (!ScreenIconScanState.arm()) {
+            p.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
+            return
+        }
+        p.resolve(true)
+    }
+
+    @ReactMethod fun takeIconScan(p: Promise) {
+        val snap = ScreenIconScanState.consume()
+        if (snap == null) {
+            p.resolve(null)
+            return
+        }
+        val result = Arguments.createMap()
+        result.putInt("version", 1)
+        result.putString("snapshotId", snap.id)
+        result.putString("packageName", snap.sourcePackage)
+        result.putDouble("capturedAtWallMs", snap.capturedAtWallMs.toDouble())
+        result.putInt("expiresInMs", snap.expiresInMs)
+        val elements = Arguments.createArray()
+        for (icon in snap.icons) {
+            val item = Arguments.createMap()
+            item.putString("id", icon.id)
+            item.putString("label", icon.label)
+            item.putString("semantic", icon.semantic)
+            item.putBoolean("clickable", icon.clickable)
+            item.putString("evidence", "accessibility")
+            val bounds = Arguments.createMap()
+            bounds.putInt("left", icon.bounds.left)
+            bounds.putInt("top", icon.bounds.top)
+            bounds.putInt("right", icon.bounds.right)
+            bounds.putInt("bottom", icon.bounds.bottom)
+            item.putMap("boundsPx", bounds)
+            elements.pushMap(item)
+        }
+        result.putArray("icons", elements)
+        p.resolve(result)
+    }
+
+    @ReactMethod fun clearIconScan(p: Promise) {
+        ScreenIconScanState.clear()
+        p.resolve(true)
+    }
+
     @ReactMethod fun clear(p: Promise) {
         ScreenAssistState.clear()
         p.resolve(true)
