@@ -17,7 +17,7 @@ internal data class ObservedIcon(
 internal data class IconScanResult(
     val id: String, val sourcePackage: String, val capturedAtWallMs: Long,
     val expiresInMs: Int, val icons: List<ObservedIcon>,
-    val windowBounds: IconBox?
+    val windowBounds: IconBox? = null
 )
 internal object ScreenIconScanState {
     private val lock = Any()
@@ -40,7 +40,7 @@ internal object ScreenIconScanState {
     fun isArmed(): Boolean = synchronized(lock) {
         armedUntilMs > SystemClock.elapsedRealtime() && scan == null
     }
-    fun capture(sourcePackage: String, items: List<ObservedIcon>, window: IconBox?) = synchronized(lock) {
+    fun capture(sourcePackage: String, items: List<ObservedIcon>, window: IconBox? = null) = synchronized(lock) {
         if (sourcePackage.isBlank() || !isArmed() || scan != null) return@synchronized
         scanId = UUID.randomUUID().toString()
         scan = sourcePackage.take(150) to items.take(64)
