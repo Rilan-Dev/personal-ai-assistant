@@ -358,6 +358,15 @@ export default function App() {
   const [appSearch,setAppSearch] = useState('');
   const [appMatches,setAppMatches] = useState<LaunchableAppMatch[]>([]);
   const [appSearchNotice,setAppSearchNotice] = useState('');
+  // Observations never remain in React state past their short native lifetime.
+  useEffect(()=>{
+    if(!iconScan)return;
+    const timeout=setTimeout(()=>setIconScan(null),Math.max(1,Math.min(iconScan.expiresInMs,60_000)));
+    return ()=>clearTimeout(timeout);
+  },[iconScan]);
+  useEffect(()=>{
+    if(tab!=='tools'){setIconScan(null);setAppMatches([]);}
+  },[tab]);
   const [selectedContact,setSelectedContact]=useState<OwnerSelectedContact|null>(null);
   const [approximateLocation,setApproximateLocation]=useState<OwnerApproximateLocation|null>(null);
   const [privacyToolNotice,setPrivacyToolNotice]=useState('');
