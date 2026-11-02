@@ -832,3 +832,10 @@
 - Added native emulator instrumentation for device facts and restricted model function schema, plus source regression coverage of wake path, approval order and explicit permission gate. Android native compilation/emulator and physical device remain separate release gates.
 - Full multi-phase roadmap and Android policy restrictions: `docs/design/NEXA_ANDROID_AGENTIC_DEVICE_CONTROL_ROADMAP_20261103.md`.
 - Isolated non-Alma checkout source tests `npm test` 247/247, TypeScript and web export passed. No access to the AlmaLinux home server and no changes to the deployed AI Comms Agent runtime.
+
+## 2026-11-03 — final follow-up safety and continuity fixes
+- Fixed the floating fallback's legacy two-minute timeout incorrectly ending a live provider conversation. Live voice is now governed by the service's own bounded idle and maximum session limits.
+- Native app discovery now queries MAIN/LAUNCHER without MATCH_DEFAULT_ONLY, so legitimate launcher apps are not excluded, and normalizes spoken "app" suffixes. No broad app inventory permission.
+- Pending voice action approvals now expire automatically after 60 seconds and return an explicit denied/expired result instead of leaving the conversation permanently blocked. Neither expiry nor callback can execute an app launch.
+- Sarvam read-only function tools now validate the **current owner utterance** before returning battery/storage/device-status data to the provider. A model-originating tool call alone is not authorization to disclose phone facts.
+- Added Android instrumentation coverage rejecting unrequested read tools. Source tests and TypeScript passed for the follow-up fixes. Native CI must still confirm Kotlin, emulator instrumentation, signing and APK.
