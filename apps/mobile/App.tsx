@@ -1497,6 +1497,37 @@ export default function App() {
                    {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
                  </Text>
                ))}
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={askAboutIcons}>
+                 <Text style={styles.outlineInlineText}>Explain icon metadata in Chat</Text>
+               </Pressable>
+             </View>}
+           </>}
+           {engine.live&&visualIconCaptureAvailable()&&<>
+             <Text style={styles.groupLabel}>Visual fallback — unknown icons only</Text>
+             <Text style={styles.cardText}>Arm a one-time screenshot for up to six small unlabeled button crops. Only these thumbnails return to Nexa; the full screenshot is never passed to React Native or AI.</Text>
+             <View style={styles.buttonRow}>
+               <Pressable accessibilityRole="button" style={styles.primaryInline}
+                 disabled={running||visualArmed||screenArmed||iconScanArmed} onPress={armVisualScan}>
+                 <Text style={styles.primaryInlineText}>{visualArmed?'Capture armed':'Arm visual icons'}</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewVisualScan}>
+                 <Text style={styles.outlineInlineText}>Review images</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={clearVisualScan}>
+                 <Text style={styles.outlineInlineText}>Discard images</Text>
+               </Pressable>
+             </View>
+             {visualNotice!==''&&<Text style={styles.feedback}>{visualNotice}</Text>}
+             {visualPreview&&<View style={styles.configContents}>
+               <Text style={styles.groupLabel}>Local images · {visualPreview.packageName}</Text>
+               <View style={{flexDirection:'row',flexWrap:'wrap'}}>
+                 {visualPreview.crops.map(crop=>(
+                   <View key={crop.iconId} style={{alignItems:'center',padding:6}}>
+                     <Image source={{uri:crop.dataUri}} style={{width:64,height:64,borderRadius:12}}/>
+                     <Text style={styles.settingHelp}>{crop.iconId}</Text>
+                   </View>
+                 ))}
+               </View>
              </View>}
            </>}
            <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. It is not a screen recording service. Some apps hide content from accessibility.</Text>
