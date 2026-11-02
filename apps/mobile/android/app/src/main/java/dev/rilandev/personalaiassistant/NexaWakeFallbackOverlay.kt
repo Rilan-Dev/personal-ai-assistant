@@ -111,15 +111,19 @@ internal class NexaWakeFallbackOverlay(
 
     fun show(): Boolean {
         if (active) return true
-        val providerReady = service.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
-            .getBoolean("auto_voice_invocation_v1", false) &&
-            (try { AgentJournalModule.openVoiceCredentials(service) != null }
-                catch (_: Exception) { false })
+        // This overlay is shown only after the separately user-armed local
+        // Hey Nexa detector fires. A second gesture auto-start toggle is not
+        // required. Actual streaming still needs the encrypted provider key
+        // and purpose-specific audio consent.
+        val providerReady = try {
+            NexaWakeWordService.enabled(service) &&
+                AgentJournalModule.openVoiceCredentials(service) != null
+        } catch (_: Exception) { false }
         // A configured, owner-enabled live voice overlay does not require an
         // Android on-device speech engine; only the offline fallback does.
         if (!Settings.canDrawOverlays(service) ||
             service.checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED || !providerReady) return false
+            PackageManager.PERMISSION_GRANTED) return false
         val wm = service.getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val palette = NexaOverlayTheme.palette(service)
         fun px(v: Int) = NexaOverlayTheme.dp(service, v)
@@ -229,11 +233,7 @@ internal class NexaWakeFallbackOverlay(
         handler.postDelayed(maximum, 2 * 60 * 1000L)
         handler.postDelayed({
             if (!active) return@postDelayed
-            val optedIn = service.getSharedPreferences("nexa_setup", Context.MODE_PRIVATE)
-                .getBoolean("auto_voice_invocation_v1", false)
-            val configured = try { AgentJournalModule.openVoiceCredentials(service) != null }
-                catch (_: Exception) { false }
-            if (optedIn && configured && Build.VERSION.SDK_INT >= 26) {
+            if (providerReady && Build.VERSION.SDK_INT >= 26) {
                 try {
                     service.startForegroundService(Intent(service,
                         RealtimeVoiceService::class.java).apply {
@@ -249,7 +249,7 @@ internal class NexaWakeFallbackOverlay(
                     handler.postDelayed({ if(active) finish("Voice could not start") }, 2400L)
                 }
             } else {
-                showStatus("Configure a live voice provider and enable invocation in Nexa Setup")
+                showStatus("Save a Model API key and enable voice streaming in Nexa Settings")
                 handler.postDelayed({ if(active) finish("Voice not configured") }, 2400L)
             }
         }, 550L)
