@@ -61,7 +61,7 @@ internal object NexaPhoneVoiceTools {
     fun findLaunchableApp(context: Context, utterance: String): Decision? {
         val q=utterance.lowercase(Locale.ROOT).trim()
             .replace(Regex("[.?!]+$"),"").trim()
-        if(q.length !in 5..150 || Regex("[;\\n\\"“”]|\\b(and|then|send|text|message|call|dial|delete|remove|install|settings|without|don't|not)\\b")
+        if(q.length !in 5..150 || Regex("""[;\\n"“”]|\\b(and|then|send|text|message|call|dial|delete|remove|install|settings|without|don't|not)\\b""")
                 .containsMatchIn(q)) return null
         val match=Regex("^(?:(?:can|could|would) you (?:please )?|please |i (?:want|need) you to )?(?:open|launch|start|find) (?:my |the )?([a-z0-9][a-z0-9 ._+-]{1,55})(?: app)?$")
             .matchEntire(q) ?: return null
