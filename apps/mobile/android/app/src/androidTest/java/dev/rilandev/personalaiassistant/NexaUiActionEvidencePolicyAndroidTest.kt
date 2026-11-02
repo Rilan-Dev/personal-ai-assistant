@@ -19,4 +19,15 @@ class NexaUiActionEvidencePolicyAndroidTest {
  @Test fun unavailableWindowCannotBeCalledSuccessful() {
   assertEquals("unverified",NexaUiActionEvidencePolicy.classify("tap","a",null,0,0))
  }
+ @Test fun evidenceFromDifferentForegroundAppIsNotAttributedToApprovedAction() {
+  assertEquals("context_changed_unverified",
+   NexaUiActionEvidencePolicy.classify("tap","old","new",0,1,false))
+  assertEquals("context_changed_unverified",
+   NexaUiActionEvidencePolicy.classify("scroll","old","new",1,0,false))
+ }
+ @Test fun missingPostActionWindowCannotBeCalledConfirmed() {
+  assertEquals("unverified",
+   NexaUiActionEvidencePolicy.classify("scroll","old",null,1,0,true))
+ }
+
 }
