@@ -122,10 +122,10 @@ internal object NexaVisualIconCapture {
                             buffer.close()
                         }
                     }
-                    override fun onFailure(errorCode: Int) { complete(pkg,emptyList(),windowId) }
+                    override fun onFailure(errorCode: Int) { done(emptyList()) }
                 })
         } catch (_: Exception) {
-            complete(pkg,emptyList(),windowId)
+            done(emptyList())
         }
     }
 
