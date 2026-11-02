@@ -36,9 +36,9 @@ internal object NexaSarvamReadTools {
     fun requestedByOwner(name:String, utterance:String):Boolean {
         val q=utterance.lowercase(java.util.Locale.ROOT).take(250)
         return when(name) {
-            "get_battery_level" -> Regex("""\\b(battery|charge|charging)\\b""").containsMatchIn(q)
-            "get_storage_usage" -> Regex("""\\b(storage|disk|space|memory)\\b""").containsMatchIn(q)
-            "get_device_status" -> Regex("""\\b(status|permission|permissions|wake|microphone|assistant setup)\\b""").containsMatchIn(q)
+            "get_battery_level" -> Regex("""\b(battery|charge|charging)\b""").containsMatchIn(q)
+            "get_storage_usage" -> Regex("""\b(storage|disk|space|memory)\b""").containsMatchIn(q)
+            "get_device_status" -> Regex("""\b(status|permission|permissions|wake|microphone|assistant setup)\b""").containsMatchIn(q)
             else -> false
         }
     }
