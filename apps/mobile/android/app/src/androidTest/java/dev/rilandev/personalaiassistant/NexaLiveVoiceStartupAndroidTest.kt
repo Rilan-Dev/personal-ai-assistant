@@ -15,8 +15,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Execute the real Android service startup, with the owner app visibly open,
- * on the CI emulator. No API credentials are injected and no provider call is
+ * Execute the real Android service startup, with a debug-only native foreground
+ * Activity on the CI emulator (no React Native/Metro dependency). No API credentials are injected and no provider call is
  * allowed. Tests missing-configuration startup and repeated STOP safety.
  *
  * This cannot reproduce a crash specific to the owner's Sarvam credentials
@@ -39,7 +39,7 @@ class NexaLiveVoiceStartupAndroidTest {
             app.checkSelfPermission(Manifest.permission.RECORD_AUDIO))
         assertTrue("Without an active wake FGS, the microphone is released",
             NexaWakeWordService.liveMicReleased())
-        val activity = ActivityScenario.launch(MainActivity::class.java)
+        val activity = ActivityScenario.launch(NexaVoiceTestHostActivity::class.java)
         try {
             activity.onActivity { owner ->
                 owner.startForegroundService(Intent(owner,
