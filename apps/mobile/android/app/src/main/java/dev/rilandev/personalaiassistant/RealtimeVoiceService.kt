@@ -193,7 +193,7 @@ class RealtimeVoiceService : Service() {
             AgentJournalModule.openVoiceCredentials(applicationContext)
         } catch (_: Exception) { null }
         if (credentials == null) {
-            stopWithStatus("error","Configure a supported voice provider and Voice Agent IDs")
+            stopWithStatus("error","Save a supported Model API key and enable voice streaming consent in Nexa Settings")
             return START_NOT_STICKY
         }
         microphoneMuted=false
