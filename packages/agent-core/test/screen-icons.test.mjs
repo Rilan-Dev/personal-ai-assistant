@@ -34,3 +34,10 @@ test('rejects duplicate IDs and unexpected packages', () => {
   assert.equal(parseScreenIconSnapshot(duplicate),null);
   assert.equal(parseScreenIconSnapshot({...valid(),packageName:'com.app\nsecret'}),null);
 });
+
+test('round-trips bounded app window geometry but rejects malformed geometry', () => {
+  const sample={...valid(),windowBoundsPx:{left:0,top:40,right:1080,bottom:2260}};
+  assert.deepEqual(parseScreenIconSnapshot(sample)?.windowBoundsPx,sample.windowBoundsPx);
+  assert.equal(parseScreenIconSnapshot({...sample,windowBoundsPx:{...sample.windowBoundsPx,right:0}}),null);
+  assert.equal(parseScreenIconSnapshot({...sample,windowBoundsPx:{...sample.windowBoundsPx,top:-1}}),null);
+});
