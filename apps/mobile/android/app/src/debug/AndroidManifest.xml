@@ -3,5 +3,12 @@
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
-    <application android:usesCleartextTraffic="true" tools:targetApi="28" tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic" />
+    <application android:usesCleartextTraffic="true" tools:targetApi="28"
+        tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic">
+        <!-- Native non-React foreground activity for emulator instrumentation.
+             This is debug-only, nonexported and excluded from release APKs. -->
+        <activity android:name=".NexaVoiceTestHostActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
 </manifest>
