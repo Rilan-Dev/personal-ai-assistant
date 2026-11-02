@@ -150,6 +150,24 @@ internal object NexaUiActionJournal {
             } catch (_: Exception) { false }
         }
 
+    /** Exact one-time approval lookup. Only the status is returned, never UI data. */
+    fun outcomeFor(ctx: Context, approvalToken: String): String? = synchronized(lock) {
+        if(approvalToken.length !in 16..128) return@synchronized null
+        try {
+            val id=digest(approvalToken)
+            val entries=read(ctx)
+            var status: String?=null
+            for(i in 0 until entries.length()) {
+                val event=entries.getJSONObject(i)
+                if(event.optString("id")==id && event.optString("kind")=="tap") {
+                    status=event.optString("status")
+                    break
+                }
+            }
+            status
+        }catch(_:Exception){ null }
+    }
+
     /** Most recent native action evidence, without icon, package, token or geometry. */
     fun latestOutcome(ctx: Context): Pair<String,String>? = synchronized(lock) {
         try {
