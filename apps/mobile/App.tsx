@@ -63,6 +63,12 @@ const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
 export default function App() {
   const screenGrant=useMemo(createOwnerScreenGrant,[]);
   const engine = useMemo(()=>makeEngine(screenGrant),[screenGrant]);
+  useEffect(()=>{
+    const listener=AppState.addEventListener('change',status=>{
+      if(status!=='active')screenGrant.revoke();
+    });
+    return ()=>{listener.remove();screenGrant.revoke();};
+  },[screenGrant]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
