@@ -476,3 +476,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - Check app does not emit NexaHub data, files, screen, contacts, device inventory or transcript-based tool actions to Sarvam. Confirm random user identifier per call.
 - Do not assert zero Sarvam retention; provider itself documents Voice Agent retention at least one day and default indefinite when unset. Do not mutate remote dashboard or privacy/training controls on behalf of the owner. Recommend Owner disable model-training consent and choose shortest Voice Agents retention where permitted before accepting cloud use.
 - Exposed API keys must be rotated again directly in dashboard; do not paste them into GitHub or chat.
+
+## 2026-11-02 — API-only continuous voice acceptance gates
+- Promote exact validated Development revision to main and run GitHub Android native compilation/instrumentation/release signing. Fix any Kotlin compile/test failure, do not claim APK until green.
+- Install only a signed APK from a successful native CI build. In Nexa Settings select Sarvam AI, enter a **newly rotated** Model API subscription key, save, then explicitly enable realtime voice streaming. Do **not** enter Samvaad workspace/Agent IDs.
+- Run Voice → Verify Sarvam API realtime connection (STT & TTS WS handshakes + synthetic LLM request, no audio) then real 3+ turn conversation, 20+ second speech, barge-in, mute, Stop/restart, wake-to-live and phone tool approval/denial. Capture sanitized device logcat if the voice service crashes.
+- This is compositional STT→LLM→TTS using two continuous vendor WS plus per-turn LLM REST, not a single native speech-to-speech provider endpoint. No provider-side zero-data-retention guarantee is possible merely from app settings.
+- Do not access or execute on the AlmaLinux home server until user gives explicit approval. No production changes to AI Comms server needed.
