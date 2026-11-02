@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider } from '@paa/agent-core';
@@ -33,6 +33,8 @@ import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
 import {iconRecognitionAvailable, armIconRecognition, takeIconRecognition, clearIconRecognition} from './src/native/androidIconRecognition';
 import {appCatalogueAvailable, findLaunchableApps} from './src/native/androidAppCatalogue';
+import {visualIconCaptureAvailable, armVisualIcons, takeVisualIcons, discardVisualIcons} from './src/native/androidVisualIcons';
+import type {VisualIconPreview} from './src/native/androidVisualIcons';
 import type {LaunchableAppMatch} from './src/native/androidAppCatalogue';
 import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
@@ -355,6 +357,9 @@ export default function App() {
   const [iconScanArmed,setIconScanArmed] = useState(false);
   const [iconScan,setIconScan] = useState<ScreenIconSnapshot|null>(null);
   const [iconScanNotice,setIconScanNotice] = useState('');
+  const [visualArmed,setVisualArmed] = useState(false);
+  const [visualPreview,setVisualPreview] = useState<VisualIconPreview|null>(null);
+  const [visualNotice,setVisualNotice] = useState('');
   const [appSearch,setAppSearch] = useState('');
   const [appMatches,setAppMatches] = useState<LaunchableAppMatch[]>([]);
   const [appSearchNotice,setAppSearchNotice] = useState('');
@@ -365,8 +370,13 @@ export default function App() {
     return ()=>clearTimeout(timeout);
   },[iconScan]);
   useEffect(()=>{
-    if(tab!=='tools'){setIconScan(null);setAppMatches([]);}
+    if(tab!=='tools'){setIconScan(null);setVisualPreview(null);setAppMatches([]);}
   },[tab]);
+  useEffect(()=>{
+    if(!visualPreview)return;
+    const timeout=setTimeout(()=>setVisualPreview(null),Math.max(1,Math.min(visualPreview.expiresInMs,60_000)));
+    return ()=>clearTimeout(timeout);
+  },[visualPreview]);
   const [selectedContact,setSelectedContact]=useState<OwnerSelectedContact|null>(null);
   const [approximateLocation,setApproximateLocation]=useState<OwnerApproximateLocation|null>(null);
   const [privacyToolNotice,setPrivacyToolNotice]=useState('');
@@ -697,6 +707,7 @@ export default function App() {
     setScreenSnapshot(null);
     try {
       await armScreenReadOnce();
+      setVisualArmed(false);setVisualPreview(null);
       setIconScanArmed(false);setIconScan(null);
       setScreenArmed(true);
       setScreenAssistNotice('Armed for 20 seconds. Switch to the app you want to read, then come back and review. No screen text is sent to AI automatically.');
@@ -721,7 +732,7 @@ export default function App() {
     setIconScan(null);
     try {
       await armIconRecognition();
-      setScreenArmed(false);setIconScanArmed(true);
+      setScreenArmed(false);setVisualArmed(false);setVisualPreview(null);setIconScanArmed(true);
       setIconScanNotice('Armed for 20 seconds. Open the target application, then return to review visible controls. Nothing is sent to AI.');
     }catch{setIconScanNotice('Enable Screen Assist in Android Accessibility settings before scanning icons.');}
   };
@@ -738,6 +749,36 @@ export default function App() {
     await clearIconRecognition().catch(()=>{});
     setIconScanArmed(false);setIconScan(null);
     setIconScanNotice('Icon scan discarded.');
+  };
+  const armVisualScan=async()=>{
+    setVisualPreview(null);
+    try{
+      await armVisualIcons();
+      setScreenArmed(false);setIconScanArmed(false);setIconScan(null);setVisualArmed(true);
+      setVisualNotice('Armed for 20 seconds. Open the app containing unlabeled icons, then return to review local image crops.');
+    }catch{setVisualNotice('Visual fallback requires Android 11+ and enabled Nexa Screen Assist.');}
+  };
+  const reviewVisualScan=async()=>{
+    try{
+      const result=await takeVisualIcons();
+      setVisualPreview(result);setVisualArmed(false);
+      setVisualNotice(result
+        ? result.crops.length+' icon crops available. No images have been uploaded.'
+        : 'No visual icon capture available. The window may be protected or the scan expired.');
+    }catch{setVisualNotice('Unable to retrieve visual icon crops.');}
+  };
+  const clearVisualScan=async()=>{
+    await discardVisualIcons().catch(()=>{});
+    setVisualPreview(null);setVisualArmed(false);
+    setVisualNotice('Visual icon images discarded from memory.');
+  };
+  const askAboutIcons=()=>{
+    if(!iconScan)return;
+    const labels=iconScan.icons.slice(0,32).map(icon=>
+      icon.label+' ('+icon.semantic+') at '+icon.boundsPx.left+','+icon.boundsPx.top).join('; ');
+    setInput('Explain these observed interface controls without executing actions. Accessibility metadata from '+
+      iconScan.packageName+': '+labels.slice(0,1200));
+    setTab('chat');setIconScan(null);
   };
   const searchAppCatalogue=async()=>{
     setAppMatches([]);
@@ -1415,7 +1456,7 @@ export default function App() {
               <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
             </Pressable>
             <Pressable accessibilityRole="button" style={styles.primaryInline}
-              onPress={armScreenRead} disabled={running||screenArmed||iconScanArmed}>
+              onPress={armScreenRead} disabled={running||screenArmed||iconScanArmed||visualArmed}>
               <Text style={styles.primaryInlineText}>{screenArmed?'Capture armed · switch apps':'Arm one screen read'}</Text>
             </Pressable>
             <View style={styles.buttonRow}>
@@ -1438,7 +1479,7 @@ export default function App() {
              <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This does not take screenshots, click icons, or send observations to the agent.</Text>
              <View style={styles.buttonRow}>
                <Pressable accessibilityRole="button" style={styles.primaryInline}
-                 disabled={running||screenArmed||iconScanArmed} onPress={armIconScanOnce}>
+                 disabled={running||screenArmed||iconScanArmed||visualArmed} onPress={armIconScanOnce}>
                  <Text style={styles.primaryInlineText}>{iconScanArmed?'Scan armed':'Arm icon scan'}</Text>
                </Pressable>
                <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewIcons}>
