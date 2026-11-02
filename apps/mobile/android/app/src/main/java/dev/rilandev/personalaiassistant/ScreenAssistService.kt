@@ -136,7 +136,7 @@ class ScreenAssistService : AccessibilityService() {
             val box = android.graphics.Rect()
             root.getBoundsInScreen(box)
             ScreenIconScanState.capture(pkg, ScreenIconDetector.detect(root),
-                IconBox(box.left,box.top,box.right,box.bottom))
+                IconBox(box.left,box.top,box.right,box.bottom),root.windowId)
         }
         if (NexaVisualIconCapture.isArmed()) {
             NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root))
@@ -273,6 +273,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
             window.putInt("bottom",b.bottom)
             result.putMap("windowBoundsPx",window)
         }
+        snap.windowId?.let { result.putInt("windowId",it) }
         p.resolve(result)
     }
 
