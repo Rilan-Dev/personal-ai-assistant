@@ -21,8 +21,9 @@ export function createIconReviewSession(){
     offer(input:IconReviewOffer,now:number):boolean{
       pending=null;
       if(!input || !boundedId(input.snapshotId,80)||!boundedId(input.cropId,40)||
+        typeof input.modelLabel!=='string'||
         !allowedLabels.has(input.modelLabel.toLowerCase())||
-        input.evidenceStatus==='blocked' ||
+        !['tentative','corroborated'].includes(input.evidenceStatus) ||
         !Number.isInteger(input.score)||input.score<1||input.score>85||
         !Number.isSafeInteger(input.expiresAtWallMs)||!Number.isFinite(now)||
         input.expiresAtWallMs<=now||input.expiresAtWallMs-now>60000||
