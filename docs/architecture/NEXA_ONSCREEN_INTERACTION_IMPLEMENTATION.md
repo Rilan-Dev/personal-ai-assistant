@@ -157,3 +157,8 @@ The previous visual-screenshot capture and accessibility-icon scan were separate
 
 ### Outstanding practical limitations
 This is source implementation, not a verified production-ready Android build. Screen capture may be blocked by secure apps or OEM restrictions. Window/Accessibility observations can change before screenshots; in such cases the system rejects the pair rather than fabricating a successful match. Unknown-only crops cannot supply an independently validated semantic label on their own. Autonomous multi-app task completion and calibrated probability-based vision accuracy are not implemented.
+
+
+## Screenshot callback race hardening
+
+A visual capture may finish asynchronously after the owner discards it, re-arms a scan or leaves the screen. An earlier implementation checked only a shared `busy` flag, which could incorrectly accept a delayed callback belonging to a previous scan. `NexaCaptureEpoch` now assigns a fresh monotonic generation to every arming and acquisition, invalidating the previous generation on clear, expiry or consume. Completion callbacks are accepted only when their generation still matches. Expiry runnables also capture the generation so an old timeout cannot erase newer capture data. Instrumentation test source covers stale callbacks after cancellation/re-arming and repeated callbacks. Device/Gradle acceptance is still outstanding.
