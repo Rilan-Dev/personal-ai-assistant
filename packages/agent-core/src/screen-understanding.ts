@@ -43,7 +43,7 @@ function valid(snapshot:ScreenIconSnapshot,now:number):boolean {
   return Number.isFinite(now) && Number.isSafeInteger(snapshot.capturedAtWallMs) &&
     Number.isInteger(snapshot.expiresInMs) && snapshot.expiresInMs > 0 &&
     now >= snapshot.capturedAtWallMs - 5000 &&
-    now <= snapshot.capturedAtWallMs + snapshot.expiresInMs &&
+    now <= (snapshot.expiresAtWallMs ?? snapshot.capturedAtWallMs + snapshot.expiresInMs) &&
     snapshot.icons.length <= 64;
 }
 function area(rect:IconRect,viewport?:IconRect):string|undefined {
@@ -122,5 +122,5 @@ export function summarizeScreenControls(snapshot:ScreenIconSnapshot,now:number):
     unknownCount:icons.filter(x=>x.semantic==='unknown').length,
     safeNavigationCount:icons.filter(x=>x.clickable && nav.has(x.semantic)).length,
     iconNames:icons.filter(x=>x.semantic!=='unknown').slice(0,32).map(x=>x.label),
-    expiresSoon:snapshot.capturedAtWallMs+snapshot.expiresInMs-now<10000};
+    expiresSoon:(snapshot.expiresAtWallMs??snapshot.capturedAtWallMs+snapshot.expiresInMs)-now<10000};
 }
