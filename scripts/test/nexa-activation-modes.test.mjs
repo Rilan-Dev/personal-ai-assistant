@@ -25,7 +25,7 @@ test('assistant gesture starts only opted-in live provider; local commands requi
   assert.match(assistant,/NexaWakeWordService\.assistantShown\(\)/);
   assert.match(assistant,/args\?\.getBoolean\("nexa_overlay_tap"\) == true/);
   assert.match(assistant,/if \(automaticLiveVoice\) startOwnerVoice\(\)/);
-  assert.match(assistant,/else feedback\("Enable live AI after assistant invocation/);
+  assert.match(assistant,/else feedback\("Save a live AI provider key/);
   assert.match(assistant,/SpeechRecognizer\.createOnDeviceSpeechRecognizer\(app\)/);
   assert.match(assistant,/silenceWindowMs = 18_000L/);
   assert.match(assistant,/TextToSpeech/);
