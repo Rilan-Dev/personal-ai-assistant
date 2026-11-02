@@ -1,5 +1,5 @@
 import type {ScreenIconSnapshot, IconRect} from '../../agent-contracts/src/screen-icons.ts';
-type VisualIconPreview={snapshotId:string;packageName:string;capturedAtWallMs:number;expiresInMs:number;crops:{iconId:string;boundsPx:IconRect}[]};
+type VisualIconPreview={snapshotId:string;packageName:string;windowId?:number;capturedAtWallMs:number;expiresInMs:number;crops:{iconId:string;boundsPx:IconRect}[]};
 import type {IconVisionHint} from './icon-vision.ts';
 
 export type GroundingStatus='geometry_matched'|'source_mismatch'|'expired'|'ambiguous'|'conflicting'|'unknown'|'unmatched';
@@ -43,6 +43,9 @@ export function groundVisualIcon(
     !validTime(visual.capturedAtWallMs,visual.expiresInMs,now)||
     Math.abs(snapshot.capturedAtWallMs-visual.capturedAtWallMs)>30000)return result('expired');
  if(snapshot.packageName!==visual.packageName ||
+    (snapshot.windowId !== undefined || visual.windowId !== undefined) &&
+    (snapshot.windowId === undefined || visual.windowId === undefined ||
+     snapshot.windowId !== visual.windowId) ||
     !/^[a-zA-Z][a-zA-Z0-9._]{2,149}$/.test(snapshot.packageName))return result('source_mismatch');
  const crop=visual.crops.filter(x=>x.iconId===cropId);
  if(crop.length!==1||!validRect(crop[0].boundsPx))return result('unmatched');
