@@ -81,13 +81,19 @@ internal object NexaUiActionVerifier {
     fun observeAfter(service:ScreenAssistService,token:String,unusedPrior:String) {
         handler.postDelayed({
             val observation=synchronized(lock){pending.remove(token)}?:return@postDelayed
-            if(!ScreenAssistState.connected||ScreenAssistService.active!==service)return@postDelayed
+            if(!ScreenAssistState.connected||ScreenAssistService.active!==service){
+                NexaUiActionJournal.markObservation(service,token,"unverified")
+                return@postDelayed
+            }
             val root=try{service.externalWindowRoot()}catch(_:Exception){null}
-            val after=if(root==null)null else try{fingerprint(root)}
+            val sameContext=root==null || (
+                root.packageName?.toString()==observation.pkg &&
+                root.windowId==observation.windowId)
+            val after=if(root==null || !sameContext)null else try{fingerprint(root)}
                 catch(_:Exception){null} finally{root.recycle()}
             val status=NexaUiActionEvidencePolicy.classify(
                 observation.kind,observation.before,after,
-                observation.scrollEvents,observation.windowEvents)
+                observation.scrollEvents,observation.windowEvents,sameContext)
             NexaUiActionJournal.markObservation(service,token,status)
         },900L)
     }
