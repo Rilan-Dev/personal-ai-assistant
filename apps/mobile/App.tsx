@@ -588,7 +588,7 @@ export default function App() {
       await setSamvaadStreamingConsent(next);
       setSarvamStreamingConsent(next);
       setSarvamVoiceNotice(next
-        ? 'Sarvam speech processing enabled by your choice. Voice Agents may retain recordings and transcripts. This does not guarantee zero provider retention.'
+        ? 'Sarvam Model API realtime audio and text processing enabled by your choice. Nexa cannot guarantee provider-side zero retention.'
         : 'Sarvam audio streaming disabled. No new Sarvam voice session may start.');
     }catch{setSarvamVoiceNotice('Could not update private voice consent. Streaming remains blocked unless stored consent is valid.');}
     finally{setSarvamVoiceBusy(false);}
@@ -767,7 +767,10 @@ export default function App() {
       setRemoteActive(false);
       setBackendToken('');
       setProviderKeyInput('');
-      setProviderNotice('AI provider saved securely and enabled. Ask a question below to use it.');
+      // Native vault revokes Sarvam audio consent on any provider change.
+      // Keep the React Native toggle synchronized with that fail-closed state.
+      setSarvamStreamingConsent(false);
+      setProviderNotice('AI provider saved in Android Keystore. Re-enable realtime voice consent explicitly if you changed your Sarvam API key.');
     } catch {
       setProviderNotice('Could not save the Model API key. Select Sarvam AI and enter a valid API subscription key (not a Samvaad workspace key).');
     } finally { setProviderBusy(false); }
