@@ -1,5 +1,6 @@
 import {NativeModules, Platform} from 'react-native';
-import type {IconRect} from '@paa/agent-contracts';
+import type {IconRect,ScreenIconSnapshot} from '@paa/agent-contracts';
+import {parsePairedIconObservation} from '@paa/agent-core';
 
 export type VisualIconCrop = {
   iconId: string;
@@ -14,6 +15,8 @@ export type VisualIconPreview = {
   expiresInMs: number;
   expiresAtWallMs?: number;
   crops: VisualIconCrop[];
+  /** Sanitized Accessibility observations from this exact screenshot event. */
+  observation: ScreenIconSnapshot;
 };
 interface NativeVisualBridge {
   armVisualScan(): Promise<boolean>;
@@ -59,8 +62,13 @@ export async function takeVisualIcons(): Promise<VisualIconPreview|null> {
     crops.push({iconId:item.iconId,dataUri:item.dataUri,boundsPx:{
       left:b.left as number,top:b.top as number,right:b.right as number,bottom:b.bottom as number}});
   }
+  const observation=parsePairedIconObservation({...src,crops});
+  if(!observation)return null; // No unpaired guess is presented as corroborated.
+  const expiresAtWallMs=Math.min(
+    (src.capturedAtWallMs as number)+60000,Date.now()+(src.expiresInMs as number));
   return {snapshotId:src.snapshotId,packageName:src.packageName,
     ...(src.windowId!==undefined?{windowId:src.windowId as number}:{}),
     capturedAtWallMs:src.capturedAtWallMs as number,expiresInMs:src.expiresInMs as number,
-    expiresAtWallMs:Math.min((src.capturedAtWallMs as number)+60000,Date.now()+(src.expiresInMs as number)),crops};
+    expiresAtWallMs,crops,
+    observation:{...observation,expiresAtWallMs}};
 }
