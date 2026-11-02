@@ -124,7 +124,9 @@ internal object NexaScreenActions {
             if (duplicate || matched == null) return "Target changed or ambiguous. No action requested."
             if (!NexaUiActionJournal.claim(service, snapshot.token, "tap", snapshot.packageName))
                 return "Secure action journal unavailable or approval already used. No click requested."
+            val before = NexaUiActionVerifier.fingerprint(root)
             return if (matched.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                NexaUiActionVerifier.observeAfter(service,snapshot.token,before)
                 if (!NexaUiActionJournal.finish(service,snapshot.token,"android_accepted"))
                     "Android accepted a click request; journal outcome uncertain. No retry."
                 else "Android accepted a single UI click request. Verify the result on screen."
