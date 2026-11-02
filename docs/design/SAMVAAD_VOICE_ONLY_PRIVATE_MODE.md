@@ -15,7 +15,7 @@ The **AI Provider** card configures Chat Completions on Sarvam's Model API endpo
 ## Privacy boundary
 
 - **Default: audio streaming disabled.** Nexa requires the owner to activate **Allow Sarvam voice streaming**, after showing that Sarvam can retain conversation contents.
-- When authorized, the mobile client sends realtime microphone PCM and the managed Voice Agent call parameters required for authentication and routing. It does **not** send NexaHub database records, contact lists, messages, files, screen captures, camera content, or broader device inventory to Sarvam.
+- When authorized, the mobile client sends realtime microphone PCM and the managed Voice Agent call parameters required for authentication and routing, using a new random anonymous identifier for each call. It does **not** send NexaHub database records, contact lists, messages, files, screen captures, camera content, or broader device inventory to Sarvam.
 - In dedicated private-voice mode, returned transcript events do not initiate Android tool actions or write to Nexa Chat or a transcript log. Device actions stay on-device; the managed Sarvam Voice Agent itself still recognizes speech internally and may retain provider-side call records.
 - Existing Chat, local phone tools, encrypted owner journals, and other app permissions are distinct. NexaHub is not a dependency of the Samvaad voice transport.
 - No code changes remotely modify agent prompts, tools, workspace data retention, or Sarvam dashboard settings. Those provider-side settings **can affect** the managed agent's behavior; they cannot be overridden by a mobile key or STS WebSocket.
