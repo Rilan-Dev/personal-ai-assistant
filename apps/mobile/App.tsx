@@ -1424,10 +1424,52 @@ export default function App() {
               </Pressable>
             </View>}
           </>}
-          <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. It is not a screen recording service. Some apps hide content from accessibility.</Text>
+          {engine.live&&iconRecognitionAvailable()&&<>
+             <Text style={styles.groupLabel}>Read-only icon inspector</Text>
+             <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This does not take screenshots, click icons, or send observations to the agent.</Text>
+             <View style={styles.buttonRow}>
+               <Pressable accessibilityRole="button" style={styles.primaryInline}
+                 disabled={running||screenArmed||iconScanArmed} onPress={armIconScanOnce}>
+                 <Text style={styles.primaryInlineText}>{iconScanArmed?'Scan armed':'Arm icon scan'}</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewIcons}>
+                 <Text style={styles.outlineInlineText}>Review icons</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={discardIcons}>
+                 <Text style={styles.outlineInlineText}>Discard icons</Text>
+               </Pressable>
+             </View>
+             {iconScanNotice!==''&&<Text style={styles.feedback}>{iconScanNotice}</Text>}
+             {iconScan&&<View style={styles.configContents}>
+               <Text style={styles.groupLabel}>{iconScan.icons.length} visible controls in {iconScan.packageName}</Text>
+               {iconScan.icons.map(icon=>(
+                 <Text key={icon.id} style={styles.cardText}>
+                   {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
+                 </Text>
+               ))}
+             </View>}
+           </>}
+           <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. It is not a screen recording service. Some apps hide content from accessibility.</Text>
         </View>
         <View style={styles.sectionCard}>
-          <Text style={styles.cardHeading}>Assistant quick access</Text>
+          <Text style={styles.cardHeading}>Find an app icon</Text>
+           <Text style={styles.cardText}>Search launchable app names and package IDs locally. It does not reveal the launcher page or open the app.</Text>
+           {engine.live&&appCatalogueAvailable()&&<>
+             <TextInput style={styles.settingInput} value={appSearch} onChangeText={setAppSearch}
+               maxLength={60} placeholder="App name, e.g. GitHub" placeholderTextColor="#7f8ba5"
+               accessibilityLabel="Find a launchable Android app"/>
+             <Pressable accessibilityRole="button" style={styles.outlineAction}
+               disabled={running||appSearch.trim().length<2} onPress={searchAppCatalogue}>
+               <Text style={styles.outlineActionText}>Find matching apps</Text>
+             </Pressable>
+             {appSearchNotice!==''&&<Text style={styles.feedback}>{appSearchNotice}</Text>}
+             {appMatches.map(app=>(
+               <Text key={app.packageName} style={styles.cardText}>{app.label} · {app.packageName}</Text>
+             ))}
+           </>}
+         </View>
+         <View style={styles.sectionCard}>
+           <Text style={styles.cardHeading}>Assistant quick access</Text>
           <Text style={styles.cardText}>Add a Quick Settings tile to reopen the assistant. It does not start listening or run tools.</Text>
           {engine.live&&<Pressable accessibilityRole="button" disabled={running||tileBusy}
             style={styles.outlineAction} onPress={installLaunchTile}>
