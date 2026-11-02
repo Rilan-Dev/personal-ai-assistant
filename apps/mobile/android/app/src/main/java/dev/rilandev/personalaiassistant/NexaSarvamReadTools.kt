@@ -28,7 +28,25 @@ internal object NexaSarvamReadTools {
         }
         return tools
     }
-    fun execute(context:Context,name:String,args:String):String {
+    /**
+     * Even read-only facts may reveal phone status. Do not send a status to
+     * the remote model unless the user's current spoken request mentioned
+     * that category. A provider-generated tool call is never consent.
+     */
+    fun requestedByOwner(name:String, utterance:String):Boolean {
+        val q=utterance.lowercase(java.util.Locale.ROOT).take(250)
+        return when(name) {
+            "get_battery_level" -> Regex("""\\b(battery|charge|charging)\\b""").containsMatchIn(q)
+            "get_storage_usage" -> Regex("""\\b(storage|disk|space|memory)\\b""").containsMatchIn(q)
+            "get_device_status" -> Regex("""\\b(status|permission|permissions|wake|microphone|assistant setup)\\b""").containsMatchIn(q)
+            else -> false
+        }
+    }
+
+    fun execute(context:Context,name:String,args:String,ownerUtterance:String):String {
+        if(!requestedByOwner(name,ownerUtterance))
+            return "Rejected: the owner did not request that device information."
+
         if(args.length>512)return "Rejected: tool arguments exceed limit."
         val json=try { JSONObject(args) } catch (_:Exception) {
             return "Rejected: invalid tool arguments."
