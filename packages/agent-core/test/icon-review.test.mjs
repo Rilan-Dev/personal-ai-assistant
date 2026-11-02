@@ -40,3 +40,10 @@ test('corrections are session-only and never authorize screen actions',()=>{
  review.clear();
  assert.deepEqual(review.summary(),{reviewed:0,accepted:0,rejected:0});
 });
+
+test('untrusted provider and bridge data fail closed rather than throwing',()=>{
+ const review=createIconReviewSession();
+ assert.equal(review.offer({...sample,modelLabel:null},2000),false);
+ assert.equal(review.offer({...sample,evidenceStatus:'invented'},2000),false);
+ assert.equal(review.summary().reviewed,0);
+});
