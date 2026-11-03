@@ -104,11 +104,11 @@ export async function acaTargets(session:AcaSession):Promise<AcaOrganization[]> 
   if (!Array.isArray(response.organizations))throw new Error("Invalid ACA organization response.");
   return response.organizations.filter(o=>typeof o.id==="string"&&typeof o.name==="string"&&Array.isArray(o.agents));
 }
-export async function acaMailSummary(session:AcaSession,options:{unreadOnly:boolean;inboxOnly:boolean},signal?:AbortSignal):Promise<AcaSummary> {
+export async function acaMailSummary(session:AcaSession,options:{unreadOnly:boolean;inboxOnly:boolean;window:"all"|"24h"},signal?:AbortSignal):Promise<AcaSummary> {
   if (!session.organizationId || !session.agentId)throw new Error("Select an organization and agent in ACA settings.");
   const params=new URLSearchParams({
     organizationId:session.organizationId,agentId:session.agentId,
-    unreadOnly:String(options.unreadOnly),inboxOnly:String(options.inboxOnly)
+    unreadOnly:String(options.unreadOnly),inboxOnly:String(options.inboxOnly),window:options.window
   });
   const response=await requestJson("/api/mobile/v1/mail/summary?"+params.toString(),{
     method:"GET",headers:bearer(session),signal
@@ -129,12 +129,13 @@ export async function disconnectAca(session:AcaSession|null):Promise<void> {
 /** Bounded exact read-only intent. Never intercept send, draft or other tools.
  * Strict scope avoids silently converting arbitrary questions into a 24h report.
  */
-export function parseAcaMailSummaryIntent(text:string):{unreadOnly:boolean;inboxOnly:boolean}|null {
+export function parseAcaMailSummaryIntent(text:string):{unreadOnly:boolean;inboxOnly:boolean;window:"all"|"24h"}|null {
   if (text.length>200 || !/\b(?:e-?mails?|inbox|mailbox)\b/i.test(text))return null;
   if (/\b(?:send|draft|reply|forward|delete|archive|mark|move|schedule|write|compose|whatsapp)\b/i.test(text))return null;
   if (!/\b(?:summari[sz]e|summary|summery|recap|report|check|list|show|count|how many|what.s new)\b/i.test(text))return null;
   if (!/\b(?:unread|new|24\s*(?:hours?|hrs?)|last\s+day|today)\b/i.test(text))return null;
   if (/\b(?:from|before|after|between|specific|sender|subject|yesterday|week|month)\b/i.test(text))return null;
-  return {unreadOnly:/\b(?:unread|what.s new)\b/i.test(text),
-    inboxOnly:/\binbox\b/i.test(text)};
+  const unreadOnly=/\b(?:unread|what.s new)\b/i.test(text);
+  const lastDay=/\b(?:24\s*(?:hours?|hrs?)|last\s+day|today)\b/i.test(text);
+  return {unreadOnly,inboxOnly:/\binbox\b/i.test(text),window:unreadOnly&&!lastDay?"all":"24h"};
 }
