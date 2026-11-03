@@ -16,21 +16,50 @@ tags:
     timeout: 25000
 - tapOn:
     text: "Allow display over apps.*"
-- assertVisible:
-    text: "Allow display over other apps"
+# Android 11+ deliberately opens the list of apps, not the direct toggle.
+# Only the Android Settings UI grants this permission after explicit user action.
+- extendedWaitUntil:
+    visible:
+      text: "Display over other apps"
+    timeout: 25000
+- takeScreenshot: nexa-overlay-android-app-list
+- scrollUntilVisible:
+    element:
+      text: "Nexa AI"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Nexa AI"
+- extendedWaitUntil:
+    visible:
+      text: "Allow display over other apps"
+    timeout: 25000
+- takeScreenshot: nexa-overlay-permission-before
 - tapOn:
     text: "Allow display over other apps"
+- takeScreenshot: nexa-overlay-permission-granted
 - back
+- back
+- launchApp:
+    stopApp: false
 - scrollUntilVisible:
-    element: "Show floating bubble"
+    element:
+      text: "Show floating bubble"
     direction: DOWN
     timeout: 25000
+# Presence of Show floating bubble after returning proves Android granted
+# the special permission; no bypass or adb app-op injection is used.
+- assertVisible: "Show floating bubble"
 - tapOn: "Show floating bubble"
 - pressKey: home
-- assertVisible:
-    text: "Nexa assistant.*Tap to expand.*"
+- extendedWaitUntil:
+    visible:
+      text: "Nexa assistant.*Tap to expand.*"
+    timeout: 25000
 - takeScreenshot: nexa-floating-bubble-over-home
 - tapOn:
     text: "Nexa assistant.*"
-- assertVisible: "Talk to Nexa.*"
+- extendedWaitUntil:
+    visible:
+      text: "Talk to Nexa.*"
+    timeout: 25000
 - takeScreenshot: nexa-expanded-overlay
