@@ -1,6 +1,10 @@
 name: Nexa Maestro Cloud UI acceptance (manual only)
 
 on:
+  # A manual owner comment on the designated QA PR can invoke the suite without
+  # requiring a GitHub Actions dispatch API token in the ChatGPT connector.
+  issue_comment:
+    types: [created]
   workflow_dispatch:
     inputs:
       suite:
@@ -35,6 +39,16 @@ permissions:
 
 jobs:
   maestro-cloud:
+    # Only the repository owner can explicitly invoke this exact QA command.
+    # Other issue comments, pull requests, branches and pushes never run this job.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 29 &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'Rilan-Dev' &&
+       github.event.comment.author_association == 'OWNER' &&
+       github.event.comment.body == '/nexa-maestro run all android-33')
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -122,8 +136,8 @@ jobs:
           MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
           MAESTRO_DISABLE_UPDATE_CHECK: "true"
           MAESTRO_CLI_NO_ANALYTICS: "true"
-          TEST_SUITE: ${{ inputs.suite }}
-          ANDROID_OS: ${{ inputs.android_os }}
+          TEST_SUITE: ${{ inputs.suite || 'all' }}
+          ANDROID_OS: ${{ inputs.android_os || 'android-33' }}
         run: |
           set -euo pipefail
           case "$TEST_SUITE" in
