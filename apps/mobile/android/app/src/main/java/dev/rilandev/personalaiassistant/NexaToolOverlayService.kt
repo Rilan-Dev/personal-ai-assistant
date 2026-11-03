@@ -179,6 +179,29 @@ class NexaToolOverlayService : Service() {
         render()
     }
 
+    /**
+     * A notification panel is a system-owned surface. Even a non-focusable
+     * TYPE_APPLICATION_OVERLAY bubble can obstruct it on some builds.
+     * Temporarily remove ALL Nexa overlay windows while the owner is using
+     * the notification shade; the user can re-show the bubble from Nexa.
+     * This must run on the Android main thread after an explicit approval.
+     */
+    private fun detachOverlayForNotificationShade() {
+        expanded=false
+        val existing=view
+        val imm=getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+        imm?.hideSoftInputFromWindow(existing?.windowToken,0)
+        view=null
+        visible=false
+        if(existing!=null) {
+            try {
+                wm.removeViewImmediate(existing)
+            } catch (_:Exception) {
+                try {wm.removeView(existing)}catch (_:Exception){}
+            }
+        }
+    }
+
     private fun confirmOwnerDeviceAction() {
         val action=proposedDeviceAction
         val expiry=proposedDeviceActionExpiresAt
@@ -193,9 +216,12 @@ class NexaToolOverlayService : Service() {
         // Expanded TYPE_APPLICATION_OVERLAY windows may retain input focus and
         // can obscure or dismiss Android's notification shade and Back target.
         // Release that focus before requesting any system navigation.
-        val isSystemNavigation=action=="open_notification_shade" || action=="go_back"
+        val isNotificationShade=action=="open_notification_shade"
+        val isSystemNavigation=isNotificationShade || action=="go_back"
         note="Action in progress; completion is not yet verified."
-        if(isSystemNavigation) collapse() else render()
+        if(isNotificationShade) detachOverlayForNotificationShade()
+        else if(isSystemNavigation) collapse()
+        else render()
 
         val dispatch={
             // Accessibility work and crypto journaling stay off the UI thread.
@@ -217,9 +243,25 @@ class NexaToolOverlayService : Service() {
                     }
                 } catch (_:Exception) { "Android action was refused or became uncertain." }
                 Handler(Looper.getMainLooper()).post {
-                    // The owner may have hidden/destroyed the overlay meanwhile.
-                    if(view==null || !visible)return@post
+                    // The owner may have hidden/destroyed Nexa while Android
+                    // performed the action; never recreate an accepted shade.
                     note=outcome.take(360)
+                    if(isNotificationShade) {
+                        if(outcome.startsWith("Android accepted")) {
+                            // No overlay window remains over Android SystemUI.
+                            // This is dispatch evidence, not shade verification.
+                            return@post
+                        }
+                        // Refusals/uncertain results must be visible to owner.
+                        // Never silently lose the failure after detaching.
+                        if(!visible && view==null) {
+                            expanded=true
+                            section="tools"
+                            render()
+                        }
+                        return@post
+                    }
+                    if(view==null || !visible)return@post
                     if(isSystemNavigation && outcome.startsWith("Android accepted")) {
                         // Keep the unobtrusive bubble. Rendering the expanded
                         // panel here can dismiss the system surface we opened.
