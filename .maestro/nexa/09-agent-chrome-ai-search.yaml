@@ -25,7 +25,11 @@ tags:
 # This request enters Nexa's real AgentHarness, not Maestro's browser automation.
 - tapOn: "Assistant command"
 - inputText: "Open Chrome and search what is AI"
-- tapOn: "Send message"
+# Android's IME can cover the Chat composer while typing.
+# Dismiss the keyboard before tapping Nexa's send control.
+- hideKeyboard
+- tapOn:
+    text: "Send message"
 - extendedWaitUntil:
     visible: "Approval needed"
     timeout: 30000
