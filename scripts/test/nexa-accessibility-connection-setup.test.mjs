@@ -28,3 +28,19 @@ test("Maestro must observe bound Screen Assist before it asks Nexa to open notif
   assert.match(flow,/Confirm requested action/);
   assert.match(flow,/No notifications\|Notification settings\|Internet\|Clear all/);
 });
+
+test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{
+  const destruction=service.slice(service.indexOf("override fun onDestroy()"),service.indexOf("override fun onAccessibilityEvent("));
+  assert.ok(destruction.includes("if (active === this) {"));
+  assert.ok(destruction.indexOf("if (active === this)") < destruction.indexOf("ScreenAssistState.connected = false"));
+  assert.ok(destruction.includes("active = null"));
+});
+test("Android 13 restricted settings are consented in Android UI, not sideload bypass",()=>{
+  assert.ok(component.includes("s.sdkLevel>=33"));
+  assert.ok(component.includes("Allow restricted settings"));
+  assert.ok(component.includes("Nexa cannot grant this permission automatically"));
+  assert.ok(flow.includes('visible: "Restricted setting"'));
+  assert.ok(flow.includes('tapOn: "Allow restricted settings"'));
+  assert.doesNotMatch(flow,/adb shell|appops set|settings put secure/);
+  assert.ok(flow.indexOf("Nexa Screen Assist connected") < flow.indexOf("open notification bar"));
+});

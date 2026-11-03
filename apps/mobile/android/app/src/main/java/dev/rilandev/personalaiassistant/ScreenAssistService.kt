@@ -114,12 +114,16 @@ class ScreenAssistService : AccessibilityService() {
     }
     override fun onInterrupt() {}
     override fun onDestroy() {
-        ScreenAssistState.connected = false
-        ScreenAssistState.clear()
-        ScreenIconScanState.clear()
-        NexaVisualIconCapture.clear()
-        NexaScreenActions.reset()
-        if (active === this) active = null
+        // Android can destroy an old service instance after a replacement has
+        // connected. Never let the old instance disconnect or clear the live one.
+        if (active === this) {
+            active = null
+            ScreenAssistState.connected = false
+            ScreenAssistState.clear()
+            ScreenIconScanState.clear()
+            NexaVisualIconCapture.clear()
+            NexaScreenActions.reset()
+        }
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {

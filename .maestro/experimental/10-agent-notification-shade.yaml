@@ -74,12 +74,85 @@ tags:
       visible: "Allow"
     commands:
       - tapOn: "Allow"
+# Android 13+ may block Accessibility for an APK installed outside an app store.
+# Follow only the stock Android consent UI if the restricted-settings dialog
+# actually appeared. Never grant via adb, shell, app-ops or test-only service.
+- runFlow:
+    when:
+      visible: "Restricted setting"
+    commands:
+      - takeScreenshot: nexa-android-restricted-setting-blocked
+      - tapOn: "OK"
+      - launchApp:
+          stopApp: false
+      - scrollUntilVisible:
+          element: "Open Nexa app info (restricted settings)"
+          direction: DOWN
+          timeout: 25000
+      - tapOn: "Open Nexa app info (restricted settings)"
+      - extendedWaitUntil:
+          visible: "App info"
+          timeout: 25000
+      - takeScreenshot: nexa-android-app-info-restricted
+      - tapOn: "More options"
+      - tapOn: "Allow restricted settings"
+      - runFlow:
+          when:
+            visible: "Allow"
+          commands:
+            - tapOn: "Allow"
+      - launchApp:
+          stopApp: false
+      - scrollUntilVisible:
+          element: "One-time screen assistance"
+          direction: UP
+          timeout: 25000
+      - tapOn:
+          text: "Open Accessibility.*One-time screen assistance.*"
+      - extendedWaitUntil:
+          visible: "Accessibility"
+          timeout: 25000
+      - runFlow:
+          when:
+            visible: "Downloaded apps"
+          commands:
+            - tapOn: "Downloaded apps"
+      - runFlow:
+          when:
+            visible: "Installed apps"
+          commands:
+            - tapOn: "Installed apps"
+      - scrollUntilVisible:
+          element: "Nexa Screen Assist"
+          direction: DOWN
+          timeout: 30000
+      - tapOn: "Nexa Screen Assist"
+      - runFlow:
+          when:
+            visible: "Use Nexa Screen Assist"
+          commands:
+            - tapOn: "Use Nexa Screen Assist"
+      - runFlow:
+          when:
+            visible: "Use service"
+          commands:
+            - tapOn: "Use service"
+      - runFlow:
+          when:
+            visible: "Allow"
+          commands:
+            - tapOn: "Allow"
 - takeScreenshot: nexa-native-screen-assist-owner-granted
 # Do not infer an Accessibility grant from visiting Android Settings.
 # A native action is impossible until Android has bound the service.
 - launchApp:
     stopApp: false
 - takeScreenshot: nexa-setup-accessibility-return-status
+- scrollUntilVisible:
+    element:
+      text: "Nexa Screen Assist connected.*native screen actions ready"
+    direction: DOWN
+    timeout: 25000
 - extendedWaitUntil:
     visible:
       text: "Nexa Screen Assist connected.*native screen actions ready"
