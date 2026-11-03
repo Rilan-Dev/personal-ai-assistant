@@ -1,0 +1,106 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa approves and actually opens Android notification shade
+tags:
+  - nexa
+  - agent
+  - notification
+  - experimental
+---
+# Screen Assist must be enabled through real Android Settings, not app-ops,
+# shell automation, or a test-only Accessibility service injection.
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element: "One-time screen assistance"
+    direction: DOWN
+    timeout: 25000
+- tapOn:
+    text: "Open Accessibility.*One-time screen assistance.*"
+- extendedWaitUntil:
+    visible: "Accessibility"
+    timeout: 25000
+- runFlow:
+    when:
+      visible: "Downloaded apps"
+    commands:
+      - tapOn: "Downloaded apps"
+- runFlow:
+    when:
+      visible: "Installed apps"
+    commands:
+      - tapOn: "Installed apps"
+- scrollUntilVisible:
+    element: "Nexa Screen Assist"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Nexa Screen Assist"
+- runFlow:
+    when:
+      visible: "Use Nexa Screen Assist"
+    commands:
+      - tapOn: "Use Nexa Screen Assist"
+- runFlow:
+    when:
+      visible: "Use service"
+    commands:
+      - tapOn: "Use service"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- takeScreenshot: nexa-native-screen-assist-owner-granted
+# Return using the real launcher, not a private service API.
+- launchApp:
+    stopApp: false
+- scrollUntilVisible:
+    element: "Floating quick tools"
+    direction: DOWN
+    timeout: 25000
+- tapOn:
+    text: "Allow display over apps.*"
+- extendedWaitUntil:
+    visible: "Display over other apps"
+    timeout: 25000
+- scrollUntilVisible:
+    element: "Nexa AI"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "Nexa AI"
+- tapOn: "Allow display over other apps"
+- back
+- back
+- launchApp:
+    stopApp: false
+- scrollUntilVisible:
+    element: "Show floating bubble"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "Show floating bubble"
+- pressKey: home
+- extendedWaitUntil:
+    visible:
+      text: "Nexa assistant.*Tap to expand.*"
+    timeout: 25000
+- tapOn:
+    text: "Nexa assistant.*"
+- assertVisible: "How can I help?"
+- tapOn: "Ask a local tool…"
+- inputText: "open notification bar"
+- hideKeyboard
+- tapOn: "Send"
+- extendedWaitUntil:
+    visible:
+      text: "Owner approval needed: open notification shade"
+    timeout: 15000
+- takeScreenshot: nexa-notification-owner-review
+- tapOn: "Confirm requested action"
+# Verify the actual OS notification panel, not a Nexa string saying accepted.
+- extendedWaitUntil:
+    visible:
+      text: ".*(No notifications|Notification settings|Internet|Clear all).*"
+    timeout: 25000
+- takeScreenshot: nexa-android-notification-shade-visible
