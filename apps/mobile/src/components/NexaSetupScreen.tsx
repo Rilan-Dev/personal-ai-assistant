@@ -52,7 +52,7 @@ export default function NexaSetupScreen(props: Props) {
       action:'Choose Nexa assistant', onPress:onAssistant},
     {key:'screen', index:'03', title:'One-time screen assistance',
       detail:'Enable Nexa Screen Assist in Android Accessibility. Only an explicitly armed single screen read is allowed.',
-      granted:Boolean(s?.screenAssist),
+      granted:Boolean(s?.screenAssist && s?.screenAssistConnected),
       action:'Open Accessibility', onPress:onAccessibility, optional:true},
     {key:'launcher', index:'04', title:'Home-screen app search',
       detail:'Separately enable Nexa Launcher Navigation for a user-started GitHub icon search. No automatic app clicking.',
@@ -122,6 +122,13 @@ export default function NexaSetupScreen(props: Props) {
               <Text style={styles.actionText}>{step.granted?'Enabled':step.action}</Text>
             </Pressable>
           </View>
+          {step.key==='screen' && s && <Text style={styles.helper}>
+            {s.screenAssistConnected
+              ? 'Nexa Screen Assist connected · native screen actions ready'
+              : s.screenAssist
+                ? 'Nexa Screen Assist disconnected. Android says enabled, but the service has not connected. Toggle the service off and on in Android Accessibility, return and refresh.'
+                : 'Nexa Screen Assist disabled. Open Accessibility, explicitly enable Nexa Screen Assist, approve Android confirmation, return and refresh.'}
+          </Text>}
           {step.key==='assistant' && !step.granted && <>
             <Pressable accessibilityRole="button" style={styles.secondary}
               disabled={busy} onPress={onAssistantSettings}>

@@ -49,6 +49,10 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
             data.putBoolean("camera", granted(Manifest.permission.CAMERA))
             data.putBoolean("approximateLocation", granted(Manifest.permission.ACCESS_COARSE_LOCATION))
             data.putBoolean("screenAssist", serviceEnabled(ScreenAssistService::class.java))
+            // The Settings toggle alone is NOT proof that AccessibilityService
+            // was bound and can execute an approved device action.
+            data.putBoolean("screenAssistConnected",
+                ScreenAssistState.connected && ScreenAssistService.active != null)
             data.putBoolean("launcherNavigation",
                 serviceEnabled(NexaLauncherNavigationService::class.java))
             data.putBoolean("assistantRoleAvailable",
