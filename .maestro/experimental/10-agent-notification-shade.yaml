@@ -100,6 +100,9 @@ tags:
       text: "Owner approval needed: open notification shade"
     timeout: 15000
 - tapOn: "Confirm requested action"
+# Nexa must not remain an expanded window over SystemUI after approval.
+- assertNotVisible:
+    text: "How can I help?"
 # Capture the actual post-action screen even if OS panel assertion fails.
 - takeScreenshot: nexa-notification-after-approved-action
 # These checks distinguish native rejection, Screen Assist being off, and
