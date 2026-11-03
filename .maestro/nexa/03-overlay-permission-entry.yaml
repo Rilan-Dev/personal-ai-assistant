@@ -1,0 +1,22 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa floating-overlay permission entry screen
+tags:
+  - nexa
+  - overlay
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element:
+      text: "Floating quick tools"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: "Floating quick tools"
+- takeScreenshot: nexa-overlay-permission-before
+- tapOn:
+    text: "Allow display over apps.*"
+- takeScreenshot: nexa-android-overlay-settings-opened
