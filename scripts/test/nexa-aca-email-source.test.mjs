@@ -5,6 +5,8 @@ import {readFileSync} from 'node:fs';
 const app=readFileSync(new URL('../../apps/mobile/App.tsx',import.meta.url),'utf8');
 const bridge=readFileSync(new URL('../../apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt',import.meta.url),'utf8');
 const api=readFileSync(new URL('../../apps/mobile/src/native/acaEmail.ts',import.meta.url),'utf8');
+const intent=readFileSync(new URL('../../apps/mobile/src/native/acaMailIntent.ts',import.meta.url),'utf8');
+const {parseAcaMailSummaryIntent}=await import('../../apps/mobile/src/native/acaMailIntent.ts');
 
 test('ACA email routing remains separate from native device tool harness',()=>{
   assert.match(app,/parseAcaMailSummaryIntent\(request\)/);
