@@ -58,8 +58,17 @@ tags:
 - takeScreenshot: nexa-floating-bubble-over-home
 - tapOn:
     text: "Nexa assistant.*"
+# Expanded overlays initially show the Chat panel. "Talk to Nexa" is
+# intentionally in the Voice panel; verify actual tab navigation rather
+# than asserting a control in the wrong panel.
+- extendedWaitUntil:
+    visible:
+      text: "How can I help?"
+    timeout: 25000
+- takeScreenshot: nexa-expanded-overlay-chat
+- tapOn: "Voice"
 - extendedWaitUntil:
     visible:
       text: "Talk to Nexa.*"
     timeout: 25000
-- takeScreenshot: nexa-expanded-overlay
+- takeScreenshot: nexa-expanded-overlay-voice
