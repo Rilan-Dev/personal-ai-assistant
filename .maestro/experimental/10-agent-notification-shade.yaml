@@ -140,6 +140,25 @@ tags:
 - launchApp:
     stopApp: false
 - takeScreenshot: nexa-setup-accessibility-return-status
+# If Android's owner grant did not connect the service, preserve the actual
+# UI state before the strict acceptance assertion below fails. Maestro may
+# suppress unrelated AccessibilityServices: this remains NO-GO, not a pass.
+- scrollUntilVisible:
+    element: "One-time screen assistance"
+    direction: UP
+    timeout: 25000
+- runFlow:
+    when:
+      visible:
+        text: "Nexa Screen Assist disconnected.*"
+    commands:
+      - takeScreenshot: nexa-screen-assist-enabled-but-unbound
+- runFlow:
+    when:
+      visible:
+        text: "Nexa Screen Assist disabled.*"
+    commands:
+      - takeScreenshot: nexa-screen-assist-permission-not-enabled
 - scrollUntilVisible:
     element:
       text: "Nexa Screen Assist connected.*native screen actions ready"
