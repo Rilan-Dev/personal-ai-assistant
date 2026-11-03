@@ -20,7 +20,7 @@ tags:
 - assertVisible: "Make your assistant yours."
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
-- pressKey: Home
+- pressKey: home
 - launchApp:
     stopApp: false
 - assertVisible: "How can I help today?"
