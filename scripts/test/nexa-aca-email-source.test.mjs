@@ -24,7 +24,13 @@ test('ACA login has no hardcoded credentials and uses Android Keystore storage',
   assert.doesNotMatch(api,/SMTSllc|smtscontracting@gmail\.com|AsyncStorage/);
 });
 
-test('summary intent gate forbids send and draft',()=>{
-  assert.match(api,/send\|draft\|reply\|forward\|delete/);
-  assert.match(api,/window:"all"\|"24h"/);
+test('read-only mail request parsing preserves user scope and blocks writes',()=>{
+  assert.match(intent,/send\\|draft\\|reply\\|forward\\|delete/);
+  assert.deepEqual(parseAcaMailSummaryIntent('Summarize unread emails from the last 24 hours'),{unreadOnly:true,inboxOnly:false,window:'24h'});
+  assert.deepEqual(parseAcaMailSummaryIntent('How many unread inbox emails do I have?'),{unreadOnly:true,inboxOnly:true,window:'all'});
+  assert.deepEqual(parseAcaMailSummaryIntent('Summarize emails in the last 24 hours'),{unreadOnly:false,inboxOnly:false,window:'24h'});
+  assert.equal(parseAcaMailSummaryIntent('Send an email to Mom'),null);
+  assert.equal(parseAcaMailSummaryIntent('Summarize emails from John in the last 24 hours'),null);
+  assert.equal(parseAcaMailSummaryIntent('Summarize emails today'),null);
+  assert.equal(parseAcaMailSummaryIntent('Open Chrome and search what is AI'),null);
 });
