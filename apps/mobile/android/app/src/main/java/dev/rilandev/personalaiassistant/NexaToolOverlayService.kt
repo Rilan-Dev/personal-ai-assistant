@@ -165,8 +165,23 @@ class NexaToolOverlayService : Service() {
         render()
     }
     private fun proposeOwnerDeviceAction(action:String,description:String) {
+        // Avoid offering a dead approval button if Android did not actually
+        // connect the user-enabled screen-assistance service.
+        if((action=="open_notification_shade" || action=="go_back" ||
+            action.startsWith("tap_visible_label:")) &&
+            ScreenAssistService.active==null) {
+            proposedDeviceAction=null
+            proposedDeviceActionExpiresAt=0L
+            section="tools"
+            note="Nexa Screen Assist is OFF. Enable it in Android Accessibility settings. No system action was attempted."
+            render()
+            return
+        }
         proposedDeviceAction=action
-        proposedDeviceActionExpiresAt=android.os.SystemClock.elapsedRealtime()+15_000L
+        // The previous 15-second window expired during real-world screen
+        // reader use and remote Android test latency. Still single use and
+        // bounded, consistent with the native voice-approval timeout.
+        proposedDeviceActionExpiresAt=android.os.SystemClock.elapsedRealtime()+60_000L
         section="tools"
         note="Owner review: $description. No operation has executed. Confirm within 15 seconds."
         render()
@@ -186,20 +201,23 @@ class NexaToolOverlayService : Service() {
      * the notification shade; the user can re-show the bubble from Nexa.
      * This must run on the Android main thread after an explicit approval.
      */
-    private fun detachOverlayForNotificationShade() {
+    private fun detachOverlayForNotificationShade():Boolean {
+        // No GLOBAL_ACTION_NOTIFICATIONS request may run while an expanded
+        // Nexa overlay is still attached or its removal failed.
+        val existing=view ?: return false
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.hideSoftInputFromWindow(existing.windowToken,0)
+        val detached=try {
+            wm.removeViewImmediate(existing)
+            true
+        } catch (_:Exception) {
+            try { wm.removeView(existing); true }catch (_:Exception){false}
+        }
+        if(!detached)return false
         expanded=false
-        val existing=view
-        val imm=getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
-        imm?.hideSoftInputFromWindow(existing?.windowToken,0)
         view=null
         visible=false
-        if(existing!=null) {
-            try {
-                wm.removeViewImmediate(existing)
-            } catch (_:Exception) {
-                try {wm.removeView(existing)}catch (_:Exception){}
-            }
-        }
+        return true
     }
 
     private fun confirmOwnerDeviceAction() {
@@ -219,8 +237,13 @@ class NexaToolOverlayService : Service() {
         val isNotificationShade=action=="open_notification_shade"
         val isSystemNavigation=isNotificationShade || action=="go_back"
         note="Action in progress; completion is not yet verified."
-        if(isNotificationShade) detachOverlayForNotificationShade()
-        else if(isSystemNavigation) collapse()
+        if(isNotificationShade) {
+            if(!detachOverlayForNotificationShade()) {
+                note="Nexa could not release its floating window. The notification shade was not requested."
+                render()
+                return
+            }
+        } else if(isSystemNavigation) collapse()
         else render()
 
         val dispatch={
@@ -557,9 +580,21 @@ class NexaToolOverlayService : Service() {
         val savedY = params?.y ?: dp(160)
         val old = view
         if (old != null) {
-            try { wm.removeView(old) } catch (_: Exception) {}
-            view = null
-            visible = false
+            val removed=try {
+                wm.removeViewImmediate(old)
+                true
+            } catch (_:Exception) {
+                try { wm.removeView(old); true }catch (_:Exception){false}
+            }
+            if(!removed) {
+                // Fail closed; do not build multiple overlapping overlay
+                // windows when the old root could not be detached.
+                visible=false
+                stopSelf()
+                return
+            }
+            view=null
+            visible=false
         }
         val layout: View = if (!expanded) {
             ImageView(this).apply {
