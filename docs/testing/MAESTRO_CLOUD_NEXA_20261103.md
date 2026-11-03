@@ -1,79 +1,57 @@
-# Nexa Maestro Cloud acceptance suite (November 3, 2026)
+# Nexa Maestro Cloud — Android UI acceptance
 
-Source application: `Rilan-Dev/personal-ai-assistant`. Application ID: `dev.rilandev.personalaiassistant`.
-Maestro project: `proj_01m6fyb4qre3kvtx4jft00gvnh`.
-Device baseline: Pixel 6 Android 13 (`android-33`), with Android 14–16 available in the manual workflow.
+Date: **November 3, 2026**. Repository: `Rilan-Dev/personal-ai-assistant`.
+Application: `dev.rilandev.personalaiassistant`.
+Maestro Cloud project: `proj_01m6fyb4qre3kvtx4jft00gvnh`.
 
-## Status
+## Verified result
 
-**NOT YET EXECUTED ON MAESTRO CLOUD**. The Android release-test APK with ARM64 native libraries
-was downloaded from successful GitHub run `41562771187`, with source commit
-`c5387224a36876fd6cee106de5d31ee8c5a9d7c6`.
-Maestro CLI v2.12.1 was installed and eight isolated flows were written. No
-Maestro Cloud execution was started: the runner did not have an authenticated
-Maestro Cloud credential, and a direct invocation carrying the credential was
-blocked by the remote command security boundary. Do not mark a flow as passed
-until it has a corresponding Maestro Cloud run result.
+**8 of 8 Maestro Cloud flows passed (0 failed) on Pixel 6, Android 13 (`android-33`).**
 
-## Manual GitHub Actions execution (credentials never committed)
+- GitHub Actions acceptance: [run #41613381123](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41613381123) — completed with success.
+- [Maestro Cloud results, screenshots, and per-step evidence](https://app.maestro.dev/project/proj_01m6fyb4qre3kvtx4jft00gvnh/maestro-test/app/app_01m6g5kv3hfyprkeqh4wqmtbdn/upload/mupload_01m6gcpypkf9csx0rf49rx1e70).
+- Tested artifact: the **signed release APK** from successful main-promotion [run #41597774425](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41597774425), not a separately rebuilt debug APK.
+- The acceptance workflow verified the APK's SHA-256, embedded source commit, and unchanged app-runtime source before uploading it to Maestro Cloud.
+- The eight flows include **112 YAML steps**. The cloud result, not YAML parsing or an APK build, is the pass evidence.
 
-1. Rotate the Maestro API key if it was pasted into a chat or ticket.
-2. In the Nexa GitHub repository, open **Settings → Secrets and variables → Actions → New repository secret**.
-3. Add **MAESTRO_CLOUD_API_KEY** with the newly rotated key. Do not store it in YAML, PR comments, logs, or APKs.
-4. After `.github/workflows/maestro-cloud-manual.yml` has been merged into the default branch,
-   visit **Actions → Nexa Maestro Cloud UI acceptance (manual only) → Run workflow**.
-5. Select `suite: all` for the full suite, or a specific suite when debugging;
-   select `android-33` to match the Android 13 baseline, then check the Maestro Console
-   for per-flow status, screenshots, command history, and video.
+## Individual flows
 
-The workflow is **manual-only** (`workflow_dispatch`); it creates a fresh debug APK
-from the exact selected Git commit and uploads it to Maestro Cloud using
-`MAESTRO_CLOUD_API_KEY` as a masked environment secret. It does not use personal
-Sarvam/OpenAI keys or contact information. A source code failure is not to be
-misrepresented as a completed cloud test.
+| Flow | What passed |
+| --- | --- |
+| `01-fresh-setup-and-navigation.yaml` | Fresh-install setup and all five React Native tabs |
+| `02-hey-nexa-wake-setup.yaml` | Privacy-first activation disclosure, protected-hotword limitation, model download control, status refresh |
+| `03-overlay-permission-entry.yaml` | Launch Android's display-over-apps Settings permission screen |
+| `04-voice-without-provider.yaml` | Unconfigured provider state shown without a live provider or silent fallback |
+| `05-overlay-bubble-end-to-end.yaml` | Open Android 13 permission list, select Nexa AI, grant overlay permission, show bubble over Home, expand default Chat, switch to Voice and verify Talk control |
+| `06-hey-nexa-model-runtime.yaml` | Download offline wake model; opt in to and stop Android's foreground Hey Nexa listener |
+| `07-screen-assist-settings-entry.yaml` | Open Android Accessibility settings for Screen Assist |
+| `08-navigation-background-resume.yaml` | Repeated tab navigation and background/foreground restoration without the scenario failing |
 
-## Flows
+## Failure-to-pass history
 
-| Flow | Purpose | Acceptance type |
-| --- | --- | --- |
-| `01-fresh-setup-and-navigation.yaml` | Fresh-install startup and five RN tabs | UI smoke |
-| `02-hey-nexa-wake-setup.yaml` | Hey Nexa disclosures, disabled model, status refresh | UI / privacy |
-| `03-overlay-permission-entry.yaml` | Navigate into Android display-over-other-apps setting | OS permission |
-| `04-voice-without-provider.yaml` | Verify voice screen handles missing provider safely | UI / configuration |
-| `05-overlay-bubble-end-to-end.yaml` | Grant overlay, show bubble over Home, expand panel | Experimental OS E2E |
-| `06-hey-nexa-model-runtime.yaml` | Download offline model, start/stop opt-in foreground listener | Experimental wake runtime |
-| `07-screen-assist-settings-entry.yaml` | Open Accessibility settings from permission center | OS permission |
-| `08-navigation-background-resume.yaml` | Repeated tab taps and foreground/background restoration | Crash smoke |
+- [Run #41597419467](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41597419467): initial upload blocked by an embedded newline in the encrypted Maestro secret. Fixed by sanitizing CR/LF **in memory**, without logging the secret.
+- [Run #41597795124](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41597795124): **5/8 passed**. Three test scripts expected UI strings without scrolling or assumed Android 13 would open the app-specific overlay switch directly.
+- [Run #41611651359](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41611651359): **7/8 passed**. The remaining test looked for a Voice-panel button while the floating overlay was still on its default Chat panel.
+- [Run #41613381123](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41613381123): **8/8 passed** after verifying the bubble's Chat panel, then tapping Voice before checking its Talk control.
 
-The experimental flows deliberately fail if permissions, overlay rendering,
-model download or service startup cannot be completed. Screenshots and native
-hierarchy data from Maestro should be used to correct brittle selectors.
-These flows make no contacts, no outgoing calls, and no WhatsApp sends.
+No special-permission bypass, forced grant, or automatic message send was introduced to obtain these results.
 
-## Critical boundaries
+## How to run again
 
-- An emulator UI test **cannot certify** the physical Infinix/XOS launcher's
-  horizontal page gestures, OEM overlay lifetime, no-gesture hotword detection,
-  incoming/outgoing SIM-call behavior, or battery-policy effects.
-- A screenshot of `Listening for Hey Nexa` proves only that the app reports the
-  state; it does **not** prove that a spoken wake phrase actually activated it.
-- To test actual wake detection, feed known audio into a supported local device
-  or use an instrumented offline detector input with consent, then verify a
-  full service handoff; finally repeat on the owner's physical Android phone.
-- System overlay permissions and Accessibility privileges are not equivalent
-  to ordinary Android `RECORD_AUDIO` runtime grants.
-- Cloud test devices are ephemeral. Avoid putting real communications, personal
-  contacts, API keys, chat history or provider accounts in Maestro screenshots.
-- Inspect crash/ANR evidence after each failure: a successful UI tap is not
-  evidence that Accessibility clicked the intended control or that the service
-  survived the action.
+The repository workflow is [`.github/workflows/maestro-cloud-manual.yml`](../../.github/workflows/maestro-cloud-manual.yml).
+It requires the encrypted GitHub Actions repository secret `MAESTRO_CLOUD_API_KEY`.
+Its **explicit/manual** entry points are:
 
-## Triage acceptance checklist
+1. GitHub Actions → **Nexa Maestro Cloud UI acceptance (manual only)** → **Run workflow**, choose `main`, `suite: all`, and `android-33`; or
+2. The repository owner's **exact** comment `/nexa-maestro run all android-33` on the designated [QA PR #29](https://github.com/Rilan-Dev/personal-ai-assistant/pull/29). This narrowly scoped event gate is not a general comment or push trigger.
 
-- One successful cloud run with recorded results and screenshots on Android 13;
-  repeat on Android 14 and 16 when possible.
-- Fresh install renders the expected modern Nexa UX, not a previous design.
-- Overlay grant → floating bubble → home screen → expanded overlay all verified.
-- User opt-in wake listener starts/stops without process death or stale mic state.
-- No cloud-flow test reports an unverified action as a completed user task.
-- Physical-device microphone wake-word and XOS overlay UAT remain separate gates.
+The job retrieves the most recent successful signed main-promotion APK, verifies integrity and runtime-source consistency, then uploads it and the selected flows. Avoid placing personal contacts, actual communications, or AI-provider API credentials in Cloud screenshots.
+
+## Important scope limits
+
+**This is Android 13 emulator UI acceptance, not full on-device product acceptance.**
+
+- The opt-in wake-model test verifies reported listener start/stop, **not recognition of the spoken phrase** `Hey Nexa` through the real phone microphone.
+- The Cloud Pixel 6 is not the user's Infinix/XOS phone. The OEM launcher, battery restrictions, assistant gesture, and persistent system-overlay lifetime remain physical-device acceptance items.
+- The suite does not exercise real Sarvam/OpenAI provider conversation, actual WhatsApp typing/sending, phone calls, or crash reproduction on Infinix. Consent and approval gates stay intact.
+- Android 14–16 cross-version acceptance and real microphone audio injection are separate tests; do not mark them passed based only on this Android 13 result.
