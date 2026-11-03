@@ -187,8 +187,12 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             require(obj.length() == 6 && obj.optInt("version") == 1)
             require(obj.optString("origin") == "https://aca.starcitytechnical.com")
             require(obj.optString("token").matches(Regex("nexa_m1_[A-Za-z0-9_-]{43}")))
-            val expiry = java.time.Instant.parse(obj.getString("expiresAt"))
-            require(expiry.isAfter(java.time.Instant.now()))
+            // Avoid java.time APIs that require Android API 26 on older phones.
+            val expires = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }.parse(obj.getString("expiresAt"))
+            require(expires != null && expires.time > System.currentTimeMillis())
             for (field in listOf("organizationId", "agentId")) {
                 val value = obj.getString(field)
                 require(value.isEmpty() || value.matches(Regex("[0-9a-fA-F-]{36}")))
