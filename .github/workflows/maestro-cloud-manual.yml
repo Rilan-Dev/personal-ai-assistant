@@ -152,6 +152,14 @@ jobs:
             resume-stress) target=".maestro/nexa/08-navigation-background-resume.yaml" ;;
             *) echo "::error::Invalid test suite"; exit 2 ;;
           esac
+          # Never print the key. GitHub secret paste often includes a trailing
+          # CR or LF, which Maestro rejects inside an Authorization header.
+          MAESTRO_CLOUD_API_KEY="$(printf '%s' "$MAESTRO_CLOUD_API_KEY" | tr -d '\r\n')"
+          if [[ -z "$MAESTRO_CLOUD_API_KEY" || "$MAESTRO_CLOUD_API_KEY" == *[[:space:]]* ]]; then
+            echo "::error::Maestro API secret contains unsupported whitespace. Update the encrypted Actions secret."
+            exit 1
+          fi
+          export MAESTRO_CLOUD_API_KEY
           "$HOME/.maestro/bin/maestro" cloud \
             --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
             --device-os "$ANDROID_OS" \
