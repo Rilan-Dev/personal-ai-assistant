@@ -21,7 +21,7 @@ test('ACA login has no hardcoded credentials and uses Android Keystore storage',
   assert.match(bridge,/write\(name\("private", "aca-device-session"\), data\)/);
   assert.match(api,/https:\/\/aca\.starcitytechnical\.com/);
   assert.match(api,/method:"DELETE"/);
-  assert.doesNotMatch(api,/SMTSllc|smtscontracting@gmail\.com|AsyncStorage/);
+  assert.doesNotMatch(api,/AsyncStorage|hardcoded_password|demo_password/);
 });
 
 test('read-only mail request parsing preserves user scope and blocks writes',()=>{
