@@ -17,11 +17,33 @@ tags:
     timeout: 25000
 - assertVisible:
     text: "Nexa activation.*"
-- assertVisible:
-    text: "Protected no-dot Hey Nexa: unavailable in this APK"
+# The disclosure is below the section title on small Android screens.
+# Assert actual protected-hotword safety, rather than assuming it is above the fold.
+- scrollUntilVisible:
+    element:
+      text: "Protected no-dot Hey Nexa: unavailable in this APK"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "Protected no-dot Hey Nexa: unavailable in this APK"
+- takeScreenshot: nexa-wake-protected-disclosure
+- scrollUntilVisible:
+    element:
+      text: "Download offline model"
+    direction: DOWN
+    timeout: 30000
 - assertVisible: "Download offline model"
 - takeScreenshot: nexa-wake-not-enabled
+- scrollUntilVisible:
+    element:
+      text: "Refresh wake status"
+    direction: DOWN
+    timeout: 25000
 - tapOn: "Refresh wake status"
+- scrollUntilVisible:
+    element:
+      text: "Nexa activation.*"
+    direction: UP
+    timeout: 30000
 - assertVisible:
     text: "Nexa activation.*"
 - takeScreenshot: nexa-wake-refreshed
