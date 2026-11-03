@@ -77,7 +77,7 @@ internal object NexaScreenLabelTap {
             val found=target ?: return "Target is not available."
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
-            if(!NexaUiActionJournal.claim(service,token,"tap_label",pkg))
+            if(!NexaUiActionJournal.claim(service,token,"tap",pkg))
                 return "Action journal rejected this request. No tap occurred."
             NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before)
             // Clicking a verified search input transfers focus only. Never
