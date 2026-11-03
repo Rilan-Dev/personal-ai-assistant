@@ -31,45 +31,88 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   maestro-cloud:
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
-      - name: Ensure Maestro credential was configured securely
+      - name: Verify Maestro Cloud secret is configured
         shell: bash
         env:
           MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
         run: |
           set -euo pipefail
           if [[ -z "${MAESTRO_CLOUD_API_KEY:-}" ]]; then
-            echo "::error::Configure repository Actions secret MAESTRO_CLOUD_API_KEY first. Do not paste it into commits or workflow logs."
+            echo "::error::Repository secret MAESTRO_CLOUD_API_KEY is missing."
             exit 1
           fi
-
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: "24"
-          cache: npm
+          fetch-depth: 0
+      - name: Locate latest successful signed Nexa APK
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-main-promotion.yml/runs?branch=main&status=success&per_page=10")"
+          release_id="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .id // empty' <<< "$runs")"
+          release_sha="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' <<< "$runs")"
+          if [[ -z "$release_id" || ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::No successful Android main-promotion release artifact run found."
+            exit 1
+          fi
+          echo "run_id=$release_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$release_sha" >> "$GITHUB_OUTPUT"
+          echo "Selected signed release run: $release_id"
+      - name: Download signed release APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: personal-ai-assistant-release-test-apk
+          run-id: ${{ steps.release.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: .maestro-release
+      - name: Verify release APK hash and application source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ steps.release.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          file=".maestro-release/release-test-source-sha.txt"
+          checksum=".maestro-release/release-test-sha256.txt"
+          test -s "$file"
+          test -s "$checksum"
+          actual_sha="$(tr -d '\r\n' < "$file")"
+          if [[ "$actual_sha" != "$EXPECTED_SHA" ]]; then
+            echo "::error::APK source provenance disagrees with the release run."
+            exit 1
+          fi
+          apk="$(find .maestro-release -type f -name app-release.apk -print -quit)"
+          test -n "$apk"
+          test -s "$apk"
+          expected_hash="$(awk 'NR==1 {print $1}' "$checksum")"
+          actual_hash="$(sha256sum "$apk" | awk '{print $1}')"
+          if [[ "$expected_hash" != "$actual_hash" ]]; then
+            echo "::error::APK checksum verification failed."
+            exit 1
+          fi
+          # Test the exact release APK only if Nexa app source remains unchanged.
+          # Updating Maestro tests or workflow YAML does not invalidate the APK.
+          if ! git diff --quiet "$EXPECTED_SHA" HEAD -- apps/mobile packages services scripts package.json package-lock.json; then
+            echo "::error::Nexa source changed after this APK. Run the Android release pipeline first."
+            exit 1
+          fi
+          echo "NEXA_RELEASE_APK=$apk" >> "$GITHUB_ENV"
+          echo "Maestro tests signed release APK from $EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Artifact run: ${{ steps.release.outputs.run_id }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK SHA256: $actual_hash" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - name: Install Android SDK 36
-        shell: bash
-        run: |
-          set -euo pipefail
-          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
-          test -n "$sdkmanager_path"
-          "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
-      - run: npm ci
-      - name: Build fresh ARM-compatible Nexa debug APK
-        working-directory: apps/mobile/android
-        env:
-          PAA_BUILD_SOURCE_REVISION: ${{ github.sha }}
-        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
       - name: Install Maestro CLI
         shell: bash
         run: curl -fsSL https://get.maestro.mobile.dev | bash
@@ -101,5 +144,5 @@ jobs:
             --device-model pixel_6 \
             --branch "$GITHUB_REF_NAME" \
             --name "Nexa $TEST_SUITE $ANDROID_OS $GITHUB_SHA" \
-            --app-file apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            --app-file "$NEXA_RELEASE_APK" \
             --flows "$target"
