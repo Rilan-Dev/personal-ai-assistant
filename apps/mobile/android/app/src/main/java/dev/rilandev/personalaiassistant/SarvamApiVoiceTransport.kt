@@ -90,6 +90,9 @@ internal class SarvamApiVoiceTransport(
     private val turns = ArrayDeque<Pair<String,String>>()
     private val sessionId = "voice-sarvam-" + java.util.UUID.randomUUID().toString()
     private var pendingSpeech: String? = null
+    private var pendingCompoundFragment:String?=null
+    private var pendingCompoundAt=0L
+    private var pendingOpenFragmentAt=0L
     private var recentUtterance = ""
     private var recentUtteranceAt = 0L
     private val heartbeat = Executors.newSingleThreadScheduledExecutor { task ->
@@ -225,38 +228,80 @@ internal class SarvamApiVoiceTransport(
 
     private fun onFinal(text:String) {
         val now=android.os.SystemClock.elapsedRealtime()
+        if(NexaVoiceFragmentGate.hasPendingCompound(text)) {
+            pendingCompoundFragment=text.trim().trimEnd('.','?','!')
+            pendingCompoundAt=now
+            NexaConversationDb.append(context,sessionId,"voice","sarvam-api","user",text)
+            return // Wait briefly for the following command, not the model.
+        }
+        if(NexaVoiceFragmentGate.isIncomplete(text)){
+            pendingOpenFragmentAt=now
+            NexaConversationDb.append(context,sessionId,"voice","sarvam-api","user",text)
+            return // Do not launch a fictitious app called "uh".
+        }
+        val compound=pendingCompoundFragment?.takeIf {
+            now-pendingCompoundAt in 0..6500L
+        }
+        pendingCompoundFragment=null
+        val restored=when {
+            compound!=null -> compound+" "+text.trim()
+            pendingOpenFragmentAt!=0L &&
+                now-pendingOpenFragmentAt in 0..6500L &&
+                !Regex("""\b(open|launch|start|read|scroll|swipe|tap|click)\b""",
+                    RegexOption.IGNORE_CASE).containsMatchIn(text) ->
+                    "open "+text.trim().trimEnd('.','?','!')
+            else -> text
+        }
+        pendingOpenFragmentAt=0L
         synchronized(lock) {
-            if(text==recentUtterance && now-recentUtteranceAt<1500L)return
-            recentUtterance=text
+            if(restored==recentUtterance && now-recentUtteranceAt<1500L)return
+            recentUtterance=restored
             recentUtteranceAt=now
         }
-        NexaConversationDb.append(context,sessionId,"voice","sarvam-api","user",text)
+        NexaConversationDb.append(context,sessionId,"voice","sarvam-api","user",restored)
         // Native owner-approval is an independent consent boundary. No
         // model instruction or transcript may silently execute a phone tool.
         // Tool execution is never allowed to crash the provider WebSocket
         // callback thread or the whole Android app. Return a spoken failure
         // rather than an uncaught OEM BatteryManager/Accessibility exception.
-        val locallyHandled=try { callbacks.ownerRequest(text) }
+        val locallyHandled=try { callbacks.ownerRequest(restored) }
             catch (_:Exception) {
                 speak("Android could not process that device request. You can retry after checking Nexa permissions.")
                 true
             }
         if(locallyHandled) {
             synchronized(lock) {
-                turns.addLast("user" to text.take(800))
+                turns.addLast("user" to restored.take(800))
                 while(turns.size>12)turns.removeFirst()
             }
             return
         }
-        askModel(text)
+        askModel(restored)
     }
 
     private fun askModel(text:String) {
         if(!running)return
         val turn=generation.incrementAndGet()
+        val screenAvailable=ScreenAssistState.connected &&
+            ScreenAssistService.active!=null
+        val capabilities=if(screenAvailable)
+            "Nexa Screen Assist is currently ENABLED on this phone."
+            else "Nexa Screen Assist is currently DISABLED; request the owner enable it in Android Accessibility Settings."
+        val prompt="You are Nexa, an Android personal voice assistant. "+capabilities+
+            " You support native, owner-requested screen reading, bounded scrolling,"+
+            " safe grounded icon/label taps and verified launcher app requests."+
+            " Android grants and owner-review settings still control execution."+
+            " Do not say an approval dialog is open unless an actual native tool result says so."+
+            " Never claim screen access, a changed page, an opened app or a sent message"+
+            " without verified native evidence. Call and message delivery tools are NOT"+
+            " integrated in this live mode: do not claim you can directly place calls,"+
+            " answer incoming calls or send WhatsApp messages. For those requests,"+
+            " explain current limitations briefly. Avoid asking the owner to repeat"+
+            " information already present in their current conversation; ask only"+
+            " when the recipient, messaging channel or intent is genuinely ambiguous."
         val body=JSONObject().put("model",CHAT_MODEL).put("max_tokens",230)
             .put("messages",JSONArray().put(JSONObject().put("role","system")
-                .put("content","You are Nexa, an Android voice assistant. Live owner-spoken commands for screen labels, scrolling in four directions, safe navigation taps, locating visible icons and opening a named installed app are handled locally with explicit one-time owner approval, only when Android Screen Assist is enabled. These actions are not automatic model tools. Tell the owner how to enable Nexa Screen Assist in Accessibility Settings if needed, and to approve each proposed action in the visible Nexa overlay. You may use read-only battery, storage and device-status tools. Never claim a screen action, app opening or message send succeeded without its verified result. Do not invent private screen data, contact information or permissions.")))
+                .put("content",prompt)))
             .put("tools",NexaSarvamReadTools.definitions())
             .put("tool_choice","auto")
         synchronized(lock) {

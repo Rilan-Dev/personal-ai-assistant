@@ -182,6 +182,12 @@ internal class NexaWakeFallbackOverlay(
                         .setAction(RealtimeVoiceService.ACTION_APPROVE_TOOL))
                 } catch (_: Exception) { showStatus("Could not approve app action") }
             }, LinearLayout.LayoutParams(0, px(48), 1f))
+            addView(action("Always allow safe") {
+                try {
+                    service.startService(Intent(service, RealtimeVoiceService::class.java)
+                        .setAction(RealtimeVoiceService.ACTION_APPROVE_ALWAYS_TOOL))
+                } catch (_: Exception) { showStatus("Could not save safe permission") }
+            }, LinearLayout.LayoutParams(0, px(48), 1f))
             addView(action("Deny") {
                 try {
                     service.startService(Intent(service, RealtimeVoiceService::class.java)

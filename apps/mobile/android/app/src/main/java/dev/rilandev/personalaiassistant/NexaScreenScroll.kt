@@ -68,6 +68,17 @@ internal object NexaScreenScroll {
                     for(i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
                 }
             }
+            if(best==null && direction in setOf("left","right") &&
+                NexaLauncherSwipe.isHome(service,root)) {
+                val full=Rect()
+                root.getBoundsInScreen(full)
+                val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
+                    root.windowId,"__home_launcher_swipe__","",
+                    IconBox(full.left,full.top,full.right,full.bottom),direction,
+                    SystemClock.elapsedRealtime()+10_000L)
+                synchronized(lock){pending=target}
+                return "Confirm one $direction swipe on your Android home screen."
+            }
             val candidate=best ?: return "No visible scrollable container supports that direction."
             val box=Rect()
             candidate.getBoundsInScreen(box)
@@ -101,6 +112,11 @@ internal object NexaScreenScroll {
         try{
             if(root.packageName?.toString()!=approved.pkg || root.windowId!=approved.windowId)
                 return "The screen changed. Scroll cancelled."
+            if(approved.classname=="__home_launcher_swipe__") {
+                if(!NexaLauncherSwipe.isHome(service,root))
+                    return "Launcher changed; no swipe allowed."
+                return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token)
+            }
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
             var visited=0

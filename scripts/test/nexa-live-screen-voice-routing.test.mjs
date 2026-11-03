@@ -56,7 +56,7 @@ test('click and scroll require a current external Accessibility window and one a
 test('device-fact and tool-callback crashes are trapped before escaping provider network thread',()=>{
   assert.match(spoken,/return try \{ deviceFactsSafe\(context,utterance\) \}/);
   assert.match(spoken,/catch \(_: Exception\) \{ "Android device information is temporarily unavailable\." \}/);
-  assert.match(transport,/val locallyHandled=try \{ callbacks\.ownerRequest\(text\) \}/);
+  assert.match(transport,/val locallyHandled=try \{ callbacks\.ownerRequest\(restored\) \}/);
   assert.match(transport,/catch \(_:Exception\)/);
 });
 

@@ -207,6 +207,13 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
                     })
                 } catch (_: Exception) { feedback("Android blocked action approval") }
             },
+            button("Always allow safe") {
+                try {
+                    app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
+                        action = RealtimeVoiceService.ACTION_APPROVE_ALWAYS_TOOL
+                    })
+                } catch (_: Exception) { feedback("Could not save safe permission") }
+            },
             button("Deny") {
                 try {
                     app.startService(Intent(app, RealtimeVoiceService::class.java).apply {
