@@ -24,6 +24,8 @@ class NexaScreenVoiceRoutingAndroidTest {
         assertEquals("menu",NexaPhoneVoiceTools.clickSafeIcon("Tap menu button"))
         assertEquals("settings",NexaPhoneVoiceTools.clickSafeIcon("Tap on the settings icon"))
         assertEquals("back",NexaPhoneVoiceTools.clickSafeIcon("Press back"))
+        assertEquals("ask meta ai or search",
+            NexaPhoneVoiceTools.tapVisibleLabelIntent("Tap the Ask Meta AI or search input box"))
         assertNull(NexaPhoneVoiceTools.clickSafeIcon("tap send"))
         assertNull(NexaPhoneVoiceTools.clickSafeIcon("tap call"))
         assertNull(NexaPhoneVoiceTools.clickSafeIcon("tap 420,320"))

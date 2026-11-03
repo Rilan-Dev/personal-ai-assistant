@@ -32,12 +32,12 @@ internal object NexaVoicePermissionPolicy {
         command=="open" || command.startsWith("open ") -> "apps.open"
         else -> "sensitive"
     }
-    /** Sender, dialing, calls, message confirmation, payments, password entry
-     * and arbitrary XY operations are never covered by an always-allow grant.
+    /** Screen text/app inventory, arbitrary labeled taps, contacts, calls,
+     * messages and payments always require direct review. Persisted grants
+     * can reduce prompts only for bounded, non-sensitive navigation.
      */
     fun isSafeCategory(category:String):Boolean=category in setOf(
-        "screen.read","apps.list","screen.scroll","screen.navigate",
-        "screen.tap_label","apps.open")
+        "screen.scroll","screen.navigate","apps.open")
     fun alwaysAllowed(context:Context,command:String):Boolean {
         val key=category(command)
         if(!isSafeCategory(key))return false
