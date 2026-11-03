@@ -53,6 +53,7 @@ class RealtimeVoiceService : Service() {
         const val ACTION_MUTE = "dev.rilandev.personalaiassistant.VOICE_MUTE"
         const val ACTION_UNMUTE = "dev.rilandev.personalaiassistant.VOICE_UNMUTE"
         const val ACTION_APPROVE_TOOL = "dev.rilandev.personalaiassistant.TOOL_APPROVE"
+        const val ACTION_APPROVE_ALWAYS_TOOL = "dev.rilandev.personalaiassistant.TOOL_APPROVE_ALWAYS"
         const val ACTION_DENY_TOOL = "dev.rilandev.personalaiassistant.TOOL_DENY"
         @Volatile var pendingApprovalSummary: String? = null
             private set
@@ -85,6 +86,8 @@ class RealtimeVoiceService : Service() {
         val createdAtMs: Long = SystemClock.elapsedRealtime()
     )
     private var pendingAppTool: PendingAppTool? = null
+    private var currentCompound: NexaVoiceTaskCursor? = null
+    private var activeToolOperation = false
     private var voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
     private var lastLocalUtterance = ""
     private var lastLocalUtteranceAt = 0L
@@ -136,16 +139,27 @@ class RealtimeVoiceService : Service() {
             stopWithStatus("stopped","Stopped by owner")
             return START_NOT_STICKY
         }
-        if (intent?.action == ACTION_APPROVE_TOOL || intent?.action == ACTION_DENY_TOOL) {
+        if (intent?.action == ACTION_APPROVE_TOOL || intent?.action == ACTION_APPROVE_ALWAYS_TOOL || intent?.action == ACTION_DENY_TOOL) {
             val pending = pendingAppTool
-            if (active.get() && assistantPanelEnabled && pending != null) {
+            if (active.get() && assistantPanelEnabled && pending != null && !activeToolOperation) {
                 pendingAppTool = null
                 pendingApprovalSummary = null
-                val approved = intent.action == ACTION_APPROVE_TOOL
+                val approved = intent.action != ACTION_DENY_TOOL
+                if(approved && intent.action==ACTION_APPROVE_ALWAYS_TOOL) {
+                    if(NexaVoicePermissionPolicy.alwaysAllow(this,pending.command) &&
+                        NexaVoicePermissionPolicy.mode(this)==NexaVoicePermissionPolicy.ASK_EVERY_TIME)
+                        NexaVoicePermissionPolicy.setMode(this,NexaVoicePermissionPolicy.TRUST_SAFE)
+                }
                 // A visible approval tap authorizes ONE bounded action, not a
                 // stale request from an earlier conversation.
                 val age = SystemClock.elapsedRealtime() - pending.createdAtMs
-                val outcome = try { when {
+                val operationSession=voiceSessionId
+                activeToolOperation = true
+                // Accessibility traversal, crypto journaling, and OEM binder clicks must
+                // never execute on the foreground service/main looper (ANR risk).
+                Thread({
+                    val outcome = try { when {
+                    !active.get() || operationSession != voiceSessionId -> "Session stopped; no action performed."
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
                     pending.command == "list_installed_apps" ->
@@ -166,10 +180,14 @@ class RealtimeVoiceService : Service() {
                     pending.installedApp != null ->
                         NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
                     else -> NexaOverlayCommands.handle(this,pending.command)
-                } } catch (_:Exception) {
-                    "Android refused the approved screen action. No automatic retry."
+                } } catch (failure:Exception) {
+                    "Android refused the approved screen action ("+
+                        failure.javaClass.simpleName+"). No automatic retry."
                 }
-                lastToolResult = outcome.take(320)
+                main.post {
+                  activeToolOperation=false
+                  if(!active.get() || operationSession != voiceSessionId)return@post
+                  lastToolResult=outcome.take(320)
                 message = lastToolResult
                 if (selectedProvider == "sarvam-api") {
                     sarvamApiTransport?.toolResult(lastToolResult)
@@ -178,6 +196,9 @@ class RealtimeVoiceService : Service() {
                     sendRealtimeToolOutput(pending.callId, lastToolResult)
                     socket?.send(JSONObject().put("type", "response.create").toString())
                 }
+                advanceCompoundAfterVerifiedAction(pending,outcome,approved)
+                }
+                },"nexa-reviewed-action").start()
                 // Sarvam's managed CALL transport has no documented on-phone
                 // function_call_output event. The outcome is shown locally;
                 // never falsely tell Sarvam the tool ran through its harness.
@@ -230,6 +251,8 @@ class RealtimeVoiceService : Service() {
         microphoneMuted=false
         assistantPanelEnabled = intent.getBooleanExtra(EXTRA_ASSISTANT_PANEL, false)
         pendingAppTool = null
+        currentCompound=null
+        activeToolOperation=false
         pendingApprovalSummary = null
         lastToolResult = ""
         voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
@@ -274,6 +297,7 @@ class RealtimeVoiceService : Service() {
                     override fun ownerRequest(text:String):Boolean {
                         if(!assistantPanelEnabled)return false
                         val recognizable=try {
+                            NexaVoiceTaskPlan.parse(text)!=null ||
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
                             NexaPhoneVoiceTools.wantsInstalledApps(text) ||
                             NexaPhoneVoiceTools.wantsScreenHelp(text) ||
@@ -540,12 +564,79 @@ class RealtimeVoiceService : Service() {
         },60_000L)
     }
 
-    private fun handleSarvamOwnerRequest(transcript: String) {
-        if (!assistantPanelEnabled || pendingAppTool != null) return
+    /** Ask for each new step only after a verified prior step. */
+    private fun advanceCompoundAfterVerifiedAction(tool:PendingAppTool,outcome:String,approved:Boolean) {
+        val cursor=currentCompound ?: return
+        if(!approved || outcome.startsWith("Rejected") ||
+            outcome.contains("could not",true) || outcome.contains("refused",true) ||
+            outcome.contains("No visible",true)) {
+            cursor.cancel(); currentCompound=null; return
+        }
+        val step=cursor.current() ?: return
+        val isAppOpen=tool.command.startsWith("open ") || tool.command=="open"
+        if(isAppOpen) {
+            val expected=tool.installedApp?.packageName ?: when {
+                tool.command.contains("whatsapp",true)->"com.whatsapp"
+                tool.command.contains("github",true)->"com.github.android"
+                tool.command.contains("brave",true)->"com.brave.browser"
+                else -> ""
+            }
+            if(expected.isBlank()) {cursor.cancel();currentCompound=null;return}
+            main.postDelayed({
+                if(!active.get() || currentCompound!==cursor)return@postDelayed
+                val root=try{ScreenAssistService.active?.externalWindowRoot()}catch(_:Exception){null}
+                val pkg=try{root?.packageName?.toString()}catch(_:Exception){null}
+                finally {try{root?.recycle()}catch(_:Exception){}}
+                if(pkg!=expected) {
+                    cursor.cancel();currentCompound=null
+                    sarvamApiTransport?.toolResult("Android did not verify "+expected+
+                        " on screen. Multi-step task stopped; no next action.")
+                    return@postDelayed
+                }
+                val next=cursor.advance(true)
+                if(next==null)currentCompound=null
+                else handleSarvamOwnerRequest(next,true)
+            },1600L)
+            return
+        }
+        val verified=outcome.startsWith("Visible screen labels") ||
+            outcome.startsWith("Visible controls") ||
+            outcome.startsWith("Installed launcher apps")
+        if(!verified) {
+            cursor.cancel();currentCompound=null
+            // Android acceptance alone is not verified completion.
+            return
+        }
+        val next=cursor.advance(true)
+        if(next==null)currentCompound=null
+        else main.post { if(active.get())handleSarvamOwnerRequest(next,true) }
+    }
+
+    private fun offerOwnerTool(tool:PendingAppTool) {
+        expirePendingTool(tool)
+        if(selectedProvider=="sarvam-api" && NexaVoicePermissionPolicy.canExecute(this,tool.command)) {
+            // Current user request plus persistent low-risk grant, never model-only
+            // arbitrary permission bypass. High-risk classes cannot be whitelisted.
+            main.post { if(active.get() && pendingAppTool===tool)
+                onStartCommand(Intent(this,RealtimeVoiceService::class.java).apply{
+                    action=ACTION_APPROVE_TOOL
+                },0,0)
+            }
+        }
+    }
+
+    private fun handleSarvamOwnerRequest(rawTranscript: String, fromPlan:Boolean=false) {
+        if(!fromPlan && currentCompound!=null){
+            currentCompound?.cancel(); currentCompound=null
+        }
+        val plan=if(fromPlan)null else NexaVoiceTaskPlan.parse(rawTranscript)
+        if(plan!=null)currentCompound=NexaVoiceTaskCursor(plan)
+        val transcript=if(plan!=null)plan.steps.first() else rawTranscript
+        if (!assistantPanelEnabled || pendingAppTool != null || activeToolOperation) return
         val now = SystemClock.elapsedRealtime()
         if (transcript == lastLocalUtterance &&
             now - lastLocalUtteranceAt < 12_000L) return
-        if (++toolCallsInSession > 12) {
+        if (++toolCallsInSession > 40) {
             lastToolResult = "Voice device-action limit reached"
             message = lastToolResult
             return
@@ -566,14 +657,14 @@ class RealtimeVoiceService : Service() {
         }
         if(NexaPhoneVoiceTools.wantsInstalledApps(transcript)) {
             pendingAppTool=PendingAppTool("local-sarvam","installed launcher apps","list_installed_apps")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Share a limited list of installed launcher-app names with your voice provider? Approve once or Deny."
             message="App-list reading awaits your approval."
             return
         }
         if(NexaPhoneVoiceTools.wantsVisibleText(transcript)) {
             pendingAppTool=PendingAppTool("local-sarvam","screen text","read_visible_screen_text")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Read visible app labels and share the result with your voice provider? Approve once or Deny."
             message="Screen reading awaits your approval. Text fields and passwords are excluded."
             return
@@ -581,7 +672,7 @@ class RealtimeVoiceService : Service() {
         val scroll=NexaPhoneVoiceTools.scrollDirection(transcript)
         if(scroll!=null) {
             pendingAppTool=PendingAppTool("local-sarvam","scroll $scroll","scroll_screen:$scroll")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Scroll $scroll once in the visible app? Approve once or Deny."
             message="One accessibility scroll request awaits approval."
             return
@@ -589,7 +680,7 @@ class RealtimeVoiceService : Service() {
         val icon=NexaPhoneVoiceTools.clickSafeIcon(transcript)
         if(icon!=null) {
             pendingAppTool=PendingAppTool("local-sarvam","$icon control","tap_safe_icon:$icon")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Tap the visible $icon navigation icon once? Approve once or Deny."
             message="A fresh accessibility target will be checked after approval."
             return
@@ -597,7 +688,7 @@ class RealtimeVoiceService : Service() {
         val label=NexaPhoneVoiceTools.tapVisibleLabelIntent(transcript)
         if(label!=null) {
             pendingAppTool=PendingAppTool("local-sarvam",label,"tap_visible_label:$label")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Tap the uniquely visible control named $label once? Approve or Deny. No raw coordinates are trusted."
             message="A screen-grounded labeled tap awaits approval."
             return
@@ -620,7 +711,7 @@ class RealtimeVoiceService : Service() {
         }
         if(NexaPhoneVoiceTools.wantsScreenOverview(transcript)) {
             pendingAppTool=PendingAppTool("local-sarvam","visible screen controls","observe_screen_icons")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Read labeled icons on the visible screen once? Approve or Deny below."
             message="Approve screen icon inspection. No screenshot or tap will occur."
             try {
@@ -633,7 +724,7 @@ class RealtimeVoiceService : Service() {
         if(requestedIcon!=null) {
             pendingAppTool=PendingAppTool("local-sarvam", "$requestedIcon icon",
                 "locate_icon:$requestedIcon")
-            pendingAppTool?.let { expirePendingTool(it) }
+            pendingAppTool?.let { offerOwnerTool(it) }
             pendingApprovalSummary="Locate the $requestedIcon icon on screen once? Approve or Deny."
             message="Awaiting owner approval for read-only icon lookup. No tap or screenshot."
             try {
@@ -709,7 +800,7 @@ class RealtimeVoiceService : Service() {
                 }
                 is NexaLiveToolPolicy.Decision.NeedsApproval -> {
                     pendingAppTool = PendingAppTool(id, decision.app, decision.command,decision.installedApp)
-                    pendingAppTool?.let { expirePendingTool(it) }
+                    pendingAppTool?.let { offerOwnerTool(it) }
                     pendingApprovalSummary = when {
                         decision.command=="list_installed_apps" ->
                             "Share a limited launcher app list with voice provider? Approve once or Deny."
@@ -867,6 +958,12 @@ class RealtimeVoiceService : Service() {
         }
         status=state
         message=reason
+        // Capture sanitized lifecycle diagnostics for owner export.
+        // No audio, access token or raw screen text is included.
+        if(state=="error" || reason.contains("interrupted",true)) {
+            NexaConversationDb.append(this,voiceSessionId,"tool",
+                selectedProvider.take(45),"tool","Voice session $state: "+reason.take(220))
+        }
         currentProviderId=""
         main.removeCallbacks(maxSession)
         main.removeCallbacks(idleCheck)
@@ -898,6 +995,8 @@ class RealtimeVoiceService : Service() {
         try { sarvamTransport?.close() } catch (_: Exception) {}
         sarvamTransport=null
         pendingAppTool = null
+        currentCompound=null
+        activeToolOperation=false
         pendingApprovalSummary = null
         assistantPanelEnabled = false
         lastToolResult = ""
@@ -1018,6 +1117,35 @@ class RealtimeVoiceModule(private val context: ReactApplicationContext) :
         } catch (_: Exception) {
             p.reject("VOICE_APPROVAL_FAILED","Android rejected the app approval request")
         }
+    }
+    @ReactMethod fun alwaysAllowPendingVoiceAction(p:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            p.reject("NOT_FOREGROUND","Open Nexa to review pending action");return
+        }
+        if(RealtimeVoiceService.pendingApprovalSummary==null ||
+            RealtimeVoiceService.status!="listening"){
+            p.reject("NO_PENDING_ACTION","No action is awaiting review");return
+        }
+        context.startService(Intent(context,RealtimeVoiceService::class.java).apply{
+            action=RealtimeVoiceService.ACTION_APPROVE_ALWAYS_TOOL
+        })
+        p.resolve(true)
+    }
+    @ReactMethod fun getVoicePermissionMode(p:Promise) {
+        p.resolve(NexaVoicePermissionPolicy.mode(context))
+    }
+    @ReactMethod fun setVoicePermissionMode(mode:String,p:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            p.reject("NOT_FOREGROUND","Open Nexa to change voice permissions");return
+        }
+        if(NexaVoicePermissionPolicy.setMode(context,mode))p.resolve(true)
+        else p.reject("INVALID_MODE","Unknown voice permission mode")
+    }
+    @ReactMethod fun clearVoicePermissions(p:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            p.reject("NOT_FOREGROUND","Open Nexa to revoke voice permissions");return
+        }
+        p.resolve(NexaVoicePermissionPolicy.clearGrants(context))
     }
     @ReactMethod fun getVoiceSessionStatus(p: Promise) {
         val data=Arguments.createMap()

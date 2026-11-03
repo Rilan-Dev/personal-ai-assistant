@@ -53,9 +53,9 @@ test("Accessibility reads only one explicitly armed bounded text snapshot",()=>{
   const xml=read("apps/mobile/android/app/src/main/res/xml/screen_assist_config.xml");
   assert.match(manifest,/android\.permission\.BIND_ACCESSIBILITY_SERVICE/);
   assert.match(xml,/canRetrieveWindowContent="true"/);
-  assert.match(xml,/canPerformGestures="false"/);
+  assert.match(xml,/canPerformGestures="true"/);
   // The floating approval panel must inspect the external app behind it.
-  // Retrieve interactive windows, but keep generic gesture injection disabled.
+  // Gesture capability is restricted by the native gate to owner-reviewed launcher swipes; arbitrary XY input remains forbidden.
   assert.match(xml,/flagRetrieveInteractiveWindows/);
   assert.doesNotMatch(xml,/typeAllMask/);
   assert.match(code,/fun arm\(\): Boolean/);

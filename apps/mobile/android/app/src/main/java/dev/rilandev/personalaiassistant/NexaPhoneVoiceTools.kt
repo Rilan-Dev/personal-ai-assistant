@@ -172,7 +172,7 @@ internal object NexaPhoneVoiceTools {
         val match=Regex("^(?:(?:can|could|would) you (?:please )?|please |i (?:want|need) you to )?(?:open|launch|start|find) (?:my |the )?([a-z0-9][a-z0-9 ._+-]{1,55})(?: app)?$")
             .matchEntire(q) ?: return null
         val target=match.groupValues[1].trim().removeSuffix(" app").trim()
-        if(target in setOf("app","an app","settings","launcher","the app") || target.length<2)
+        if(target in setOf("app","an app","settings","launcher","the app","uh","um","er","huh") || target.length<2)
             return null
         val pm=context.packageManager
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
@@ -180,15 +180,32 @@ internal object NexaPhoneVoiceTools {
             @Suppress("DEPRECATION")
             pm.queryIntentActivities(intent,0)
         }catch (_:Exception){emptyList()}
-        val candidates=entries.asSequence().mapNotNull { resolved ->
+        val available=entries.asSequence().mapNotNull { resolved ->
             val pkg=resolved.activityInfo?.packageName.orEmpty()
             if(pkg.isBlank() || pkg==context.packageName)return@mapNotNull null
             val label=resolved.loadLabel(pm)?.toString()?.trim().orEmpty()
             if(label.isBlank() || label.length>80)return@mapNotNull null
             val normalized=label.lowercase(Locale.ROOT)
-            if(normalized==target || normalized.removeSuffix(" app")==target)
-                AppChoice(label,pkg) else null
-        }.distinctBy{it.packageName}.take(3).toList()
+            AppChoice(label,pkg)
+        }.distinctBy{it.packageName}.take(120).toList()
+        val exact=available.filter { candidate ->
+            val label=candidate.label.lowercase(Locale.ROOT)
+            label==target || label.removeSuffix(" app")==target
+        }
+        // Speech transcription occasionally swaps syllables ("Halite Motion"
+        // for "Alight Motion"). Candidate is never launched without approval.
+        // Only suggest a unique near-match for a sufficiently long app name.
+        val fuzzy=if(exact.isEmpty() && target.length>=8) {
+            available.map { candidate ->
+                candidate to editDistanceAtMost(candidate.label.lowercase(Locale.ROOT),target,if(target.length>=10)4 else 3)
+            }.filter { it.second in 1..(if(target.length>=10)4 else 3) }
+                .sortedBy { it.second }
+                .let { matches ->
+                    if(matches.size==1 || matches.size>1 && matches[0].second<matches[1].second)
+                        matches.take(1).map {it.first} else emptyList()
+                }
+        }else emptyList()
+        val candidates=if(exact.isNotEmpty())exact else fuzzy
         return when(candidates.size) {
             1 -> Decision.NeedsApproval(candidates[0])
             0 -> Decision.Immediate("I could not find an installed app named $target. " +
@@ -196,6 +213,23 @@ internal object NexaPhoneVoiceTools {
             else -> Decision.Immediate("More than one app matches $target. " +
                 "Please choose the exact app name in Nexa before opening.")
         }
+    }
+
+    /** Bounded edit distance, no uncontrolled fuzzy match on short app names. */
+    private fun editDistanceAtMost(left:String,right:String,limit:Int):Int {
+        if(kotlin.math.abs(left.length-right.length)>limit)return limit+1
+        var previous=IntArray(right.length+1){it}
+        for(i in left.indices){
+            val next=IntArray(right.length+1)
+            next[0]=i+1
+            for(j in right.indices){
+                next[j+1]=minOf(next[j]+1,previous[j+1]+1,
+                    previous[j]+if(left[i]==right[j])0 else 1)
+            }
+            if(next.minOrNull()!!>limit)return limit+1
+            previous=next
+        }
+        return previous[right.length]
     }
 
     /** Called ONLY after explicit approval in the visible native overlay. */
