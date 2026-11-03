@@ -44,3 +44,24 @@ test("Android 13 restricted settings are consented in Android UI, not sideload b
   assert.doesNotMatch(flow,/adb shell|appops set|settings put secure/);
   assert.ok(flow.indexOf("Nexa Screen Assist connected") < flow.indexOf("open notification bar"));
 });
+
+test("onUnbind invalidates only the current Screen Assist service instance",()=>{
+  const unbind=service.slice(service.indexOf("override fun onUnbind("),service.indexOf("override fun onDestroy("));
+  assert.match(unbind,/override fun onUnbind\(intent: Intent\?\): Boolean/);
+  assert.ok(unbind.includes("if (active === this) {"));
+  assert.ok(unbind.indexOf("if (active === this)") < unbind.indexOf("ScreenAssistState.connected = false"));
+  assert.match(unbind,/ScreenAssistState\.clear\(\)/);
+  assert.match(unbind,/return super\.onUnbind\(intent\)/);
+});
+test("React Native retries real connection status after resuming from Android Settings",()=>{
+  const app=source("apps/mobile/App.tsx");
+  assert.match(app,/pollScreenAssistConnection=async\(remaining:number,generation:number\)/);
+  assert.match(app,/current\.screenAssist && !current\.screenAssistConnected && remaining>0/);
+  assert.match(app,/readNexaSetupStatus\(\)/);
+  assert.match(app,/AppState\.currentState!=='active'/);
+  assert.match(app,/setTimeout\(\(\)=>\{void pollScreenAssistConnection\(remaining-1,generation\);\},750\)/);
+  assert.match(app,/cancelConnectionPoll\(\)/);
+  assert.ok(app.includes("if (state==='active')"));
+  assert.ok(!app.includes("setSetupStatus({...status,screenAssistConnected:true})"),
+    "Never fabricate a bound Accessibility-service state");
+});
