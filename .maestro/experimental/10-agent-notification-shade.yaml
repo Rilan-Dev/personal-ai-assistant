@@ -64,11 +64,7 @@ tags:
       visible: "Use Nexa Screen Assist"
     commands:
       - tapOn: "Use Nexa Screen Assist"
-- runFlow:
-    when:
-      visible: "Use service"
-    commands:
-      - tapOn: "Use service"
+# On Pixel 6 Android 13, do not toggle a second alias after "Use Nexa Screen Assist".
 - runFlow:
     when:
       visible: "Allow"
@@ -132,11 +128,7 @@ tags:
             visible: "Use Nexa Screen Assist"
           commands:
             - tapOn: "Use Nexa Screen Assist"
-      - runFlow:
-          when:
-            visible: "Use service"
-          commands:
-            - tapOn: "Use service"
+      # Do not toggle a second Accessibility switch alias on retry.
       - runFlow:
           when:
             visible: "Allow"
