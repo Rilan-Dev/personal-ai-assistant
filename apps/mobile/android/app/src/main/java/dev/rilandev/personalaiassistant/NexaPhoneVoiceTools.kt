@@ -35,6 +35,26 @@ internal object NexaPhoneVoiceTools {
         return q
     }
 
+    /** A bounded two-part browser goal; not a general natural-language web agent. */
+    fun chromeSearchQuery(utterance:String):String? {
+        val q=normalizedVoice(utterance)
+        val match=Regex("""^(?:open|launch|start) (?:my |the )?chrome(?: browser)? and (?:search(?: for)?|look up) ([a-z0-9][a-z0-9 -]{1,89})$""")
+            .matchEntire(q) ?:return null
+        return NexaBrowserTaskActions.safeQuery(match.groupValues[1])
+    }
+    fun wantsNotificationShade(utterance:String):Boolean {
+        val q=normalizedVoice(utterance)
+        return q in setOf("open notification bar","open the notification bar",
+            "open notifications","show notifications","show my notifications",
+            "open notification shade","open the notification shade",
+            "pull down notifications","show notification bar")
+    }
+    fun wantsGoBack(utterance:String):Boolean {
+        val q=normalizedVoice(utterance)
+        return q in setOf("go back","navigate back","back","press back","tap back",
+            "return to previous screen")
+    }
+
     /** Screen content is accessed only after a visible one-time approval. */
     fun wantsScreenOverview(utterance:String):Boolean {
         val q=normalizedVoice(utterance)
@@ -85,9 +105,11 @@ internal object NexaPhoneVoiceTools {
     /** A grounded text-label request, never a free-form XY action. */
     fun tapVisibleLabelIntent(utterance:String):String? {
         val q=normalizedVoice(utterance)
-        val match=Regex("""^(?:tap|click|press) (?:on )?(?:the |my )?(?:visible )?([a-z0-9][a-z0-9 _-]{1,45})(?: (?:button|control))?$""")
+        val match=Regex("""^(?:tap|click|press|select|pick) (?:on )?(?:the )?(?:visible )?([a-z0-9][a-z0-9 _-]{1,45})(?: (?:button|control))?$""")
             .matchEntire(q) ?:return null
         val name=match.groupValues[1].trim()
+            .removePrefix("label ").removePrefix("icon ").removePrefix("button ")
+            .removeSuffix(" icon").removeSuffix(" label")
             .removeSuffix(" input box").removeSuffix(" search field")
             .removeSuffix(" text field").removeSuffix(" field")
             .removeSuffix(" button").trim()

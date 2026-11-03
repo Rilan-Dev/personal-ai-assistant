@@ -21,7 +21,7 @@ export type DirectProviderSettings = {
 };
 export const DIRECT_TOOL_IDS = Object.freeze([
   "device.status", "device.battery_status", "device.set_flashlight",
-  "device.open_camera", "device.open_app"
+  "device.open_camera", "device.open_app", "device.browser_search"
 ]);
 
 export function validateProviderSettings(value: unknown): DirectProviderSettings {
@@ -47,6 +47,7 @@ const INSTRUCTIONS = [
   "- device.status {} (check device bridge status)",
   "- device.battery_status {} (check battery level/charging)",
   "- device.open_camera {} (launch camera; NO capture)",
+  '- device.browser_search {"query":"what is ai"} (open Chrome Google search results, after approval; never claim results reviewed)',
   '- device.open_app {"app":"whatsapp"} OR {"app":"whatsapp-business"} (launch ONLY, no messages)',
   '- device.set_flashlight {"enabled":true} OR {"enabled":false} (one-time approval + CAMERA grant)',
   "NEVER claim that you can send messages, read contacts, listen in the background, or control other apps.",
@@ -84,7 +85,10 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
       !d.input || typeof d.input !== "object" || Array.isArray(d.input) || Object.keys(d).length !== 3)
     return {type:"clarify",question:"The provider proposed an unsupported or invalid action. Nothing was executed."};
   const input = d.input as Record<string,unknown>;
-  const valid = d.toolId === "device.open_app"
+  const valid = d.toolId === "device.browser_search"
+    ? Object.keys(input).length === 1 && typeof input.query === "string" &&
+      input.query.length >= 3 && input.query.length <= 90
+    : d.toolId === "device.open_app"
     ? Object.keys(input).length === 1 && (input.app === "whatsapp" || input.app === "whatsapp-business")
     : d.toolId === "device.set_flashlight"
       ? Object.keys(input).length === 1 && typeof input.enabled === "boolean"

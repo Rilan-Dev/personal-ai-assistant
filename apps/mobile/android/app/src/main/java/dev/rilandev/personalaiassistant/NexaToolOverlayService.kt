@@ -46,6 +46,9 @@ class NexaToolOverlayService : Service() {
     private var expanded = false
     private var section = "chat"
     private var note = "Local tools only. Full AI chat is available through Open full Chat."
+    /** Only the owner may confirm an explicitly typed, short-lived action. */
+    private var proposedDeviceAction: String? = null
+    private var proposedDeviceActionExpiresAt: Long = 0L
     private val history = ArrayDeque<String>()
     private var inspectedScreen: OverlayScreenSnapshot? = null
     private val guidedNavigation = NexaGuidedNavigation()
@@ -161,9 +164,90 @@ class NexaToolOverlayService : Service() {
         note = "Guided navigation cancelled; no additional actions requested."
         render()
     }
+    private fun proposeOwnerDeviceAction(action:String,description:String) {
+        proposedDeviceAction=action
+        proposedDeviceActionExpiresAt=android.os.SystemClock.elapsedRealtime()+15_000L
+        section="tools"
+        note="Owner review: $description. No operation has executed. Confirm within 15 seconds."
+        render()
+    }
+
+    private fun cancelOwnerDeviceAction() {
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
+        note="Proposed action cancelled. No operation occurred."
+        render()
+    }
+
+    private fun confirmOwnerDeviceAction() {
+        val action=proposedDeviceAction
+        val expiry=proposedDeviceActionExpiresAt
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
+        if(action==null || android.os.SystemClock.elapsedRealtime()>=expiry) {
+            note="Approval expired. No operation performed."
+            render()
+            return
+        }
+        note="Action in progress; no result has been verified yet."
+        render()
+        // Accessibility work and crypto journaling must stay off the UI thread.
+        Thread({
+            val outcome=try {
+                when {
+                    action=="open_notification_shade" ->
+                        NexaBrowserTaskActions.notificationsApproved(this)
+                    action=="go_back" ->
+                        NexaBrowserTaskActions.goBackApproved(this)
+                    action.startsWith("chrome_search:") ->
+                        NexaBrowserTaskActions.openChromeSearchApproved(
+                            this,action.removePrefix("chrome_search:"))
+                    action.startsWith("tap_visible_label:") ->
+                        ScreenAssistService.active?.let {
+                            NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
+                        } ?: "Screen Assist is disabled. No tap performed."
+                    else -> "Invalid device action. No operation performed."
+                }
+            } catch (_:Exception) { "Android action was refused or became uncertain." }
+            Handler(Looper.getMainLooper()).post {
+                // The owner may have hidden or destroyed the overlay during
+                // an Android binder operation. Do not resurrect it afterward.
+                if(view==null || !visible)return@post
+                note=outcome.take(360)
+                if(action.startsWith("chrome_search:") &&
+                    outcome.contains("launch requested")) collapse()
+                else render()
+            }
+        },"nexa-reviewed-device-objective").start()
+    }
+
     private fun sendLocal(raw: String) {
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
+        // A newer owner request invalidates an older unconfirmed proposal.
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
+        val search=NexaPhoneVoiceTools.chromeSearchQuery(query)
+        if(search!=null) {
+            proposeOwnerDeviceAction("chrome_search:$search",
+                "Open Chrome Google search results for '$search'")
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsNotificationShade(query)) {
+            proposeOwnerDeviceAction("open_notification_shade",
+                "Open Android notification shade without reading contents")
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsGoBack(query)) {
+            proposeOwnerDeviceAction("go_back","Navigate Back once")
+            return
+        }
+        val requestedLabel=NexaPhoneVoiceTools.tapVisibleLabelIntent(query)
+        if(requestedLabel!=null) {
+            proposeOwnerDeviceAction("tap_visible_label:$requestedLabel",
+                "Tap one uniquely grounded visible control named '$requestedLabel'")
+            return
+        }
         // Strict local intent grammar: inspection is read-only; scrolling only
         // PREPARES a pending confirmation and never fires automatically.
         when (query.lowercase(java.util.Locale.ROOT).trim().trimEnd('?','.','!')) {
@@ -499,6 +583,16 @@ class NexaToolOverlayService : Service() {
                     }
                     "tools" -> {
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
+                        val requestedAction=proposedDeviceAction
+                        if(requestedAction!=null &&
+                            android.os.SystemClock.elapsedRealtime()<proposedDeviceActionExpiresAt) {
+                            addView(text("Owner approval needed: "+
+                                requestedAction.substringBefore(':').replace('_',' '),13f,true))
+                            addView(row(
+                                button("Confirm requested action") { confirmOwnerDeviceAction() },
+                                button("Cancel requested action") { cancelOwnerDeviceAction() }
+                            ))
+                        }
                         addView(row(
                             button("Battery") { sendLocal("battery") },
                             button("Permissions") { sendLocal("device status") }
@@ -672,6 +766,8 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
         inspectedScreen = null
         NexaScreenActions.reset()
         NexaScreenScroll.cancel()
