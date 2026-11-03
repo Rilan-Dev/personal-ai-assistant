@@ -29,6 +29,8 @@ import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
 import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
+import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, parseAcaMailSummaryIntent } from './src/native/acaEmail';
+import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
 import {iconRecognitionAvailable, armIconRecognition, takeIconRecognition, clearIconRecognition} from './src/native/androidIconRecognition';
@@ -363,6 +365,60 @@ export default function App() {
   const [backendToken, setBackendToken] = useState('');
   const [remoteActive, setRemoteActive] = useState(false);
   const [backendError, setBackendError] = useState('');
+  // Separate ACA business connection; this never changes the device planner,
+  // selected model provider, native tools, approvals or live voice transport.
+  const [acaSession,setAcaSession]=useState<AcaSession|null>(null);
+  const [acaOrganizations,setAcaOrganizations]=useState<AcaOrganization[]>([]);
+  const [acaEmailInput,setAcaEmailInput]=useState('');
+  const [acaPasswordInput,setAcaPasswordInput]=useState('');
+  const [acaBusy,setAcaBusy]=useState(false);
+  const [acaNotice,setAcaNotice]=useState('');
+  useEffect(()=>{
+    if(!engine.live || !acaVaultAvailable())return;
+    let active=true;
+    void loadAcaSession().then(async(session)=>{
+      if(!active || !session)return;
+      setAcaSession(session);
+      try { const targets=await acaTargets(session); if(active)setAcaOrganizations(targets); }
+      catch { if(active)setAcaNotice('ACA saved session cannot be verified. Reconnect if it expired.'); }
+    }).catch(()=>{if(active)setAcaNotice('ACA secure storage is unavailable.');});
+    return ()=>{active=false;};
+  },[engine.live]);
+  const connectAcaAccount=async()=>{
+    if(acaBusy || running || !acaVaultAvailable())return;
+    setAcaBusy(true);setAcaNotice('');
+    try {
+      const session=await connectAca(acaEmailInput,acaPasswordInput);
+      const organizations=await acaTargets(session);
+      setAcaOrganizations(organizations);
+      const selectable=organizations.flatMap(org=>org.agents.map(agent=>({org,agent})));
+      const selected=selectable.length===1
+        ?{...session,organizationId:selectable[0]!.org.id,agentId:selectable[0]!.agent.id}:session;
+      if(selected!==session)await storeAcaSession(selected);
+      setAcaSession(selected);
+      setAcaNotice(selectable.length
+        ? 'Connected. Select an organization and agent below to enable read-only summaries.'
+        : 'Connected, but no email-readable organization/agent is available for this user.');
+    }catch(error){setAcaNotice(error instanceof Error?error.message:'ACA connection failed.');}
+    finally {setAcaPasswordInput('');setAcaBusy(false);}
+  };
+  const selectAcaTarget=async(organizationId:string,agentId:string)=>{
+    if(!acaSession || acaBusy || running)return;
+    setAcaBusy(true);
+    try {
+      const next={...acaSession,organizationId,agentId};
+      await storeAcaSession(next);setAcaSession(next);
+      setAcaNotice('Email source selected. Summaries are read-only and reflect last sync.');
+    }catch{setAcaNotice('Cannot save the selected ACA organization/agent on this phone.');}
+    finally{setAcaBusy(false);}
+  };
+  const disconnectAcaAccount=async()=>{
+    if(acaBusy || running)return;
+    setAcaBusy(true);
+    try{await disconnectAca(acaSession);setAcaSession(null);setAcaOrganizations([]);setAcaEmailInput('');setAcaNotice('ACA disconnected on this device.');}
+    catch{setAcaNotice('Could not clear secure ACA account storage.');}
+    finally{setAcaPasswordInput('');setAcaBusy(false);}
+  };
   const [recovered, setRecovered] = useState<SessionCheckpoint | null>(null);
   const [pendingApproval, setPendingApproval] = useState<{
     sessionId: string; request: string; callId: string;
@@ -1089,6 +1145,26 @@ export default function App() {
         setTab("tools");
         return;
       }
+    }
+    // ACA read-only summary is an explicit business intent. Never ask the
+    // native Android planner to guess email content or change its tool registry.
+    const acaMailScope = !restore && engine.live ? parseAcaMailSummaryIntent(request) : null;
+    if (acaMailScope) {
+      setInput('');setEvents([]);append('user',request);
+      if(!acaSession){
+        append('assistant','Connect AI Comms Agent in Settings to read synchronized emails. Nexa has not accessed a mailbox.');
+        return;
+      }
+      const mailAbort=new AbortController();
+      activeAbort.current=mailAbort;setRunning(true);
+      try{
+        const summary=await acaMailSummary(acaSession,acaMailScope,mailAbort.signal);
+        if(!mailAbort.signal.aborted)append('assistant',summary.report +
+          (summary.hasMore ? '\\nThis is a partial result; refine your request in ACA for more details.' : ''));
+      }catch(error){
+        if(!mailAbort.signal.aborted)append('assistant',error instanceof Error?error.message:'Email summary unavailable. No mail action was performed.');
+      }finally{setRunning(false);activeAbort.current=null;}
+      return;
     }
     setInput(''); setEvents([]); append('user', request);
     const controller = new AbortController(); activeAbort.current = controller;
@@ -1879,6 +1955,46 @@ export default function App() {
 
       {tab === 'settings' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Preferences</Text><Text style={styles.pageSubtitle}>Manage AI connections and privacy.</Text></View>
+        {engine.live && <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardHeading}>AI Comms Agent · Email</Text>
+            <Text style={[styles.sectionTag,acaSession&&styles.sectionTagActive]}>{acaSession?'Connected':'Not connected'}</Text>
+          </View>
+          <Text style={styles.cardText}>Use your existing ACA organization, permitted mailboxes and synchronized email summary engine. Device tools, WhatsApp handoff, AI provider and live voice remain unchanged. No auto-send.</Text>
+          <Text style={styles.settingHelp}>{ACA_ORIGIN} · Read-only access · Android Keystore session</Text>
+          {!acaSession && <>
+            <Text style={styles.fieldLabel}>ACA ACCOUNT EMAIL</Text>
+            <TextInput accessibilityLabel="AI Comms Agent account email" style={styles.settingInput}
+              value={acaEmailInput} onChangeText={setAcaEmailInput} keyboardType="email-address"
+              autoCapitalize="none" autoCorrect={false} autoComplete="off"
+              editable={!acaBusy} placeholder="Your existing ACA account email" placeholderTextColor="#8190a8"/>
+            <Text style={styles.fieldLabel}>ACA ACCOUNT PASSWORD</Text>
+            <TextInput accessibilityLabel="AI Comms Agent account password" style={styles.settingInput}
+              value={acaPasswordInput} onChangeText={setAcaPasswordInput}
+              autoCapitalize="none" autoCorrect={false} autoComplete="off"
+              secureTextEntry editable={!acaBusy} placeholder="Not stored on the phone"
+              placeholderTextColor="#8190a8"/>
+            <Pressable accessibilityRole="button" disabled={acaBusy||!acaVaultAvailable()}
+              onPress={()=>void connectAcaAccount()} style={styles.primaryInline}>
+              <Text style={styles.primaryInlineText}>{acaBusy?'Connecting…':'Connect ACA account'}</Text>
+            </Pressable>
+          </>}
+          {acaSession && <>
+            <Text style={styles.settingHelp}>Select the organization and agent that may read this mailbox:</Text>
+            {acaOrganizations.flatMap(org=>org.agents.map(agent=>({org,agent}))).map(item=>
+              <Pressable key={item.org.id+':'+item.agent.id} accessibilityRole="button"
+                accessibilityState={{selected:acaSession.organizationId===item.org.id&&acaSession.agentId===item.agent.id}}
+                disabled={acaBusy}
+                onPress={()=>void selectAcaTarget(item.org.id,item.agent.id)}
+                style={[styles.choicePill,acaSession.organizationId===item.org.id&&acaSession.agentId===item.agent.id&&styles.choiceActive]}>
+                <Text style={styles.choiceLabel}>{item.org.name} · {item.agent.name}</Text>
+              </Pressable>)}
+            <Pressable accessibilityRole="button" disabled={acaBusy} onPress={()=>void disconnectAcaAccount()}
+              style={styles.outlineInline}><Text style={styles.outlineInlineText}>Disconnect ACA</Text></Pressable>
+          </>}
+          {acaNotice!==''&&<Text style={styles.feedback}>{acaNotice}</Text>}
+          <Text style={styles.settingHelp}>Try in Chat: “Summarize unread emails from the last 24 hours.” Reports include sync freshness; drafting and sending stay in ACA's reviewed workflows.</Text>
+        </View>}
         <View style={styles.setupShortcut}>
           <View style={styles.setupShortcutText}>
             <Text style={styles.setupShortcutHeading}>Permission setup</Text>
