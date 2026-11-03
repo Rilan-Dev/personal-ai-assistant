@@ -99,8 +99,17 @@ tags:
     visible:
       text: "Owner approval needed: open notification shade"
     timeout: 15000
-- takeScreenshot: nexa-notification-owner-review
 - tapOn: "Confirm requested action"
+# Capture the actual post-action screen even if OS panel assertion fails.
+- takeScreenshot: nexa-notification-after-approved-action
+# These checks distinguish native rejection, Screen Assist being off, and
+# a timed-out owner approval from an accepted-but-unobserved global action.
+- assertNotVisible:
+    text: ".*Screen Assist is disabled.*"
+- assertNotVisible:
+    text: ".*Approval expired.*"
+- assertNotVisible:
+    text: ".*Android refused to open the notification shade.*"
 # Verify the actual OS notification panel, not a Nexa string saying accepted.
 - extendedWaitUntil:
     visible:
