@@ -12,8 +12,8 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/**'
-      - 'AGENTS.md'
+    # Maestro YAML and workflow/docs-only changes must not cancel a release build.
+    # Release-workflow revisions can be verified with manual workflow_dispatch.
   workflow_dispatch:
 concurrency:
   group: android-main-promotion-${{ github.ref }}
