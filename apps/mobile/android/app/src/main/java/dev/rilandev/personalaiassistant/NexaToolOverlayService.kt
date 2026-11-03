@@ -169,7 +169,7 @@ class NexaToolOverlayService : Service() {
         // connect the user-enabled screen-assistance service.
         if((action=="open_notification_shade" || action=="go_back" ||
             action.startsWith("tap_visible_label:")) &&
-            ScreenAssistService.active==null) {
+            (ScreenAssistService.active==null || !ScreenAssistState.connected)) {
             proposedDeviceAction=null
             proposedDeviceActionExpiresAt=0L
             section="tools"
@@ -183,7 +183,7 @@ class NexaToolOverlayService : Service() {
         // bounded, consistent with the native voice-approval timeout.
         proposedDeviceActionExpiresAt=android.os.SystemClock.elapsedRealtime()+60_000L
         section="tools"
-        note="Owner review: $description. No operation has executed. Confirm within 15 seconds."
+        note="Owner review: $description. No operation has executed. Confirm within 60 seconds."
         render()
     }
 
