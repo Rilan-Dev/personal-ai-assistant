@@ -26,7 +26,7 @@ tags:
     direction: DOWN
     timeout: 25000
 - tapOn: "Show floating bubble"
-- pressKey: Home
+- pressKey: home
 - assertVisible:
     text: "Nexa assistant.*Tap to expand.*"
 - takeScreenshot: nexa-floating-bubble-over-home
