@@ -43,7 +43,7 @@ internal object NexaLauncherSwipe {
         val description=GestureDescription.Builder().addStroke(stroke).build()
         val pkg=root.packageName.toString()
         val before=NexaUiActionVerifier.fingerprint(root)
-        if(!NexaUiActionJournal.claim(service,token,"launcher_swipe_$direction",pkg))
+        if(!NexaUiActionJournal.claim(service,token,"scroll_$direction",pkg))
             return "Action journal denied repeat/unapproved gesture."
         NexaUiActionVerifier.begin(token,"scroll",pkg,root.windowId,before)
         val queued=try {
