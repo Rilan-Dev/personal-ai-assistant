@@ -51,7 +51,7 @@ export default function NexaSetupScreen(props: Props) {
       granted:Boolean(s?.assistantSelected),
       action:'Choose Nexa assistant', onPress:onAssistant},
     {key:'screen', index:'03', title:'One-time screen assistance',
-      detail:'Enable Nexa Screen Assist in Android Accessibility. Only an explicitly armed single screen read is allowed.',
+      detail:'Enable Nexa Screen Assist in Android Accessibility for owner-approved screen reading and navigation. The service must be connected before actions can run.',
       granted:Boolean(s?.screenAssist && s?.screenAssistConnected),
       action:'Open Accessibility', onPress:onAccessibility, optional:true},
     {key:'launcher', index:'04', title:'Home-screen app search',
@@ -129,6 +129,19 @@ export default function NexaSetupScreen(props: Props) {
                 ? 'Nexa Screen Assist disconnected. Android says enabled, but the service has not connected. Toggle the service off and on in Android Accessibility, return and refresh.'
                 : 'Nexa Screen Assist disabled. Open Accessibility, explicitly enable Nexa Screen Assist, approve Android confirmation, return and refresh.'}
           </Text>}
+          {step.key==='screen' && s && !s.screenAssistConnected && s.sdkLevel>=33 && <>
+            <Text style={styles.helper}>
+              On Android 13 or later, a sideloaded APK may show “Restricted setting”.
+              Only if you trust this APK: open Nexa App info, choose More options
+              (three dots) → Allow restricted settings, confirm in Android,
+              then return to Accessibility and enable Nexa Screen Assist.
+              Nexa cannot grant this permission automatically.
+            </Text>
+            <Pressable accessibilityRole="button" style={styles.secondary}
+              disabled={busy} onPress={onAppSettings}>
+              <Text style={styles.secondaryText}>Open Nexa app info (restricted settings)</Text>
+            </Pressable>
+          </>}
           {step.key==='assistant' && !step.granted && <>
             <Pressable accessibilityRole="button" style={styles.secondary}
               disabled={busy} onPress={onAssistantSettings}>
