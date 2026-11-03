@@ -1578,7 +1578,7 @@ export default function App() {
           <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
             onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
             <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
-              <Text style={styles.settingHelp}>Open camera or installed WhatsApp app only</Text></View>
+              <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
             <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
           </Pressable>
           {engine.live&&nativeFlashlightAvailable()&&<>

@@ -20,6 +20,7 @@ interface DeviceControlBridge {
   getBatteryStatus(): Promise<{ levelPercent: number; charging: boolean; source: string }>;
   openSupportedApp(app: string): Promise<LaunchOutcome>;
   openCamera(): Promise<LaunchOutcome>;
+  openChromeSearch(query: string): Promise<LaunchOutcome>;
 }
 
 export const nativeDeviceAvailable = (): boolean =>
@@ -82,6 +83,23 @@ export function createAndroidTools(): Tool[] {
       execute: async ({enabled}) => ({
         status: "success",
         data: await setVerifiedFlashlight(Boolean(enabled))
+      })
+    },
+    {
+      id: "device.browser_search",
+      description: "Open Chrome Google search results for the owner's exact, bounded query. A one-time owner approval is required. No article was read or ranked.",
+      capabilities: ["apps.launch"],
+      risk: "medium",
+      hasExternalSideEffect: true,
+      validateInput: (input): input is Record<string, unknown> =>
+        plainObject(input) && Object.keys(input).length === 1 &&
+        typeof input.query === "string" &&
+        /^[a-z0-9][a-z0-9 -]{1,89}$/.test(input.query) &&
+        input.query.trim() === input.query && input.query.length >= 3 &&
+        !/\b(send|text|message|call|dial|pay|buy|purchase|delete|remove|grant|install|uninstall|password|otp|stop|cancel|without|never|instead)\b/i.test(input.query),
+      execute: async ({query}) => ({
+        status: "success",
+        data: await getBridge().openChromeSearch(String(query))
       })
     },
     {

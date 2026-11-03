@@ -168,6 +168,13 @@ class RealtimeVoiceService : Service() {
                     !active.get() || operationSession != voiceSessionId -> "Session stopped; no action performed."
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
+                    pending.command.startsWith("chrome_search:") ->
+                        NexaBrowserTaskActions.openChromeSearchApproved(
+                            this,pending.command.removePrefix("chrome_search:"))
+                    pending.command == "open_notification_shade" ->
+                        NexaBrowserTaskActions.notificationsApproved(this)
+                    pending.command == "go_back" ->
+                        NexaBrowserTaskActions.goBackApproved(this)
                     pending.command == "list_installed_apps" ->
                         NexaPhoneVoiceTools.installedAppsApproved(this)
                     pending.command.startsWith("tap_visible_label:") ->
@@ -669,13 +676,15 @@ class RealtimeVoiceService : Service() {
             closeCompound(cursor,"failed",outcome)
             return
         }
-        val isAppOpen=tool.command.startsWith("open ") || tool.command=="open"
+        val isAppOpen=tool.command.startsWith("open ") || tool.command=="open" ||
+            tool.command.startsWith("chrome_search:")
         if(isAppOpen) {
             if(!outcome.contains("launch requested",true)) {
                 closeCompound(cursor,"uncertain",outcome)
                 return
             }
             val expected=tool.installedApp?.packageName ?: when {
+                tool.command.startsWith("chrome_search:")->"com.android.chrome"
                 tool.command.contains("whatsapp",true)->"com.whatsapp"
                 tool.command.contains("github",true)->"com.github.android"
                 tool.command.contains("brave",true)->"com.brave.browser"
@@ -787,6 +796,30 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        val chromeQuery=NexaPhoneVoiceTools.chromeSearchQuery(transcript)
+        if(chromeQuery!=null) {
+            pendingAppTool=PendingAppTool("local-sarvam","Chrome search for $chromeQuery",
+                "chrome_search:$chromeQuery")
+            pendingAppTool?.let { offerOwnerTool(it) }
+            pendingApprovalSummary="Open Chrome Google search results for '$chromeQuery'? Approve once or Deny. Article selection is a separate request."
+            message="Public Chrome search awaits owner approval."
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsNotificationShade(transcript)) {
+            pendingAppTool=PendingAppTool("local-sarvam","notification shade",
+                "open_notification_shade")
+            pendingAppTool?.let { offerOwnerTool(it) }
+            pendingApprovalSummary="Open Android's notification shade? No notification contents will be read. Approve or Deny."
+            message="Notification shade opening awaits owner approval."
+            return
+        }
+        if(NexaPhoneVoiceTools.wantsGoBack(transcript)) {
+            pendingAppTool=PendingAppTool("local-sarvam","back navigation","go_back")
+            pendingAppTool?.let { offerOwnerTool(it) }
+            pendingApprovalSummary="Navigate Back once? Approve or Deny."
+            message="Back navigation awaits owner approval."
+            return
+        }
         val screenOperation = NexaPhoneVoiceTools.wantsVisibleText(transcript) ||
             NexaPhoneVoiceTools.tapVisibleLabelIntent(transcript)!=null ||
             NexaPhoneVoiceTools.scrollDirection(transcript)!=null ||

@@ -14,6 +14,7 @@ internal object NexaSarvamActionTools {
         "request_read_visible_screen","request_visible_icons",
         "request_locate_visible_icon","request_scroll_screen",
         "request_tap_safe_icon","request_tap_visible_label",
+        "request_chrome_search","request_open_notification_shade","request_go_back",
         "request_list_installed_apps")
     fun isAction(name:String):Boolean=name in requestTools
 
@@ -83,6 +84,15 @@ internal object NexaSarvamActionTools {
                     (q.contains(label) ||
                         label.contains("search") && q.contains("search"))
             }
+            "request_chrome_search" -> {
+                val query=value("query")
+                query!=null && NexaBrowserTaskActions.safeQuery(query)!=null &&
+                    NexaPhoneVoiceTools.chromeSearchQuery(utterance)==query
+            }
+            "request_open_notification_shade" ->
+                input.length()==0 && NexaPhoneVoiceTools.wantsNotificationShade(utterance)
+            "request_go_back" ->
+                input.length()==0 && NexaPhoneVoiceTools.wantsGoBack(utterance)
             "request_open_app","request_open_installed_app" -> {
                 val target=value("app")
                 target!=null && target.length in 2..55 &&

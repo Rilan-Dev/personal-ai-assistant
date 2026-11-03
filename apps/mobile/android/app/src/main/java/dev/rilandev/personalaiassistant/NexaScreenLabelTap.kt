@@ -11,6 +11,12 @@ internal object NexaScreenLabelTap {
     private val unsafe = Regex("""\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|otp|logout|sign out)\b""",
         RegexOption.IGNORE_CASE)
 
+    /** Accessible names often contain bullets or join app words (MyMotor).
+     * Strip only separators; never use fuzzy match or ambiguous coordinates.
+     */
+    private fun labelKey(raw:String):String =
+        raw.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]"""),"")
+
     fun approved(service:ScreenAssistService, requested:String):String {
         val label=requested.trim()
         if(label.length !in 2..45 || unsafe.containsMatchIn(label))
@@ -44,7 +50,11 @@ internal object NexaScreenLabelTap {
                         node.hintText?.toString().orEmpty())
                     else listOf(node.text?.toString().orEmpty(),
                         node.contentDescription?.toString().orEmpty())
-                val match=visible.any { it.trim().equals(label,ignoreCase=true) } ||
+                val requestedKey=labelKey(label)
+                val match=visible.any {
+                    it.trim().equals(label,ignoreCase=true) ||
+                        requestedKey.isNotBlank() && labelKey(it)==requestedKey
+                } ||
                     isSearchInput && label.equals("search",ignoreCase=true)
                 if(match) {
                     var candidate:AccessibilityNodeInfo?=node

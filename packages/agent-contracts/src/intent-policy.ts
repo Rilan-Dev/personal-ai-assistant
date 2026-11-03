@@ -40,13 +40,28 @@ export function parseFlashlightIntent(normalized: string): boolean | null {
   return suffix ? suffix[1] === "on" : null;
 }
 
+export function parseChromeSearchIntent(request: string): string | null {
+  if (typeof request !== "string" || request.length < 12 || request.length > 250 ||
+      /[\n\r;\"“”‘’]/.test(request)) return null;
+  let text = request.toLowerCase().trim().replace(/[.!?]+$/, "").trim();
+  text = text.replace(/^hey\s+(?:nexa|assistant)[,!]?\s+/, "");
+  text = text.replace(/^(?:(?:can|could|would|will) you (?:please )?|please )/, "").trim();
+  const m = text.match(/^(?:open|launch|start) (?:my |the )?chrome(?: browser)? and (?:search(?: for)?|look up) ([a-z0-9][a-z0-9 -]{1,89})$/);
+  if (!m) return null;
+  const query=m[1].trim();
+  if (query.length < 3 || /\b(?:send|text|message|call|dial|pay|buy|purchase|delete|remove|grant|install|uninstall|password|otp|stop|cancel|without|never|instead)\b/.test(query)) return null;
+  return query;
+}
+
 export type NativeOwnerIntent = {
   toolId: "device.status" | "device.battery_status" | "device.set_flashlight" |
-    "device.open_camera" | "device.open_app";
+    "device.open_camera" | "device.open_app" | "device.browser_search";
   input: Record<string, unknown>;
 };
 
 export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | null {
+  const chromeQuery=parseChromeSearchIntent(request);
+  if(chromeQuery) return {toolId:"device.browser_search",input:{query:chromeQuery}};
   const text = normalizeNativeRequest(request);
   if (text === null) return null;
   const desired = parseFlashlightIntent(text);
