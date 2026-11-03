@@ -39,6 +39,8 @@ internal class SarvamApiVoiceTransport(
         fun interrupted()
         /** Return true only if an explicit owner request needs native review. */
         fun ownerRequest(text: String): Boolean
+        /** Model proposals must pass explicit owner-utterance intent and native approval. */
+        fun requestNativeTool(name:String,args:String,callId:String,utterance:String):Boolean
         fun failed(reason: String)
         fun ended()
     }
@@ -88,6 +90,11 @@ internal class SarvamApiVoiceTransport(
     private val generation = AtomicInteger(0)
     private val ttsGeneration = AtomicInteger(0)
     private val turns = ArrayDeque<Pair<String,String>>()
+    private data class PendingModelTool(
+        val turn:Int,val round:Int,val callId:String,val body:JSONObject,
+        val tool:JSONObject,val ownerUtterance:String
+    )
+    private var pendingModelTool:PendingModelTool?=null
     private val sessionId = "voice-sarvam-" + java.util.UUID.randomUUID().toString()
     private var pendingSpeech: String? = null
     private var pendingCompoundFragment:String?=null
@@ -215,7 +222,10 @@ internal class SarvamApiVoiceTransport(
     private fun interruptReply() {
         if(!running)return
         generation.incrementAndGet()
-        synchronized(lock){ modelCall?.cancel(); modelCall=null; pendingSpeech=null }
+        synchronized(lock){
+            modelCall?.cancel(); modelCall=null; pendingSpeech=null
+            pendingModelTool=null // A fresh owner utterance revokes stale model proposals.
+        }
         // Bulbul has no in-band cancel. Drop old audio immediately and open
         // a clean TTS websocket for the next spoken reply.
         ttsReady=false
@@ -302,7 +312,7 @@ internal class SarvamApiVoiceTransport(
         val body=JSONObject().put("model",CHAT_MODEL).put("max_tokens",230)
             .put("messages",JSONArray().put(JSONObject().put("role","system")
                 .put("content",prompt)))
-            .put("tools",NexaSarvamReadTools.definitions())
+            .put("tools",NexaSarvamActionTools.definitions())
             .put("tool_choice","auto")
         synchronized(lock) {
             turns.addLast("user" to text.take(800))
@@ -322,7 +332,7 @@ internal class SarvamApiVoiceTransport(
      * NexaSarvamReadTools. The owner-approved app route is kept separate.
      */
     private fun completeModelTurn(turn:Int, body:JSONObject, round:Int, ownerUtterance:String) {
-        if(!running || turn!=generation.get() || round>1)return
+        if(!running || turn!=generation.get() || round>4)return
         val request=Request.Builder().url("https://api.sarvam.ai/v1/chat/completions")
             .header("api-subscription-key",apiKey)
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
@@ -353,7 +363,7 @@ internal class SarvamApiVoiceTransport(
                         }
                     val toolCalls=message.optJSONArray("tool_calls")
                     if(toolCalls!=null && toolCalls.length()>0) {
-                        if(round>=1 || toolCalls.length()!=1) {
+                        if(round>=4 || toolCalls.length()!=1) {
                             speak("I cannot perform additional actions in this voice turn.")
                             return
                         }
@@ -366,21 +376,28 @@ internal class SarvamApiVoiceTransport(
                             speak("That tool request was not valid.")
                             return
                         }
-                        // Never execute a tool outside the native read-only
-                        // registry. In particular, there is no remote model
-                        // gesture, app-launch, send, call or approval function.
+                        if(NexaSarvamActionTools.isAction(name)){
+                            if(!NexaSarvamActionTools.ownerRequested(name,args,ownerUtterance)){
+                                resumeModelAfterTool(turn,round,body,tool!!,id,
+                                    ownerUtterance,"Rejected: the owner did not request that operation.")
+                                return
+                            }
+                            val pending=PendingModelTool(turn,round,id,JSONObject(body.toString()),
+                                JSONObject(tool!!.toString()),ownerUtterance)
+                            synchronized(lock){pendingModelTool=pending}
+                            val accepted=try {
+                                callbacks.requestNativeTool(name,args,id,ownerUtterance)
+                            }catch (_:Exception){false}
+                            if(!accepted) {
+                                synchronized(lock){if(pendingModelTool===pending)
+                                    pendingModelTool=null}
+                                resumeModelAfterTool(turn,round,body,tool,id,
+                                    ownerUtterance,"Rejected: native permission review unavailable.")
+                            }
+                            return
+                        }
                         val result=NexaSarvamReadTools.execute(context,name,args,ownerUtterance)
-                        val next=JSONObject(body.toString())
-                        val history=next.getJSONArray("messages")
-                        history.put(JSONObject().put("role","assistant")
-                            .put("content",JSONObject.NULL)
-                            .put("tool_calls",JSONArray().put(tool)))
-                        history.put(JSONObject().put("role","tool")
-                            .put("tool_call_id",id)
-                            .put("content",result))
-                        next.remove("tools")
-                        next.remove("tool_choice")
-                        completeModelTurn(turn,next,round+1,ownerUtterance)
+                        resumeModelAfterTool(turn,round,body,tool!!,id,ownerUtterance,result)
                         return
                     }
                     val answer=message.optString("content").trim()
@@ -402,6 +419,46 @@ internal class SarvamApiVoiceTransport(
         })
     }
 
+    /** Resume only the exact outstanding Sarvam function call after Android's
+     * owner review. This is deliberately not a permission grant.
+     */
+    fun completeNativeTool(callId:String,result:String) {
+        val pending=synchronized(lock){
+            val req=pendingModelTool
+            if(req==null || req.callId!=callId || req.turn!=generation.get() ||
+                !running)null
+            else {pendingModelTool=null;req}
+        } ?: return
+        NexaConversationDb.append(context,sessionId,"tool","sarvam-api","tool",
+            result.take(500))
+        resumeModelAfterTool(pending.turn,pending.round,pending.body,pending.tool,
+            pending.callId,pending.ownerUtterance,result.take(500))
+    }
+    private fun resumeModelAfterTool(turn:Int,round:Int,body:JSONObject,
+                                     tool:JSONObject,callId:String,
+                                     ownerUtterance:String,result:String) {
+        if(!running || turn!=generation.get())return
+        val next=JSONObject(body.toString())
+        val history=next.getJSONArray("messages")
+        history.put(JSONObject().put("role","assistant")
+            .put("content",JSONObject.NULL)
+            .put("tool_calls",JSONArray().put(tool)))
+        history.put(JSONObject().put("role","tool")
+            .put("tool_call_id",callId)
+            .put("content",result.take(500)))
+        // Android dispatch acceptance alone is not an observation of a
+        // changed app/screen. Never let the model chain more actions after
+        // denied, uncertain or unverified side-effect results.
+        val verifiedObservation=result.startsWith("Visible screen labels") ||
+            result.startsWith("Visible controls") ||
+            result.startsWith("Installed launcher apps") ||
+            result.startsWith("Verified foreground package")
+        if(!verifiedObservation){
+            next.remove("tools")
+            next.remove("tool_choice")
+        }
+        completeModelTurn(turn,next,round+1,ownerUtterance)
+    }
     /** A verified Android owner-approval result, never provider-invented. */
     fun toolResult(result:String) {
         if(!running) return

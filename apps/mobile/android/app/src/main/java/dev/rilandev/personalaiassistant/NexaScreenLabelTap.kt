@@ -28,10 +28,24 @@ internal object NexaScreenLabelTap {
             var inspected=0
             while(queue.isNotEmpty() && inspected++<200) {
                 val node=queue.removeFirst()
-                if(!node.isVisibleToUser || node.isPassword || node.isEditable)continue
-                val visible=listOf(node.text?.toString().orEmpty(),
-                    node.contentDescription?.toString().orEmpty())
-                val match=visible.any { it.trim().equals(label,ignoreCase=true) }
+                if(!node.isVisibleToUser || node.isPassword)continue
+                // Editable search fields can be focused, never read or filled.
+                // Other editable controls (password, recipient, payment,
+                // message boxes) remain unavailable to generic label taps.
+                val isSearchInput=node.isEditable &&
+                    label.contains("search",ignoreCase=true) &&
+                    listOf(node.contentDescription?.toString().orEmpty(),
+                        node.hintText?.toString().orEmpty(),
+                        node.viewIdResourceName.orEmpty())
+                        .any {it.contains("search",ignoreCase=true)}
+                if(node.isEditable && !isSearchInput)continue
+                val visible=if(node.isEditable)
+                    listOf(node.contentDescription?.toString().orEmpty(),
+                        node.hintText?.toString().orEmpty())
+                    else listOf(node.text?.toString().orEmpty(),
+                        node.contentDescription?.toString().orEmpty())
+                val match=visible.any { it.trim().equals(label,ignoreCase=true) } ||
+                    isSearchInput && label.equals("search",ignoreCase=true)
                 if(match) {
                     var candidate:AccessibilityNodeInfo?=node
                     repeat(3) {
@@ -40,7 +54,7 @@ internal object NexaScreenLabelTap {
                     }
                     val rect=Rect()
                     candidate?.getBoundsInScreen(rect)
-                    if(candidate!=null && candidate!!.isClickable && candidate!!.isEnabled &&
+                    if(candidate!=null && (candidate!!.isClickable || isSearchInput) && candidate!!.isEnabled &&
                         rect.width()>0 && rect.height()>0 && rootRect.contains(rect)) {
                         matches++
                         target=candidate
@@ -56,6 +70,8 @@ internal object NexaScreenLabelTap {
             if(!NexaUiActionJournal.claim(service,token,"tap_label",pkg))
                 return "Action journal rejected this request. No tap occurred."
             NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before)
+            // Clicking a verified search input transfers focus only. Never
+            // use ACTION_SET_TEXT or read/edit the field's current contents.
             return if(found.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
                 NexaUiActionVerifier.observeAfter(service,token,before)
                 NexaUiActionJournal.finish(service,token,"android_accepted")

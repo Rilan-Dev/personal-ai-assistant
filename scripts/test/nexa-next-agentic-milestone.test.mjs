@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+
+const dir='apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/';
+const read=name=>readFileSync(dir+name,'utf8');
+const voice=read('RealtimeVoiceService.kt');
+const transport=read('SarvamApiVoiceTransport.kt');
+const bridge=readFileSync('apps/mobile/src/native/conversationHistory.ts','utf8');
+const app=readFileSync('apps/mobile/App.tsx','utf8');
+
+test('Sarvam can propose bounded native tools but never grants execution itself',()=>{
+  const registry=read('NexaSarvamActionTools.kt');
+  assert.match(registry,/request_read_visible_screen/);
+  assert.match(registry,/request_tap_visible_label/);
+  assert.match(registry,/NexaSarvamReadTools\.definitions\(\)/);
+  assert.match(registry,/NexaLiveToolPolicy\.definitions\(\)/);
+  assert.match(registry,/fun ownerRequested/);
+  assert.doesNotMatch(registry,/send_message|answer_call|place_call|ACTION_CALL/);
+  assert.match(transport,/NexaSarvamActionTools\.definitions\(\)/);
+  assert.match(transport,/NexaSarvamActionTools\.ownerRequested\(name,args,ownerUtterance\)/);
+  assert.match(transport,/callbacks\.requestNativeTool\(name,args,id,ownerUtterance\)/);
+  assert.match(transport,/pendingModelTool/);
+  assert.match(transport,/completeNativeTool\(/);
+  assert.match(voice,/expirePendingTool\(pending\)/);
+  assert.match(voice,/NexaLiveToolPolicy\.decide\(/);
+  assert.match(voice,/PendingAppTool\("sarvam-model-\$callId"/);
+  assert.match(voice,/sarvamApiTransport\?\.completeNativeTool\(/);
+});
+test('voice tasks are persisted encrypted before dispatch and each verified step',()=>{
+  const db=read('NexaConversationDb.kt');
+  const task=read('NexaVoiceTaskPlan.kt');
+  assert.match(db,/"custom\.db", null, 2/);
+  assert.match(db,/voice_task_checkpoints/);
+  assert.match(db,/if \(oldVersion == 1 && newVersion >= 2\)/);
+  assert.match(db,/fun saveTask/);
+  assert.match(db,/encrypt\(payload\.toString\(\)\)/);
+  assert.match(db,/fun taskHistory/);
+  assert.match(db,/\.put\("tasks",taskHistory/);
+  assert.match(task,/taskId="task-"/);
+  assert.match(voice,/checkpointAndContinue/);
+  assert.match(voice,/NexaConversationDb\.saveTask/);
+  assert.match(voice,/operationSession != voiceSessionId/);
+  assert.match(voice,/closeCompound\(cursor,"uncertain"/);
+  assert.match(bridge,/recentVoiceTasks/);
+  assert.match(app,/Recent voice tasks/);
+});
+test('Android crash and ANR history is owner-exported, not sent silently',()=>{
+  const diagnostics=read('NexaCrashDiagnostics.kt');
+  const db=read('NexaConversationDb.kt');
+  assert.match(diagnostics,/getHistoricalProcessExitReasons/);
+  assert.match(diagnostics,/REASON_CRASH/);
+  assert.match(diagnostics,/REASON_ANR/);
+  assert.match(diagnostics,/traceInputStream/);
+  assert.match(diagnostics,/16_384/);
+  assert.match(db,/shareAndroidProcessExits/);
+  assert.match(db,/currentActivity\?\.hasWindowFocus\(\)!=true/);
+  assert.match(db,/\.put\("androidProcessExits",NexaCrashDiagnostics\.recent/);
+  assert.match(app,/Export Android crash \/ ANR diagnostics/);
+  assert.doesNotMatch(diagnostics,/httpClient|POST|firebase|analytics/);
+});
+test('visible search box focusing is owner-approved and cannot type credentials',()=>{
+  const tap=read('NexaScreenLabelTap.kt');
+  const phrases=read('NexaPhoneVoiceTools.kt');
+  const policy=read('NexaVoicePermissionPolicy.kt');
+  assert.match(phrases,/removeSuffix\(" input box"\)/);
+  assert.match(tap,/val isSearchInput=node\.isEditable/);
+  assert.match(tap,/node\.hintText/);
+  assert.match(tap,/node\.isPassword/);
+  assert.match(tap,/matches!=1/);
+  assert.match(tap,/NexaUiActionJournal\.claim/);
+  assert.doesNotMatch(tap,/performAction\(AccessibilityNodeInfo\.ACTION_SET_TEXT\)/);
+  assert.doesNotMatch(policy,/\"screen\.tap_label\",\"apps\.open\"/);
+});

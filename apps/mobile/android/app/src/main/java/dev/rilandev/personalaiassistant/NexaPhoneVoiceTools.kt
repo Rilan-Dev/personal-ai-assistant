@@ -87,7 +87,10 @@ internal object NexaPhoneVoiceTools {
         val q=normalizedVoice(utterance)
         val match=Regex("""^(?:tap|click|press) (?:on )?(?:the |my )?(?:visible )?([a-z0-9][a-z0-9 _-]{1,45})(?: (?:button|control))?$""")
             .matchEntire(q) ?:return null
-        val name=match.groupValues[1].trim().removeSuffix(" button").trim()
+        val name=match.groupValues[1].trim()
+            .removeSuffix(" input box").removeSuffix(" search field")
+            .removeSuffix(" text field").removeSuffix(" field")
+            .removeSuffix(" button").trim()
         if(name in setOf("screen","here","there","anything","somewhere","the screen") ||
             Regex("""\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|otp|sign out|logout)\b""")
                 .containsMatchIn(name)) return null

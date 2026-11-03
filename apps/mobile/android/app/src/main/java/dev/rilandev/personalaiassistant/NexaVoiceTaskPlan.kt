@@ -29,7 +29,11 @@ internal object NexaVoiceTaskPlan {
 
 /** Small task cursor; no side-effect can be executed by a planner alone. */
 internal class NexaVoiceTaskCursor(private val plan:NexaVoiceTaskPlan.Plan) {
+    val taskId="task-"+java.util.UUID.randomUUID().toString()
+    val originalRequest:String get()=plan.original
+    val steps:List<String> get()=plan.steps
     private var index=0
+    val stepIndex:Int get()=index
     fun current():String?=plan.steps.getOrNull(index)
     fun advance(verified:Boolean):String? {
         if(!verified)return null
