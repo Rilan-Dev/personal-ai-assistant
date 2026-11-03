@@ -189,36 +189,62 @@ class NexaToolOverlayService : Service() {
             render()
             return
         }
-        note="Action in progress; no result has been verified yet."
-        render()
-        // Accessibility work and crypto journaling must stay off the UI thread.
-        Thread({
-            val outcome=try {
-                when {
-                    action=="open_notification_shade" ->
-                        NexaBrowserTaskActions.notificationsApproved(this)
-                    action=="go_back" ->
-                        NexaBrowserTaskActions.goBackApproved(this)
-                    action.startsWith("chrome_search:") ->
-                        NexaBrowserTaskActions.openChromeSearchApproved(
-                            this,action.removePrefix("chrome_search:"))
-                    action.startsWith("tap_visible_label:") ->
-                        ScreenAssistService.active?.let {
-                            NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
-                        } ?: "Screen Assist is disabled. No tap performed."
-                    else -> "Invalid device action. No operation performed."
+
+        // Expanded TYPE_APPLICATION_OVERLAY windows may retain input focus and
+        // can obscure or dismiss Android's notification shade and Back target.
+        // Release that focus before requesting any system navigation.
+        val isSystemNavigation=action=="open_notification_shade" || action=="go_back"
+        note="Action in progress; completion is not yet verified."
+        if(isSystemNavigation) collapse() else render()
+
+        val dispatch={
+            // Accessibility work and crypto journaling stay off the UI thread.
+            Thread({
+                val outcome=try {
+                    when {
+                        action=="open_notification_shade" ->
+                            NexaBrowserTaskActions.notificationsApproved(this)
+                        action=="go_back" ->
+                            NexaBrowserTaskActions.goBackApproved(this)
+                        action.startsWith("chrome_search:") ->
+                            NexaBrowserTaskActions.openChromeSearchApproved(
+                                this,action.removePrefix("chrome_search:"))
+                        action.startsWith("tap_visible_label:") ->
+                            ScreenAssistService.active?.let {
+                                NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
+                            } ?: "Screen Assist is disabled. No tap performed."
+                        else -> "Invalid device action. No operation performed."
+                    }
+                } catch (_:Exception) { "Android action was refused or became uncertain." }
+                Handler(Looper.getMainLooper()).post {
+                    // The owner may have hidden/destroyed the overlay meanwhile.
+                    if(view==null || !visible)return@post
+                    note=outcome.take(360)
+                    if(isSystemNavigation && outcome.startsWith("Android accepted")) {
+                        // Keep the unobtrusive bubble. Rendering the expanded
+                        // panel here can dismiss the system surface we opened.
+                        // Accepted is not a verified task-complete claim.
+                        return@post
+                    }
+                    if(action.startsWith("chrome_search:") &&
+                        outcome.contains("launch requested")) {
+                        collapse()
+                    } else {
+                        if(isSystemNavigation) {
+                            expanded=true
+                            section="tools"
+                        }
+                        // Refused/unknown actions must still have visible feedback.
+                        render()
+                    }
                 }
-            } catch (_:Exception) { "Android action was refused or became uncertain." }
-            Handler(Looper.getMainLooper()).post {
-                // The owner may have hidden or destroyed the overlay during
-                // an Android binder operation. Do not resurrect it afterward.
-                if(view==null || !visible)return@post
-                note=outcome.take(360)
-                if(action.startsWith("chrome_search:") &&
-                    outcome.contains("launch requested")) collapse()
-                else render()
-            }
-        },"nexa-reviewed-device-objective").start()
+            },"nexa-reviewed-device-objective").start()
+        }
+        if(isSystemNavigation) {
+            // Give WindowManager time to release the expanded overlay and IME
+            // before Android processes GLOBAL_ACTION_NOTIFICATIONS / BACK.
+            Handler(Looper.getMainLooper()).postDelayed({dispatch()},240L)
+        } else dispatch()
     }
 
     private fun sendLocal(raw: String) {
