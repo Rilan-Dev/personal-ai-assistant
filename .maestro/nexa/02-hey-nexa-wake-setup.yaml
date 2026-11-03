@@ -1,0 +1,27 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa offline Hey Nexa setup and safety disclosures
+tags:
+  - nexa
+  - wake
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element:
+      text: "Nexa activation.*"
+    direction: DOWN
+    timeout: 25000
+- assertVisible:
+    text: "Nexa activation.*"
+- assertVisible:
+    text: "Protected no-dot Hey Nexa: unavailable in this APK"
+- assertVisible: "Download offline model"
+- takeScreenshot: nexa-wake-not-enabled
+- tapOn: "Refresh wake status"
+- assertVisible:
+    text: "Nexa activation.*"
+- takeScreenshot: nexa-wake-refreshed
