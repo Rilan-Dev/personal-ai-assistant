@@ -1,0 +1,47 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa agent performs owner-approved Chrome AI search
+tags:
+  - nexa
+  - agent
+  - browser
+  - cloud
+---
+# Chrome startup is an environment precondition, not an agent action.
+# Do not confuse this prewarm with the later searched query.
+- openLink:
+    link: https://www.google.com
+    autoVerify: true
+    browser: true
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- tapOn: "App launching"
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+# This request enters Nexa's real AgentHarness, not Maestro's browser automation.
+- tapOn: "Assistant command"
+- inputText: "Open Chrome and search what is AI"
+- tapOn: "Send message"
+- extendedWaitUntil:
+    visible: "Approval needed"
+    timeout: 30000
+- assertVisible:
+    text: "Tool: device.browser_search"
+- assertVisible:
+    text: ".*what is ai.*"
+- takeScreenshot: nexa-browser-user-approved-goal
+- tapOn: "Approve once"
+- extendedWaitUntil:
+    visible: "Resume saved task"
+    timeout: 20000
+- tapOn: "Resume saved task"
+# Observe the actual Chrome page, not a Nexa success toast or intent dispatch.
+- extendedWaitUntil:
+    visible:
+      text: ".*[Ww]hat is [Aa][Ii].*"
+    timeout: 65000
+- takeScreenshot: nexa-chrome-ai-search-results

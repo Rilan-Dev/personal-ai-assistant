@@ -10,6 +10,7 @@ import android.graphics.drawable.Icon
 import android.os.Build
 import java.util.function.Consumer
 import android.provider.MediaStore
+import android.net.Uri
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -154,6 +155,44 @@ class DeviceControlModule(
             promise.reject("APP_LAUNCH_DENIED", "Android denied launching this app")
         } catch (e: ActivityNotFoundException) {
             promise.reject("APP_UNAVAILABLE", "Application launch activity missing")
+        }
+    }
+
+    /** User-initiated, explicitly approved public Chrome search. Never accepts URLs,
+     * schemes, javascript, redirects, or model-supplied coordinates. Intent delivery
+     * is NOT evidence of a successful search-results page.
+     */
+    @ReactMethod
+    fun openChromeSearch(query: String, promise: Promise) {
+        val clean=query.trim().lowercase(java.util.Locale.ROOT)
+        if(clean.length !in 3..90 || clean!=query ||
+            !clean.matches(Regex("[a-z0-9][a-z0-9 -]{1,89}")) ||
+            Regex("""\b(send|text|message|call|dial|pay|buy|purchase|delete|remove|grant|install|uninstall|password|otp|stop|cancel|without|never|instead)\b""")
+                .containsMatchIn(clean)) {
+            promise.reject("INVALID_SEARCH", "Search requires a short public text query")
+            return
+        }
+        val url=Uri.Builder().scheme("https").authority("www.google.com")
+            .appendPath("search").appendQueryParameter("q",clean).build()
+        val intent=Intent(Intent.ACTION_VIEW,url).apply {
+            setPackage("com.android.chrome")
+            addCategory(Intent.CATEGORY_BROWSABLE)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            context.startActivity(intent)
+            val result=Arguments.createMap()
+            result.putBoolean("intentDispatched",true)
+            result.putString("packageId","com.android.chrome")
+            result.putString("action","chrome_search")
+            result.putString("verification","not_observed")
+            promise.resolve(result)
+        } catch (_:ActivityNotFoundException) {
+            promise.reject("CHROME_UNAVAILABLE","Chrome is not installed or cannot handle a search")
+        } catch (_:SecurityException) {
+            promise.reject("CHROME_DENIED","Android denied the Chrome search")
+        } catch (_:Exception) {
+            promise.reject("CHROME_UNAVAILABLE","Android could not open Chrome")
         }
     }
 

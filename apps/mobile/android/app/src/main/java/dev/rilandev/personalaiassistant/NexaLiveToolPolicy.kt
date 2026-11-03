@@ -36,6 +36,13 @@ internal object NexaLiveToolPolicy {
         put(option("request_open_installed_app",
             "Request to open a named installed launcher app. The owner must approve on screen; do not claim it opened.",
             "app",null))
+        put(option("request_chrome_search",
+            "Request one owner-approved Chrome Google search for the user's exact public query. Never claim an article was read or selected.",
+            "query",null))
+        put(noArgs("request_open_notification_shade",
+            "Request one owner-approved Android notification shade opening. Never read notification contents."))
+        put(noArgs("request_go_back",
+            "Request one owner-approved Android Back navigation; verify the resulting screen separately."))
         put(noArgs("request_list_installed_apps",
             "Ask permission to read a limited list of launcher app names. Names are shared with provider only after approval."))
         put(noArgs("request_read_visible_screen",
@@ -79,6 +86,20 @@ internal object NexaLiveToolPolicy {
                         "get_storage_usage"->"storage"
                         else->"battery"
                     }) ?: "Android device status unavailable.")
+            "request_chrome_search" -> {
+                val query=single("query").orEmpty()
+                if(NexaBrowserTaskActions.safeQuery(query)==null)
+                    Decision.Immediate("Rejected: invalid public Chrome search query")
+                else Decision.NeedsApproval("Chrome search: $query","chrome_search:$query")
+            }
+            "request_open_notification_shade" ->
+                if(args.length()!=0)Decision.Immediate("Rejected: unexpected arguments")
+                else if(!available())Decision.Immediate("Screen Assist is OFF. No notification shade action.")
+                else Decision.NeedsApproval("notification shade","open_notification_shade")
+            "request_go_back" ->
+                if(args.length()!=0)Decision.Immediate("Rejected: unexpected arguments")
+                else if(!available())Decision.Immediate("Screen Assist is OFF. No Back action.")
+                else Decision.NeedsApproval("back navigation","go_back")
             "request_list_installed_apps" ->
                 if(args.length()!=0)Decision.Immediate("Rejected: unexpected arguments")
                 else Decision.NeedsApproval("launcher app list","list_installed_apps")

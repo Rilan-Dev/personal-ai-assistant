@@ -55,7 +55,7 @@ export const androidIntentPlanner: Planner = {
     if (call) return { type: "tool", call };
     return {
       type: "clarify",
-      question: "Native controls currently support: Open camera, Open WhatsApp, Open WhatsApp Business, Check device status, Check battery level, Turn flashlight on/off, and Test approval. Multi-step actions and messaging are not enabled yet."
+      question: "Native controls currently support: Open Chrome and search a public query, Open camera, Open WhatsApp, Open WhatsApp Business, Check device status, Check battery level, Turn flashlight on/off, and Test approval. Multi-step actions and messaging are not enabled yet."
     };
   }
 };
