@@ -23,7 +23,7 @@ test('user transcriptions are validated and require a visible owner approval bef
   assert.match(realtime,/!assistantPanelEnabled \|\| pendingAppTool != null/);
   assert.match(realtime,/PendingAppTool\("local-sarvam"/);
   assert.match(realtime,/pendingApprovalSummary = "Open/);
-  assert.match(realtime,/if \(active\.get\(\) && assistantPanelEnabled && pending != null\)/);
+  assert.match(realtime,/if \(active\.get\(\) && assistantPanelEnabled && pending != null && !activeToolOperation\)/);
   assert.match(realtime,/if \(selectedProvider == "openai"\) \{/);
   assert.match(assistant,/Approve once/);
   assert.match(wake,/Approve app/);
@@ -58,6 +58,6 @@ test('app-started voice also exposes an owner-review surface, not a silent local
   assert.match(realtime,/data\.putString\("pendingAppApproval",RealtimeVoiceService\.pendingApprovalSummary\)/);
   assert.match(native,/decideOwnerLiveAppAction/);
   assert.match(ui,/pendingAppApproval/);
-  assert.match(ui,/Approve action once/);
+  assert.match(ui,/Allow once/);
   assert.match(ui,/onPress=\{\(\)=>void reviewLiveAppAction\(false\)\}/);
 });

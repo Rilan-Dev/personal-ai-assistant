@@ -39,6 +39,11 @@ internal object NexaUiActionVerifier {
                 .append(':').append(node.childCount).append(':').append(node.isScrollable)
                 .append(':').append(r.left).append(',').append(r.top)
                 .append(',').append(r.right).append(',').append(r.bottom)
+            // Only a transient SHA-256 fingerprint is retained, not raw labels.
+            // Same-shaped home screens can differ only in icon descriptions.
+            val label=node.contentDescription?.toString()
+                ?:node.text?.toString().orEmpty()
+            if(label.isNotBlank())content.append(':').append(label.take(80))
             for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
         }
         val digest=MessageDigest.getInstance("SHA-256")

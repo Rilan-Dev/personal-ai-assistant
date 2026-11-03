@@ -38,7 +38,8 @@ import type {VisualIconPreview} from './src/native/androidVisualIcons';
 import type {LaunchableAppMatch} from './src/native/androidAppCatalogue';
 import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
-import type {LiveVoiceStatus} from './src/native/liveVoice';
+import type {LiveVoiceStatus,VoicePermissionMode} from './src/native/liveVoice';
+import {getVoicePermissionMode,setVoicePermissionMode,clearVoicePermissions,alwaysAllowPendingVoiceAction} from './src/native/liveVoice';
 import {historyAvailable,appendConversation,recentConversations,copyConversationHistory,shareConversationHistory} from './src/native/conversationHistory';
 import type {NexaConversationEntry} from './src/native/conversationHistory';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
@@ -376,6 +377,26 @@ export default function App() {
     state:'stopped',message:'No live conversation',microphoneActive:false,microphoneMuted:false
   });
   const [liveVoiceBusy,setLiveVoiceBusy] = useState(false);
+  const [voicePermissionMode,setLocalVoicePermissionMode]=useState<VoicePermissionMode>('ask_every_time');
+  const [voicePermissionNotice,setVoicePermissionNotice]=useState('');
+  useEffect(()=>{
+    if(!liveVoiceAvailable())return;
+    void getVoicePermissionMode().then(setLocalVoicePermissionMode).catch(()=>{});
+  },[]);
+  const choosePermissionMode=async(mode:VoicePermissionMode)=>{
+    try {
+      await setVoicePermissionMode(mode);
+      setLocalVoicePermissionMode(mode);
+      setVoicePermissionNotice('Saved. Android Accessibility and microphone permissions remain separate.');
+    }catch{setVoicePermissionNotice('Could not save permission mode.');}
+  };
+  const resetVoiceGrants=async()=>{
+    try {
+      await clearVoicePermissions();
+      setLocalVoicePermissionMode('ask_every_time');
+      setVoicePermissionNotice('Stored approvals revoked; default review restored.');
+    }catch{setVoicePermissionNotice('Could not revoke stored approvals.');}
+  };
   const voiceSessionRunning=liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening';
   const configuredVoiceProvider=activeProvider?.provider==='sarvam'?'Sarvam AI (Model API)'
     : activeProvider?.provider==='openai'?'OpenAI Realtime':null;
@@ -1453,7 +1474,11 @@ export default function App() {
             <View style={styles.buttonRow}>
               <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
                 style={styles.primaryInline} onPress={()=>void reviewLiveAppAction(true)}>
-                <Text style={styles.primaryInlineText}>Approve action once</Text>
+                <Text style={styles.primaryInlineText}>Allow once</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
+                style={styles.outlineInline} onPress={()=>void alwaysAllowPendingVoiceAction().catch(()=>setVoicePermissionNotice('Could not save safe approval.'))}>
+                <Text style={styles.outlineInlineText}>Always allow safe</Text>
               </Pressable>
               <Pressable accessibilityRole="button" disabled={liveVoiceBusy}
                 style={styles.outlineInline} onPress={()=>void reviewLiveAppAction(false)}>
@@ -1480,6 +1505,22 @@ export default function App() {
             <Text style={styles.warning}>Muted: only silence is transmitted. Android microphone hardware remains open until you stop the session.</Text>}
         </View>
         <View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Permission mode for voice tasks</Text>
+          <Text style={styles.cardText}>Choose the extent to which Nexa can reuse your approvals for limited safe actions. Sending messages, placing calls, payment, deletion, contacts and Android system permissions are never silently granted. You can revoke remembered grants below.</Text>
+          {([
+            ['ask_every_time','Ask every time (default)'],
+            ['trusted_safe','Reuse individually approved safe actions'],
+            ['trusted_navigation','Allow routine navigation without repeated prompts'],
+          ] as [VoicePermissionMode,string][]).map(([mode,label])=>
+            <Pressable key={mode} accessibilityRole="button"
+              style={styles.outlineAction} onPress={()=>void choosePermissionMode(mode)}>
+              <Text style={styles.outlineActionText}>{voicePermissionMode===mode?'◉ ':'○ '}{label}</Text>
+            </Pressable>)}
+          <Pressable accessibilityRole="button" style={styles.outlineAction}
+            onPress={()=>void resetVoiceGrants()}>
+            <Text style={styles.outlineActionText}>Revoke all saved voice approvals</Text>
+          </Pressable>
+          {voicePermissionNotice!==''&&<Text style={styles.settingHelp}>{voicePermissionNotice}</Text>}
           <Text style={styles.cardHeading}>Live session permissions and limitations</Text>
           <Text style={styles.cardText}>Nexa live voice can request one-time approved Accessibility screen reading, safe visible-control taps, four-direction scrolling, icon detection and app opening. Enable Screen Assist in Tools → Accessibility Settings and review each action in the floating overlay. Unavailable Accessibility permissions never grant themselves. Live conversation uses the saved Sarvam Model API or OpenAI provider key. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
         </View>

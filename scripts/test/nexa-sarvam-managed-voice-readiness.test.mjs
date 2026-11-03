@@ -42,7 +42,7 @@ test('continuous voice memory stays bounded, no transcript UI or file writes, no
   assert.match(direct,/ArrayDeque<Pair<String,String>>/);
   assert.match(direct,/while\(turns\.size>12\)turns\.removeFirst\(\)/);
   assert.match(direct,/fun toolResult\(result:String\)/);
-  assert.match(direct,/callbacks\.ownerRequest\(text\)/);
+  assert.match(direct,/callbacks\.ownerRequest\(restored\)/);
   assert.match(direct,/modelCall\?\.cancel\(\)/);
   assert.match(direct,/60\*60\*1000L|generation\.incrementAndGet\(\)/);
   assert.doesNotMatch(direct,/Log\.|println\(|SharedPreferences|FileOutputStream|openFileOutput|device\.open_app|NexaHub/);

@@ -42,7 +42,7 @@ test('Realtime tool loop responds to function_call_output and never invokes arbi
   assert.match(realtime,/conversation\.item\.create/);
   assert.match(realtime,/response\.create/);
   assert.match(realtime,/seenCallIds/);
-  assert.match(realtime,/toolCallsInSession > 12/);
+  assert.match(realtime,/toolCallsInSession > 40/);
   assert.match(realtime,/pendingAppTool != null/);
   assert.match(realtime,/ACTION_APPROVE_TOOL/);
   assert.match(realtime,/ACTION_DENY_TOOL/);

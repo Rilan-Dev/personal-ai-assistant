@@ -31,7 +31,7 @@ test('voice exposes and approves real screen inspection, gestures, app discovery
   assert.match(screen,/setOf\("up","down","left","right"\)/);
 });
 test('Sarvam routes user speech through the owner gate instead of disabling screen help',()=>{
-  assert.match(sarvam,/callbacks\.ownerRequest\(text\)/);
+  assert.match(sarvam,/callbacks\.ownerRequest\(restored\)/);
   assert.match(voice,/NexaPhoneVoiceTools\.wantsVisibleText\(text\)/);
   assert.match(voice,/NexaPhoneVoiceTools\.tapVisibleLabelIntent\(text\)/);
   assert.match(voice,/Screen Assist is disabled/);
