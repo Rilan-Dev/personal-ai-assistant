@@ -173,4 +173,14 @@ jobs:
             --branch "$GITHUB_REF_NAME" \
             --name "Nexa $TEST_SUITE $ANDROID_OS $GITHUB_SHA" \
             --app-file "$NEXA_RELEASE_APK" \
+            --format HTML-DETAILED \
+            --output "$RUNNER_TEMP/nexa-maestro-detailed.html" \
             --flows "$target"
+      - name: Retain detailed Maestro results and failed step evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-maestro-detail-${{ github.run_id }}
+          path: ${{ runner.temp }}/nexa-maestro-detailed.html
+          if-no-files-found: ignore
+          retention-days: 7
