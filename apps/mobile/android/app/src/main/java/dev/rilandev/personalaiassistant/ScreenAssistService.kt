@@ -113,6 +113,20 @@ class ScreenAssistService : AccessibilityService() {
         ScreenAssistState.connected = true
     }
     override fun onInterrupt() {}
+    override fun onUnbind(intent: Intent?): Boolean {
+        // A service can be unbound without onDestroy immediately following.
+        // Do not retain a false Ready state; ignore callbacks from obsolete
+        // instances when Android has already connected a replacement.
+        if (active === this) {
+            active = null
+            ScreenAssistState.connected = false
+            ScreenAssistState.clear()
+            ScreenIconScanState.clear()
+            NexaVisualIconCapture.clear()
+            NexaScreenActions.reset()
+        }
+        return super.onUnbind(intent)
+    }
     override fun onDestroy() {
         // Android can destroy an old service instance after a replacement has
         // connected. Never let the old instance disconnect or clear the live one.
