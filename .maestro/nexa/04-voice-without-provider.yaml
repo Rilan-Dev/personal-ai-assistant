@@ -12,7 +12,22 @@ tags:
 - tapOn: "Voice"
 - assertVisible: "Speak naturally"
 - assertVisible: "Live speech-to-speech"
-- assertVisible: "No supported live provider configured"
+# React Native renders the prefix and provider value as one Text label.
+# Scroll to the live session card and assert the entire absent-provider state.
+- scrollUntilVisible:
+    element:
+      text: ".*Provider for next session: No supported live provider configured.*"
+    direction: DOWN
+    timeout: 25000
+- assertVisible:
+    text: ".*Provider for next session: No supported live provider configured.*"
+- scrollUntilVisible:
+    element:
+      text: ".*No live model selected.*"
+    direction: DOWN
+    timeout: 25000
+- assertVisible:
+    text: ".*No live model selected.*"
 - takeScreenshot: nexa-voice-unconfigured
 - tapOn: "Setup"
 - assertVisible: "Make your assistant yours."
