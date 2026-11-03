@@ -75,9 +75,17 @@ tags:
     commands:
       - tapOn: "Allow"
 - takeScreenshot: nexa-native-screen-assist-owner-granted
-# Return using the real launcher, not a private service API.
+# Do not infer an Accessibility grant from visiting Android Settings.
+# A native action is impossible until Android has bound the service.
 - launchApp:
     stopApp: false
+- takeScreenshot: nexa-setup-accessibility-return-status
+- extendedWaitUntil:
+    visible:
+      text: "Nexa Screen Assist connected.*native screen actions ready"
+    timeout: 25000
+- takeScreenshot: nexa-native-screen-assist-connected
+# Return using the real launcher, not a private service API.
 - scrollUntilVisible:
     element: "Show floating bubble"
     direction: DOWN

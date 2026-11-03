@@ -7,6 +7,7 @@ export type NexaSetupStatus = {
   camera: boolean;
   approximateLocation: boolean;
   screenAssist: boolean;
+  screenAssistConnected: boolean;
   launcherNavigation: boolean;
   assistantRoleAvailable: boolean;
   assistantSelected: boolean;
@@ -42,6 +43,7 @@ export async function readNexaSetupStatus(): Promise<NexaSetupStatus> {
       typeof data.setupAcknowledged !== 'boolean' ||
       typeof data.microphone !== 'boolean' ||
       typeof data.screenAssist !== 'boolean' ||
+      typeof data.screenAssistConnected !== 'boolean' ||
       typeof data.autoStartVoiceOnInvocation !== 'boolean')
     throw new Error('The installed Android build did not return valid setup status.');
   return data;
