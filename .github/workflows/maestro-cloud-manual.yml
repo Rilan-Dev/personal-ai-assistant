@@ -1,0 +1,105 @@
+name: Nexa Maestro Cloud UI acceptance (manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: "Which Nexa Maestro scenario to run?"
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - startup
+          - wake-setup
+          - overlay-settings
+          - voice-safety
+          - overlay-bubble
+          - wake-runtime
+          - screen-assist
+          - resume-stress
+      android_os:
+        description: "Maestro Cloud Android image"
+        required: true
+        default: android-33
+        type: choice
+        options:
+          - android-33
+          - android-34
+          - android-35
+          - android-36
+
+permissions:
+  contents: read
+
+jobs:
+  maestro-cloud:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - name: Ensure Maestro credential was configured securely
+        shell: bash
+        env:
+          MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${MAESTRO_CLOUD_API_KEY:-}" ]]; then
+            echo "::error::Configure repository Actions secret MAESTRO_CLOUD_API_KEY first. Do not paste it into commits or workflow logs."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
+      - run: npm ci
+      - name: Build fresh ARM-compatible Nexa debug APK
+        working-directory: apps/mobile/android
+        env:
+          PAA_BUILD_SOURCE_REVISION: ${{ github.sha }}
+        run: ./gradlew :app:assembleDebug --no-daemon --stacktrace
+      - name: Install Maestro CLI
+        shell: bash
+        run: curl -fsSL https://get.maestro.mobile.dev | bash
+      - name: Run selected Nexa UI acceptance flow in Maestro Cloud
+        shell: bash
+        env:
+          MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          MAESTRO_DISABLE_UPDATE_CHECK: "true"
+          MAESTRO_CLI_NO_ANALYTICS: "true"
+          TEST_SUITE: ${{ inputs.suite }}
+          ANDROID_OS: ${{ inputs.android_os }}
+        run: |
+          set -euo pipefail
+          case "$TEST_SUITE" in
+            all) target=".maestro/nexa" ;;
+            startup) target=".maestro/nexa/01-fresh-setup-and-navigation.yaml" ;;
+            wake-setup) target=".maestro/nexa/02-hey-nexa-wake-setup.yaml" ;;
+            overlay-settings) target=".maestro/nexa/03-overlay-permission-entry.yaml" ;;
+            voice-safety) target=".maestro/nexa/04-voice-without-provider.yaml" ;;
+            overlay-bubble) target=".maestro/nexa/05-overlay-bubble-end-to-end.yaml" ;;
+            wake-runtime) target=".maestro/nexa/06-hey-nexa-model-runtime.yaml" ;;
+            screen-assist) target=".maestro/nexa/07-screen-assist-settings-entry.yaml" ;;
+            resume-stress) target=".maestro/nexa/08-navigation-background-resume.yaml" ;;
+            *) echo "::error::Invalid test suite"; exit 2 ;;
+          esac
+          "$HOME/.maestro/bin/maestro" cloud \
+            --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
+            --device-os "$ANDROID_OS" \
+            --device-model pixel_6 \
+            --branch "$GITHUB_REF_NAME" \
+            --name "Nexa $TEST_SUITE $ANDROID_OS $GITHUB_SHA" \
+            --app-file apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            --flows "$target"

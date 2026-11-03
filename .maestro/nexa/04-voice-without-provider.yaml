@@ -1,0 +1,18 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa voice screen safe unconfigured provider state
+tags:
+  - nexa
+  - voice
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- tapOn: "Voice"
+- assertVisible: "Speak naturally"
+- assertVisible: "Live speech-to-speech"
+- assertVisible: "No supported live provider configured"
+- takeScreenshot: nexa-voice-unconfigured
+- tapOn: "Setup"
+- assertVisible: "Make your assistant yours."

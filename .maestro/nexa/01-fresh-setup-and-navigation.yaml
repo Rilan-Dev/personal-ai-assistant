@@ -1,0 +1,25 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa fresh setup and five-tab navigation
+tags:
+  - nexa
+  - smoke
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- assertVisible: "Microphone & notifications"
+- takeScreenshot: nexa-fresh-setup
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- tapOn: "Voice"
+- assertVisible: "Speak naturally"
+- tapOn: "Setup"
+- assertVisible: "Make your assistant yours."
+- tapOn: "Settings"
+- assertVisible: "Nexa · Settings"
+- takeScreenshot: nexa-five-tabs

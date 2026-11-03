@@ -1,0 +1,31 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa navigation repeated screen taps background resume
+tags:
+  - nexa
+  - smoke
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Voice"
+- assertVisible: "Speak naturally"
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- tapOn: "Setup"
+- assertVisible: "Make your assistant yours."
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- pressKey: Home
+- launchApp:
+    stopApp: false
+- assertVisible: "How can I help today?"
+- tapOn: "Voice"
+- assertVisible: "Live speech-to-speech"
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- takeScreenshot: nexa-navigation-after-resume

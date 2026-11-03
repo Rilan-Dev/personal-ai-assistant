@@ -1,0 +1,36 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa overlay grant bubble appears on home screen
+tags:
+  - nexa
+  - overlay
+  - extended
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element: "Floating quick tools"
+    direction: DOWN
+    timeout: 25000
+- tapOn:
+    text: "Allow display over apps.*"
+- assertVisible:
+    text: "Allow display over other apps"
+- tapOn:
+    text: "Allow display over other apps"
+- back
+- scrollUntilVisible:
+    element: "Show floating bubble"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "Show floating bubble"
+- pressKey: Home
+- assertVisible:
+    text: "Nexa assistant.*Tap to expand.*"
+- takeScreenshot: nexa-floating-bubble-over-home
+- tapOn:
+    text: "Nexa assistant.*"
+- assertVisible: "Talk to Nexa.*"
+- takeScreenshot: nexa-expanded-overlay

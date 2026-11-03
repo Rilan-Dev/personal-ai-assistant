@@ -1,0 +1,20 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa Screen Assist Accessibility permission entry
+tags:
+  - nexa
+  - screen
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element: "One-time screen assistance"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: "One-time screen assistance"
+- tapOn:
+    text: "Open Accessibility.*One-time screen assistance.*"
+- takeScreenshot: nexa-android-accessibility-settings-opened

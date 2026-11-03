@@ -1,0 +1,32 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa wake model download opt-in listening and stop
+tags:
+  - nexa
+  - wake
+  - extended
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element: "Download offline model"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "Download offline model"
+- extendedWaitUntil:
+    visible: "Enable Hey Nexa.*"
+    timeout: 120000
+- tapOn:
+    text: "Enable Hey Nexa.*"
+- extendedWaitUntil:
+    visible: ".*Listening for Hey Nexa.*"
+    timeout: 30000
+- takeScreenshot: nexa-wake-listening-foreground
+- tapOn:
+    text: "Disable Hey Nexa.*"
+- extendedWaitUntil:
+    visible: ".*Model ready.*"
+    timeout: 20000
+- takeScreenshot: nexa-wake-disabled
