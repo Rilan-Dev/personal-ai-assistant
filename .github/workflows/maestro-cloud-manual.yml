@@ -23,6 +23,7 @@ on:
           - screen-assist
           - resume-stress
           - agent-browser
+          - agent-controls
       android_os:
         description: "Maestro Cloud Android image"
         required: true
@@ -50,7 +51,8 @@ jobs:
        github.event.comment.user.login == 'Rilan-Dev' &&
        github.event.comment.author_association == 'OWNER' &&
        (github.event.comment.body == '/nexa-maestro run all android-33' ||
-        github.event.comment.body == '/nexa-maestro run agent-browser android-33'))
+        github.event.comment.body == '/nexa-maestro run agent-browser android-33' ||
+        github.event.comment.body == '/nexa-maestro run agent-controls android-33'))
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -138,7 +140,7 @@ jobs:
           MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
           MAESTRO_DISABLE_UPDATE_CHECK: "true"
           MAESTRO_CLI_NO_ANALYTICS: "true"
-          TEST_SUITE: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-browser android-33' && 'agent-browser' || inputs.suite || 'all' }}
+          TEST_SUITE: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-browser android-33' && 'agent-browser' || github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-controls android-33' && 'agent-controls' || inputs.suite || 'all' }}
           ANDROID_OS: ${{ inputs.android_os || 'android-33' }}
         run: |
           set -euo pipefail
@@ -153,6 +155,7 @@ jobs:
             screen-assist) target=".maestro/nexa/07-screen-assist-settings-entry.yaml" ;;
             resume-stress) target=".maestro/nexa/08-navigation-background-resume.yaml" ;;
             agent-browser) target=".maestro/nexa/09-agent-chrome-ai-search.yaml" ;;
+            agent-controls) target=".maestro/experimental/10-agent-notification-shade.yaml" ;;
             *) echo "::error::Invalid test suite"; exit 2 ;;
           esac
           # Never print the key. GitHub secret paste often includes a trailing
