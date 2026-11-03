@@ -35,10 +35,31 @@ class NexaConversationDbAndroidTest {
             }
         } finally {db.close()}
         val exported=JSONObject(NexaConversationDb.export(context))
-        assertEquals(1,exported.getInt("schemaVersion"))
+        assertEquals(2,exported.getInt("schemaVersion"))
+        assertTrue(exported.has("tasks"))
         assertTrue(exported.getJSONArray("entries").toString().contains(unique))
     }
 
+    @Test fun persistsDurableTaskCheckpointWithExistingConversationData() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val id="task-"+UUID.randomUUID()
+        val session="voice-test-"+UUID.randomUUID()
+        val goal="open WhatsApp and read my screen"
+        val steps=listOf("open WhatsApp","read my screen")
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "planned",0,goal,steps))
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "completed",2,goal,steps,"Verified foreground and visible screen labels"))
+        val saved=NexaConversationDb.taskHistory(ctx,200)
+        val entry=(0 until saved.length()).map{saved.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==id}
+        assertNotNull("Task must survive a new SQLite helper",entry)
+        assertEquals("completed",entry!!.optString("status"))
+        assertEquals(2,entry.optInt("stepIndex"))
+        assertEquals(goal,entry.optString("goal"))
+        assertFalse(NexaConversationDb.saveTask(ctx,id,session,
+            "sent",2,goal,steps))
+    }
     @Test fun rejectsUnknownChannelsAndInvalidRoles() {
         val context=ApplicationProvider.getApplicationContext<Context>()
         val session="android-reject-"+UUID.randomUUID()

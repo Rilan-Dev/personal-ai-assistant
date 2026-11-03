@@ -40,8 +40,8 @@ import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
 import type {LiveVoiceStatus,VoicePermissionMode} from './src/native/liveVoice';
 import {getVoicePermissionMode,setVoicePermissionMode,clearVoicePermissions,alwaysAllowPendingVoiceAction} from './src/native/liveVoice';
-import {historyAvailable,appendConversation,recentConversations,copyConversationHistory,shareConversationHistory} from './src/native/conversationHistory';
-import type {NexaConversationEntry} from './src/native/conversationHistory';
+import {historyAvailable,appendConversation,recentConversations,recentVoiceTasks,recentAndroidProcessExits,shareAndroidProcessExits,copyConversationHistory,shareConversationHistory} from './src/native/conversationHistory';
+import type {NexaConversationEntry,NexaTaskHistoryEntry,NexaProcessExit} from './src/native/conversationHistory';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
@@ -109,14 +109,22 @@ export default function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const chatLogSession=useRef('chat-'+Date.now());
   const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
+  const [taskHistoryEntries,setTaskHistoryEntries]=useState<NexaTaskHistoryEntry[]>([]);
+  const [androidExitEntries,setAndroidExitEntries]=useState<NexaProcessExit[]>([]);
   const [historyNotice,setHistoryNotice]=useState('');
   const refreshHistory=async()=>{
-    try {setHistoryEntries(await recentConversations(120));setHistoryNotice('Local encrypted custom.db · last 120 records');}
+    try {setHistoryEntries(await recentConversations(120));setTaskHistoryEntries(await recentVoiceTasks(40));setAndroidExitEntries(await recentAndroidProcessExits());setHistoryNotice('Local encrypted custom.db · recent chats, voice tasks and Android exits');}
     catch {setHistoryNotice('Could not read local conversation history on this device.');}
   };
   const copyHistory=async()=>{
     try {await copyConversationHistory();setHistoryNotice('Copied local history JSON. Clipboard is visible to other apps you paste into.');}
     catch {setHistoryNotice('Could not copy conversation history.');}
+  };
+  const exportExitReport=async()=>{
+    try {
+      await shareAndroidProcessExits();
+      setHistoryNotice('Choose where to save Android process exit diagnostics. Detailed ANR traces may contain sensitive app text. Share only with someone you trust.');
+    }catch{setHistoryNotice('Android process diagnostics are unavailable.');}
   };
   const exportHistory=async()=>{
     try {await shareConversationHistory();setHistoryNotice('Choose where to save or share the JSON export.');}
@@ -1506,7 +1514,7 @@ export default function App() {
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Permission mode for voice tasks</Text>
-          <Text style={styles.cardText}>Choose the extent to which Nexa can reuse your approvals for limited safe actions. Sending messages, placing calls, payment, deletion, contacts and Android system permissions are never silently granted. You can revoke remembered grants below.</Text>
+          <Text style={styles.cardText}>Choose whether Nexa can reuse approvals for low-risk navigation: ordinary scrolling, safe icons and app opening. Screen contents, installed-app lists, arbitrary text-label taps, messages, calls, payments and Android system grants still need explicit review. Revoke stored approvals any time.</Text>
           {([
             ['ask_every_time','Ask every time (default)'],
             ['trusted_safe','Reuse individually approved safe actions'],
@@ -1539,6 +1547,20 @@ export default function App() {
             <Text style={styles.outlineActionText}>Export conversations as JSON</Text>
           </Pressable>
           {historyNotice!==''&&<Text style={styles.settingHelp}>{historyNotice}</Text>}
+          <Pressable accessibilityRole="button" style={styles.outlineAction}
+            onPress={()=>void exportExitReport()}>
+            <Text style={styles.outlineActionText}>Export Android crash / ANR diagnostics</Text>
+          </Pressable>
+          {androidExitEntries.length>0&&<Text style={styles.cardHeading}>Recent Android process exits</Text>}
+          {androidExitEntries.slice(-6).map((exit,i)=><View key={String(exit.timestamp)+'-'+i} style={styles.actionCard}>
+            <Text style={styles.settingHelp}>{new Date(exit.timestamp).toLocaleString()} · {exit.reason} · PID {exit.pid}</Text>
+          </View>)}
+          {taskHistoryEntries.length>0&&<Text style={styles.cardHeading}>Recent voice tasks</Text>}
+          {taskHistoryEntries.slice(-12).map(task=><View key={task.taskId} style={styles.actionCard}>
+            <Text style={styles.settingHelp}>{new Date(task.updatedAt).toLocaleString()} · {task.status} · {task.status==="completed"?"all steps completed":"step "+Math.min(task.stepIndex+1,task.steps.length)+" of "+task.steps.length}</Text>
+            <Text style={styles.cardText} selectable>{task.goal}</Text>
+            {Boolean(task.lastEvidence)&&<Text style={styles.settingHelp}>{task.lastEvidence}</Text>}
+          </View>)}
           {historyEntries.slice(-25).map(item=><View key={item.id} style={styles.actionCard}>
             <Text style={styles.settingHelp}>{new Date(item.createdAt).toLocaleString()} · {item.channel} · {item.role} · {item.provider}</Text>
             <Text style={styles.cardText} selectable>{item.text}</Text>

@@ -25,7 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Private device-local custom.db with Android Keystore-encrypted transcript bodies. */
 internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
-    context.applicationContext, "custom.db", null, 1
+    context.applicationContext, "custom.db", null, 2
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE conversation_entries (
@@ -38,9 +38,25 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
             created_at INTEGER NOT NULL
         )""")
         db.execSQL("CREATE INDEX conversation_session_idx ON conversation_entries(session_id,id)")
+        createTaskTables(db)
+    }
+    private fun createTaskTables(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS voice_task_checkpoints (
+            task_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            step_index INTEGER NOT NULL,
+            payload BLOB NOT NULL,
+            updated_at INTEGER NOT NULL
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS voice_task_sessions ON voice_task_checkpoints(session_id,updated_at)")
     }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        throw IllegalStateException("Conversation database migration required")
+        if (oldVersion == 1 && newVersion >= 2) {
+            createTaskTables(db) // Preserve all v1 conversation entries and keys.
+        } else {
+            throw IllegalStateException("Unsupported conversation database migration")
+        }
     }
     companion object {
         private val lock=Any()
@@ -91,6 +107,61 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
                 // Storage errors must never terminate live microphone/model streaming.
             }
         }
+        /** Encrypted durable checkpoint. Write before any dependent native action.
+         * Only the owner-created task and verified observations are persisted.
+         */
+        fun saveTask(context:Context,taskId:String,sessionId:String,status:String,
+                     stepIndex:Int,request:String,steps:List<String>,evidence:String=""):Boolean {
+            if(!taskId.matches(Regex("[A-Za-z0-9-]{8,100}")) ||
+                sessionId.length !in 1..100 || stepIndex !in 0..8 ||
+                steps.isEmpty() || steps.size>8 || steps.any{it.length !in 1..160} ||
+                request.length !in 1..500 || evidence.length>350 ||
+                status !in setOf("planned","awaiting_approval","executing","verifying",
+                    "verified","failed","uncertain","cancelled","completed"))return false
+            return try { synchronized(lock) {
+                val helper=NexaConversationDb(context)
+                try {
+                    val payload=JSONObject().put("request",request)
+                        .put("steps",JSONArray(steps)).put("evidence",evidence)
+                    helper.writableDatabase.compileStatement(
+                        "INSERT OR REPLACE INTO voice_task_checkpoints(task_id,session_id,status,step_index,payload,updated_at) VALUES(?,?,?,?,?,?)"
+                    ).use { statement ->
+                        statement.bindString(1,taskId)
+                        statement.bindString(2,sessionId)
+                        statement.bindString(3,status)
+                        statement.bindLong(4,stepIndex.toLong())
+                        statement.bindBlob(5,encrypt(payload.toString()))
+                        statement.bindLong(6,System.currentTimeMillis())
+                        statement.executeInsert()
+                    }
+                    true
+                } finally { helper.close() }
+            }} catch (_:Exception) {false}
+        }
+        fun taskHistory(context:Context,limit:Int):JSONArray = synchronized(lock) {
+            val rows=JSONArray()
+            val helper=NexaConversationDb(context)
+            try {
+                helper.readableDatabase.rawQuery(
+                    "SELECT task_id,session_id,status,step_index,payload,updated_at FROM voice_task_checkpoints ORDER BY updated_at DESC LIMIT ?",
+                    arrayOf(limit.coerceIn(1,1000).toString())
+                ).use { c ->
+                    while(c.moveToNext()) {
+                        val body=try{ JSONObject(decrypt(c.getBlob(4))) }
+                            catch (_:Exception){ JSONObject().put("unavailable",true) }
+                        rows.put(JSONObject().put("taskId",c.getString(0))
+                            .put("sessionId",c.getString(1)).put("status",c.getString(2))
+                            .put("stepIndex",c.getInt(3)).put("goal",body.optString("request"))
+                            .put("steps",body.optJSONArray("steps")?:JSONArray())
+                            .put("lastEvidence",body.optString("evidence"))
+                            .put("updatedAt",c.getLong(5)))
+                    }
+                }
+            } finally { helper.close() }
+            val chronological=JSONArray()
+            for(i in rows.length()-1 downTo 0)chronological.put(rows.getJSONObject(i))
+            chronological
+        }
         fun history(context:Context, limit:Int):JSONArray = synchronized(lock) {
             val rows=JSONArray()
             val helper=NexaConversationDb(context)
@@ -118,9 +189,11 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
             chronological
         }
         fun export(context:Context):String =
-            JSONObject().put("schemaVersion",1).put("source","Nexa custom.db")
+            JSONObject().put("schemaVersion",2).put("source","Nexa custom.db")
                 .put("exportedAt",System.currentTimeMillis())
-                .put("entries",history(context,10000)).toString(2)
+                .put("entries",history(context,10000))
+                .put("tasks",taskHistory(context,1000))
+                .put("androidProcessExits",NexaCrashDiagnostics.recent(context,12)).toString(2)
     }
 }
 class NexaConversationModule(private val reactContext:ReactApplicationContext):
@@ -134,6 +207,40 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
     @ReactMethod fun recentEntries(limit:Int,promise:Promise) {
         try { promise.resolve(NexaConversationDb.history(reactContext,limit.coerceIn(1,200)).toString()) }
         catch (_:Exception) { promise.reject("HISTORY_READ","Cannot read local conversation history") }
+    }
+    @ReactMethod fun recentTasks(limit:Int,promise:Promise) {
+        try { promise.resolve(NexaConversationDb.taskHistory(reactContext,limit.coerceIn(1,200)).toString()) }
+        catch (_:Exception) { promise.reject("TASK_HISTORY","Cannot read local task history") }
+    }
+    @ReactMethod fun recentAndroidProcessExits(promise:Promise) {
+        try {promise.resolve(NexaCrashDiagnostics.recent(reactContext,12).toString())}
+        catch (_:Exception) {promise.reject("EXIT_REPORT","Cannot read Android process exits")}
+    }
+    @ReactMethod fun shareAndroidProcessExits(promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to export Android crash diagnostics")
+            return
+        }
+        try {
+            val directory=File(reactContext.cacheDir,"conversation-exports").apply {mkdirs()}
+            val file=File(directory,"nexa-android-exits-"+System.currentTimeMillis()+".json")
+            file.writeText(NexaCrashDiagnostics.ownerExport(reactContext),
+                StandardCharsets.UTF_8)
+            val uri=FileProvider.getUriForFile(reactContext,
+                reactContext.packageName+".conversationprovider",file)
+            val intent=Intent(Intent.ACTION_SEND).apply {
+                type="application/json"
+                putExtra(Intent.EXTRA_STREAM,uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData=ClipData.newUri(reactContext.contentResolver,
+                    "Nexa Android crash diagnostics",uri)
+            }
+            reactContext.currentActivity?.startActivity(
+                Intent.createChooser(intent,"Share Nexa Android crash diagnostics"))
+            promise.resolve(true)
+        } catch (_:Exception) {
+            promise.reject("EXIT_EXPORT","Could not share Android crash diagnostics")
+        }
     }
     @ReactMethod fun copyAllHistory(promise:Promise) {
         if (reactContext.currentActivity?.hasWindowFocus()!=true) {

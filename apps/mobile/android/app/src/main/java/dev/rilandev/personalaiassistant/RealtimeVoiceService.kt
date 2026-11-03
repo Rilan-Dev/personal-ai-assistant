@@ -87,6 +87,7 @@ class RealtimeVoiceService : Service() {
     )
     private var pendingAppTool: PendingAppTool? = null
     private var currentCompound: NexaVoiceTaskCursor? = null
+    private var taskRequestEpoch = 0L
     private var activeToolOperation = false
     private var voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
     private var lastLocalUtterance = ""
@@ -158,7 +159,12 @@ class RealtimeVoiceService : Service() {
                 // Accessibility traversal, crypto journaling, and OEM binder clicks must
                 // never execute on the foreground service/main looper (ANR risk).
                 Thread({
+                    val task=currentCompound
+                    val checkpointOk=task==null || NexaConversationDb.saveTask(
+                        this,task.taskId,operationSession,"executing",task.stepIndex,
+                        task.originalRequest,task.steps,"Owner reviewed step")
                     val outcome = try { when {
+                    !checkpointOk -> "Task checkpoint could not be saved. No action executed."
                     !active.get() || operationSession != voiceSessionId -> "Session stopped; no action performed."
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
@@ -190,7 +196,10 @@ class RealtimeVoiceService : Service() {
                   lastToolResult=outcome.take(320)
                 message = lastToolResult
                 if (selectedProvider == "sarvam-api") {
-                    sarvamApiTransport?.toolResult(lastToolResult)
+                    if(pending.callId.startsWith("sarvam-model-")) {
+                        sarvamApiTransport?.completeNativeTool(
+                            pending.callId.removePrefix("sarvam-model-"),lastToolResult)
+                    }else sarvamApiTransport?.toolResult(lastToolResult)
                 }
                 if (selectedProvider == "openai") {
                     sendRealtimeToolOutput(pending.callId, lastToolResult)
@@ -252,6 +261,7 @@ class RealtimeVoiceService : Service() {
         assistantPanelEnabled = intent.getBooleanExtra(EXTRA_ASSISTANT_PANEL, false)
         pendingAppTool = null
         currentCompound=null
+        taskRequestEpoch++
         activeToolOperation=false
         pendingApprovalSummary = null
         lastToolResult = ""
@@ -293,6 +303,13 @@ class RealtimeVoiceService : Service() {
                     override fun interrupted() {
                         idleGate.reset(SystemClock.elapsedRealtime())
                         interruptSpeakerPlayback()
+                        main.post {
+                            if(pendingAppTool?.callId?.startsWith("sarvam-model-")==true){
+                                pendingAppTool=null
+                                pendingApprovalSummary=null
+                                message="Old model request cancelled by new speech."
+                            }
+                        }
                     }
                     override fun ownerRequest(text:String):Boolean {
                         if(!assistantPanelEnabled)return false
@@ -314,6 +331,49 @@ class RealtimeVoiceService : Service() {
                         main.post {
                             if(active.get() && selectedProvider=="sarvam-api")
                                 handleSarvamOwnerRequest(text)
+                        }
+                        return true
+                    }
+                    override fun requestNativeTool(name:String,args:String,
+                                                    callId:String,utterance:String):Boolean {
+                        if(!assistantPanelEnabled || selectedProvider!="sarvam-api" ||
+                            !callId.matches(Regex("[A-Za-z0-9_-]{1,128}")))return false
+                        main.post {
+                            if(!active.get() || selectedProvider!="sarvam-api")return@post
+                            if(pendingAppTool!=null || activeToolOperation) {
+                                sarvamApiTransport?.completeNativeTool(callId,
+                                    "Rejected: finish or deny the previous action first.")
+                                return@post
+                            }
+                            if(++toolCallsInSession>40) {
+                                sarvamApiTransport?.completeNativeTool(callId,
+                                    "Rejected: voice device action budget exhausted.")
+                                return@post
+                            }
+                            when(val decision=NexaLiveToolPolicy.decide(
+                                this@RealtimeVoiceService,name,args)){
+                                is NexaLiveToolPolicy.Decision.Immediate -> {
+                                    sarvamApiTransport?.completeNativeTool(
+                                        callId,decision.result)
+                                }
+                                is NexaLiveToolPolicy.Decision.NeedsApproval -> {
+                                    // This is a model-proposed action, NOT an
+                                    // implicit "always approve" permission.
+                                    val pending=PendingAppTool("sarvam-model-$callId",
+                                        decision.app,decision.command,decision.installedApp)
+                                    pendingAppTool=pending
+                                    pendingApprovalSummary=when {
+                                        decision.command=="read_visible_screen_text" ->
+                                            "The assistant requests visible screen labels. Share once with Sarvam? Allow once or Deny."
+                                        decision.command=="list_installed_apps" ->
+                                            "The assistant requests launcher app names. Share once with Sarvam? Allow once or Deny."
+                                        else -> "Model suggested: "+decision.app.take(65)+
+                                            ". Allow one reviewed Android action or Deny."
+                                    }
+                                    message="Review suggested tool: "+name.take(55)
+                                    offerOwnerTool(pending)
+                                }
+                            }
                         }
                         return true
                     }
@@ -556,7 +616,10 @@ class RealtimeVoiceService : Service() {
             lastToolResult="Approval expired after 60 seconds. Nothing was opened."
             message=lastToolResult
             if(selectedProvider=="sarvam-api") {
-                sarvamApiTransport?.toolResult(lastToolResult)
+                if(tool.callId.startsWith("sarvam-model-")) {
+                    sarvamApiTransport?.completeNativeTool(
+                        tool.callId.removePrefix("sarvam-model-"),lastToolResult)
+                }else sarvamApiTransport?.toolResult(lastToolResult)
             } else if(selectedProvider=="openai") {
                 sendRealtimeToolOutput(tool.callId,lastToolResult)
                 socket?.send(JSONObject().put("type","response.create").toString())
@@ -564,38 +627,93 @@ class RealtimeVoiceService : Service() {
         },60_000L)
     }
 
-    /** Ask for each new step only after a verified prior step. */
-    private fun advanceCompoundAfterVerifiedAction(tool:PendingAppTool,outcome:String,approved:Boolean) {
+    /** Persist a task before any dependent step. On failure, stop safely. */
+    private fun checkpointAndContinue(cursor:NexaVoiceTaskCursor,status:String,
+                                      evidence:String,next:()->Unit) {
+        val session=voiceSessionId
+        Thread({
+            val saved=NexaConversationDb.saveTask(this,cursor.taskId,session,status,
+                cursor.stepIndex,cursor.originalRequest,cursor.steps,evidence.take(350))
+            main.post {
+                if(currentCompound!==cursor || session!=voiceSessionId || !active.get())
+                    return@post
+                if(saved)next()
+                else {
+                    cursor.cancel();currentCompound=null
+                    sarvamApiTransport?.toolResult(
+                        "Secure task checkpoint unavailable. Stopped before next action.")
+                }
+            }
+        },"nexa-task-checkpoint").start()
+    }
+
+    /** Never falsely claim a failed or uncertain device dispatch completed a plan. */
+    private fun closeCompound(cursor:NexaVoiceTaskCursor,status:String,evidence:String) {
+        if(currentCompound===cursor)currentCompound=null
+        val index=cursor.stepIndex
+        cursor.cancel()
+        val session=voiceSessionId
+        Thread({
+            NexaConversationDb.saveTask(this,cursor.taskId,session,status,index,
+                cursor.originalRequest,cursor.steps,evidence.take(350))
+        },"nexa-task-terminal").start()
+    }
+
+    private fun advanceCompoundAfterVerifiedAction(tool:PendingAppTool,outcome:String,
+                                                   approved:Boolean) {
         val cursor=currentCompound ?: return
         if(!approved || outcome.startsWith("Rejected") ||
             outcome.contains("could not",true) || outcome.contains("refused",true) ||
-            outcome.contains("No visible",true)) {
-            cursor.cancel(); currentCompound=null; return
+            outcome.contains("No visible",true) || outcome.contains("not saved",true) ||
+            outcome.contains("No action",true)) {
+            closeCompound(cursor,"failed",outcome)
+            return
         }
-        val step=cursor.current() ?: return
         val isAppOpen=tool.command.startsWith("open ") || tool.command=="open"
         if(isAppOpen) {
+            if(!outcome.contains("launch requested",true)) {
+                closeCompound(cursor,"uncertain",outcome)
+                return
+            }
             val expected=tool.installedApp?.packageName ?: when {
                 tool.command.contains("whatsapp",true)->"com.whatsapp"
                 tool.command.contains("github",true)->"com.github.android"
                 tool.command.contains("brave",true)->"com.brave.browser"
                 else -> ""
             }
-            if(expected.isBlank()) {cursor.cancel();currentCompound=null;return}
+            if(expected.isBlank()) {
+                closeCompound(cursor,"uncertain","Unknown launched package")
+                return
+            }
+            val session=voiceSessionId
             main.postDelayed({
-                if(!active.get() || currentCompound!==cursor)return@postDelayed
-                val root=try{ScreenAssistService.active?.externalWindowRoot()}catch(_:Exception){null}
-                val pkg=try{root?.packageName?.toString()}catch(_:Exception){null}
-                finally {try{root?.recycle()}catch(_:Exception){}}
-                if(pkg!=expected) {
-                    cursor.cancel();currentCompound=null
-                    sarvamApiTransport?.toolResult("Android did not verify "+expected+
-                        " on screen. Multi-step task stopped; no next action.")
+                if(!active.get() || currentCompound!==cursor || voiceSessionId!=session)
                     return@postDelayed
-                }
-                val next=cursor.advance(true)
-                if(next==null)currentCompound=null
-                else handleSarvamOwnerRequest(next,true)
+                Thread({
+                    val root=try{ScreenAssistService.active?.externalWindowRoot()}
+                        catch(_:Exception){null}
+                    val pkg=try{root?.packageName?.toString()}
+                        catch(_:Exception){null}
+                        finally{try{root?.recycle()}catch(_:Exception){}}
+                    main.post {
+                        if(!active.get() || currentCompound!==cursor ||
+                            voiceSessionId!=session)return@post
+                        if(pkg!=expected) {
+                            closeCompound(cursor,"uncertain",
+                                "Foreground package not verified: "+(pkg?:"unavailable"))
+                            sarvamApiTransport?.toolResult(
+                                "Android did not verify $expected on screen. No further action.")
+                            return@post
+                        }
+                        val next=cursor.advance(true)
+                        checkpointAndContinue(cursor,
+                            if(cursor.finished)"completed" else "verified",
+                            "Foreground package verified: $expected") {
+                            if(next==null)currentCompound=null
+                            else handleSarvamOwnerRequest(next,true)
+                        }
+                    }
+                },"nexa-task-app-verification").start()
             },1600L)
             return
         }
@@ -603,17 +721,22 @@ class RealtimeVoiceService : Service() {
             outcome.startsWith("Visible controls") ||
             outcome.startsWith("Installed launcher apps")
         if(!verified) {
-            cursor.cancel();currentCompound=null
-            // Android acceptance alone is not verified completion.
+            closeCompound(cursor,"uncertain",outcome)
             return
         }
         val next=cursor.advance(true)
-        if(next==null)currentCompound=null
-        else main.post { if(active.get())handleSarvamOwnerRequest(next,true) }
+        checkpointAndContinue(cursor,
+            if(cursor.finished)"completed" else "verified",outcome.take(350)) {
+            if(next==null) currentCompound=null
+            else handleSarvamOwnerRequest(next,true)
+        }
     }
 
     private fun offerOwnerTool(tool:PendingAppTool) {
         expirePendingTool(tool)
+        // An app discovered by fuzzy launcher label matching may be wrong.
+        // Always show its exact target for review, even in trusted navigation.
+        if(tool.command=="open" && tool.installedApp!=null)return
         if(selectedProvider=="sarvam-api" && NexaVoicePermissionPolicy.canExecute(this,tool.command)) {
             // Current user request plus persistent low-risk grant, never model-only
             // arbitrary permission bypass. High-risk classes cannot be whitelisted.
@@ -626,13 +749,34 @@ class RealtimeVoiceService : Service() {
     }
 
     private fun handleSarvamOwnerRequest(rawTranscript: String, fromPlan:Boolean=false) {
-        if(!fromPlan && currentCompound!=null){
-            currentCompound?.cancel(); currentCompound=null
+        if (!assistantPanelEnabled || pendingAppTool != null || activeToolOperation)return
+        if(!fromPlan) {
+            taskRequestEpoch++
+            currentCompound?.let { closeCompound(it,"cancelled","New owner request") }
         }
         val plan=if(fromPlan)null else NexaVoiceTaskPlan.parse(rawTranscript)
-        if(plan!=null)currentCompound=NexaVoiceTaskCursor(plan)
-        val transcript=if(plan!=null)plan.steps.first() else rawTranscript
-        if (!assistantPanelEnabled || pendingAppTool != null || activeToolOperation) return
+        if(plan!=null){
+            val cursor=NexaVoiceTaskCursor(plan)
+            val session=voiceSessionId
+            val epoch=taskRequestEpoch
+            Thread({
+                val saved=NexaConversationDb.saveTask(this,cursor.taskId,session,
+                    "planned",0,cursor.originalRequest,cursor.steps)
+                main.post {
+                    if(!active.get() || !assistantPanelEnabled || session!=voiceSessionId ||
+                        taskRequestEpoch!=epoch || pendingAppTool!=null) return@post
+                    if(!saved) {
+                        sarvamApiTransport?.toolResult(
+                            "Secure task journal unavailable. No device action started.")
+                        return@post
+                    }
+                    currentCompound=cursor
+                    handleSarvamOwnerRequest(cursor.steps.first(),true)
+                }
+            },"nexa-task-start").start()
+            return
+        }
+        val transcript=rawTranscript
         val now = SystemClock.elapsedRealtime()
         if (transcript == lastLocalUtterance &&
             now - lastLocalUtteranceAt < 12_000L) return
@@ -995,7 +1139,9 @@ class RealtimeVoiceService : Service() {
         try { sarvamTransport?.close() } catch (_: Exception) {}
         sarvamTransport=null
         pendingAppTool = null
+        currentCompound?.let { closeCompound(it,"cancelled","Voice session ended") }
         currentCompound=null
+        taskRequestEpoch++
         activeToolOperation=false
         pendingApprovalSummary = null
         assistantPanelEnabled = false
