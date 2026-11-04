@@ -323,6 +323,7 @@ class RealtimeVoiceService : Service() {
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
                             NexaGeneralMessageVoice.parse(text)!=null ||
+                            NexaVoiceTextIntent.parse(text)!=null ||
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
                             NexaPhoneVoiceTools.wantsInstalledApps(text) ||
                             NexaPhoneVoiceTools.wantsScreenHelp(text) ||
@@ -552,6 +553,16 @@ class RealtimeVoiceService : Service() {
                         // A precise user-uttered message request can only
                         // open Nexa's local app/recipient review screen.
                         if(assistantPanelEnabled && transcript.isNotBlank()) {
+                            val field=NexaVoiceTextIntent.parse(transcript)
+                            if(field!=null)main.post {
+                                if(active.get() && selectedProvider=="openai"){
+                                    NexaVoiceTextIntent.queue(field)
+                                    try {
+                                        startActivity(Intent(this@RealtimeVoiceService,MainActivity::class.java)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                    }catch(_:Exception){NexaVoiceTextIntent.clear()}
+                                }
+                            }
                             val request=NexaGeneralMessageVoice.parse(transcript)
                             if(request!=null) main.post {
                                 if(active.get() && selectedProvider=="openai") {
@@ -815,6 +826,22 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        val textIntent=NexaVoiceTextIntent.parse(transcript)
+        if(textIntent!=null){
+            NexaVoiceTextIntent.queue(textIntent)
+            val opened=try{
+                startActivity(Intent(this,MainActivity::class.java).apply{
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                true
+            }catch(_:Exception){false}
+            lastToolResult=if(opened)
+                "Nexa text-field review opened. Find the correct empty field and approve typing. No submit."
+                else "Nexa could not open text-field review. Nothing typed or submitted."
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
         val messageIntent=NexaGeneralMessageVoice.parse(transcript)
         if(messageIntent!=null) {
             // Speech supplies a local message draft request, not authorization
