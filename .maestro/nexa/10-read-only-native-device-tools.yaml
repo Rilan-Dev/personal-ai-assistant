@@ -1,0 +1,34 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa native battery and status tools return observed Android data
+tags:
+  - nexa
+  - native-tools
+  - battery
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+# This uses Nexa's actual Android BatteryManager bridge, not a mocked value.
+- tapOn: "Check battery"
+- extendedWaitUntil:
+    visible:
+      text: "Android reports battery at [0-9]{1,3}%;.*"
+    timeout: 30000
+- assertNotVisible: "Battery status was unavailable or invalid"
+- takeScreenshot: nexa-verified-native-battery
+# A second native read-only tool must still work in the same app session.
+- tapOn: "Assistant command"
+- inputText: "Check device status"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible:
+      text: "Android's native device bridge responded.*"
+    timeout: 30000
+- takeScreenshot: nexa-verified-native-device-status
