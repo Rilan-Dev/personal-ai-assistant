@@ -24,6 +24,7 @@ on:
           - resume-stress
           - agent-browser
           - agent-controls
+          - whatsapp-review
       android_os:
         description: "Maestro Cloud Android image"
         required: true
@@ -190,6 +191,7 @@ jobs:
             resume-stress) target=".maestro/nexa/08-navigation-background-resume.yaml" ;;
             agent-browser) target=".maestro/nexa/09-agent-chrome-ai-search.yaml" ;;
             agent-controls) target=".maestro/experimental/10-agent-notification-shade.yaml" ;;
+            whatsapp-review) target=".maestro/experimental/11-whatsapp-owner-review.yaml" ;;
             *) echo "::error::Invalid test suite"; exit 2 ;;
           esac
           # Never print the key. GitHub secret paste often includes a trailing
