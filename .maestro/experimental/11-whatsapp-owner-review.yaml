@@ -1,0 +1,26 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa WhatsApp owner request prepares local review without sending
+tags:
+  - nexa
+  - whatsapp
+  - owner-review
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Assistant command"
+- inputText: 'Send a WhatsApp message to my mom "I will call you later"'
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible:
+      text: "Requested contact: mom.*Nothing was sent.*"
+    timeout: 30000
+- assertVisible: "Nexa · Tools"
+- takeScreenshot: nexa-owner-whatsapp-local-preview-no-send
