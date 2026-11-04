@@ -1,0 +1,48 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa owner approval can decline and resume a single harmless training tool
+tags:
+  - nexa
+  - approval
+  - native-tools
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+# A training-only tool: no native device action, no message and no provider call.
+- tapOn: "Assistant command"
+- inputText: "Test approval"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible: "Approval needed"
+    timeout: 30000
+- assertVisible: "Tool: demo.approval_test"
+- takeScreenshot: nexa-owner-approval-ungranted
+- tapOn: "Decline"
+- extendedWaitUntil:
+    visible: "Approval declined. Task cancelled without execution."
+    timeout: 15000
+- takeScreenshot: nexa-owner-action-declined
+# A fresh, separately requested training task must require a fresh approval.
+- tapOn: "Assistant command"
+- inputText: "Test approval"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible: "Approval needed"
+    timeout: 30000
+- tapOn: "Approve once"
+- extendedWaitUntil:
+    visible: "Approved once. Use Resume to continue the exact task with your currently granted permissions."
+    timeout: 15000
+- tapOn: "Resume saved task"
+- extendedWaitUntil:
+    visible: "The one-time approval was consumed. This was a safe training action; no device operation occurred."
+    timeout: 30000
+- takeScreenshot: nexa-owner-one-time-tool-resume-verified
