@@ -30,6 +30,14 @@ tags:
     timeout: 30000
 - assertVisible: "Target input: Search"
 - assertVisible: "Exact text: project update"
-- assertVisible: "Prepare approved text entry"
-- assertVisible: "Discard text"
+- scrollUntilVisible:
+    element:
+      text: "Prepare approved text entry"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Discard text"
+    direction: DOWN
+    timeout: 30000
 - takeScreenshot: nexa-reviewed-generic-text-input
