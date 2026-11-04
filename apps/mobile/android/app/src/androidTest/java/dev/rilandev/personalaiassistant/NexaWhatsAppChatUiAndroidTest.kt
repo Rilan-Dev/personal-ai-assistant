@@ -1,6 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.os.SystemClock
+import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -35,9 +36,34 @@ class NexaWhatsAppChatUiAndroidTest {
             root().let { current ->
                 assertTrue("New chat header + message composer must both be present",
                     NexaWhatsAppChatActions.inspect(current,"Nova Forever").alreadyOpen)
+                val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+                queue.add(current)
+                val composers=mutableListOf<AccessibilityNodeInfo>()
+                while(queue.isNotEmpty() && composers.size<3) {
+                    val node=queue.removeFirst()
+                    if(node.isEditable && node.isVisibleToUser && !node.isPassword) {
+                        val desc=listOf(node.hintText?.toString().orEmpty(),
+                            node.contentDescription?.toString().orEmpty()).joinToString(" ")
+                        if(NexaMessageInputPolicy.isMessageField(desc,true,
+                            node.isPassword,node.isEnabled,node.isVisibleToUser,
+                            node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT},
+                            !NexaEditableNode.isEmpty(node)))
+                            composers.add(node)
+                    }
+                    for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
+                }
+                assertEquals("The destination must have exactly one empty composer",1,composers.size)
+                val payload=Bundle().apply{
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                        "Synthetic test: I will call later")
+                }
+                assertTrue("Android must accept a single composer text insertion",
+                    composers.single().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,payload))
             }
             scenario.onActivity {
                 assertEquals(1,NexaChatListQaActivity.chatRowClicks)
+                assertEquals("Synthetic test: I will call later",
+                    it.messageInput.text.toString())
                 assertEquals(0,NexaChatListQaActivity.sendClicks)
                 assertTrue(NexaChatListQaActivity.opened)
             }
