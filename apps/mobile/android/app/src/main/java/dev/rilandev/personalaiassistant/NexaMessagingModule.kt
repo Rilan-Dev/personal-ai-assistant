@@ -188,6 +188,39 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
         }
     }
 
+    /** A user-reviewed generic field (search, notes, description).
+     * No arbitrary text entry from a model, no automatic IME submit. */
+    @ReactMethod fun stageReviewedTextField(label: String, text: String, p: Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true) {
+            p.reject("NOT_FOREGROUND","Open the visible Nexa review before typing")
+            return
+        }
+        if(!ScreenAssistState.connected || ScreenAssistService.active==null ||
+            !Settings.canDrawOverlays(context)){
+            p.reject("TEXT_GRANT_REQUIRED","Enable Screen Assist and overlay permission first")
+            return
+        }
+        if(!NexaTextInputState.stage(label,text)){
+            p.reject("INVALID_TEXT_FIELD","Choose a safe named field and up to 500 characters")
+            return
+        }
+        try {
+            context.startService(Intent(context,NexaToolOverlayService::class.java).apply{
+                action=NexaToolOverlayService.ACTION_SHOW
+            })
+            p.resolve(true)
+        }catch(_:Exception){
+            NexaTextInputState.clear()
+            p.reject("TEXT_ENTRY_UNAVAILABLE","Unable to present Nexa field-entry approval")
+        }
+    }
+
+    @ReactMethod fun cancelReviewedTextField(p: Promise) {
+        NexaTextInputActions.cancel()
+        NexaTextInputState.clear()
+        p.resolve(true)
+    }
+
     @ReactMethod fun discardManualComposer(p: Promise) {
         NexaMessageInputActions.cancel()
         NexaMessageDraftState.clear()
