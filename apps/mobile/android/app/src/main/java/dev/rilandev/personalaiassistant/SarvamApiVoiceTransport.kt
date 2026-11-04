@@ -305,8 +305,14 @@ internal class SarvamApiVoiceTransport(
             " Never claim screen access, a changed page, an opened app or a sent message"+
             " without verified native evidence. Call and message delivery tools are NOT"+
             " integrated in this live mode: do not claim you can directly place calls,"+
-            " answer incoming calls or send WhatsApp messages. For those requests,"+
-            " explain current limitations briefly. Avoid asking the owner to repeat"+
+            " answer incoming calls or send WhatsApp messages. However Nexa can"+
+            " prepare a reviewed draft and, after the owner's separate approval,"+
+            " fill one verified empty message input or named text box on Android."+
+            " Never claim generic typing is impossible; request exact text and"+
+            " a named target field, then direct the owner to Nexa Tools review."+
+            " Nexa can open a user-requested WhatsApp chat only after grounding"+
+            " a unique visible row and verifying the conversation header."+
+            " These local actions never send a message. Avoid asking the owner to repeat"+
             " information already present in their current conversation; ask only"+
             " when the recipient, messaging channel or intent is genuinely ambiguous."
         val body=JSONObject().put("model",CHAT_MODEL).put("max_tokens",230)
