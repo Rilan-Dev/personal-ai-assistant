@@ -347,9 +347,25 @@ internal class SarvamApiVoiceTransport(
                 if(!running || turn!=generation.get()){response.close();return}
                 try { response.use {
                     if(!it.isSuccessful) {
-                        callbacks.failed(if(it.code==401 || it.code==403)
-                            "Sarvam Model API rejected the subscription key"
-                            else "Sarvam conversation model returned HTTP ${it.code}")
+                        // The exported phone logs only showed an opaque HTTP
+                        // 400. Classify the bounded provider error body but
+                        // never expose its free-form message or any keys.
+                        val detail=try{it.body?.string().orEmpty().take(5000)}
+                            catch(_:Exception){""}
+                        val diagnosis=NexaSarvamChatError.classify(it.code,detail)
+                        if(it.code==400 && diagnosis.safeTextOnlyRetry &&
+                            round==0 && body.has("tools")) {
+                            val fallback=JSONObject(body.toString())
+                            fallback.remove("tools")
+                            fallback.remove("tool_choice")
+                            // One strictly non-executing fallback on a
+                            // provider-confirmed unsupported tool schema.
+                            // No device operation, no further retry on 400.
+                            completeModelTurn(turn,fallback,round+1,ownerUtterance)
+                            return
+                        }
+                        callbacks.failed(diagnosis.explanation+
+                            " [code="+diagnosis.code+"]")
                         return
                     }
                     val raw=it.body?.string().orEmpty()
