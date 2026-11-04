@@ -18,7 +18,8 @@ import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistan
 import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
-  hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft} from './src/native/androidToolOverlay';
+  hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
+  consumeSpokenMessageRequest} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -562,6 +563,41 @@ export default function App() {
     let mounted=true;
     const consume=async()=>{
       try {
+        const spoken=await consumeSpokenMessageRequest();
+        if (spoken && mounted) {
+          // A spoken user command enters the same explicit channel chooser
+          // as a typed command. The transcript never grants send permission.
+          setMessageRequest(spoken);
+          setMessageChosen(null);
+          setMessageOptions([]);
+          setSelectedContact(null);
+          setMessageRecipientConfirmed(false);
+          setWhatsAppDraft(spoken.text);
+          setMessageBusy(true);
+          setMessageNotice('Spoken message queued for '+spoken.recipientHint+
+            '. Check the installed app and confirm the recipient. Nothing was sent.');
+          setTab('tools');
+          try {
+            const apps=await installedMessagingApps();
+            const key=recipientMemoryKey(spoken.recipientHint);
+            const remembered=key?await rememberedMessageApp(key):null;
+            if(!mounted)return;
+            const decision=decideMessageApp(spoken,apps,remembered);
+            setMessageOptions(apps);
+            if(decision.kind==='selected'&&decision.app){
+              setMessageChosen(decision.app);
+              setMessageNotice('Spoken request: '+decision.app.label+
+                (decision.reason==='remembered'?' remembered for this alias. ':' requested. ')+
+                'Choose and confirm the real recipient. Not sent.');
+            }else {
+              setMessageNotice(decision.kind==='unavailable'
+                ? 'Requested messaging app was not found. No alternative selected.'
+                : 'Choose a messaging app below for '+spoken.recipientHint+'. Nothing sent.');
+            }
+          }catch{if(mounted)setMessageNotice('Messaging app discovery or preference unavailable. No message sent.');}
+          finally{if(mounted)setMessageBusy(false);}
+          return;
+        }
         const pending=await consumeReviewedVoiceDraft();
         if (!mounted || !pending) return;
         setSelectedContact(null);
