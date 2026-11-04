@@ -343,6 +343,11 @@ class NexaToolOverlayService : Service() {
         // Strict local intent grammar: inspection is read-only; scrolling only
         // PREPARES a pending confirmation and never fires automatically.
         when (query.lowercase(java.util.Locale.ROOT).trim().trimEnd('?','.','!')) {
+            "find input boxes", "find text fields", "inspect input boxes",
+            "list editable fields", "what input boxes are on screen" -> {
+                findSafeInputBoxes()
+                return
+            }
             "inspect screen", "inspect screen icons", "find screen icons",
             "what icons are on screen", "what icons are on my screen" -> {
                 section = "tools"
@@ -561,6 +566,13 @@ class NexaToolOverlayService : Service() {
     private fun cancelScroll() {
         NexaScreenScroll.cancel()
         note = "Scroll cancelled."
+        render()
+    }
+    private fun findSafeInputBoxes() {
+        val service=ScreenAssistService.active
+        note=if(service==null)"Screen Assist is not connected; no input boxes inspected."
+            else NexaTextInputActions.inspectVisibleFields(service)
+        section="tools"
         render()
     }
     private fun inspectNamedTextBox() {
@@ -793,6 +805,7 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(button("Find visible input boxes") { findSafeInputBoxes() })
                         addView(text("Owner-guided navigation: one approved tap at each step.",11f,true))
                         addView(row(
                             button("Menu → Search") { startGuidedNavigation("find search in menu") },
