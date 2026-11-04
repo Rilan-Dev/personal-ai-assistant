@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NexaWhatsAppChatUiAndroidTest {
     private fun root():AccessibilityNodeInfo =
-        NexaQaAccessibilityRoot.ownWindow()
+        NexaQaAccessibilityRoot.ownWindow("WhatsApp - Synthetic QA only")
 
     @Test fun duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader() {
         NexaChatListQaActivity.duplicateContact=false
