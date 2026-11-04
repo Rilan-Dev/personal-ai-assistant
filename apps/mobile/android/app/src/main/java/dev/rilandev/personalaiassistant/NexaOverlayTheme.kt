@@ -1,6 +1,8 @@
 package dev.rilandev.personalaiassistant
 
 import android.content.Context
+import android.content.res.ColorStateList
+import android.graphics.drawable.RippleDrawable
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -114,6 +116,17 @@ internal object NexaOverlayTheme {
         setPadding(dp(ctx, 6), 0, dp(ctx, 6), 0)
         setTextColor(p.buttonText)
         background = inset(ctx, p, 17).apply { setColor(p.button) }
+        // Native tactile feedback, not an extra permission or action.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            foreground = RippleDrawable(
+                ColorStateList.valueOf(Color.argb(45, 220, 230, 255)),
+                null,
+                GradientDrawable().apply {
+                    setColor(Color.WHITE)
+                    cornerRadius = dp(ctx, 17).toFloat()
+                }
+            )
+        }
         setOnClickListener { run() }
     }
 

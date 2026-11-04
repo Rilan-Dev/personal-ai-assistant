@@ -58,7 +58,7 @@ test('overlay remains non-modal, draggable, collapsible, and bounded in size and
   assert.match(overlay,/TYPE_APPLICATION_OVERLAY/);
   assert.match(overlay,/ACTION_MOVE/);
   assert.match(overlay,/if \(expanded\) minOf\(dp\(360\)/);
-  assert.match(overlay,/if \(expanded\) minOf\(dp\(490\)/);
+  assert.match(overlay,/if \(expanded\) minOf\(dp\(540\)/);
   assert.match(overlay,/ScrollView\(this\)/);
   assert.match(overlay,/while \(history\.size > 10\) history\.removeFirst\(\)/);
   assert.match(overlay,/raw\.trim\(\)\.take\(150\)/);

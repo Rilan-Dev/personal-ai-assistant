@@ -76,7 +76,26 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+          script: |
+            set -u
+            native_result=0
+            cd apps/mobile/android
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace || native_result=$?
+            cd ../../..
+            # Real installed app, ephemeral emulator, no external provider keys.
+            # Screenshot collection cannot manufacture app behavior or grant permissions.
+            visual_result=0
+            bash scripts/ci/capture-nexa-ui.sh || visual_result=$?
+            if [[ "$native_result" -ne 0 ]]; then exit "$native_result"; fi
+            if [[ "$visual_result" -ne 0 ]]; then exit "$visual_result"; fi
+      - name: Upload Android emulator screen evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-ui-screenshots
+          path: artifacts/nexa-ui-screenshots/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Upload instrumentation diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
