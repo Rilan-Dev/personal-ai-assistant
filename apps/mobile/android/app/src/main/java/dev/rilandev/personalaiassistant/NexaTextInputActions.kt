@@ -95,7 +95,7 @@ internal object NexaTextInputActions {
                     node.contentDescription?.toString().orEmpty(),
                     node.viewIdResourceName?.substringAfterLast('/')?.replace('_',' ').orEmpty())
                 if(NexaTextInputPolicy.matches(target,hints,node.isEditable,node.isPassword,
-                    node.isVisibleToUser,node.isEnabled,node.text.isNullOrEmpty(),
+                    node.isVisibleToUser,node.isEnabled,NexaEditableNode.isEmpty(node),
                     node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT})){
                     val bounds=Rect().also{node.getBoundsInScreen(it)}
                     if(bounds.width()>0&&bounds.height()>0&&window.contains(bounds)){
@@ -123,7 +123,7 @@ internal object NexaTextInputActions {
             while(queue.isNotEmpty()&&visited++<160&&labels.size<8) {
                 val node=queue.removeFirst()
                 if(!node.isVisibleToUser || node.isPassword)continue
-                if(node.isEditable && node.isEnabled && node.text.isNullOrEmpty() &&
+                if(node.isEditable && node.isEnabled && NexaEditableNode.isEmpty(node) &&
                     node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT}) {
                     val hints=listOf(node.hintText?.toString().orEmpty(),
                         node.contentDescription?.toString().orEmpty(),
@@ -196,7 +196,8 @@ internal object NexaTextInputActions {
                         draft.exactText)
                 }
                 val accepted=node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
-                val matches=accepted && node.text?.toString()==draft.exactText
+                val matches=accepted &&
+                    NexaEditableNode.containsExactTextAfterDispatch(node,draft.exactText)
                 NexaUiActionJournal.finish(service,approval.token,
                     if(accepted)"android_accepted" else "android_rejected")
                 if(matches){
