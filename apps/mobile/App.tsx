@@ -5,10 +5,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
-import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey} from "@paa/agent-core";
-import type {MessageRequest,InstalledMessageApp} from "@paa/agent-core";
+import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
+import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
-  forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer} from './src/native/nexaMessaging';
+  forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
+  reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
@@ -556,6 +557,9 @@ export default function App() {
   const [messageBusy,setMessageBusy]=useState(false);
   const [messageNotice,setMessageNotice]=useState('');
   const [messageRecipientConfirmed,setMessageRecipientConfirmed]=useState(false);
+  const [textEntryRequest,setTextEntryRequest]=useState<ReviewedTextEntry|null>(null);
+  const [textEntryBusy,setTextEntryBusy]=useState(false);
+  const [textEntryNotice,setTextEntryNotice]=useState('');
   // Consume one explicitly spoken command only after Nexa's RN UI becomes
   // active. Native code never selects contacts or invokes WhatsApp Send.
   useEffect(()=>{
@@ -736,6 +740,25 @@ export default function App() {
     }catch(e){setMessageNotice(e instanceof Error?e.message:'Could not start protected message composer. No action performed.');}
     finally{setMessageBusy(false);}
   };
+  const beginReviewedTextEntry=async()=>{
+    if(!textEntryRequest||textEntryBusy)return;
+    setTextEntryBusy(true);
+    try{
+      if(!reviewedTextInputAvailable())throw Error('Updated Android text-entry bridge is unavailable.');
+      await stageReviewedTextInput(textEntryRequest.targetLabel,textEntryRequest.exactText);
+      setTextEntryNotice('Text staged only in device memory. Open the intended app, tap the Nexa bubble → Tools → Find input box, inspect the target, then tap Confirm type text. No submit or send.');
+    }catch(e){setTextEntryNotice(e instanceof Error?e.message:'Android rejected the text-entry review.');}
+    finally{setTextEntryBusy(false);}
+  };
+  const discardReviewedTextEntry=async()=>{
+    setTextEntryBusy(true);
+    try{if(reviewedTextInputAvailable())await cancelReviewedTextInput();}
+    catch{setTextEntryNotice('Could not clear Android staged text; it expires automatically within 90 seconds.');}
+    finally{
+      setTextEntryRequest(null);setTextEntryBusy(false);
+    }
+  };
+
   const cancelMessageReview=()=>{
     setMessageRequest(null);setMessageChosen(null);setMessageOptions([]);
     setMessageRecipientConfirmed(false);
@@ -1330,6 +1353,21 @@ export default function App() {
         return;
       }
     }
+    // User-named external text inputs require an independent screen-grounded
+    // review. The AI never chooses a guessed box or submits the text.
+    if(!restore && engine.live){
+      const requestedText=parseReviewedTextEntry(request);
+      if(requestedText){
+        setInput('');setEvents([]);append('user',request);
+        setTextEntryRequest(requestedText);
+        setTextEntryNotice('Find and review one safe empty '+requestedText.targetLabel+
+          ' field in the intended app. No text was typed, submitted or sent.');
+        append('assistant','I prepared the exact requested text for a '+requestedText.targetLabel+
+          ' field. Open Tools to approve field discovery and typing. I will not submit it.');
+        setTab('tools');
+        return;
+      }
+    }
     // ACA read-only summary is an explicit business intent. Never ask the
     // native Android planner to guess email content or change its tool registry.
     const acaMailScope = !restore && engine.live ? parseAcaMailSummaryIntent(request) : null;
@@ -1865,6 +1903,23 @@ export default function App() {
             <Text style={styles.cardHeading}>Private, one-time observations</Text>
             <Text style={styles.sectionTag}>On demand</Text>
           </View>
+          {textEntryRequest&&<View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Review text entry into another app</Text>
+            <Text style={styles.cardText}>Target input: {textEntryRequest.targetLabel}</Text>
+            <Text style={styles.cardText} selectable>Exact text: {textEntryRequest.exactText}</Text>
+            <Text style={styles.settingHelp}>Only a visible, unique, empty, non-sensitive field may be filled. Android Screen Assist and floating-bubble permissions are required. No Enter/Send/Submit press will occur.</Text>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" disabled={textEntryBusy}
+                onPress={()=>void beginReviewedTextEntry()} style={styles.primaryInline}>
+                <Text style={styles.primaryInlineText}>Prepare approved text entry</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={textEntryBusy}
+                onPress={()=>void discardReviewedTextEntry()} style={styles.outlineInline}>
+                <Text style={styles.outlineInlineText}>Discard text</Text>
+              </Pressable>
+            </View>
+            {textEntryNotice!==''&&<Text style={styles.feedback}>{textEntryNotice}</Text>}
+          </View>}
           {messageRequest&&<View style={styles.actionCard}>
             <Text style={styles.actionTitle}>Message app & recipient review</Text>
             <Text style={styles.cardText}>Requested recipient: {messageRequest.recipientHint}</Text>
