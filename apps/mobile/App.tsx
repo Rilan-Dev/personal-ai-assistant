@@ -5,7 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
-import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
+import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey} from "@paa/agent-core";
+import type {MessageRequest,InstalledMessageApp} from "@paa/agent-core";
+import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
+  forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer} from './src/native/nexaMessaging';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
@@ -546,6 +549,12 @@ export default function App() {
   const [whatsAppDraft,setWhatsAppDraft]=useState('');
   const [whatsAppDraftNotice,setWhatsAppDraftNotice]=useState('');
   const [whatsAppDraftBusy,setWhatsAppDraftBusy]=useState(false);
+  const [messageRequest,setMessageRequest]=useState<MessageRequest|null>(null);
+  const [messageOptions,setMessageOptions]=useState<InstalledMessageApp[]>([]);
+  const [messageChosen,setMessageChosen]=useState<InstalledMessageApp|null>(null);
+  const [messageBusy,setMessageBusy]=useState(false);
+  const [messageNotice,setMessageNotice]=useState('');
+  const [messageRecipientConfirmed,setMessageRecipientConfirmed]=useState(false);
   // Consume one explicitly spoken command only after Nexa's RN UI becomes
   // active. Native code never selects contacts or invokes WhatsApp Send.
   useEffect(()=>{
@@ -605,6 +614,7 @@ export default function App() {
     if(!engine.live||privacyToolBusy||running)return;
     setPrivacyToolBusy(true);setPrivacyToolNotice('');
     setSelectedContact(null);
+    setMessageRecipientConfirmed(false);
     setApproximateLocation(null);
     try {
       const contact=await pickOwnerContact();
@@ -618,7 +628,8 @@ export default function App() {
     }finally{setPrivacyToolBusy(false);}
   };
   const openSelectedWhatsAppDraft=async()=>{
-    if (!selectedContact || !whatsAppDraft.trim() || whatsAppDraftBusy ||
+    if (!selectedContact || (messageRequest!==null && !messageRecipientConfirmed) ||
+        !whatsAppDraft.trim() || whatsAppDraftBusy ||
         Date.now() > privateObservationDeadline.current) {
       setWhatsAppDraftNotice('Select one contact again, review the message, then choose Open draft.');
       return;
@@ -1172,6 +1183,51 @@ export default function App() {
           ". Choose the correct contact using the Android picker. Nothing was sent.");
         append("assistant", "I prepared the exact WhatsApp text locally. Select the intended contact, review the recipient and message, then open the draft. You still tap Send in WhatsApp.");
         setTab("tools");
+        return;
+      }
+    }
+    // A generic message request is NOT an instruction to choose a messenger,
+    // locate a person, type into arbitrary controls or send. A remembered app
+    // is only a device-local, owner-selected channel hint.
+    if(!restore && engine.live) {
+      const requested=parseMessageRequest(request);
+      if(requested) {
+        setInput('');setEvents([]);append('user',request);
+        setMessageRequest(requested);
+        setMessageOptions([]);
+        setMessageChosen(null);
+        setMessageRecipientConfirmed(false);
+        setSelectedContact(null);
+        setWhatsAppDraft(requested.text);
+        setMessageBusy(true);
+        setTab('tools');
+        if(!messagingAvailable()) {
+          setMessageNotice('Updated Android messaging module is unavailable. Install the latest signed Nexa APK. No message was sent.');
+        } else {
+          try {
+            const apps=await installedMessagingApps();
+            const key=recipientMemoryKey(requested.recipientHint);
+            const remembered=key?await rememberedMessageApp(key):null;
+            const decision=decideMessageApp(requested,apps,remembered);
+            setMessageOptions(apps);
+            if(decision.kind==='selected' && decision.app) {
+              setMessageChosen(decision.app);
+              setMessageNotice('Using '+decision.app.label+
+                (decision.reason==='remembered'?' (your remembered choice)':' (you requested this app)')+
+                '. Select and confirm the intended recipient. No message was sent.');
+            } else {
+              setMessageNotice(decision.kind==='unavailable'
+                ? 'The requested messaging app was not found on this phone. No other app was substituted.'
+                : 'Choose a messaging app for '+requested.recipientHint+
+                  '. You may remember this choice on this device for future requests.');
+            }
+          } catch {
+            setMessageNotice('Android could not safely discover the supported messaging apps or read preference storage. No message sent.');
+          }
+        }
+        setMessageBusy(false);
+        append('assistant','I prepared your exact text for '+requested.recipientHint+
+          ' locally. Check the app and recipient in Tools. I will not automatically send anything.');
         return;
       }
     }
