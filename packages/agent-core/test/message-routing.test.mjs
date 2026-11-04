@@ -23,6 +23,18 @@ test('first time with several installed apps must request human app selection',(
  assert.equal(decideMessageApp(input,apps,'sms').app.id,'sms');
  assert.equal(decideMessageApp(input,apps,'botim').kind,'choose');
 });
+test('one installed messenger can be selected without an unnecessary first-use question',()=>{
+ const request=parseMessageRequest('Send message to Mom that I will call later');
+ const only=[apps[0]];
+ assert.deepEqual(decideMessageApp(request,only,null),{
+  kind:'selected',app:only[0],reason:'only_installed'
+ });
+ // A missing remembered preference must NOT be silently replaced.
+ assert.deepEqual(decideMessageApp(request,only,'botim'),{
+  kind:'choose',app:null,reason:'not_installed'
+ });
+ assert.equal(decideMessageApp(request,[],null).kind,'choose');
+});
 test('explicit channel overrides prior memory, and unsupported app is never substituted',()=>{
  const input=parseMessageRequest('Send imo message to Mom saying Hello');
  assert.equal(decideMessageApp(input,apps,'whatsapp').app.id,'imo');

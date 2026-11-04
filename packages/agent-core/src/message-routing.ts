@@ -11,7 +11,7 @@ export type MessageRequest = {
   reviewOnly: true;
 };
 export type InstalledMessageApp = {id: MessageAppId; label: string; packageName: string};
-export type MessageAppDecision = {kind: 'choose' | 'selected' | 'unavailable'; app: InstalledMessageApp | null; reason: 'explicit' | 'remembered' | 'first_use' | 'not_installed'};
+export type MessageAppDecision = {kind: 'choose' | 'selected' | 'unavailable'; app: InstalledMessageApp | null; reason: 'explicit' | 'remembered' | 'only_installed' | 'first_use' | 'not_installed'};
 
 /**
  * Reject conversational clauses masquerading as an intent; quoted text
@@ -55,6 +55,10 @@ export function decideMessageApp(request: MessageRequest, installed: InstalledMe
   const found=preferred?installed.find(a=>a.id===preferred):undefined;
   if(preferred && found)return {kind:'selected',app:found,reason:request.explicitApp?'explicit':'remembered'};
   if(request.explicitApp)return {kind:'unavailable',app:null,reason:'not_installed'};
+  // No guess or substitution: auto-select only when exactly one supported app
+  // is installed and the owner has no explicit or remembered preference.
+  if(!preferred && installed.length===1)
+    return {kind:'selected',app:installed[0],reason:'only_installed'};
   return {kind:'choose',app:null,reason:remembered?'not_installed':'first_use'};
 }
 

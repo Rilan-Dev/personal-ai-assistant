@@ -91,7 +91,7 @@ internal object NexaMessageInputActions {
                 if(NexaMessageInputPolicy.isMessageField(desc,true,node.isPassword,
                     node.isEnabled,node.isVisibleToUser,
                     node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT},
-                    !node.text.isNullOrEmpty())) {
+                    !NexaEditableNode.isEmpty(node))) {
                     val bounds=Rect().also{node.getBoundsInScreen(it)}
                     if(bounds.width()>0 && bounds.height()>0 && bounds.left>=0 && bounds.top>=0) {
                         count++
@@ -170,7 +170,8 @@ internal object NexaMessageInputActions {
                         draft.message)
                 }
                 val accepted=node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
-                val verified=accepted && node.text?.toString()==draft.message
+                val verified=accepted &&
+                    NexaEditableNode.containsExactTextAfterDispatch(node,draft.message)
                 NexaUiActionJournal.finish(service,approval.token,
                     if(accepted)"android_accepted" else "android_rejected")
                 if(verified) {
