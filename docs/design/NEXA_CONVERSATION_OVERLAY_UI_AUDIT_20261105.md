@@ -106,3 +106,15 @@ passed purely because source tests compile.
   assets or configure explicit permitted export to a GitHub artifact.
 - Validate small-screen, large-font, high-contrast, dark/light, RTL, keyboard,
   and physical OEM overlay entry before broad release.
+
+
+### Screenshot provenance correction
+
+CI's Android debug APK does not bundle React Native JS and normally needs a
+running Metro server. It must NOT be used for visual proof. The capture workflow
+now compiles the exact source SHA/versioned, permanently signed RELEASE APK
+while the emulator remains alive, replaces the synthetic debug install with
+that release APK, then captures the app from an empty permission state. The
+artifact records the installed release APK SHA-256 for comparison with the
+uploaded signed APK. If the screenshot script or on-device UI selectors fail,
+the main-promotion gate fails instead of publishing a misleading image.

@@ -68,6 +68,12 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Pin release version and source for emulator and distributable APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "PAA_BUILD_VERSION_CODE=$(bash scripts/signing/release-version-code.sh)" >> "$GITHUB_ENV"
+          echo "PAA_BUILD_SOURCE_REVISION=$GITHUB_SHA" >> "$GITHUB_ENV"
       - name: Gate release on native Keystore, permission and action-replay tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -77,17 +83,15 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: |
-            set -u
-            native_result=0
+            set -euo pipefail
             cd apps/mobile/android
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace || native_result=$?
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+            # A debug APK needs Metro and is not reliable visual evidence.
+            # Build the same signed, bundled release artifact that will be
+            # uploaded below, using the pinned version, SHA and signer.
+            ./gradlew :app:assembleRelease --no-daemon --stacktrace
             cd ../../..
-            # Real installed app, ephemeral emulator, no external provider keys.
-            # Screenshot collection cannot manufacture app behavior or grant permissions.
-            visual_result=0
-            bash scripts/ci/capture-nexa-ui.sh || visual_result=$?
-            if [[ "$native_result" -ne 0 ]]; then exit "$native_result"; fi
-            if [[ "$visual_result" -ne 0 ]]; then exit "$visual_result"; fi
+            bash scripts/ci/capture-nexa-ui.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
       - name: Upload Android emulator screen evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -106,13 +110,12 @@ jobs:
           retention-days: 7
       - name: Assemble optimized signed Android release variant
         working-directory: apps/mobile/android
-        env:
-          PAA_BUILD_SOURCE_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
-          # Both workflows produce comparable ascending Android version codes.
-          export PAA_BUILD_VERSION_CODE="$(bash ../../../scripts/signing/release-version-code.sh)"
+          : "${PAA_BUILD_SOURCE_REVISION:?source revision was not pinned}"
+          : "${PAA_BUILD_VERSION_CODE:?release version was not pinned}"
           test "$PAA_BUILD_VERSION_CODE" -lt 2100000000
+          # Gradle reuses the release APK already installed on the emulator.
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
       - name: Verify release signature matches permanent Nexa identity
         shell: bash
