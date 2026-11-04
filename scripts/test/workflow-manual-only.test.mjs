@@ -36,7 +36,10 @@ test("main release runs test, emulator and signed APK serially on one runner",()
   const upload=file.indexOf("Upload installable release-test APK");
   assert.ok(node>0&&emulator>node&&release>emulator&&upload>release);
   assert.match(file,/android-emulator-runner@v2/);
-  assert.match(file,/connectedDebugAndroidTest/);
+  assert.match(file,/bash scripts\/ci\/run-nexa-emulator-acceptance\.sh/);
+  const runner=readFileSync("scripts/ci/run-nexa-emulator-acceptance.sh","utf8");
+  assert.match(runner,/:app:connectedDebugAndroidTest/);
+  assert.match(runner,/:app:assembleRelease/);
   assert.match(file,/release-test-sha256\.txt/);
   assert.match(file,/release-test-source-sha\.txt/);
   assert.match(file,/cancel-in-progress: true/);
