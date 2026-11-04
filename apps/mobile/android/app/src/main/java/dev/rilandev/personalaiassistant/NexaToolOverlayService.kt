@@ -111,6 +111,7 @@ class NexaToolOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_HIDE) { stopSelf(); return START_NOT_STICKY }
+        if (NexaMessageDraftState.peek()!=null) section="tools"
         if (intent?.action != ACTION_SHOW || !Settings.canDrawOverlays(this)) {
             stopSelf()
             return START_NOT_STICKY
@@ -562,6 +563,30 @@ class NexaToolOverlayService : Service() {
         note = "Scroll cancelled."
         render()
     }
+    private fun inspectMessageInput() {
+        val service=ScreenAssistService.active
+        note=if(service==null) "Screen Assist disconnected. No message was typed."
+            else NexaMessageInputActions.prepare(service)
+        section="tools"
+        render()
+    }
+    private fun confirmMessageInput() {
+        val service=ScreenAssistService.active
+        note=if(service==null) {
+            NexaMessageInputActions.cancel()
+            NexaMessageDraftState.clear()
+            "Screen Assist disconnected. Message insertion cancelled."
+        } else NexaMessageInputActions.confirm(service)
+        expanded=false
+        render()
+    }
+    private fun cancelMessageInput() {
+        NexaMessageInputActions.cancel()
+        NexaMessageDraftState.clear()
+        note="Reviewed message entry cancelled. No message sent."
+        render()
+    }
+
     private fun showSection(name: String) {
         if (name != "tools") {
             inspectedScreen = null
@@ -685,6 +710,21 @@ class NexaToolOverlayService : Service() {
                         ))
                     }
                     "tools" -> {
+                        NexaMessageDraftState.peek()?.let { draft ->
+                            addView(text("MESSAGE DRAFT · ${draft.appId} · ${draft.recipientHint}",13f))
+                            addView(text("Open the correct conversation. Nexa checks its visible title and finds one empty message box. Your message will be inserted only after another tap; it will NEVER be sent by Nexa.",11f,true))
+                            if (NexaMessageInputActions.ready()) {
+                                addView(row(
+                                    button("Confirm fill draft") { confirmMessageInput() },
+                                    button("Cancel draft") { cancelMessageInput() }
+                                ))
+                            } else {
+                                addView(row(
+                                    button("Find message input") { inspectMessageInput() },
+                                    button("Cancel draft") { cancelMessageInput() }
+                                ))
+                            }
+                        }
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
                         val requestedAction=proposedDeviceAction
                         if(requestedAction!=null &&
