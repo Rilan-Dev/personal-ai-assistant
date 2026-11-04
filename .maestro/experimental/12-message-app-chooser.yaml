@@ -28,6 +28,14 @@ tags:
     timeout: 30000
 - assertVisible: "Requested recipient: Mom"
 - assertVisible: "Exact draft: I am in the meeting i will call you later"
-- assertVisible: "Choose a messaging app"
-- assertVisible: "Discard message review — do not send"
+- scrollUntilVisible:
+    element:
+      text: "Choose a messaging app"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Discard message review — do not send"
+    direction: DOWN
+    timeout: 30000
 - takeScreenshot: nexa-ambiguous-messenger-explicit-owner-choice
