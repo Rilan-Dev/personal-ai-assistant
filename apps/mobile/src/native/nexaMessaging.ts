@@ -77,6 +77,6 @@ function validated(outcome:DispatchOutcome):DispatchOutcome {
 export const openReviewedSmsDraft=async(phone:string,message:string)=>
   validated(await messaging().openSmsDraft(phone,message));
 /** App opens, then owner navigates to chat and confirms one text-field fill. */
-export const openManualMessageComposer=async(appId:'imo'|'botim',hint:string,text:string)=>
+export const openManualMessageComposer=async(appId:'imo'|'botim'|'whatsapp-business',hint:string,text:string)=>
   validated(await messaging().stageManualComposer(appId,hint,text));
 export const discardManualMessage=()=>messaging().discardManualComposer();
