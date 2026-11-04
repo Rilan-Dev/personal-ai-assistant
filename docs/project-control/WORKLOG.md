@@ -865,3 +865,12 @@
 - Screen voice router now reports `Screen Assist is disabled` immediately if Android Accessibility has not been user-enabled instead of presenting an approval that could never execute.
 - Added `NexaScreenVoiceRoutingAndroidTest` and `nexa-live-screen-voice-routing.test.mjs`, covering owner intent, denied unsafe clicks, four-way scroll, missing permission, crash containment and bounded text capture.
 - Final isolated source checks: 271/271 Node tests, typecheck, web export passed. Native Android CI still required; no physical phone logs were provided to prove the specific source of the reported battery crash.
+
+
+## 2026-11-05 — DSH source-admission foundation (Development)
+- Audited current source HEAD 865fa166a7292df3585482dea52160ce7e9644b2 with GitHub; synced VPS test checkout via BridgeHead git pull --ff-only. No direct server source edits.
+- Baseline npm test 365/365 passed on exact audited revision.
+- Added packages/agent-contracts/src/task-plan.ts: strict bounded, policy-scoped, immutable, non-executable TaskPlan proposal binding. New gate is disabled; no Android actions or prior user flows were changed.
+- Added packages/agent-core/test/task-plan.test.mjs with 12 cases. Initial focused 12/12 and full 377/377 pass; Expo web export passed. TypeScript narrowing initially failed and was corrected in commit ce12c334629c628be7fbb07075016d4e860c48bf; repeat exact-commit check before claiming certification.
+- Pinned DSH MIT, LangGraph and Deep Agents source review, documented the existing duplicated task lifecycles, Android Play Accessibility constraints and exact future migration/release requirements in docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md.
+- Production Android acceptance and DSH task execution integration remain explicitly NOT ACCEPTED. VPS free disk ~7 GB; no unrelated Docker restart, no live redeploy, no main promotion.
