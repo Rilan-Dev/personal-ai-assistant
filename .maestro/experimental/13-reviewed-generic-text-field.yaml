@@ -1,0 +1,35 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa user-requested named input box stays reviewed and unsent
+tags:
+  - nexa
+  - text-entry
+  - owner-review
+  - experimental
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible: "Make your assistant yours."
+    timeout: 30000
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Assistant command"
+- inputText: "Hey Nexa type project update into the Search box"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible: "Nexa · Tools"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Review text entry into another app"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "Target input: Search"
+- assertVisible: "Exact text: project update"
+- assertVisible: "Prepare approved text entry"
+- assertVisible: "Discard text"
+- takeScreenshot: nexa-reviewed-generic-text-input
