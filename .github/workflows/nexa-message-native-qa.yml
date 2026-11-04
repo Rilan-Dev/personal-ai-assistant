@@ -20,7 +20,7 @@ jobs:
        github.event.comment.author_association == 'OWNER' &&
        github.event.comment.body == '/nexa-message native-qa')
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +66,46 @@ jobs:
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
           script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Install Maestro CLI for user-visible messaging smoke test
+        shell: bash
+        run: curl -fsSL https://get.maestro.mobile.dev | bash
+      - name: Run Nexa message app chooser on Maestro Cloud
+        shell: bash
+        env:
+          MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
+          MAESTRO_DISABLE_UPDATE_CHECK: "true"
+          MAESTRO_CLI_NO_ANALYTICS: "true"
+        run: |
+          set -euo pipefail
+          test -s apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          MAESTRO_CLOUD_API_KEY="$(printf '%s' "$MAESTRO_CLOUD_API_KEY" | tr -d '\r\n')"
+          if [[ -z "$MAESTRO_CLOUD_API_KEY" || "$MAESTRO_CLOUD_API_KEY" == *[[:space:]]* ]]; then
+            echo "::error::Maestro API key is not configured safely."
+            exit 1
+          fi
+          export MAESTRO_CLOUD_API_KEY
+          "$HOME/.maestro/bin/maestro" cloud \
+            --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
+            --device-os android-33 --device-model pixel_6 \
+            --name "Nexa messaging chooser ${{ github.run_id }} $(git rev-parse --short HEAD)" \
+            --app-file apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            --format HTML-DETAILED \
+            --output "$RUNNER_TEMP/nexa-message-maestro.html" \
+            --flows .maestro/experimental/12-message-app-chooser.yaml \
+            2>&1 | tee "$RUNNER_TEMP/nexa-message-maestro-cli.log"
+      - name: Gate on individually passed message chooser flow
+        if: always()
+        run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-message-maestro-cli.log" 1
+      - name: Retain real UI validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-message-feature-maestro-evidence
+          path: |
+            ${{ runner.temp }}/nexa-message-maestro.html
+            ${{ runner.temp }}/nexa-message-maestro-cli.log
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Keep native instrumented failure reports
         if: failure()
         uses: actions/upload-artifact@v4
