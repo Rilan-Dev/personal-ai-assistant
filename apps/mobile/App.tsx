@@ -49,8 +49,8 @@ import type {ScreenIconSnapshot} from '@paa/agent-contracts';
 import { liveVoiceAvailable, getLiveVoiceStatus, startOwnerLiveVoice, prepareOwnerLiveVoicePermissions, stopOwnerLiveVoice, setOwnerLiveMicMuted, decideOwnerLiveAppAction, checkSarvamVoiceAuthorization } from './src/native/liveVoice';
 import type {LiveVoiceStatus,VoicePermissionMode} from './src/native/liveVoice';
 import {getVoicePermissionMode,setVoicePermissionMode,clearVoicePermissions,alwaysAllowPendingVoiceAction} from './src/native/liveVoice';
-import {historyAvailable,appendConversation,recentConversations,recentVoiceTasks,recentAndroidProcessExits,shareAndroidProcessExits,copyConversationHistory,shareConversationHistory} from './src/native/conversationHistory';
-import type {NexaConversationEntry,NexaTaskHistoryEntry,NexaProcessExit} from './src/native/conversationHistory';
+import {historyAvailable,appendConversation,recentConversations,recentVoiceTasks,recentAndroidProcessExits,shareAndroidProcessExits,copyConversationHistory,shareConversationHistory,ownerTaskPreviewAvailable,recentAgentTasks,saveOwnerTaskRequest,cancelOwnerTaskRequest} from './src/native/conversationHistory';
+import type {NexaConversationEntry,NexaTaskHistoryEntry,NexaProcessExit,NexaAgentTaskEntry} from './src/native/conversationHistory';
 import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from './src/native/ownerPrivacy';
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
@@ -118,11 +118,44 @@ export default function App() {
   const chatLogSession=useRef('chat-'+Date.now());
   const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
   const [taskHistoryEntries,setTaskHistoryEntries]=useState<NexaTaskHistoryEntry[]>([]);
+  const [savedTaskRequests,setSavedTaskRequests]=useState<NexaAgentTaskEntry[]>([]);
+  const [newSavedTask,setNewSavedTask]=useState('');
+  const [savedTaskBusy,setSavedTaskBusy]=useState(false);
+  const [savedTaskNotice,setSavedTaskNotice]=useState('');
   const [androidExitEntries,setAndroidExitEntries]=useState<NexaProcessExit[]>([]);
   const [historyNotice,setHistoryNotice]=useState('');
   const refreshHistory=async()=>{
-    try {setHistoryEntries(await recentConversations(120));setTaskHistoryEntries(await recentVoiceTasks(40));setAndroidExitEntries(await recentAndroidProcessExits());setHistoryNotice('Local encrypted custom.db · recent chats, voice tasks and Android exits');}
+    try {
+      setHistoryEntries(await recentConversations(120));
+      setTaskHistoryEntries(await recentVoiceTasks(40));
+      if(ownerTaskPreviewAvailable())setSavedTaskRequests(await recentAgentTasks(40));
+      setAndroidExitEntries(await recentAndroidProcessExits());
+      setHistoryNotice('Local encrypted custom.db · recent chats, task requests, voice tasks and Android exits');
+    }
     catch {setHistoryNotice('Could not read local conversation history on this device.');}
+  };
+  /** An explicit owner note, not a dispatched task or AI-agent grant. */
+  const createSavedTask=async()=>{
+    if(savedTaskBusy||!ownerTaskPreviewAvailable()||!newSavedTask.trim())return;
+    setSavedTaskBusy(true);
+    try {
+      await saveOwnerTaskRequest(newSavedTask.trim());
+      setNewSavedTask('');
+      setSavedTaskRequests(await recentAgentTasks(40));
+      setSavedTaskNotice('Task request saved privately. Execution is disabled; no app action was started.');
+    }catch {
+      setSavedTaskNotice('Task could not be saved. Open Nexa in the foreground and enter up to 500 characters.');
+    }finally{setSavedTaskBusy(false);}
+  };
+  const cancelSavedTask=async(taskId:string)=>{
+    if(savedTaskBusy||!ownerTaskPreviewAvailable())return;
+    setSavedTaskBusy(true);
+    try {
+      const cancelled=await cancelOwnerTaskRequest(taskId);
+      setSavedTaskRequests(await recentAgentTasks(40));
+      setSavedTaskNotice(cancelled?'Request cancelled permanently. No action was started.':'Request could not be cancelled or was already final.');
+    }catch{setSavedTaskNotice('Could not update the task request.');}
+    finally{setSavedTaskBusy(false);}
   };
   const copyHistory=async()=>{
     try {await copyConversationHistory();setHistoryNotice('Copied local history JSON. Clipboard is visible to other apps you paste into.');}
@@ -1937,6 +1970,29 @@ export default function App() {
             <Text style={styles.cardText} selectable>{task.goal}</Text>
             {Boolean(task.lastEvidence)&&<Text style={styles.settingHelp}>{task.lastEvidence}</Text>}
           </View>)}
+          {ownerTaskPreviewAvailable()&&<View style={styles.actionCard}>
+            <Text style={styles.cardHeading}>Saved task requests · local preview</Text>
+            <Text style={styles.settingHelp}>Save a request for review or cancel it later. This encrypted local queue does not start an AI task, open an app, control the screen, or send a message. The unified task executor remains disabled.</Text>
+            <TextInput accessibilityLabel="Saved task request" style={styles.settingInput}
+              placeholder="Describe a task to save, not execute"
+              placeholderTextColor="#8190a8" multiline maxLength={500}
+              value={newSavedTask} onChangeText={setNewSavedTask}/>
+            <Pressable accessibilityRole="button"
+              disabled={savedTaskBusy||newSavedTask.trim().length===0}
+              style={styles.outlineAction} onPress={()=>void createSavedTask()}>
+              <Text style={styles.outlineActionText}>{savedTaskBusy?'Saving task…':'Save request only'}</Text>
+            </Pressable>
+            {Boolean(savedTaskNotice)&&<Text style={styles.settingHelp}>{savedTaskNotice}</Text>}
+            {savedTaskRequests.slice(0,12).map(task=><View key={task.taskId} style={styles.actionCard}>
+              <Text style={styles.settingHelp}>{new Date(task.updatedAt).toLocaleString()} · {task.origin} · {task.status}</Text>
+              <Text style={styles.cardText} selectable>{task.goal}</Text>
+              {task.status==='proposed'&&<Pressable accessibilityRole="button"
+                disabled={savedTaskBusy} style={styles.outlineInline}
+                onPress={()=>void cancelSavedTask(task.taskId)}>
+                <Text style={styles.outlineInlineText}>Cancel saved request</Text>
+              </Pressable>}
+            </View>)}
+          </View>}
           {historyEntries.slice(-25).map(item=><View key={item.id} style={styles.actionCard}>
             <Text style={styles.settingHelp}>{new Date(item.createdAt).toLocaleString()} · {item.channel} · {item.role} · {item.provider}</Text>
             <Text style={styles.cardText} selectable>{item.text}</Text>
