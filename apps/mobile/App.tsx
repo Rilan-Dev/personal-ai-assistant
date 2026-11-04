@@ -1973,6 +1973,7 @@ export default function App() {
             <Text style={styles.cardText}>Requested recipient: {messageRequest.recipientHint}</Text>
             <Text style={styles.cardText} selectable>Exact draft: {messageRequest.text}</Text>
             <Text style={styles.settingHelp}>Nexa never guesses a recipient, sends this text or chooses an unfamiliar app. It remembers only an app you explicitly select for this alias.</Text>
+            <Text style={styles.cardHeading}>Messaging app decision</Text>
             {messageBusy&&<ActivityIndicator/>}
             {!messageChosen&&<Text style={styles.cardHeading}>Choose a messaging app</Text>}
             {!messageChosen&&messageOptions.map(app=><View key={app.id} style={styles.actionCard}>
