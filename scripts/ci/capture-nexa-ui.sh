@@ -8,7 +8,17 @@ mkdir -p "$out"
 echo "Source revision: ${GITHUB_SHA:-local}" > "$out/README.txt"
 echo "Device: Android emulator; fresh synthetic data; no permissions granted" >> "$out/README.txt"
 echo "Screenshots here are emulator renders, NOT physical-phone/OEM acceptance." >> "$out/README.txt"
-adb shell pm path "$app" >/dev/null
+if [[ "$#" -ne 1 || ! -s "$1" ]]; then
+  echo "Pass the exact bundled, signed release APK" >&2
+  exit 1
+fi
+release_apk="$1"
+sha256sum "$release_apk" > "$out/captured-release-apk-sha256.txt"
+# Previous instrumentation APK uses a disposable DEBUG signer.
+# This is a synthetic CI emulator: uninstall it before installing RELEASE.
+adb uninstall "$app" >/dev/null || true
+adb install "$release_apk" > "$out/install.txt"
+adb shell pm path "$app" > "$out/installed-package.txt"
 adb shell am force-stop "$app" || true
 adb shell pm clear "$app" >/dev/null
 adb shell am start -W -n "$app/.MainActivity" > "$out/launch.txt"

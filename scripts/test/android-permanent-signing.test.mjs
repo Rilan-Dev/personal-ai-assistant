@@ -27,7 +27,12 @@ test('both APK workflows require identical centrally stored secrets, without eph
       assert.match(source,new RegExp('secrets\\.'+secret));
     assert.match(source,/bash scripts\/signing\/load-ci-release-key\.sh/);
     assert.match(source,/bash scripts\/signing\/verify-release-apk\.sh/);
-    assert.match(source,/bash \.\.\/\.\.\/\.\.\/scripts\/signing\/release-version-code\.sh/);
+    if(path.endsWith('android-main-promotion.yml')){
+      assert.match(source,/bash scripts\/signing\/release-version-code\.sh/);
+      assert.match(source,/PAA_BUILD_VERSION_CODE=\$\(bash scripts\/signing\/release-version-code\.sh\)/);
+    }else{
+      assert.match(source,/bash \.\.\/\.\.\/\.\.\/scripts\/signing\/release-version-code\.sh/);
+    }
     assert.doesNotMatch(source,/NEXA_RELEASE_[A-Z_]+:[^\n]*openssl rand/);
     assert.doesNotMatch(source,/PAA Temporary Release Test|Temporary test-only release signer/);
     assert.match(source,/release-test-signing-certificate\.txt/);
