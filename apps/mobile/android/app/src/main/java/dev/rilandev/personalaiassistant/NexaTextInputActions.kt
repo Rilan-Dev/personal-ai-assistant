@@ -11,18 +11,26 @@ internal object NexaTextInputPolicy {
     private val forbidden = Regex(
         """\b(password|passcode|pin|otp|one[ -]?time|verification|security|secret|recovery|payment|card|cvv|cvc|iban|bank|account|recipient|email address|phone number|amount|transfer|purchase|checkout|submit|send)\b""",
         RegexOption.IGNORE_CASE)
+    private val forbiddenIdentifiers=Regex(
+        "password|passcode|pininput|otp|onetime|verification|securitycode|cvv|cvc|iban|bank|payment|creditcard|cardnumber|secret|recovery|recipient|emailaddress|phonenumber|amount|transfer|purchase|checkout|submit|send|ssn",
+        RegexOption.IGNORE_CASE)
+    private fun sensitive(raw:String):Boolean =
+        forbidden.containsMatchIn(raw) ||
+        forbiddenIdentifiers.containsMatchIn(
+            raw.lowercase(java.util.Locale.ROOT).replace(Regex("[^a-z0-9]"),""))
     private fun normalized(value:String):String =
         value.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]+""")," ").trim()
     fun safeTarget(target:String):Boolean =
         target.length in 2..60 && target.none{it.code<32} &&
-        !forbidden.containsMatchIn(target) &&
+        !sensitive(target) &&
+        !Regex("""^(to|cc|bcc|from|address|email|phone|number)$""", RegexOption.IGNORE_CASE).matches(target.trim()) &&
         normalized(target).length>=2
     fun matches(target:String, fieldHints:List<String>, editable:Boolean,password:Boolean,
                 visible:Boolean,enabled:Boolean,empty:Boolean,setText:Boolean):Boolean {
         if(!safeTarget(target)||!editable||password||!visible||!enabled||!empty||!setText)return false
         val wanted=normalized(target)
         // A harmless Search hint must not hide a password/OTP resource ID.
-        if(fieldHints.any{forbidden.containsMatchIn(normalized(it))})return false
+        if(fieldHints.any{sensitive(it)})return false
         return fieldHints.filter{it.isNotBlank()}.any { value ->
             val candidate=normalized(value)
             candidate.isNotBlank() &&
