@@ -167,7 +167,7 @@ jobs:
         shell: bash
         run: curl -fsSL https://get.maestro.mobile.dev | bash
       - name: Check strict Maestro result classifier
-        run: node --test .maestro/validate-report.test.mjs
+        run: node --test .maestro/validate-report.test.mjs .maestro/validate-cloud-cli.test.mjs
       - name: Run selected Nexa UI acceptance flow in Maestro Cloud
         shell: bash
         env:
