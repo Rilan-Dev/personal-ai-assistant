@@ -33,3 +33,6 @@ export {parsePairedIconObservation} from './paired-icon-capture.ts';
 
 export {createIconReviewSession} from './icon-review.ts';
 export type {IconReviewOffer,IconReviewResult,IconReviewSummary} from './icon-review.ts';
+
+export {parseReviewedTextEntry} from './text-entry-intent.ts';
+export type {ReviewedTextEntry} from './text-entry-intent.ts';
