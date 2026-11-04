@@ -34,7 +34,7 @@ test('voice tasks are persisted encrypted before dispatch and each verified step
   assert.match(db,/context\.applicationContext, databaseName, null, 3/);
   assert.match(db,/voice_task_checkpoints/);
   assert.match(db,/if \(oldVersion <= 1\) createTaskTables\(db\)/);
-  assert.match(db,/if \(oldVersion <= 2\) createUiActionClaimTable\(db\)/);
+  assert.match(db,/if \(oldVersion <= 2\) \{\s+createUiActionClaimTable\(db\)\s+createAgentTaskTables\(db\)/);
   assert.match(db,/agent_action_claims/);
   assert.match(db,/fun saveTask/);
   assert.match(db,/encrypt\(payload\.toString\(\)\)/);
