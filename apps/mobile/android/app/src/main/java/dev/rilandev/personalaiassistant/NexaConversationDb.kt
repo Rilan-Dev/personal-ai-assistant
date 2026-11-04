@@ -431,36 +431,6 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
 class NexaConversationModule(private val reactContext:ReactApplicationContext):
     ReactContextBaseJavaModule(reactContext) {
     override fun getName()="PAAConversationHistory"
-    /** Requires the real foreground Android activity. A stored request is
-     * never a permission to start processing or a model-granted mandate.
-     */
-    @ReactMethod fun saveOwnerTaskRequest(goal:String,promise:Promise) {
-        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
-            promise.reject("NOT_FOREGROUND","Open Nexa to save a task request")
-            return
-        }
-        val request=goal.trim()
-        val id="task-"+java.util.UUID.randomUUID().toString()
-        val session="owner-"+java.util.UUID.randomUUID().toString()
-        if(NexaConversationDb.saveProposedAgentTask(reactContext,id,session,
-                "chat","owner-preview-v1",request)) promise.resolve(id)
-        else promise.reject("TASK_INVALID","Task request was not saved")
-    }
-    @ReactMethod fun cancelOwnerTaskRequest(taskId:String,promise:Promise) {
-        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
-            promise.reject("NOT_FOREGROUND","Open Nexa to cancel a task")
-            return
-        }
-        promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId))
-    }
-    @ReactMethod fun recentAgentTasks(limit:Int,promise:Promise) {
-        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
-            promise.reject("NOT_FOREGROUND","Open Nexa to view private task history")
-            return
-        }
-        try {promise.resolve(NexaConversationDb.agentTaskHistory(reactContext,limit).toString())}
-        catch (_:Exception) {promise.reject("TASK_HISTORY","Cannot read private task history")}
-    }
     @ReactMethod fun appendEntry(session:String,channel:String,provider:String,role:String,
                                  text:String,promise:Promise) {
         NexaConversationDb.append(reactContext,session,channel,provider,role,text)
