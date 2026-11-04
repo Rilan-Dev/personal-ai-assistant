@@ -16,7 +16,7 @@ function harness(overrides={}) {
   let saved=null,clears=0;
   const calls=[];
   const vault={
-    async saveAcaSession(data){saved=data;return true},
+    async saveAcaSession(data){if(overrides.failSave)return false; saved=data;return true},
     async loadAcaSession(){return saved},
     async clearAcaSession(){saved=null;clears++;return true}
   };
@@ -175,4 +175,15 @@ test('401 and 403 return typed status without reflecting private server bodies',
     await assert.rejects(h.client.acaMailSummary(session,{unreadOnly:true,inboxOnly:false,window:'24h'}),
       error=>error?.httpStatus===code && !error.message.includes('not-for-client'));
   }
+});
+
+test('failed Android secure storage revokes freshly issued remote device session',async()=>{
+  const h=harness({failSave:true});
+  await assert.rejects(h.client.connectAca('owner@example.invalid','test-only-password'),
+    /Cannot securely store ACA login on this phone/);
+  assert.equal(h.saved,null);
+  assert.deepEqual(h.calls.map(call=>call.method),['POST','DELETE']);
+  const revoke=h.calls[1];
+  assert.equal(revoke.path,'/api/mobile/v1/session');
+  assert.equal(revoke.headers.Authorization,'Bearer '+validToken);
 });

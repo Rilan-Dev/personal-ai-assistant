@@ -465,8 +465,13 @@ export default function App() {
       if(provisional){
         // Never leave a seemingly disconnected but still usable device token
         // in the Android vault after target discovery/selection failed.
-        try{await disconnectAca(provisional);}
-        catch{
+        try{
+          const {serverRevoked}=await disconnectAca(provisional);
+          if(!serverRevoked){
+            setAcaNotice('ACA targets were unavailable. The login was cleared from this phone, but remote revocation could not be verified; the server token expires automatically.');
+            return;
+          }
+        }catch{
           setAcaSession(provisional);
           setAcaVerified(false);
           setAcaNotice('ACA verification failed and secure cleanup could not finish. Tap Disconnect ACA before reconnecting.');

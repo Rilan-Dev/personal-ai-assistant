@@ -108,7 +108,18 @@ export async function connectAca(email:string,password:string):Promise<AcaSessio
     expiresAt:String(data.expiresAt ?? ""),organizationId:"",agentId:""
   };
   if (!validAcaSession(session))throw new Error("ACA returned an invalid device session.");
-  await storeAcaSession(session);
+  try {
+    await storeAcaSession(session);
+  } catch {
+    // A newly issued device bearer must not survive on the server if this
+    // Android device cannot secure it in its Keystore-backed vault.
+    try {
+      await requestJson("/api/mobile/v1/session",{
+        method:"DELETE",headers:bearer(session)
+      });
+    } catch { /* Remote revoke failure is handled by server token expiry. */ }
+    throw new Error("Cannot securely store ACA login on this phone. No account was connected.");
+  }
   return session;
 }
 export async function acaTargets(session:AcaSession):Promise<AcaOrganization[]> {
