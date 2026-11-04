@@ -75,7 +75,7 @@ internal object NexaWhatsAppChatMatch {
     /** 0=no match, 100=exact after emoji stripping, 85=one ASR edit. */
     fun evidence(expected:String,visible:String):Int {
         val a=key(expected);val b=key(visible)
-        if(a.length !in 5..55||b.length !in 5..80)return 0
+        if(a.length !in 3..55||b.length !in 3..80)return 0
         if(a==b)return 100
         // A one-letter mismatch is permissible only for a sufficiently
         // distinctive multi-word name. Require a long shared suffix as well.
