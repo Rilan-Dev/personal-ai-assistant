@@ -90,10 +90,12 @@ internal object NexaWhatsAppChatActions {
                 return "Matching chat header and composer are already visible. No tap necessary."
             if(scan.candidates!=1)
                 return "Found "+scan.candidates+" possible chat rows; need one unique contact. Nothing tapped."
-            // ASR near-matches are recommendations, never authority to pick a
-            // different person. Require the exact *observed* contact label.
-            if(scan.bestEvidence<100)
-                return "A similar chat name is visible, but it is not an exact match. Verify the name on screen before tapping."
+            // One-letter speech variations are permitted only when there is
+            // exactly one uniquely observed chat row and the owner has
+            // explicitly approved opening that conversation (not sending).
+            // A completely different name or two possible rows fail closed.
+            if(scan.bestEvidence<85)
+                return "Chat contact could not be grounded. No tap performed."
             val target=scan.target ?:return "The matched chat row is no longer available."
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
