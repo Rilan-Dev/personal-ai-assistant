@@ -743,8 +743,11 @@ class RealtimeVoiceService : Service() {
                         checkpointAndContinue(cursor,
                             if(cursor.finished)"completed" else "verified",
                             "Matching WhatsApp chat header and composer verified") {
-                            if(next==null)currentCompound=null
-                            else handleSarvamOwnerRequest(next,true)
+                            if(next==null){
+                                currentCompound=null
+                                sarvamApiTransport?.toolResult(
+                                    "WhatsApp conversation header and message input are verified. Ready to review a draft. Nothing typed or sent.")
+                            }else handleSarvamOwnerRequest(next,true)
                         }
                     }
                 },"nexa-chat-verification").start()
