@@ -74,6 +74,19 @@ internal object NexaOverlayCommands {
     fun handle(context: Context, raw: String): String {
         // Spoken message text is preserved exactly; never normalize/lowercase it.
         // The user must still select the recipient and press Send in WhatsApp.
+        val genericMessage=NexaGeneralMessageVoice.parse(raw)
+        if(genericMessage!=null){
+            NexaGeneralMessageVoice.queue(genericMessage)
+            return try {
+                context.startActivity(Intent(context,MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                "Nexa message-app review opened. Choose the app and verify the recipient. Nothing was sent."
+            }catch(_:Exception){
+                NexaGeneralMessageVoice.clear()
+                "Could not open message review. No app or message was sent."
+            }
+        }
         val review = NexaVoiceDraftState.parse(raw)
         if (review != null) {
             NexaVoiceDraftState.queue(review)
