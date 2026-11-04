@@ -18,9 +18,17 @@ tags:
 - hideKeyboard
 - tapOn:
     text: "Send message"
+# Route to the private Tools review first. The contact-preview area is
+# intentionally below device controls; Maestro does not auto-scroll for
+# extendedWaitUntil. Do not pass merely because the Tools tab appeared.
 - extendedWaitUntil:
-    visible:
-      text: "Requested contact: mom.*Nothing was sent.*"
+    visible: "Nexa · Tools"
     timeout: 30000
-- assertVisible: "Nexa · Tools"
+- scrollUntilVisible:
+    element:
+      text: "Requested contact: mom.*Nothing was sent.*"
+    direction: DOWN
+    timeout: 30000
+- assertVisible:
+    text: "Requested contact: mom.*Nothing was sent.*"
 - takeScreenshot: nexa-owner-whatsapp-local-preview-no-send
