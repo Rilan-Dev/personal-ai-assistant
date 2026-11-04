@@ -124,10 +124,50 @@ class NexaConversationDbAndroidTest {
                     assertTrue(it.moveToFirst())
                     assertEquals(if(oldVersion==2) 1 else 0,it.getInt(0))
                 }
+                for(table in listOf("agent_tasks","agent_task_steps","agent_task_events",
+                    "agent_mandates","agent_step_approvals","agent_observations")) {
+                    db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+                        arrayOf(table)).use { c ->
+                        assertTrue(c.moveToFirst())
+                        assertEquals("Missing v3 task table $table",1,c.getInt(0))
+                    }
+                }
+                db.rawQuery("PRAGMA foreign_keys",null).use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("Child task rows require real foreign keys",1,c.getInt(0))
+                }
+
             } finally {
                 upgraded.close()
                 ctx.deleteDatabase(name)
             }
+        }
+    }
+
+    @Test fun v3TaskStepsRejectOrphanForeignKeys() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val name="nexa-v3-task-fk-"+UUID.randomUUID()+".db"
+        val helper=NexaConversationDb(ctx,name)
+        try {
+            val db=helper.writableDatabase
+            assertEquals(3,db.version)
+            var refused=false
+            try {
+                db.execSQL("""INSERT INTO agent_task_steps(
+                    step_id,task_id,ordinal,tool_id,status,risk,expected_evidence,arguments_cipher
+                ) VALUES('step-orphan','nonexistent',0,'device.battery_status',
+                    'planned','low','native_reading',X'0102')""")
+            }catch(_:android.database.sqlite.SQLiteConstraintException) {
+                refused=true
+            }
+            assertTrue("Orphan native task step must be blocked",refused)
+            db.rawQuery("SELECT COUNT(*) FROM agent_task_steps",null).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0,c.getInt(0))
+            }
+        } finally {
+            helper.close()
+            ctx.deleteDatabase(name)
         }
     }
 
