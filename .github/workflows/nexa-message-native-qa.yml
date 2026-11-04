@@ -1,0 +1,76 @@
+name: Nexa messaging native feature QA (manual owner command)
+
+# No automatic pushes, no release signer, no provider API keys.
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-messaging-qa:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.number == 29 &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == 'Rilan-Dev' &&
+       github.event.comment.author_association == 'OWNER' &&
+       github.event.comment.body == '/nexa-message native-qa')
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/nexa-message-routing-input-20261104
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | sort -V | tail -n 1)"
+          test -n "$sdkmanager_path"
+          "$sdkmanager_path" --install "platforms;android-36" "build-tools;36.0.0"
+      - name: Install locked dependencies and verify source + type safety
+        run: |
+          npm ci
+          npm test
+          npm run typecheck
+      - name: Create disposable Android debug signing identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          keytool -genkeypair -keystore apps/mobile/android/app/debug.keystore             -alias androiddebugkey -storepass android -keypass android             -keyalg RSA -keysize 2048 -validity 365             -dname "CN=Nexa Feature Test,O=Personal AI Assistant,C=US" -noprompt
+      - name: Enable hardware-accelerated emulator
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Execute Android native instrumentation on installed emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
+          script: cd apps/mobile/android && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Keep native instrumented failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexa-message-feature-native-diagnostics
+          path: apps/mobile/android/app/build/reports/androidTests/connected/
+          if-no-files-found: ignore
+          retention-days: 7
