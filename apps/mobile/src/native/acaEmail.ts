@@ -24,6 +24,16 @@ type NativeAcaVault = {
   clearAcaSession():Promise<boolean>;
 };
 const sessionPattern = /^nexa_m1_[A-Za-z0-9_-]{43}$/;
+const optionalUuid = /^(?:|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/** Makes the transport status available to the UI without exposing remote
+ * response bodies (which could contain mailbox data or attacker text). */
+export class AcaRequestError extends Error {
+  constructor(readonly httpStatus:number, message:string) {
+    super(message);
+    this.name='AcaRequestError';
+  }
+}
 function nativeVault():NativeAcaVault {
   const module=NativeModules.PAAAgentJournal;
   if (Platform.OS !== "android" || !module ||
@@ -46,14 +56,18 @@ export function validAcaSession(input:unknown):input is AcaSession {
   return x.version === 1 && x.origin === ACA_ORIGIN &&
     typeof x.token === "string" && sessionPattern.test(x.token) &&
     typeof x.expiresAt === "string" && Number.isFinite(Date.parse(x.expiresAt)) &&
-    typeof x.organizationId === "string" && /^[0-9a-f-]{0,36}$/i.test(x.organizationId) &&
-    typeof x.agentId === "string" && /^[0-9a-f-]{0,36}$/i.test(x.agentId);
+    typeof x.organizationId === "string" && optionalUuid.test(x.organizationId) &&
+    typeof x.agentId === "string" && optionalUuid.test(x.agentId);
 }
 export async function loadAcaSession():Promise<AcaSession|null> {
   const saved=await nativeVault().loadAcaSession();
   if (saved === null) return null;
-  const parsed:unknown=JSON.parse(saved);
-  return validAcaSession(parsed) && Date.parse(parsed.expiresAt)>Date.now()?parsed:null;
+  try {
+    const parsed:unknown=JSON.parse(saved);
+    if(validAcaSession(parsed) && Date.parse(parsed.expiresAt)>Date.now())return parsed;
+  } catch { /* Corrupt or outdated local data is never an active login. */ }
+  await clearAcaSession();
+  return null;
 }
 export async function storeAcaSession(session:AcaSession):Promise<void> {
   if (!validAcaSession(session)) throw new Error("Invalid ACA session");
@@ -69,9 +83,9 @@ async function requestJson(path:string,options:RequestInit = {}):Promise<unknown
     ...options.headers
   }});
   if (!response.ok) {
-    if (response.status===401)throw new Error("Session expired or login rejected. Reconnect your ACA account.");
-    if (response.status===403)throw new Error("ACA access denied. Check your organization and email permissions.");
-    if (response.status===404)throw new Error("Nexa mobile email access is not enabled on the ACA server.");
+    if (response.status===401)throw new AcaRequestError(401,"Session expired or login rejected. Reconnect your ACA account.");
+    if (response.status===403)throw new AcaRequestError(403,"ACA access denied. Check your organization and email permissions.");
+    if (response.status===404)throw new AcaRequestError(404,"Nexa mobile email access is not enabled on the ACA server.");
     throw new Error("ACA request unavailable (HTTP "+response.status+").");
   }
   const body=await response.text();
@@ -102,7 +116,16 @@ export async function acaTargets(session:AcaSession):Promise<AcaOrganization[]> 
     method:"GET",headers:bearer(session)
   }) as {organizations?:AcaOrganization[]};
   if (!Array.isArray(response.organizations))throw new Error("Invalid ACA organization response.");
-  return response.organizations.filter(o=>typeof o.id==="string"&&typeof o.name==="string"&&Array.isArray(o.agents));
+  return response.organizations.filter(o=>typeof o.id==="string"&&optionalUuid.test(o.id)&&o.id.length===36&&
+    typeof o.name==="string"&&Array.isArray(o.agents) &&
+    o.agents.every(a=>typeof a.id==="string"&&a.id.length===36&&optionalUuid.test(a.id)&&typeof a.name==="string"));
+}
+
+/** Selection is accepted only when the current server-side org/agent picker
+ * still contains exactly that pair. Revocations invalidate cached selection. */
+export function authorizedAcaSelection(session:AcaSession,organizations:AcaOrganization[]):boolean {
+  return Boolean(session.organizationId && session.agentId && organizations.some(org=>
+    org.id===session.organizationId && org.agents.some(agent=>agent.id===session.agentId)));
 }
 export async function acaMailSummary(session:AcaSession,options:{unreadOnly:boolean;inboxOnly:boolean;window:"all"|"24h"},signal?:AbortSignal):Promise<AcaSummary> {
   if (!session.organizationId || !session.agentId)throw new Error("Select an organization and agent in ACA settings.");
@@ -118,12 +141,19 @@ export async function acaMailSummary(session:AcaSession,options:{unreadOnly:bool
     throw new Error("Invalid ACA mail summary response.");
   return response;
 }
-export async function disconnectAca(session:AcaSession|null):Promise<void> {
+export async function disconnectAca(session:AcaSession|null):Promise<{serverRevoked:boolean}> {
+  let serverRevoked = !session || !validAcaSession(session);
   if (session && validAcaSession(session)) {
-    try {await requestJson("/api/mobile/v1/session",{method:"DELETE",headers:bearer(session)});}
-    catch { /* Local Keystore token is removed even if the server is unavailable. */ }
+    try {
+      await requestJson("/api/mobile/v1/session",{method:"DELETE",headers:bearer(session)});
+      serverRevoked=true;
+    } catch {
+      // Offline logout still removes the device token. The UI must explain
+      // that remote revocation was not confirmed; no false success claim.
+    }
   }
   await clearAcaSession();
+  return {serverRevoked};
 }
 
 export { parseAcaMailSummaryIntent } from "./acaMailIntent";

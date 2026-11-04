@@ -55,7 +55,7 @@ function harness(overrides={}) {
     fetch:fakeFetch,URL,URLSearchParams,AbortController,console
   };
   runInNewContext(compiled,sandbox,{filename:'acaEmail.ts'});
-  return {client:moduleExports,calls,get saved(){return saved},get clears(){return clears},response};
+  return {client:moduleExports,calls,vault,get saved(){return saved},get clears(){return clears},response};
 }
 test('mobile client is read-only, uses encrypted native session vault and never sends an email',async()=>{
   const h=harness();
@@ -123,4 +123,56 @@ test('incorrect source-tagged mail response is rejected, not displayed as truste
   await assert.rejects(h.client.acaMailSummary(session,{
     unreadOnly:true,inboxOnly:false,window:'24h'
   }),/Invalid ACA mail summary response/);
+});
+
+test('expired or corrupted Keystore sessions are purged, not silently reused',async()=>{
+  const h=harness();
+  const session={version:1,origin:'https://aca.starcitytechnical.com',
+    token:validToken,expiresAt:'2020-01-01T00:00:00.000Z',
+    organizationId:orgId,agentId:id};
+  await h.client.storeAcaSession(session);
+  assert.equal(await h.client.loadAcaSession(),null);
+  assert.equal(h.saved,null);
+  assert.equal(h.clears,1);
+  await h.vault.saveAcaSession('{ corrupted JSON');
+  assert.equal(await h.client.loadAcaSession(),null);
+  assert.equal(h.saved,null);
+  assert.equal(h.clears,2);
+});
+test('saved account selection must be in a currently authorized organization-agent pair',()=>{
+  const h=harness();
+  const session={version:1,origin:'https://aca.starcitytechnical.com',
+    token:validToken,expiresAt:'2099-01-01T00:00:00.000Z',
+    organizationId:orgId,agentId:id};
+  const organizations=[{id:orgId,name:'One',role:'owner',agents:[{id,name:'Active'}]}];
+  assert.equal(h.client.authorizedAcaSelection(session,organizations),true);
+  assert.equal(h.client.authorizedAcaSelection({...session,agentId:'00000000-0000-0000-0000-000000000003'},organizations),false);
+  assert.equal(h.client.authorizedAcaSelection({...session,organizationId:'00000000-0000-0000-0000-000000000004'},organizations),false);
+  assert.equal(h.client.authorizedAcaSelection({...session,agentId:''},organizations),false);
+  assert.equal(h.client.validAcaSession({...session,agentId:'not-a-valid-uuid'}),false);
+});
+test('server revoke failure is surfaced to caller while local device token is cleared',async()=>{
+  const h=harness({handler:(url,opts,response)=>{
+    if(url.pathname==='/api/mobile/v1/session'&&opts.method==='DELETE')
+      return response(503,{error:'temporary_outage'});
+    return response(404,{error:'unconfigured'});
+  }});
+  const session={version:1,origin:'https://aca.starcitytechnical.com',
+    token:validToken,expiresAt:'2099-01-01T00:00:00.000Z',
+    organizationId:orgId,agentId:id};
+  await h.client.storeAcaSession(session);
+  const revoked=await h.client.disconnectAca(session);
+  assert.equal(revoked.serverRevoked,false);
+  assert.equal(h.saved,null);
+  assert.equal(h.clears,1);
+});
+test('401 and 403 return typed status without reflecting private server bodies',async()=>{
+  for(const code of [401,403]){
+    const h=harness({handler:()=>h.response(code,{error:'forbidden',secret:'not-for-client'})});
+    const session={version:1,origin:'https://aca.starcitytechnical.com',
+      token:validToken,expiresAt:'2099-01-01T00:00:00.000Z',
+      organizationId:orgId,agentId:id};
+    await assert.rejects(h.client.acaMailSummary(session,{unreadOnly:true,inboxOnly:false,window:'24h'}),
+      error=>error?.httpStatus===code && !error.message.includes('not-for-client'));
+  }
 });
