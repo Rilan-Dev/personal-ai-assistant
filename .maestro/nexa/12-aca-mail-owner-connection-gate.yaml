@@ -1,0 +1,38 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa ACA email requires an explicit owner connection before any mailbox read
+tags:
+  - nexa
+  - aca
+  - email
+  - security
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Settings"
+- assertVisible: "Preferences"
+- scrollUntilVisible:
+    element: "AI Comms Agent · Email"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: "Not connected"
+- scrollUntilVisible:
+    element: "Connect ACA account"
+    direction: DOWN
+    timeout: 25000
+- assertVisible: "Connect ACA account"
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Assistant command"
+- inputText: "Summarize unread emails"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible:
+      text: "Connect AI Comms Agent in Settings to read synchronized emails.*"
+    timeout: 30000
+- takeScreenshot: nexa-aca-mail-read-denied-until-owner-connects
