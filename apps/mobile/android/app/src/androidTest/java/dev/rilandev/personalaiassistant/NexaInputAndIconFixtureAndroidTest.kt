@@ -26,7 +26,7 @@ class NexaInputAndIconFixtureAndroidTest {
         return result
     }
     private fun foregroundRoot(): AccessibilityNodeInfo =
-        NexaQaAccessibilityRoot.ownWindow()
+        NexaQaAccessibilityRoot.ownWindow("Nexa synthetic input and icon fixture")
 
     private fun safeEditable(node:AccessibilityNodeInfo,label:String):Boolean {
         val hints=listOf(node.hintText?.toString().orEmpty(),
