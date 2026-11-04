@@ -322,6 +322,7 @@ class RealtimeVoiceService : Service() {
                         if(!assistantPanelEnabled)return false
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
+                            NexaGeneralMessageVoice.parse(text)!=null ||
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
                             NexaPhoneVoiceTools.wantsInstalledApps(text) ||
                             NexaPhoneVoiceTools.wantsScreenHelp(text) ||
@@ -796,6 +797,24 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        val messageIntent=NexaGeneralMessageVoice.parse(transcript)
+        if(messageIntent!=null) {
+            // Speech supplies a local message draft request, not authorization
+            // to choose a channel, tap a recipient or send any external text.
+            NexaGeneralMessageVoice.queue(messageIntent)
+            val opened=try {
+                startActivity(Intent(this,MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                true
+            }catch(_:Exception){false}
+            lastToolResult=if(opened)
+                "Nexa message review opened. Select the app and confirm the recipient. Nothing sent."
+                else "Message held for local review. Open Nexa to choose an app; nothing sent."
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
         val chromeQuery=NexaPhoneVoiceTools.chromeSearchQuery(transcript)
         if(chromeQuery!=null) {
             pendingAppTool=PendingAppTool("local-sarvam","Chrome search for $chromeQuery",
