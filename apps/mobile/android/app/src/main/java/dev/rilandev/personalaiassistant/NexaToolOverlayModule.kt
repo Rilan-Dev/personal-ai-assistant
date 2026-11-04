@@ -112,6 +112,17 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
         }
     }
 
+    @ReactMethod fun consumePendingMessageRequest(p: Promise) {
+        val pending=NexaGeneralMessageVoice.take()
+        if(pending==null) {p.resolve(null);return}
+        val result=Arguments.createMap()
+        result.putString("recipientHint",pending.recipientHint)
+        result.putString("text",pending.message)
+        result.putString("explicitApp",pending.explicitApp)
+        result.putBoolean("reviewOnly",true)
+        p.resolve(result)
+    }
+
     @ReactMethod fun consumePendingVoiceDraft(p: Promise) {
         val pending = NexaVoiceDraftState.take()
         if (pending == null) { p.resolve(null); return }
