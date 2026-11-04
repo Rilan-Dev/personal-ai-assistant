@@ -21,9 +21,11 @@ internal object NexaTextInputPolicy {
                 visible:Boolean,enabled:Boolean,empty:Boolean,setText:Boolean):Boolean {
         if(!safeTarget(target)||!editable||password||!visible||!enabled||!empty||!setText)return false
         val wanted=normalized(target)
+        // A harmless Search hint must not hide a password/OTP resource ID.
+        if(fieldHints.any{forbidden.containsMatchIn(normalized(it))})return false
         return fieldHints.filter{it.isNotBlank()}.any { value ->
             val candidate=normalized(value)
-            candidate.isNotBlank() && !forbidden.containsMatchIn(candidate) &&
+            candidate.isNotBlank() &&
                 (candidate==wanted ||
                     candidate.startsWith("$wanted ") &&
                     wanted in setOf("search","notes","note","description","comment",
