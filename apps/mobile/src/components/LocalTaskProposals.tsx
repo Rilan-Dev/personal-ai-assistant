@@ -1,4 +1,4 @@
-import React,{useEffect,useState} from 'react';
+import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
 import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal} from '../native/localTaskProposals';
 import type {LocalTaskProposal} from '../native/localTaskProposals';
@@ -8,11 +8,13 @@ export function LocalTaskProposals(){
   const [goal,setGoal]=useState('');
   const [items,setItems]=useState<LocalTaskProposal[]>([]);
   const [busy,setBusy]=useState(false);
+  // A rapid double-tap must not persist two different task IDs before React rerenders.
+  const busyRef=useRef(false);
   const [loading,setLoading]=useState(false);
   const [notice,setNotice]=useState('');
   const available=localTaskProposalsAvailable();
   async function refresh(){
-    if(!available||busy)return;
+    if(!available||busyRef.current||loading)return;
     setLoading(true);
     try{setItems(await listLocalTaskProposals());setNotice('');}
     catch{setNotice('Could not securely read your local task proposals.');}
@@ -20,28 +22,39 @@ export function LocalTaskProposals(){
   }
   useEffect(()=>{if(available)void refresh();},[available]);
   async function save(){
-    if(busy||!available)return;
-    setBusy(true);setNotice('');
+    if(busyRef.current||!available||loading)return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    let savedId:string|null=null;
     try{
-      await saveLocalTaskProposal(goal);
+      savedId=await saveLocalTaskProposal(goal);
       setGoal('');
-      setItems(await listLocalTaskProposals());
-      setNotice('Saved privately for review. This task cannot execute or send messages.');
+      // Keep the confirmed receipt even if a subsequent list read fails.
+      setNotice('Saved privately for review. No assistant action or message was sent.');
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice('Task saved privately. List refresh failed; do not save it again. Tap Refresh.');}
     }catch{
-      setNotice('The task could not be confirmed. Refresh the list before retrying.');
-    }finally{setBusy(false);}
+      // A rejected native write has uncertain persistence, so do not claim failure
+      // or encourage duplicate retries until the owner refreshes the local store.
+      setNotice(savedId
+        ? 'Task saved. List refresh unavailable; tap Refresh.'
+        : 'The task save could not be verified. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
   }
   async function cancel(item:LocalTaskProposal){
-    if(busy||item.status!=='proposed')return;
-    setBusy(true);setNotice('');
+    if(busyRef.current||item.status!=='proposed'||loading)return;
+    busyRef.current=true;setBusy(true);setNotice('');
     try{
       const canceled=await cancelLocalTaskProposal(item.taskId);
       if(!canceled)throw Error('not canceled');
-      setItems(await listLocalTaskProposals());
+      // A successful native cancellation is final, even if refreshing fails.
+      setItems(previous=>previous.map(row=>row.taskId===item.taskId
+        ? {...row,status:'cancelled'}:row));
       setNotice('Proposal canceled permanently; no action was executed.');
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice('Proposal canceled. History refresh unavailable; tap Refresh.');}
     }catch{
-      setNotice('Cancellation could not be confirmed. Reload before retrying.');
-    }finally{setBusy(false);}
+      setNotice('Cancellation could not be confirmed. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
   }
   return <View style={styles.container} accessibilityLabel="Private task proposals">
     <Text style={styles.heading}>Private task proposals</Text>
