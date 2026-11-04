@@ -44,3 +44,28 @@
 **DO NOT mark complete simply because the signed APK built or the Maestro report said PASSED at aggregate level.** All individual Maestro flows must pass; negative and restricted-setting cases must remain truthful; native provider calls and physical-device controls need separately recorded evidence. Android instrumentation can suppress independent Accessibility services via default UiAutomation flags, so a Maestro test failing to bind Screen Assist is not proof of real-phone functionality, nor can it be counted as success. Record an actual on-device `dumpsys accessibility` and logcat trace if the failure persists.
 
 For physical-device diagnostic steps, use [Nexa Screen Assist runtime acceptance](NEXA_SCREEN_ASSIST_RUNTIME_ACCEPTANCE_20261104.md) and the read-only PowerShell `scripts/acceptance/nexa-screen-assist-device.ps1`. Share logs only after redacting private app text and account information.
+
+## Verified follow-up evidence — 2026-11-04 (supersedes earlier provisional run statuses)
+
+| Acceptance surface | Evidence | Result |
+|---|---|---|
+| Development signed APK and native security/action replay | [Android run #41802422534](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41802422534), source `714b175b` | PASS: 340 source tests, 110 Android API 35 instrumentation tests, signed APK and signature verification |
+| Twelve standard Maestro UI flows | [Maestro #41804370133](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41804370133), Development | **PASS 12/12**: setup, navigation/resume, overlay, offline wake setup/runtime, voice unconfigured safety, Chrome observed results, screen settings entry, battery/status observed native values, one-time approval, and disconnected ACA email consent gate |
+| WhatsApp owner request **local review only** | [Maestro #41848990853](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41848990853), manually owner-triggered from main workflow, exact Development source checkout and signed APK #41802422534 | **PASS 1/1**: quoted owner request reached local review notice. No contact automatically chosen; no message sent |
+| Notification shade actual Android system action | [Maestro #41790632409](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41790632409) | **FAIL/NO-GO**: AccessibilityService readiness was not observable in Maestro Cloud before action. Do not claim the notification panel opened |
+| Live Sarvam/OpenAI provider + microphone, real phone voice/wake, WhatsApp draft in real app, safe screen taps/scrolls and crash-free hardware use | No authorized physical device or authenticated live-provider acceptance record | **NOT VERIFIED/NO-GO**; source/emulator tests are not substitutes |
+
+### Tool-specific acceptance boundaries
+
+- **Chat battery/status:** positive UI evidence from Maestro on Android Cloud. **Storage:** native policy-tested; separate real-device measurement not accepted.
+- **Chrome search:** the standard Maestro flow observed the destination page after owner review. **Camera, flashlight and arbitrary installed-app launch:** native code/policy checks exist, but real hardware/OS grants/physical result still need acceptance.
+- **WhatsApp:** quoted request to the one-time local review is verified. Actual Android contact selection, intended-recipient correctness and WhatsApp draft launch are **not** verified. Nexa never automatically sends.
+- **Accessibility, icons, tap, scroll, notification shade, Back:** unit/native policy coverage does not prove a bound service or a visible external-app result. The separate notification test fails readiness in Maestro's suppressed-service environment; physical-device testing is still necessary.
+- **Hey Nexa and voice:** offline setup, model download and stop UI flows passed in Cloud; actual wake-phrase recognition and live Sarvam/OpenAI microphone/provider conversations have **not** passed physical acceptance.
+- **ACA email:** safe unconnected mailbox state passed. This does not prove a real authorized mailbox sync/summary, nor authorize sending mail.
+
+### Release decision
+
+**Standard Maestro Cloud UI suite: accepted 12/12. WhatsApp review-only Cloud scenario: accepted 1/1. Complete Nexa functionality: NO-GO**, pending live Android device evidence, real provider testing and the still-unverified notification/screen-control actions. Keep Android permission grants and all external side effects owner controlled; never replace unverified results with a success label.
+
+The Development test was fixed in [PR #82](https://github.com/Rilan-Dev/personal-ai-assistant/pull/82). A separate owner-comment workflow for running a signed Development artifact from the default-branch GitHub workflow was merged in [PR #83](https://github.com/Rilan-Dev/personal-ai-assistant/pull/83); it is manual-only, verifies release ancestry, APK hash and unchanged app source, and uses per-flow CLI proof.
