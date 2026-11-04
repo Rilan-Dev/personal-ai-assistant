@@ -1,5 +1,7 @@
 package dev.rilandev.personalaiassistant
 
+import android.animation.ValueAnimator
+import android.view.animation.DecelerateInterpolator
 import android.Manifest
 import android.app.Service
 import android.content.Context
@@ -44,6 +46,7 @@ class NexaToolOverlayService : Service() {
     private var view: View? = null
     private var params: WindowManager.LayoutParams? = null
     private var expanded = false
+    private var lastRenderedExpanded: Boolean? = null
     private var section = "chat"
     private var note = "Local tools only. Full AI chat is available through Open full Chat."
     /** Only the owner may confirm an explicitly typed, short-lived action. */
@@ -657,6 +660,8 @@ class NexaToolOverlayService : Service() {
             view=null
             visible=false
         }
+        val shouldAnimate = lastRenderedExpanded != expanded
+        lastRenderedExpanded = expanded
         val layout: View = if (!expanded) {
             ImageView(this).apply {
                 setImageResource(R.drawable.ic_nexa_assistant)
@@ -701,12 +706,12 @@ class NexaToolOverlayService : Service() {
                 background=NexaOverlayTheme.card(this@NexaToolOverlayService,
                     NexaOverlayTheme.palette(this@NexaToolOverlayService))
                 elevation=dp(12).toFloat()
-                addView(text("━━    ✦ NEXA  ·  LIVE ASSISTANT",12f,true))
-                addView(text("How can I help?",22f))
+                addView(text("✦   NEXA",13f,true))
+                addView(text("How can I help?",19f))
+                addView(text("On-device tools · Actions need your approval",11f,true))
                 addView(NexaOverlayTheme.waveform(this@NexaToolOverlayService,
                     NexaOverlayTheme.palette(this@NexaToolOverlayService)),
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(37)))
-                addView(text("Choose a tool or ask a local device question",12f,true))
+                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(25)))
                 addView(row(
                     button("Chat") { showSection("chat") },
                     button("Tools") { showSection("tools") },
@@ -924,7 +929,7 @@ class NexaToolOverlayService : Service() {
         } else layout
         val p = WindowManager.LayoutParams(
             if (expanded) minOf(dp(360), resources.displayMetrics.widthPixels - dp(24)) else dp(52),
-            if (expanded) minOf(dp(490), resources.displayMetrics.heightPixels - dp(110)) else dp(52),
+            if (expanded) minOf(dp(540), resources.displayMetrics.heightPixels - dp(122)) else dp(52),
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                 (if (expanded && section == "chat") 0
@@ -941,6 +946,21 @@ class NexaToolOverlayService : Service() {
             wm.addView(fittedLayout,p)
             view=fittedLayout
             visible=true
+            // Decorative entrance only. Android's animator scale / Reduce
+            // motion setting overrides this; never delay tool side effects.
+            if (shouldAnimate && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                ValueAnimator.areAnimatorsEnabled()) {
+                fittedLayout.alpha=0f
+                fittedLayout.scaleX=0.955f
+                fittedLayout.scaleY=0.955f
+                fittedLayout.post {
+                    if (view === fittedLayout && fittedLayout.isAttachedToWindow) {
+                        fittedLayout.animate().alpha(1f).scaleX(1f).scaleY(1f)
+                            .setDuration(175L).setInterpolator(DecelerateInterpolator())
+                            .start()
+                    }
+                }
+            }
         } catch (_: Exception) {
             view=null
             visible=false
@@ -954,6 +974,7 @@ class NexaToolOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        view?.animate()?.cancel()
         view?.let {try {wm.removeView(it)}catch (_: Exception) {}}
         view=null
         visible=false

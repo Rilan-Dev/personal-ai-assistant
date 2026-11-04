@@ -36,8 +36,8 @@ test('voice and device tools expose explicit action controls',()=>{
 
 test('user and agent text use consistent readable system font',()=>{
   assert.match(app,/fontFamily:'sans-serif'/);
-  assert.match(app,/fontSize:14,lineHeight:22/);
-  assert.match(app,/borderRadius:22/);
+  assert.match(app,/fontSize:15,lineHeight:24/);
+  assert.match(app,/borderRadius:27/);
 });
 
 test('Android back button navigates from settings/tools/voice to chat',()=>{

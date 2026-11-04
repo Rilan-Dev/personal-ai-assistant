@@ -43,7 +43,12 @@ test('APK embeds its real commit and uses comparable Android version codes',()=>
   assert.match(gradle,/PAA_SOURCE_REVISION/);
   assert.match(gradle,/PAA_BUILD_VERSION_CODE/);
   for(const ci of [workflow,releaseWorkflow]){
-    assert.match(ci,/PAA_BUILD_SOURCE_REVISION: \$\{\{ github\.sha \}\}/);
+    if(ci===workflow){
+      assert.match(ci,/echo "PAA_BUILD_SOURCE_REVISION=\$GITHUB_SHA" >> "\$GITHUB_ENV"/);
+      assert.match(ci,/Pin release version and source for emulator and distributable APK/);
+    } else {
+      assert.match(ci,/PAA_BUILD_SOURCE_REVISION: \$\{\{ github\.sha \}\}/);
+    }
     assert.match(ci,/release-version-code\.sh/);
     assert.match(ci,/release-test-signing-certificate\.txt/);
     assert.match(ci,/Load permanent Nexa release signer/);

@@ -29,6 +29,8 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
   requestApproximateLocationSetup, setAutoStartVoiceOnInvocation} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
+import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
+import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
   stopWakeListening, resumeWakeIfEnabled} from './src/native/androidWakeWord';
 import type {WakeStatus} from './src/native/androidWakeWord';
@@ -56,7 +58,6 @@ import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakS
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
-const quickPrompts = ['Check battery', 'Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Turn flashlight on', 'Turn flashlight off', 'Test approval'];
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
@@ -1658,6 +1659,12 @@ export default function App() {
       setSetupNotice('Could not save the on-device setup preference. Please try again.');
     } finally {setSetupBusy(false);}
   };
+  const voiceVisualState:VoiceVisualState =
+    liveVoiceStatus.microphoneMuted ? 'muted' :
+    liveVoiceStatus.state === 'connecting' ? 'connecting' :
+    liveVoiceStatus.state === 'listening' || listening ? 'listening' :
+    speaking ? 'speaking' :
+    liveVoiceStatus.state === 'error' ? 'error' : 'idle';
   return (
     <SafeAreaView style={styles.root} edges={["top","bottom","left","right"]}>
       <StatusBar barStyle="light-content"/>
@@ -1708,7 +1715,7 @@ export default function App() {
         <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}
           ref={chatScroll} onContentSizeChange={() => messages.length ? chatScroll.current?.scrollToEnd({animated: true}) : chatScroll.current?.scrollTo({y:0,animated:false})}
           keyboardShouldPersistTaps="handled">
-          {messages.length <= 1 && <View style={styles.welcome}>
+          {messages.length === 0 && <NexaReveal><View style={styles.welcome}>
             <View style={styles.welcomeGlow}><Text style={styles.welcomeIcon}>✦</Text></View>
             <Text style={styles.welcomeTitle}>How can I help today?</Text>
             <Text style={styles.welcomeText}>Ask anything, speak a request, or control an approved device action.</Text>
@@ -1718,11 +1725,11 @@ export default function App() {
                 {label:'Flashlight on',prompt:'Turn flashlight on'},
                 {label:'What can you do?',prompt:'What can you do?'}].map(item=>
                   <Pressable key={item.label} accessibilityRole="button" accessibilityLabel={item.label} disabled={running}
-                    style={styles.suggestion} onPress={() => send(item.prompt)}>
+                    style={({pressed})=>[styles.suggestion,pressed&&styles.pressed]} onPress={() => send(item.prompt)}>
                     <Text style={styles.suggestionLabel}>{item.label}  ↗</Text>
                   </Pressable>)}
             </View>
-          </View>}
+          </View></NexaReveal>}
           {messages.map(message=>
             <View key={message.id} style={[styles.messageRow,message.speaker==='user' && styles.messageRowUser]}>
               {message.speaker==='assistant' && <View style={styles.messageAvatar}><Text style={styles.avatarText}>✦</Text></View>}
@@ -1760,12 +1767,6 @@ export default function App() {
           </Pressable>}
         </ScrollView>
         <View style={styles.chatComposerArea}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
-            contentContainerStyle={styles.promptRail}>
-            {quickPrompts.slice(0,6).map(prompt=><Pressable key={prompt} accessibilityRole="button" accessibilityLabel={prompt} disabled={running}
-              onPress={() => send(prompt === 'Check battery' ? 'Check battery level' : prompt)}
-              style={styles.promptChip}><Text style={styles.promptChipText}>{prompt}</Text></Pressable>)}
-          </ScrollView>
           <View style={styles.composerRow}>
             <Pressable accessibilityRole="button" accessibilityLabel="Open tools" onPress={() => navigate('tools')} style={styles.composerIcon}>
               <Text style={styles.composerIconText}>＋</Text>
@@ -1787,8 +1788,8 @@ export default function App() {
       {tab === 'voice' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
         <View style={styles.voiceHero}>
           <Text style={styles.eyebrow}>VOICE ASSISTANT</Text>
-          <View style={[styles.voiceOrb,listening && styles.voiceOrbActive]}><Text style={styles.voiceOrbGlyph}>{listening ? '◉' : '✦'}</Text></View>
-          <Text style={styles.voiceHeadline}>{listening?'Listening…':speaking?'Speaking…':'Speak naturally'}</Text>
+          <NexaVoiceOrb state={voiceVisualState}/>
+          <Text style={styles.voiceHeadline}>Speak naturally</Text>
           <Text style={styles.voiceSubline}>{sarvamVoiceKeySaved?'Samvaad live speech-to-speech uses one managed WebSocket. Chat/dictation uses separate credentials and does not receive the Voice Agents workspace key.':'Use locally controlled speech or configure a Samvaad Voice Agent for live speech.'}</Text>
           <Pressable accessibilityRole="button" disabled={running || speaking || (voiceInProgress.current && !listening) ||
               liveVoiceStatus.state==='connecting'||liveVoiceStatus.state==='listening'}
@@ -2502,7 +2503,7 @@ export default function App() {
             accessibilityState={{selected:tab===item.id}}
             accessibilityLabel={item.label+' tab'}
             onPress={()=>navigate(item.id)}
-            style={[styles.tabButton,tab===item.id&&styles.tabButtonActive]}>
+            style={({pressed})=>[styles.tabButton,tab===item.id&&styles.tabButtonActive,pressed&&styles.pressed]}>
             <Text style={[styles.tabGlyph,tab===item.id&&styles.tabGlyphActive]}>{item.glyph}</Text>
             <Text style={[styles.tabLabel,tab===item.id&&styles.tabLabelActive]}>{item.label}</Text>
           </Pressable>)}
@@ -2512,35 +2513,35 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  root:{flex:1,backgroundColor:'#0B1020'},
-  topBar:{minHeight:72,paddingHorizontal:18,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:1,borderColor:'#263250',backgroundColor:'#10162A'},
-  brandIcon:{width:42,height:42,backgroundColor:'#5658D9',borderRadius:14,justifyContent:'center',alignItems:'center'},
+  root:{flex:1,backgroundColor:'#0D1017'},
+  topBar:{minHeight:64,paddingHorizontal:18,flexDirection:'row',alignItems:'center',gap:12,borderBottomWidth:1,borderColor:'#222733',backgroundColor:'#12161F'},
+  brandIcon:{width:36,height:36,backgroundColor:'#333961',borderRadius:12,justifyContent:'center',alignItems:'center'},
   brandInitial:{fontFamily:'sans-serif',fontSize:25,fontWeight:'700',color:'#FFF'},
   brandText:{flex:1,minWidth:0},
-  brandTitle:{fontFamily:'sans-serif',color:'#F8FAFC',fontSize:19,fontWeight:'700',letterSpacing:-.3},
+  brandTitle:{fontFamily:'sans-serif',color:'#F7F8FC',fontSize:18,fontWeight:'700',letterSpacing:-.3},
   brandSubtitle:{fontFamily:'sans-serif',color:'#98A6C1',fontSize:12,marginTop:4},
   headerAction:{width:42,height:42,borderRadius:15,borderWidth:1,borderColor:'#32405B',alignItems:'center',justifyContent:'center'},
   headerActionText:{fontFamily:'sans-serif',fontSize:24,color:'#E2E8F0'},
   headerStatus:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:'#19243A',borderRadius:16,paddingHorizontal:10,paddingVertical:7},
   statusDot:{width:7,height:7,borderRadius:5,backgroundColor:'#64748B'},statusDotOn:{backgroundColor:'#34D399'},
   statusLabel:{fontFamily:'sans-serif',fontSize:11,color:'#B6C4D9',fontWeight:'600'},
-  chatScroll:{flex:1},chatContent:{paddingHorizontal:16,paddingVertical:22,gap:16,paddingBottom:28},
-  welcome:{alignItems:'center',paddingTop:34,paddingBottom:18},
-  welcomeGlow:{width:80,height:80,borderRadius:28,backgroundColor:'#2A2B73',borderWidth:1,borderColor:'#5456AB',alignItems:'center',justifyContent:'center',marginBottom:21},
-  welcomeIcon:{fontSize:42,color:'#C7D2FE'},
-  welcomeTitle:{fontFamily:'sans-serif',fontSize:23,fontWeight:'700',color:'#F8FAFC',letterSpacing:-.4},
+  chatScroll:{flex:1},chatContent:{paddingHorizontal:18,paddingVertical:20,gap:18,paddingBottom:28},
+  welcome:{alignItems:'center',paddingTop:55,paddingBottom:28},
+  welcomeGlow:{width:60,height:60,borderRadius:22,backgroundColor:'#272D48',alignItems:'center',justifyContent:'center',marginBottom:20},
+  welcomeIcon:{fontSize:35,color:'#C8CAFF'},
+  welcomeTitle:{fontFamily:'sans-serif',fontSize:24,fontWeight:'700',color:'#F8FAFC',letterSpacing:-.5},
   welcomeText:{fontFamily:'sans-serif',fontSize:14,color:'#9EADC6',lineHeight:22,textAlign:'center',maxWidth:310,marginTop:10,marginBottom:27},
   suggestionGrid:{flexDirection:'row',flexWrap:'wrap',gap:10,width:'100%'},
-  suggestion:{width:'48%',backgroundColor:'#151E31',borderColor:'#2A3650',borderWidth:1,padding:14,minHeight:54,borderRadius:16,justifyContent:'center'},
-  suggestionLabel:{fontFamily:'sans-serif',fontSize:13,fontWeight:'600',color:'#CDD7E8'},
+  suggestion:{width:'48%',backgroundColor:'#1A202C',borderColor:'#333B4D',borderWidth:1,padding:15,minHeight:62,borderRadius:18,justifyContent:'center'},
+  suggestionLabel:{fontFamily:'sans-serif',fontSize:13,fontWeight:'600',color:'#E2E6F1',lineHeight:19},
   messageRow:{flexDirection:'row',gap:10,maxWidth:'100%',alignItems:'flex-start'},
   messageRowUser:{justifyContent:'flex-end'},
-  messageAvatar:{width:29,height:29,borderRadius:10,backgroundColor:'#394099',justifyContent:'center',alignItems:'center'},
+  messageAvatar:{width:27,height:27,borderRadius:10,backgroundColor:'#262E4B',justifyContent:'center',alignItems:'center'},
   avatarText:{color:'#FFF',fontSize:17},
-  messageCard:{borderRadius:17,padding:14,maxWidth:'88%'},
-  messageUser:{backgroundColor:'#4245A4',borderBottomRightRadius:5},
-  messageAssistant:{backgroundColor:'#192339',borderWidth:1,borderColor:'#273550',borderTopLeftRadius:5},
-  messageText:{fontFamily:'sans-serif',color:'#EEF2FF',fontSize:14,lineHeight:22},
+  messageCard:{borderRadius:20,padding:13,maxWidth:'89%'},
+  messageUser:{backgroundColor:'#303747',borderBottomRightRadius:7},
+  messageAssistant:{backgroundColor:'transparent',paddingHorizontal:0,paddingTop:2,borderWidth:0},
+  messageText:{fontFamily:'sans-serif',color:'#E9EDF7',fontSize:15,lineHeight:24},
   loadingLine:{flexDirection:'row',alignItems:'center',gap:12,paddingVertical:12,paddingHorizontal:8},
   statusText:{fontFamily:'sans-serif',fontSize:13,color:'#9DAFCB'},
   actionCard:{backgroundColor:'#1D2444',borderRadius:16,borderColor:'#5C60B6',borderWidth:1,padding:16,gap:11},
@@ -2549,22 +2550,22 @@ const styles = StyleSheet.create({
   tracePanel:{backgroundColor:'#11192B',borderRadius:12,padding:12,borderWidth:1,borderColor:'#23324D'},
   traceTitle:{fontFamily:'sans-serif',color:'#B0C0DC',fontWeight:'600',fontSize:12},
   traceLine:{fontFamily:'sans-serif',color:'#91A0B9',fontSize:11,marginTop:8},
-  chatComposerArea:{borderTopWidth:1,borderColor:'#202B43',backgroundColor:'#0E1527',paddingTop:10,paddingHorizontal:14,paddingBottom:8},
+  chatComposerArea:{borderTopWidth:1,borderColor:'#262C3A',backgroundColor:'#111720',paddingTop:12,paddingHorizontal:12,paddingBottom:8},
   promptRail:{gap:8,paddingBottom:11},
   promptChip:{borderWidth:1,borderColor:'#35425F',backgroundColor:'#1A2539',paddingVertical:9,paddingHorizontal:13,borderRadius:24},
   promptChipText:{fontFamily:'sans-serif',fontSize:12,color:'#C4D0E8'},
-  composerRow:{flexDirection:'row',alignItems:'flex-end',gap:8,backgroundColor:'#1A2437',borderWidth:1,borderColor:'#35445F',borderRadius:22,padding:6,minHeight:54},
-  composerIcon:{height:42,width:36,justifyContent:'center',alignItems:'center'},
+  composerRow:{flexDirection:'row',alignItems:'flex-end',gap:8,backgroundColor:'#222935',borderWidth:1,borderColor:'#3C4557',borderRadius:27,padding:6,minHeight:56},
+  composerIcon:{height:44,width:38,justifyContent:'center',alignItems:'center'},
   composerIconText:{fontFamily:'sans-serif',color:'#ACBEE0',fontSize:23},
-  composerInput:{flex:1,fontFamily:'sans-serif',fontSize:14,color:'#F1F5F9',maxHeight:112,minHeight:40,paddingHorizontal:3,paddingVertical:9,textAlignVertical:'center'},
-  composerSend:{width:42,height:42,borderRadius:16,backgroundColor:'#6366F1',justifyContent:'center',alignItems:'center'},
-  composerSendText:{fontFamily:'sans-serif',fontSize:23,color:'#FFF',fontWeight:'700'},
-  composerNote:{fontFamily:'sans-serif',textAlign:'center',color:'#65748D',fontSize:10,marginTop:8},
-  bottomNav:{minHeight:70,flexDirection:'row',backgroundColor:'#11182C',borderTopWidth:1,borderColor:'#283554',paddingHorizontal:5},
+  composerInput:{flex:1,fontFamily:'sans-serif',fontSize:15,color:'#F2F5FC',maxHeight:130,minHeight:42,paddingHorizontal:4,paddingVertical:10,textAlignVertical:'center'},
+  composerSend:{width:44,height:44,borderRadius:22,backgroundColor:'#E9EDF8',justifyContent:'center',alignItems:'center'},
+  composerSendText:{fontFamily:'sans-serif',fontSize:23,color:'#1D2433',fontWeight:'700'},
+  composerNote:{fontFamily:'sans-serif',textAlign:'center',color:'#A6AEC2',fontSize:11,marginTop:9},
+  bottomNav:{minHeight:66,flexDirection:'row',backgroundColor:'#111720',borderTopWidth:1,borderColor:'#272F3D',paddingHorizontal:5},
   tabButton:{flex:1,alignItems:'center',justifyContent:'center',gap:4,borderRadius:13,marginVertical:6,minHeight:52},
-  tabButtonActive:{backgroundColor:'#232A54'},
-  tabGlyph:{fontFamily:'sans-serif',fontSize:21,color:'#8391AD'},tabGlyphActive:{color:'#A5B4FC'},
-  tabLabel:{fontFamily:'sans-serif',fontSize:10,color:'#A5B0C9',fontWeight:'600'},tabLabelActive:{color:'#E1E6FF'},
+  tabButtonActive:{backgroundColor:'#273044'},
+  tabGlyph:{fontFamily:'sans-serif',fontSize:20,color:'#94A1B7'},tabGlyphActive:{color:'#DEE4FF'},
+  tabLabel:{fontFamily:'sans-serif',fontSize:10,color:'#A5B0C9',fontWeight:'600'},tabLabelActive:{color:'#F0F2FF'},
   pageScroll:{flex:1},pageContent:{paddingHorizontal:18,paddingTop:24,paddingBottom:38,gap:17},
   pageIntro:{marginBottom:3},pageHeadline:{fontFamily:'sans-serif',fontSize:23,fontWeight:'700',color:'#F5F7FF'},
   pageSubtitle:{fontFamily:'sans-serif',fontSize:13,color:'#9AA9C4',lineHeight:20,marginTop:6},
@@ -2599,13 +2600,13 @@ const styles = StyleSheet.create({
   settingInput:{minHeight:48,paddingVertical:12,paddingHorizontal:13,borderRadius:13,borderWidth:1,borderColor:'#40516C',backgroundColor:'#1A263A',fontFamily:'sans-serif',fontSize:14,color:'#F5F7FB'},
   textAction:{paddingVertical:9,alignItems:'center'},textActionText:{fontFamily:'sans-serif',fontSize:12,color:'#FFB7C4',fontWeight:'600'},
   warning:{color:'#FFBBC7',fontSize:12},
-  voiceHero:{backgroundColor:'#171D3A',borderRadius:25,paddingHorizontal:24,paddingVertical:34,alignItems:'center',borderWidth:1,borderColor:'#30396B'},
+  voiceHero:{backgroundColor:'#181E2E',borderRadius:26,paddingHorizontal:22,paddingVertical:30,alignItems:'center',borderWidth:1,borderColor:'#333B54'},
   eyebrow:{color:'#8E9BE9',fontFamily:'sans-serif',fontSize:11,letterSpacing:1.5,fontWeight:'700'},
   voiceOrb:{width:142,height:142,borderRadius:71,backgroundColor:'#353C91',borderWidth:2,borderColor:'#7378E2',alignItems:'center',justifyContent:'center',marginTop:26,marginBottom:22},
   voiceOrbActive:{backgroundColor:'#6B304C',borderColor:'#F08DA7'},
   voiceOrbGlyph:{fontSize:65,color:'#DDE3FF'},
-  voiceHeadline:{fontFamily:'sans-serif',fontSize:23,fontWeight:'700',color:'#FFF'},
-  voiceSubline:{fontFamily:'sans-serif',color:'#B3BFDC',textAlign:'center',fontSize:13,lineHeight:21,marginTop:8,marginBottom:25},
+  voiceHeadline:{fontFamily:'sans-serif',fontSize:16,fontWeight:'600',color:'#D6DEEF',marginBottom:2},
+  voiceSubline:{fontFamily:'sans-serif',color:'#AEBAD0',textAlign:'center',fontSize:13,lineHeight:21,marginTop:8,marginBottom:23},
   voiceBigButton:{backgroundColor:'#6366F1',borderRadius:17,paddingVertical:16,paddingHorizontal:25,width:'100%',alignItems:'center'},
   voiceStopButton:{backgroundColor:'#A43856'},
   voiceBigButtonText:{fontFamily:'sans-serif',color:'#FFF',fontWeight:'700',fontSize:15},
@@ -2616,5 +2617,6 @@ const styles = StyleSheet.create({
   setupShortcutDetail:{color:'#B8C3DD',fontSize:12,lineHeight:20},
   setupShortcutButton:{backgroundColor:'#5658D6',minHeight:46,borderRadius:12,alignItems:'center',justifyContent:'center'},
   setupShortcutButtonText:{fontSize:13,color:'#fff',fontWeight:'700'},
+  pressed:{opacity:.76,transform:[{scale:.988}]},
   mutedSmall:{fontFamily:'sans-serif',color:'#9BAAC5',fontSize:12,lineHeight:18,textAlign:'center'}
 });

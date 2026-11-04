@@ -65,7 +65,8 @@ jobs:
        github.event.comment.author_association == 'OWNER' &&
        (github.event.comment.body == '/nexa-maestro run all android-33' ||
         github.event.comment.body == '/nexa-maestro run agent-browser android-33' ||
-        github.event.comment.body == '/nexa-maestro run agent-controls android-33'))
+        github.event.comment.body == '/nexa-maestro run agent-controls android-33' ||
+        github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33'))
     runs-on: ubuntu-latest
     timeout-minutes: 70
     steps:
@@ -79,14 +80,17 @@ jobs:
             echo "::error::Repository secret MAESTRO_CLOUD_API_KEY is missing."
             exit 1
           fi
+      # The Development checkout is allowed only for this one exact owner command.
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33' && 'Development' || github.ref_name }}
           fetch-depth: 0
       - name: Locate latest successful signed Nexa APK
         id: release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          TARGET_BRANCH: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33' && 'Development' || github.ref_name }}
           PINNED_RELEASE_RUN_ID: ${{ inputs.release_run_id || '' }}
         run: |
           set -euo pipefail
@@ -101,14 +105,14 @@ jobs:
             release_branch="$(jq -r '.head_branch // empty' <<< "$selected")"
             release_path="$(jq -r '.path // empty' <<< "$selected")"
             release_conclusion="$(jq -r '.conclusion // empty' <<< "$selected")"
-            if [[ "$release_branch" != "$GITHUB_REF_NAME" ||
+            if [[ "$release_branch" != "$TARGET_BRANCH" ||
                   "$release_path" != ".github/workflows/android-main-promotion.yml" ||
                   "$release_conclusion" != "success" ]]; then
               echo "::error::Pinned signed APK run must have succeeded on this exact branch."
               exit 1
             fi
           else
-            runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-main-promotion.yml/runs?branch=main&status=success&per_page=10")"
+            runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-main-promotion.yml/runs?branch=$TARGET_BRANCH&status=success&per_page=10")"
             release_id="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .id // empty' <<< "$runs")"
             release_sha="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' <<< "$runs")"
           fi
@@ -150,12 +154,16 @@ jobs:
             echo "::error::APK checksum verification failed."
             exit 1
           fi
-          # Only shipped app/runtime changes invalidate the signed APK.
-          # Source-only test additions in scripts/test/ do not enter the APK.
+          # Only verified signed, ancestor APKs may be reused.
+          if ! git merge-base --is-ancestor "$EXPECTED_SHA" HEAD; then
+            echo "::error::Signed APK is not an ancestor of the tested branch."
+            exit 1
+          fi
+          # Test-only scripts do not enter APK. App/runtime changes do.
           changed_source="$(git diff --name-only "$EXPECTED_SHA" HEAD -- apps/mobile packages services scripts package.json package-lock.json)"
           runtime_changes="$(printf '%s\n' "$changed_source" | grep -Ev '^scripts/test/|^$' || true)"
           if [[ -n "$runtime_changes" ]]; then
-            echo "::error::Nexa runtime source changed after this APK. Rebuild the Android release first."
+            echo "::error::Nexa app/runtime changed since signed release APK. Rebuild first."
             printf '%s\n' "$runtime_changes"
             exit 1
           fi
@@ -178,7 +186,8 @@ jobs:
           MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
           MAESTRO_DISABLE_UPDATE_CHECK: "true"
           MAESTRO_CLI_NO_ANALYTICS: "true"
-          TEST_SUITE: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-browser android-33' && 'agent-browser' || github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-controls android-33' && 'agent-controls' || inputs.suite || 'all' }}
+          TARGET_BRANCH: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33' && 'Development' || github.ref_name }}
+          TEST_SUITE: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33' && 'whatsapp-review' || github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-browser android-33' && 'agent-browser' || github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-controls android-33' && 'agent-controls' || inputs.suite || 'all' }}
           ANDROID_OS: ${{ inputs.android_os || 'android-33' }}
         run: |
           set -euo pipefail
@@ -209,8 +218,8 @@ jobs:
             --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
             --device-os "$ANDROID_OS" \
             --device-model pixel_6 \
-            --branch "$GITHUB_REF_NAME" \
-            --name "Nexa $TEST_SUITE $ANDROID_OS $GITHUB_SHA" \
+            --branch "$TARGET_BRANCH" \
+            --name "Nexa $TEST_SUITE $ANDROID_OS $(git rev-parse --short HEAD)" \
             --app-file "$NEXA_RELEASE_APK" \
             --format HTML-DETAILED \
             --output "$RUNNER_TEMP/nexa-maestro-detailed.html" \
