@@ -111,15 +111,15 @@ class NexaToolOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_HIDE) { stopSelf(); return START_NOT_STICKY }
-        if (NexaMessageDraftState.peek()!=null) section="tools"
+        if (NexaMessageDraftState.peek()!=null || NexaTextInputState.peek()!=null) section="tools"
         if (intent?.action != ACTION_SHOW || !Settings.canDrawOverlays(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
         if (view == null) {
             wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            render()
         }
+        render()
         return START_NOT_STICKY
     }
 
@@ -563,6 +563,30 @@ class NexaToolOverlayService : Service() {
         note = "Scroll cancelled."
         render()
     }
+    private fun inspectNamedTextBox() {
+        val service=ScreenAssistService.active
+        note=if(service==null)"Screen Assist disconnected; nothing typed."
+            else NexaTextInputActions.prepare(service)
+        section="tools"
+        render()
+    }
+    private fun confirmNamedTextBox() {
+        val service=ScreenAssistService.active
+        note=if(service==null){
+            NexaTextInputActions.cancel()
+            NexaTextInputState.clear()
+            "Screen Assist disconnected. Text entry cancelled."
+        }else NexaTextInputActions.confirm(service)
+        expanded=false
+        render()
+    }
+    private fun cancelNamedTextBox() {
+        NexaTextInputActions.cancel()
+        NexaTextInputState.clear()
+        note="Text entry cancelled without sending or submitting."
+        render()
+    }
+
     private fun inspectMessageInput() {
         val service=ScreenAssistService.active
         note=if(service==null) "Screen Assist disconnected. No message was typed."
@@ -710,6 +734,18 @@ class NexaToolOverlayService : Service() {
                         ))
                     }
                     "tools" -> {
+                        NexaTextInputState.peek()?.let { draft ->
+                            addView(text("REVIEW TEXT FIELD · "+draft.targetLabel,13f))
+                            addView(text("Exact proposed text: "+draft.exactText.take(500),12f))
+                            addView(text("Open the intended external app and one empty field. Nexa will only enter this text after one more confirmation; never submit or send.",11f,true))
+                            if(NexaTextInputActions.ready()) addView(row(
+                                button("Confirm type text") { confirmNamedTextBox() },
+                                button("Cancel typing") { cancelNamedTextBox() }
+                            )) else addView(row(
+                                button("Find input box") { inspectNamedTextBox() },
+                                button("Cancel typing") { cancelNamedTextBox() }
+                            ))
+                        }
                         NexaMessageDraftState.peek()?.let { draft ->
                             addView(text("MESSAGE DRAFT · ${draft.appId} · ${draft.recipientHint}",13f))
                             addView(text("Open the correct conversation. Nexa checks its visible title and finds one empty message box. Your message will be inserted only after another tap; it will NEVER be sent by Nexa.",11f,true))
