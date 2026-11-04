@@ -14,15 +14,9 @@ import org.junit.runner.RunWith
  * No WhatsApp account, real contact, communications permission or sending. */
 @RunWith(AndroidJUnit4::class)
 class NexaWhatsAppChatUiAndroidTest {
-    private fun root():AccessibilityNodeInfo {
-        val instrument=InstrumentationRegistry.getInstrumentation()
-        repeat(16) {
-            instrument.waitForIdleSync()
-            instrument.uiAutomation.rootInActiveWindow?.let{return it}
-            SystemClock.sleep(120)
-        }
-        throw AssertionError("Synthetic chat UI Accessibility root unavailable")
-    }
+    private fun root():AccessibilityNodeInfo =
+        NexaQaAccessibilityRoot.ownWindow()
+
     @Test fun duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader() {
         NexaChatListQaActivity.duplicateContact=false
         ActivityScenario.launch(NexaChatListQaActivity::class.java).use{ scenario ->
