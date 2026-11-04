@@ -1829,6 +1829,51 @@ export default function App() {
             <Text style={styles.cardHeading}>Private, one-time observations</Text>
             <Text style={styles.sectionTag}>On demand</Text>
           </View>
+          {messageRequest&&<View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Message app & recipient review</Text>
+            <Text style={styles.cardText}>Requested recipient: {messageRequest.recipientHint}</Text>
+            <Text style={styles.cardText} selectable>Exact draft: {messageRequest.text}</Text>
+            <Text style={styles.settingHelp}>Nexa never guesses a recipient, sends this text or chooses an unfamiliar app. It remembers only an app you explicitly select for this alias.</Text>
+            {messageBusy&&<ActivityIndicator/>}
+            {!messageChosen&&<Text style={styles.cardHeading}>Choose a messaging app</Text>}
+            {!messageChosen&&messageOptions.map(app=><View key={app.id} style={styles.actionCard}>
+              <Text style={styles.settingTitle}>{app.label}</Text>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" disabled={messageBusy}
+                  style={styles.outlineInline} onPress={()=>void chooseMessageChannel(app,false)}>
+                  <Text style={styles.outlineInlineText}>Use {app.label} once</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={messageBusy||!recipientMemoryKey(messageRequest.recipientHint)}
+                  style={styles.primaryInline} onPress={()=>void chooseMessageChannel(app,true)}>
+                  <Text style={styles.primaryInlineText}>Remember {app.label} for {messageRequest.recipientHint}</Text>
+                </Pressable>
+              </View>
+            </View>)}
+            {messageChosen&&<>
+              <Text style={styles.settingTitle}>Chosen app: {messageChosen.label}</Text>
+              <Text style={styles.settingHelp}>Select the real recipient using Android for SMS/WhatsApp. For IMO, BOTIM or WhatsApp Business, open the right conversation yourself; the overlay will verify the visible title and empty message box before any text entry.</Text>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.outlineInline}
+                  onPress={()=>{setMessageChosen(null);setMessageRecipientConfirmed(false);}}>
+                  <Text style={styles.outlineInlineText}>Change messaging app</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.outlineInline}
+                  onPress={()=>void forgetRecipientChannel()}>
+                  <Text style={styles.outlineInlineText}>Forget saved app</Text>
+                </Pressable>
+              </View>
+              {['imo','botim','whatsapp-business'].includes(messageChosen.id)&&
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.primaryInline}
+                  onPress={()=>void openGuidedMessageInput()}>
+                  <Text style={styles.primaryInlineText}>Open {messageChosen.label} for reviewed text entry</Text>
+                </Pressable>}
+            </>}
+            {messageNotice!==''&&<Text style={styles.feedback}>{messageNotice}</Text>}
+            <Pressable accessibilityRole="button" style={styles.textAction}
+              onPress={cancelMessageReview}>
+              <Text style={styles.textActionText}>Discard message review — do not send</Text>
+            </Pressable>
+          </View>}
           <Text style={styles.cardText}>Choose one contact using Android's contact picker without reading your address book, or obtain one approximate location after Android permission. The result stays in memory for up to 60 seconds. It is not sent to AI unless you review and send it yourself.</Text>
           {engine.live&&ownerPrivacyAvailable()&&<>
             <View style={styles.buttonRow}>
@@ -1844,14 +1889,28 @@ export default function App() {
             {selectedContact&&<View style={styles.configContents}>
               <Text style={styles.groupLabel}>Selected contact · local preview</Text>
               <Text style={styles.cardText}>{selectedContact.name} · {selectedContact.phone}</Text>
-              {whatsAppDraftAvailable() && <>
+              {messageRequest && (messageChosen?.id==='whatsapp'||messageChosen?.id==='sms')&&
+                <View style={styles.actionCard}>
+                  <Text style={styles.cardText}>Requested: {messageRequest.recipientHint}. Android-selected contact: {selectedContact.name}. Nexa cannot assume these refer to the same person.</Text>
+                  <Pressable accessibilityRole="button" disabled={messageRecipientConfirmed}
+                    style={styles.primaryInline} onPress={()=>setMessageRecipientConfirmed(true)}>
+                    <Text style={styles.primaryInlineText}>{messageRecipientConfirmed?'Recipient confirmed':'Confirm this is '+messageRequest.recipientHint}</Text>
+                  </Pressable>
+                </View>}
+              {messageRequest && messageChosen?.id==='sms'&&
+                <Pressable accessibilityRole="button" style={styles.primaryInline}
+                  disabled={!messageRecipientConfirmed||messageBusy}
+                  onPress={()=>void openPreparedSms()}>
+                  <Text style={styles.primaryInlineText}>Open reviewed SMS draft — do not send</Text>
+                </Pressable>}
+              {whatsAppDraftAvailable() && (!messageRequest || messageChosen?.id==='whatsapp') && <>
                 <Text style={styles.settingHelp}>Compose only. The selected number must include +country code. Nexa only opens a draft; confirm recipient and tap Send in WhatsApp.</Text>
                 <TextInput style={styles.composerInput} placeholder="WhatsApp message to selected contact"
                   placeholderTextColor="#7f8ba5" value={whatsAppDraft}
                   onChangeText={setWhatsAppDraft} multiline maxLength={500}
                   accessibilityLabel="WhatsApp message preview" />
                 <Pressable accessibilityRole="button" style={styles.primaryInline}
-                  disabled={whatsAppDraftBusy || !whatsAppDraft.trim()}
+                  disabled={whatsAppDraftBusy || !whatsAppDraft.trim() || (messageRequest!==null && !messageRecipientConfirmed)}
                   onPress={openSelectedWhatsAppDraft}>
                   <Text style={styles.primaryInlineText}>{whatsAppDraftBusy ? 'Preparing…' : 'Open reviewed WhatsApp draft'}</Text>
                 </Pressable>
