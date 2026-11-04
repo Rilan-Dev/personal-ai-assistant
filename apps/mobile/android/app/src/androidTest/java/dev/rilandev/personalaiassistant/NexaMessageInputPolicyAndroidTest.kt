@@ -37,6 +37,18 @@ class NexaMessageInputPolicyAndroidTest {
         assertFalse(NexaMessageInputPolicy.recipientMatches("Mom",""))
     }
 
+    @Test fun matchingNameInChatHistoryIsNotTheConversationHeader() {
+        val window=android.graphics.Rect(0,80,1000,2080)
+        assertTrue(NexaMessageInputPolicy.isHeaderLabel(
+            android.graphics.Rect(60,160,310,235),window))
+        assertFalse(NexaMessageInputPolicy.isHeaderLabel(
+            android.graphics.Rect(60,1200,310,1280),window))
+        assertFalse(NexaMessageInputPolicy.isHeaderLabel(
+            android.graphics.Rect(60,0,310,75),window))
+        assertFalse(NexaMessageInputPolicy.isHeaderLabel(
+            android.graphics.Rect(0,160,1000,900),window))
+    }
+
     @Test fun disconnectedServiceCannotPrepareOrPerformTextEntry() {
         val service=ScreenAssistService()
         val initial=ScreenAssistState.connected
