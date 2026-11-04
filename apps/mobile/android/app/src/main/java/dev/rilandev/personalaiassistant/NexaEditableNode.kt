@@ -1,5 +1,6 @@
 package dev.rilandev.personalaiassistant
 
+import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 
 /**
@@ -9,12 +10,14 @@ import android.view.accessibility.AccessibilityNodeInfo
  */
 internal object NexaEditableNode {
     fun isEmpty(node: AccessibilityNodeInfo): Boolean =
-        node.isEditable && (node.text.isNullOrEmpty() || node.isShowingHintText)
+        node.isEditable && (node.text.isNullOrEmpty() ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && node.isShowingHintText))
 
     /** Read-only post-action refresh. Never triggers a second text insertion. */
     fun containsExactTextAfterDispatch(node:AccessibilityNodeInfo,expected:String):Boolean {
         return try {
-            node.refresh() && !node.isShowingHintText &&
+            node.refresh() &&
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !node.isShowingHintText) &&
                 node.text?.toString()==expected
         } catch (_:Exception) { false }
     }
