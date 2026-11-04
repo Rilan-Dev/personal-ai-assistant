@@ -17,6 +17,9 @@ class NexaTextInputAndroidTest {
             true,false,true,true,true,true))
         assertFalse(NexaTextInputPolicy.matches("Search",listOf("Password"),
             true,false,true,true,true,true))
+        assertFalse("Safe hint cannot override sensitive resource ID",
+            NexaTextInputPolicy.matches("Search",listOf("Search","password_text"),
+                true,false,true,true,true,true))
         assertFalse(NexaTextInputPolicy.matches("Search",listOf("Search"),
             true,true,true,true,true,true))
         assertFalse(NexaTextInputPolicy.matches("Search",listOf("Search"),
