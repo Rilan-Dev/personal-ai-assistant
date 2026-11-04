@@ -644,6 +644,69 @@ export default function App() {
       setWhatsAppDraftNotice(e instanceof Error ? e.message : 'Unable to prepare WhatsApp draft.');
     } finally {setWhatsAppDraftBusy(false);}
   };
+  const chooseMessageChannel=async(app:InstalledMessageApp,remember:boolean)=>{
+    if(!messageRequest||messageBusy||!messageOptions.some(x=>x.id===app.id&&x.packageName===app.packageName))return;
+    setMessageBusy(true);
+    try {
+      if(remember) {
+        const key=recipientMemoryKey(messageRequest.recipientHint);
+        if(!key)throw Error('This contact alias cannot be saved safely. Use once instead.');
+        await rememberMessageApp(key,app.id);
+      }
+      setMessageChosen(app);
+      setSelectedContact(null);
+      setMessageRecipientConfirmed(false);
+      setWhatsAppDraft(messageRequest.text);
+      setMessageNotice(app.label+' selected'+(remember?' and remembered on this phone':' for this request only')+
+        '. Confirm the correct recipient. Text remains local and unsent.');
+    }catch(e){
+      setMessageNotice(e instanceof Error?e.message:'Could not securely remember the app. No app was selected.');
+    }finally{setMessageBusy(false);}
+  };
+  const forgetRecipientChannel=async()=>{
+    if(!messageRequest||messageBusy)return;
+    const key=recipientMemoryKey(messageRequest.recipientHint);
+    if(!key)return;
+    setMessageBusy(true);
+    try{
+      await forgetMessageApp(key);
+      setMessageChosen(null);
+      setMessageRecipientConfirmed(false);
+      setMessageNotice('Saved app preference deleted for '+messageRequest.recipientHint+
+        '. Choose an installed app for the current request. Nothing was sent.');
+    }catch{setMessageNotice('Could not delete saved messaging preference.');}
+    finally{setMessageBusy(false);}
+  };
+  const openPreparedSms=async()=>{
+    if(!messageRequest||messageChosen?.id!=='sms'||!selectedContact||
+      !messageRecipientConfirmed||Date.now()>privateObservationDeadline.current)return;
+    setMessageBusy(true);
+    try{
+      await openReviewedSmsDraft(selectedContact.phone,messageRequest.text);
+      setMessageNotice('Android SMS composer opened. Verify the recipient and text, then press Send yourself. Nexa did not send anything.');
+    }catch(e){setMessageNotice(e instanceof Error?e.message:'SMS draft could not be opened. Nothing was sent.');}
+    finally{setMessageBusy(false);}
+  };
+  const openGuidedMessageInput=async()=>{
+    if(!messageRequest||!messageChosen||!['imo','botim','whatsapp-business'].includes(messageChosen.id)||
+      messageBusy)return;
+    setMessageBusy(true);
+    try{
+      await openManualMessageComposer(
+        messageChosen.id as 'imo'|'botim'|'whatsapp-business',
+        messageRequest.recipientHint,messageRequest.text);
+      setMessageNotice('Chosen app opened. Manually open '+messageRequest.recipientHint+
+        ' chat, then tap Nexa bubble → Tools → Find message input → Confirm fill draft. Verify the text and tap Send yourself. No message was sent.');
+    }catch(e){setMessageNotice(e instanceof Error?e.message:'Could not start protected message composer. No action performed.');}
+    finally{setMessageBusy(false);}
+  };
+  const cancelMessageReview=()=>{
+    setMessageRequest(null);setMessageChosen(null);setMessageOptions([]);
+    setMessageRecipientConfirmed(false);
+    setWhatsAppDraft('');
+    setMessageNotice('Message review discarded. Nothing was sent.');
+  };
+
   const readPrivateLocation=async()=>{
     if(!engine.live||privacyToolBusy||running)return;
     setPrivacyToolBusy(true);setPrivacyToolNotice('');
