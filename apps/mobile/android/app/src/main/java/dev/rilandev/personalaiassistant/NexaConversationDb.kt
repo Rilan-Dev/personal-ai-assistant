@@ -25,7 +25,7 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Private device-local custom.db with Android Keystore-encrypted transcript bodies. */
 internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
-    context.applicationContext, "custom.db", null, 2
+    context.applicationContext, "custom.db", null, 3
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE conversation_entries (
@@ -39,6 +39,7 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
         )""")
         db.execSQL("CREATE INDEX conversation_session_idx ON conversation_entries(session_id,id)")
         createTaskTables(db)
+        createUiActionClaimTable(db)
     }
     private fun createTaskTables(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE IF NOT EXISTS voice_task_checkpoints (
@@ -51,12 +52,23 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
         )""")
         db.execSQL("CREATE INDEX IF NOT EXISTS voice_task_sessions ON voice_task_checkpoints(session_id,updated_at)")
     }
+    /** Permanent claim tombstones are separate from the bounded UI diagnostics ledger.
+     * Never prune these records merely because visible history is full.
+     */
+    private fun createUiActionClaimTable(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_action_claims (
+            token_digest TEXT PRIMARY KEY NOT NULL,
+            action_kind TEXT NOT NULL,
+            package_digest TEXT NOT NULL,
+            claimed_at INTEGER NOT NULL
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_action_claims_at ON agent_action_claims(claimed_at)")
+    }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion == 1 && newVersion >= 2) {
-            createTaskTables(db) // Preserve all v1 conversation entries and keys.
-        } else {
+        if (oldVersion !in 1..2 || newVersion != 3)
             throw IllegalStateException("Unsupported conversation database migration")
-        }
+        if (oldVersion <= 1) createTaskTables(db) // Keep v1 conversations/keys.
+        if (oldVersion <= 2) createUiActionClaimTable(db) // Add only; no v2 rows altered.
     }
     companion object {
         private val lock=Any()
@@ -82,6 +94,31 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
             val cipher=Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,bytes.copyOfRange(0,12)))
             return String(cipher.doFinal(bytes.copyOfRange(12,bytes.size)),StandardCharsets.UTF_8)
+        }
+        /** Atomically retain a one-shot native UI action identity before dispatch.
+         * Failure (including storage/Keystore errors) fails closed. A claimed
+         * token is not released when the diagnostic ledger trims old records.
+         */
+        fun reserveUiActionClaim(context:Context,tokenDigest:String,kind:String,
+                                 packageDigest:String):Boolean {
+            if(!tokenDigest.matches(Regex("[0-9a-f]{64}")) ||
+                !packageDigest.matches(Regex("[0-9a-f]{64}")) ||
+                kind !in setOf("tap","scroll_up","scroll_down","scroll_left",
+                    "scroll_right","message_fill","text_fill"))return false
+            return try { synchronized(lock) {
+                val helper=NexaConversationDb(context)
+                try {
+                    helper.writableDatabase.compileStatement(
+                        "INSERT OR IGNORE INTO agent_action_claims(token_digest,action_kind,package_digest,claimed_at) VALUES(?,?,?,?)"
+                    ).use { statement ->
+                        statement.bindString(1,tokenDigest)
+                        statement.bindString(2,kind)
+                        statement.bindString(3,packageDigest)
+                        statement.bindLong(4,System.currentTimeMillis())
+                        statement.executeInsert() != -1L
+                    }
+                } finally {helper.close()}
+            }} catch (_:Exception) {false}
         }
         fun append(context:Context, session:String, channel:String, provider:String,
                    role:String, text:String) {
@@ -189,7 +226,7 @@ internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
             chronological
         }
         fun export(context:Context):String =
-            JSONObject().put("schemaVersion",2).put("source","Nexa custom.db")
+            JSONObject().put("schemaVersion",3).put("source","Nexa custom.db")
                 .put("exportedAt",System.currentTimeMillis())
                 .put("entries",history(context,10000))
                 .put("tasks",taskHistory(context,1000))
