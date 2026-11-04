@@ -36,7 +36,7 @@ Do not allow both TypeScript and Kotlin to independently own the same Android si
 - NEXA_TASK_V2_ENABLED is false. No runtime pathway has been activated; existing Chat/Voice native execution remains unchanged.
 - New packages/agent-core/test/task-plan.test.mjs covers 12 negative and positive admission cases.
 
-## Proposed additive database v2 → v3 migration (NOT YET IMPLEMENTED)
+## Additive database v2 → v3 schema (source implemented; native acceptance open)
 
 | Table | Role |
 |---|---|
@@ -45,10 +45,12 @@ Do not allow both TypeScript and Kotlin to independently own the same Android si
 | agent_task_events | append-only state transitions and redacted reason |
 | agent_mandates | scope, actor, policy version, expiry and revocation epoch |
 | agent_step_approvals | exact one-shot step/target/input binding |
-| agent_action_claims | durable idempotency/anti-replay identity independent of bounded diagnostics |
+| agent_action_claims | IMPLEMENTED: durable digest tombstones, used before UI action dispatch and independent of bounded diagnostics |
 | agent_observations | evidence category and digest; no default raw screen content |
 
-Preserve v1/v2 user records and Keystore keys; unfinished legacy tasks must not automatically resume. Claims are committed before actions; unknown outcomes prohibit blind retry. Test database upgrades, tampering, process death, signing continuity, concurrent callers and native restart before release.
+The v3 tables above have now been created in NexaConversationDb.kt and include task/step foreign keys, indexed events, and encrypted BLOB fields for goals, arguments and event details. Native callers may persist encrypted proposals only (status=proposed); **no v3 step or mandate can initiate an Android action**. The native UI journal now writes an irreversible claim digest to agent_action_claims before the existing 40-entry diagnostic ledger can be pruned. Separate instrumentation tests cover migration from both v1 and v2, SQLite FK enforcement, encrypted proposal persistence, duplicate token denial and replay rejection after 45 audit events. These are unverified until exact-commit Android instrumentation passes.
+
+Preserve v1/v2 user records, Keystore keys, installation signing identity and existing action-claim state; unfinished legacy tasks must not automatically resume. Unknown outcomes prohibit blind retry. Native process-death, actual phone upgrade and restored keystore acceptance are still required. A previous APK may have already pruned its oldest UI audit entries; that unavailable history cannot be reconstructed retroactively.
 
 ## Android distribution and deployment constraints
 
@@ -66,7 +68,7 @@ Keep the existing manual GitHub Actions workflow policy; do not add Development 
 |---|---|---|
 | 0 | Pin source, inventory executor paths, baseline Node tests, policy review | Source baseline verified, release/hardware checks separate |
 | 1 | Versioned task plans, secure admission, negative tests | Source implemented, feature disabled |
-| 2 | Encrypted v3 database and durable native single-writer claims | Open |
+| 2 | Encrypted v3 schema, native task proposal and UI action tombstones | Implemented in source; native acceptance, unified coordinator and full task CRUD remain open |
 | 3 | Shared Chat/Voice task routing and planner adaptation | Open |
 | 4 | Unified native mandates and approval revalidation | Open |
 | 5 | Observed native task continuation, Android evidence | Open |
@@ -81,3 +83,12 @@ Before edits, baseline Development HEAD was 865fa166a7292df3585482dea52160ce7e96
 Earlier signed APK run https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41917330496 passed on a different source SHA. PR https://github.com/Rilan-Dev/personal-ai-assistant/pull/97 remains open. Source tests do not certify OEM device, actual Accessibility binding, authorized real voice provider or messaging outcomes.
 
 Release requires explicit evidence: current source CI, native signed APK and instrumented tests when relevant, full per-scenario Maestro, same-signature upgrade, real-phone Screen Assist/overlay/mic and process-death tests, and approved rollback. No live APK or unrelated production service is modified in this milestone.
+
+## Phase 2 verification addendum
+
+- Dev source commits introduce additive v3 schema and UI one-shot token claims; all new native task operations remain proposal-only.
+- Local tests following the initial v3 migration test correction: **377/377 source tests**, TypeScript and Expo web export PASS on e9ef60885834c35e4acd32c3bda88fd49a0eac6e. Subsequent v3 table/proposal commits require exact-SHA retesting.
+- Native job #41923323315 failed before Gradle because a brittle Node source assertion required the v2 constructor. Fixed in e9ef608; not a native Kotlin failure or device pass.
+- Native job #41923776222 is the e9ef608 commit and must be checked for final result; it cannot certify later commits.
+- Production npm audit --omit=dev found ten reported advisories (two high, seven moderate, one low) in the locked Expo-related dependency tree. Automated major Expo downgrade suggestions have NOT been applied because compatibility and security impact require source review.
+- No service deploy, automatic device permission grant, external message Send, or main promotion performed.
