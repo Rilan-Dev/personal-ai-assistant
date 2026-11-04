@@ -10,6 +10,8 @@ import android.widget.TextView
 
 /** Debug-only synthetic WhatsApp-like list, never a real messaging account. */
 class NexaChatListQaActivity:Activity() {
+    lateinit var messageInput:EditText
+        private set
     companion object {
         @Volatile var duplicateContact=false
         @Volatile var chatRowClicks=0
@@ -62,11 +64,12 @@ class NexaChatListQaActivity:Activity() {
             text="Nova Forever 🖤";contentDescription="Nova Forever 🖤"
             textSize=19f
         })
-        area.addView(EditText(this).apply{
+        messageInput=EditText(this).apply{
             hint="Type a message"
             contentDescription="Type a message"
             inputType=InputType.TYPE_CLASS_TEXT
-        })
+        }
+        area.addView(messageInput)
         area.addView(Button(this).apply{
             text="Send"
             setOnClickListener{sendClicks++}
