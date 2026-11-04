@@ -655,7 +655,8 @@ export default function App() {
             if(decision.kind==='selected'&&decision.app){
               setMessageChosen(decision.app);
               setMessageNotice('Spoken request: '+decision.app.label+
-                (decision.reason==='remembered'?' remembered for this alias. ':' requested. ')+
+                (decision.reason==='remembered'?' remembered for this alias. ':
+                 decision.reason==='only_installed'?' is the only supported messaging app found. ':' requested. ')+
                 'Choose and confirm the real recipient. Not sent.');
             }else {
               setMessageNotice(decision.kind==='unavailable'
@@ -1399,7 +1400,8 @@ export default function App() {
             if(decision.kind==='selected' && decision.app) {
               setMessageChosen(decision.app);
               setMessageNotice('Using '+decision.app.label+
-                (decision.reason==='remembered'?' (your remembered choice)':' (you requested this app)')+
+                (decision.reason==='remembered'?' (your remembered choice)':
+                 decision.reason==='only_installed'?' (the only supported messaging app found on this phone)':' (you requested this app)')+
                 '. Select and confirm the intended recipient. No message was sent.');
             } else {
               setMessageNotice(decision.kind==='unavailable'
