@@ -83,3 +83,11 @@ test("manual release APK contains source-commit provenance and signer verificati
   assert.match(readFileSync("scripts/signing/verify-release-apk.sh","utf8"),/apksigner/);
   assert.match(yml,/if-no-files-found: error/);
 });
+
+test("manual native messaging QA checks out exact dispatched SHA, not old feature branch",()=>{
+  const yml=source("nexa-message-native-qa.yml");
+  assert.match(yml,/github\.event_name == 'workflow_dispatch' && github\.sha/);
+  assert.match(yml,/test "\$\(git rev-parse HEAD\)" = "\$GITHUB_SHA"/);
+  assert.match(yml,/github\.event_name == 'issue_comment'/);
+  assert.doesNotMatch(yml,/^\s+ref:\s+feature\/nexa-message-routing-input-20261104\s*$/m);
+});
