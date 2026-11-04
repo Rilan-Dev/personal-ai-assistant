@@ -255,8 +255,10 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
          * An append-only event and the state change commit together.
          * This API NEVER dispatches an Android action.
          */
-        fun cancelProposedAgentTask(context:Context,taskId:String):Boolean {
+        fun cancelProposedAgentTask(context:Context,taskId:String,requiredPolicyVersion:String?=null):Boolean {
             if(!taskId.matches(Regex("[A-Za-z0-9][A-Za-z0-9_-]{7,99}")))return false
+            if(requiredPolicyVersion!=null &&
+                !requiredPolicyVersion.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,79}")))return false
             return try { synchronized(lock) {
                 val helper=NexaConversationDb(context)
                 try {
@@ -265,10 +267,14 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                     try {
                         val now=System.currentTimeMillis()
                         val updated=db.compileStatement(
-                            "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed'"
+                            if(requiredPolicyVersion==null)
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed'"
+                            else
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=?"
                         ).use { statement ->
                             statement.bindLong(1,now)
                             statement.bindString(2,taskId)
+                            if(requiredPolicyVersion!=null)statement.bindString(3,requiredPolicyVersion)
                             statement.executeUpdateDelete()
                         }
                         if(updated!=1)return@synchronized false
@@ -496,7 +502,7 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             return
         }
         try {
-            promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId))
+            promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId,"owner-review-v1"))
         }catch (_:Exception) {
             promise.reject("TASK_CANCEL","Cannot persist proposal cancellation")
         }
