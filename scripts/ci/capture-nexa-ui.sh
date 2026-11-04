@@ -66,8 +66,70 @@ PY
 }
 
 # First-run setup is an important screenshot because the user reported missing grants.
+# Android cloud emulators can show a Pixel Launcher ANR directly above Nexa
+# while instrumentation, release packaging and UIAutomator compete for CPU.
+# Never record the system-error dialog as a successful Nexa screenshot.
+# A stock OS "Wait" response is safe; it grants no Android app permissions.
+wait_for_nav_ui() {
+  local snapshot="$out/readiness-last.xml"
+  local status
+  local attempt
+  for attempt in $(seq 1 20); do
+    timeout 20 adb shell uiautomator dump /sdcard/nexa-audit.xml >/dev/null 2>&1 || true
+    adb pull /sdcard/nexa-audit.xml "$snapshot" >/dev/null 2>&1 || true
+    if [[ -s "$snapshot" ]]; then
+      status="$(python3 - "$snapshot" <<'PY'
+import sys,xml.etree.ElementTree as ET,re
+try:
+  nodes=list(ET.parse(sys.argv[1]).iter("node"))
+except (ET.ParseError,OSError):
+  print("pending")
+  raise SystemExit(0)
+labels=[((n.get("text") or "")+" "+(n.get("content-desc") or "")).lower() for n in nodes]
+if any((n.get("content-desc") or "").strip().lower()=="chat tab" for n in nodes):
+  print("ready")
+elif any("pixel launcher isn't responding" in text for text in labels):
+  for n in nodes:
+    if (n.get("text") or "").strip().lower()=="wait":
+      match=re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]",n.get("bounds") or "")
+      if match:
+        x1,y1,x2,y2=map(int,match.groups())
+        print(f"wait:{(x1+x2)//2}:{(y1+y2)//2}")
+        break
+  else:
+    print("launcher_anr")
+else:
+  print("pending")
+PY
+)"
+      case "$status" in
+        ready) return 0 ;;
+        wait:*)
+          echo "Android emulator launcher ANR detected; choosing stock Wait option." >> "$out/README.txt"
+          IFS=: read -r _ x y <<< "$status"
+          adb shell input tap "$x" "$y"
+          ;;
+        launcher_anr)
+          echo "Android emulator launcher ANR has no visible Wait action." >> "$out/README.txt"
+          ;;
+      esac
+    fi
+    if ! adb shell pidof "$app" >/dev/null 2>&1; then
+      echo "Nexa process exited before the tab UI became visible" >&2
+      adb logcat -d -s AndroidRuntime:E > "$out/startup-android-runtime.log" || true
+      return 1
+    fi
+    sleep 3
+  done
+  echo "The Nexa navigation never became visible; no fake screenshot pass." >&2
+  adb logcat -d -s AndroidRuntime:E ActivityManager:E > "$out/startup-android-runtime.log" || true
+  return 1
+}
+
+wait_for_nav_ui
 capture "01-first-run-setup"
 for item in chat voice tools setup settings; do
+  wait_for_nav_ui
   select_tab "${item^}"
   # Deterministic, flat filenames; no accidental nested directories.
   capture "tab-$item"
