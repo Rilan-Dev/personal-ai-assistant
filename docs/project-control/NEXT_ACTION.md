@@ -1,3 +1,23 @@
+# Current priority — DSH-inspired Nexa implementation
+
+**5 November 2026.** Source inventory and gates: docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md
+
+## Verified and implemented in source
+- Non-executable, owner-scoped bounded task plan validator; feature remains OFF.
+- Additive Android custom.db v3 schema and unique permanent UI-action claims; encrypted proposed-only tasks; native migration and replay tests.
+- Local source checks on e9ef608: 377/377 Node tests, TS and Expo export passed. Later native changes require exact-SHA native CI.
+
+## Outstanding work / NO-GO
+1. Review CI run #41923776222; conduct one exact-current-SHA emulator test for the later storage changes, fix any Kotlin or instrumentation failures.
+2. Implement one trusted native task coordinator, serialized step state, evidence, permissions, approvals, crash recovery and user-visible history before enabling task v2.
+3. Bridge Chat, Sarvam/OpenAI Voice, assistant role and overlay through the same owner task identity, with strict model/tool boundaries and no general-purpose autonomous Accessibility behavior.
+4. Preserve manual messaging Send, recipient confirmation, privacy and Android settings grant requirements. Add no unattended calls, payments or unsafe external UI control.
+5. Pass all native/emulator, physical phone, real-provider, signed in-place upgrade, rollback and Play-distribution acceptance. Do not promote main until verified.
+6. Review npm dependency audit's 2 high advisories without unsafe automatic Expo downgrade.
+7. VPS Nexa workspace is only for source tests, not a Docker Compose deployment. Leave running production stacks alone.
+
+---
+
 # Current priority — Nexa × DSH integration
 
 **Date:** 2026-11-05  
