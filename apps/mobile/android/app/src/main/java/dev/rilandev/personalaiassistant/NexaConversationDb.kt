@@ -197,6 +197,39 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                 } finally {helper.close()}
             }} catch (_:Exception) {false}
         }
+        /**
+         * A v3 Task is only a recorded PROPOSAL. This API grants no capability
+         * and never accepts a model-authored authorization or executable status.
+         * Reusing the same task ID fails closed instead of replacing the goal.
+         */
+        fun saveProposedAgentTask(context:Context,taskId:String,sessionId:String,
+                                  origin:String,policyVersion:String,goal:String):Boolean {
+            if(!taskId.matches(Regex("[A-Za-z0-9][A-Za-z0-9_-]{7,99}")) ||
+                !sessionId.matches(Regex("[A-Za-z0-9_-]{1,100}")) ||
+                origin !in setOf("chat","live-voice","assistant-role","overlay") ||
+                !policyVersion.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,79}")) ||
+                goal.isBlank() || goal.length>500 ||
+                goal.any {it == '\u0000' || (it.code < 32 && it != '\n' && it != '\t')})
+                return false
+            return try { synchronized(lock) {
+                val helper=NexaConversationDb(context)
+                try {
+                    val time=System.currentTimeMillis()
+                    helper.writableDatabase.compileStatement(
+                        "INSERT OR IGNORE INTO agent_tasks(task_id,session_id,origin,status,policy_version,plan_revision,goal_cipher,created_at,updated_at) VALUES(?,?,?,'proposed',?,1,?,?,?)"
+                    ).use { statement ->
+                        statement.bindString(1,taskId)
+                        statement.bindString(2,sessionId)
+                        statement.bindString(3,origin)
+                        statement.bindString(4,policyVersion)
+                        statement.bindBlob(5,encrypt(goal))
+                        statement.bindLong(6,time)
+                        statement.bindLong(7,time)
+                        statement.executeInsert() != -1L
+                    }
+                } finally {helper.close()}
+            }} catch (_:Exception) {false}
+        }
         fun append(context:Context, session:String, channel:String, provider:String,
                    role:String, text:String) {
             if (text.isBlank() || text.length>12000 || session.length !in 1..100 ||
