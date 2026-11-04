@@ -27,6 +27,7 @@ on:
           - whatsapp-review
           - message-app-chooser
           - reviewed-text-entry
+          - task-proposals
       android_os:
         description: "Maestro Cloud Android image"
         required: true
@@ -208,6 +209,7 @@ jobs:
             whatsapp-review) target=".maestro/experimental/11-whatsapp-owner-review.yaml" ;;
             message-app-chooser) target=".maestro/experimental/12-message-app-chooser.yaml" ;;
             reviewed-text-entry) target=".maestro/experimental/13-reviewed-generic-text-field.yaml" ;;
+            task-proposals) target=".maestro/nexa/14-local-task-proposals.yaml" ;;
             *) echo "::error::Invalid test suite"; exit 2 ;;
           esac
           # Never print the key. GitHub secret paste often includes a trailing

@@ -29,6 +29,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
   requestApproximateLocationSetup, setAutoStartVoiceOnInvocation} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
+import {LocalTaskProposals} from './src/components/LocalTaskProposals';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -121,7 +122,12 @@ export default function App() {
   const [androidExitEntries,setAndroidExitEntries]=useState<NexaProcessExit[]>([]);
   const [historyNotice,setHistoryNotice]=useState('');
   const refreshHistory=async()=>{
-    try {setHistoryEntries(await recentConversations(120));setTaskHistoryEntries(await recentVoiceTasks(40));setAndroidExitEntries(await recentAndroidProcessExits());setHistoryNotice('Local encrypted custom.db · recent chats, voice tasks and Android exits');}
+    try {
+      setHistoryEntries(await recentConversations(120));
+      setTaskHistoryEntries(await recentVoiceTasks(40));
+      setAndroidExitEntries(await recentAndroidProcessExits());
+      setHistoryNotice('Local encrypted custom.db · recent chats, task requests, voice tasks and Android exits');
+    }
     catch {setHistoryNotice('Could not read local conversation history on this device.');}
   };
   const copyHistory=async()=>{
@@ -2015,6 +2021,7 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
+        {engine.live && <LocalTaskProposals/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>

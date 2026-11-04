@@ -206,6 +206,66 @@ class NexaConversationDbAndroidTest {
         } finally {helper.close()}
     }
 
+    @Test fun v3ProposalAndCancellationHaveAtomicOwnerEvents() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val task="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        val goal="private request "+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,task,session,"chat","owner-preview-v1",goal))
+        assertFalse("A second submit cannot replace or duplicate owner events",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","owner-preview-v1","replacement"))
+        val initial=NexaConversationDb.agentTaskHistory(ctx,40)
+        val record=(0 until initial.length()).map{initial.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==task}
+        assertNotNull("Owner task history must include new proposal",record)
+        assertEquals("proposed",record!!.getString("status"))
+        assertEquals(goal,record.getString("goal"))
+        assertEquals("owner-preview-v1",record.getString("policyVersion"))
+        val ownerExport=JSONObject(NexaConversationDb.export(ctx))
+        val proposals=ownerExport.getJSONArray("agentTasks")
+        assertTrue("Explicit owner export should include the saved encrypted-at-rest request",
+            (0 until proposals.length()).any {
+                proposals.getJSONObject(it).optString("taskId")==task
+            })
+        assertTrue("Owner may cancel an unexecuted proposal",
+            NexaConversationDb.cancelProposedAgentTask(ctx,task))
+        assertFalse("Cancellation is terminal and must not replay",
+            NexaConversationDb.cancelProposedAgentTask(ctx,task))
+        assertFalse("An old task ID may never be reused",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","owner-preview-v1",goal))
+        assertFalse("Unknown task cannot be cancelled",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,"task-"+UUID.randomUUID()))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT status,goal_cipher FROM agent_tasks WHERE task_id=?",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("cancelled",c.getString(0))
+                assertFalse(c.getBlob(1).contentEquals(goal.toByteArray(Charsets.UTF_8)))
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT event_kind FROM agent_task_events WHERE task_id=? ORDER BY id",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("proposed",c.getString(0))
+                assertTrue(c.moveToNext())
+                assertEquals("owner_cancelled",c.getString(0))
+                assertFalse("Reject duplicate transitions",c.moveToNext())
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("Only owner note, never native action",0,c.getInt(0))
+            }
+        } finally {helper.close()}
+    }
+
     @Test fun rejectsUnknownChannelsAndInvalidRoles() {
         val context=ApplicationProvider.getApplicationContext<Context>()
         val session="android-reject-"+UUID.randomUUID()
@@ -214,4 +274,39 @@ class NexaConversationDbAndroidTest {
         val current=NexaConversationDb.history(context,200).toString()
         assertFalse(current.contains(session))
     }
+    @Test fun localOwnerProposalLifecycleIsOneShotAndEventAudited() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val id="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Review customer quotation"))
+        assertFalse("A different policy cannot cancel the owner task",
+            NexaConversationDb.cancelProposedAgentTask(ctx,id,"different-policy"))
+        assertTrue(NexaConversationDb.cancelProposedAgentTask(ctx,id,"owner-review-v1"))
+        assertFalse("Cancellation must not replay",NexaConversationDb.cancelProposedAgentTask(ctx,id))
+        assertFalse("Canceled ID cannot be recreated",NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Replacement"))
+        val history=NexaConversationDb.agentTaskHistory(ctx,50)
+        val entry=(0 until history.length()).map{history.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==id}
+        assertEquals("cancelled",entry?.optString("status"))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT event_kind FROM agent_task_events WHERE task_id=? ORDER BY id",
+                arrayOf(id)
+            ).use { cursor ->
+                val actual=mutableListOf<String>()
+                while(cursor.moveToNext())actual.add(cursor.getString(0))
+                assertEquals(listOf("proposed","owner_cancelled"),actual)
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",arrayOf(id)
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0,cursor.getInt(0))
+            }
+        } finally{helper.close()}
+    }
+
 }

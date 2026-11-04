@@ -18,6 +18,7 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -214,22 +215,115 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             return try { synchronized(lock) {
                 val helper=NexaConversationDb(context)
                 try {
-                    val time=System.currentTimeMillis()
-                    helper.writableDatabase.compileStatement(
-                        "INSERT OR IGNORE INTO agent_tasks(task_id,session_id,origin,status,policy_version,plan_revision,goal_cipher,created_at,updated_at) VALUES(?,?,?,'proposed',?,1,?,?,?)"
-                    ).use { statement ->
-                        statement.bindString(1,taskId)
-                        statement.bindString(2,sessionId)
-                        statement.bindString(3,origin)
-                        statement.bindString(4,policyVersion)
-                        statement.bindBlob(5,encrypt(goal))
-                        statement.bindLong(6,time)
-                        statement.bindLong(7,time)
-                        statement.executeInsert() != -1L
-                    }
+                    val db=helper.writableDatabase
+                    // Encrypt before opening the database transaction; never
+                    // persist an unencrypted goal or a partial event.
+                    val ciphertext=encrypt(goal)
+                    db.beginTransaction()
+                    try {
+                        val now=System.currentTimeMillis()
+                        val inserted=db.compileStatement(
+                            "INSERT OR IGNORE INTO agent_tasks(task_id,session_id,origin,status,policy_version,plan_revision,goal_cipher,created_at,updated_at) VALUES(?,?,?,'proposed',?,1,?,?,?)"
+                        ).use { statement ->
+                            statement.bindString(1,taskId)
+                            statement.bindString(2,sessionId)
+                            statement.bindString(3,origin)
+                            statement.bindString(4,policyVersion)
+                            statement.bindBlob(5,ciphertext)
+                            statement.bindLong(6,now)
+                            statement.bindLong(7,now)
+                            statement.executeInsert()
+                        }
+                        if(inserted==-1L)return@synchronized false
+                        db.compileStatement(
+                            "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) VALUES(?,NULL,'proposed',?)"
+                        ).use {statement ->
+                            statement.bindString(1,taskId)
+                            statement.bindLong(2,now)
+                            statement.executeInsert()
+                        }
+                        db.setTransactionSuccessful()
+                        true
+                    } finally {db.endTransaction()}
                 } finally {helper.close()}
             }} catch (_:Exception) {false}
         }
+
+        /**
+         * Owner-only proposal lifecycle. Cancellation is a compare-and-swap:
+         * a terminal proposal cannot be resumed, re-approved, or overwritten.
+         * An append-only event and the state change commit together.
+         * This API NEVER dispatches an Android action.
+         */
+        fun cancelProposedAgentTask(context:Context,taskId:String,requiredPolicyVersion:String?=null):Boolean {
+            if(!taskId.matches(Regex("[A-Za-z0-9][A-Za-z0-9_-]{7,99}")))return false
+            if(requiredPolicyVersion!=null &&
+                !requiredPolicyVersion.matches(Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,79}")))return false
+            return try { synchronized(lock) {
+                val helper=NexaConversationDb(context)
+                try {
+                    val db=helper.writableDatabase
+                    db.beginTransaction()
+                    try {
+                        val now=System.currentTimeMillis()
+                        val updated=db.compileStatement(
+                            if(requiredPolicyVersion==null)
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed'"
+                            else
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=?"
+                        ).use { statement ->
+                            statement.bindLong(1,now)
+                            statement.bindString(2,taskId)
+                            if(requiredPolicyVersion!=null)statement.bindString(3,requiredPolicyVersion)
+                            statement.executeUpdateDelete()
+                        }
+                        if(updated!=1)return@synchronized false
+                        db.compileStatement(
+                            "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) VALUES(?,NULL,'owner_cancelled',?)"
+                        ).use { statement ->
+                            statement.bindString(1,taskId)
+                            statement.bindLong(2,now)
+                            statement.executeInsert()
+                        }
+                        db.setTransactionSuccessful()
+                        true
+                    } finally {db.endTransaction()}
+                } finally {helper.close()}
+            }} catch (_:Exception) {false}
+        }
+
+        /** A foreground-only caller may obtain these locally decrypted owner
+         * summaries. Never include them in model tool observations or telemetry.
+         */
+        fun agentTaskHistory(context:Context,limit:Int,
+                             manualOnly:Boolean=false):JSONArray = synchronized(lock) {
+            val results=JSONArray()
+            val helper=NexaConversationDb(context)
+            try {
+                helper.readableDatabase.rawQuery(
+                    if(manualOnly)
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks WHERE origin='chat' AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
+                    else
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
+                    arrayOf(limit.coerceIn(1,200).toString())
+                ).use { cursor ->
+                    while(cursor.moveToNext()) {
+                        val text=try{decrypt(cursor.getBlob(5))}
+                            catch (_:Exception){"[encrypted task unavailable]"}
+                        results.put(JSONObject().put("taskId",cursor.getString(0))
+                            .put("sessionId",cursor.getString(1))
+                            .put("origin",cursor.getString(2))
+                            .put("status",cursor.getString(3))
+                            .put("policyVersion",cursor.getString(4))
+                            .put("goal",text)
+                            .put("createdAt",cursor.getLong(6))
+                            .put("updatedAt",cursor.getLong(7)))
+                    }
+                }
+            } finally {helper.close()}
+            results
+        }
+
         fun append(context:Context, session:String, channel:String, provider:String,
                    role:String, text:String) {
             if (text.isBlank() || text.length>12000 || session.length !in 1..100 ||
@@ -340,6 +434,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                 .put("exportedAt",System.currentTimeMillis())
                 .put("entries",history(context,10000))
                 .put("tasks",taskHistory(context,1000))
+                .put("agentTasks",agentTaskHistory(context,200))
                 .put("androidProcessExits",NexaCrashDiagnostics.recent(context,12)).toString(2)
     }
 }
@@ -359,6 +454,64 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         try { promise.resolve(NexaConversationDb.taskHistory(reactContext,limit.coerceIn(1,200)).toString()) }
         catch (_:Exception) { promise.reject("TASK_HISTORY","Cannot read local task history") }
     }
+    /**
+     * Explicit in-foreground owner action. The Android service mints the task
+     * identity; neither provider/model text nor another app can select an ID.
+     * This saves encrypted review-only data, never a runnable mandate.
+     */
+    @ReactMethod fun createOwnerTaskProposal(goal:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to save a task proposal")
+            return
+        }
+        val text=goal.trim()
+        if(text.length !in 1..500 || text.any {
+            it == '\u0000' || (it.code<32 && it!='\n' && it!='\t')
+        }) {
+            promise.reject("TASK_INVALID","Enter a short task description")
+            return
+        }
+        try {
+            val id="task-"+UUID.randomUUID().toString()
+            val session="owner-"+UUID.randomUUID().toString()
+            if(!NexaConversationDb.saveProposedAgentTask(
+                reactContext,id,session,"chat","owner-review-v1",text
+            )) {
+                promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
+                return
+            }
+            promise.resolve(id)
+        }catch (_:Exception) {
+            promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
+        }
+    }
+    /** Decrypted only to an owner-visible foreground app; never a model tool. */
+    @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review local tasks")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.agentTaskHistory(
+                reactContext,limit.coerceIn(1,50),manualOnly=true
+            ).toString())
+        } catch (_:Exception) {
+            promise.reject("TASK_LIST","Cannot read encrypted task proposals")
+        }
+    }
+    /** A canceled proposal cannot execute, be resumed or be uncanceled. */
+    @ReactMethod fun cancelOwnerTaskProposal(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to cancel a proposal")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId,"owner-review-v1"))
+        }catch (_:Exception) {
+            promise.reject("TASK_CANCEL","Cannot persist proposal cancellation")
+        }
+    }
+
     @ReactMethod fun recentAndroidProcessExits(promise:Promise) {
         try {promise.resolve(NexaCrashDiagnostics.recent(reactContext,12).toString())}
         catch (_:Exception) {promise.reject("EXIT_REPORT","Cannot read Android process exits")}
