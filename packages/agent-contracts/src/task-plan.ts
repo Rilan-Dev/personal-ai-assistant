@@ -187,7 +187,7 @@ export function bindTaskPlan(value: unknown, ctx: TaskPlanAdmission): BoundTaskP
 
     const rawInput = JSON.stringify(raw.input);
     if (rawInput.length > 2048) reject('oversized');
-    if (seen.has(raw.stepId)) reject('dependency');
+    if (seen.has(raw.stepId as string)) reject('dependency');
     const dependencyIds = raw.dependsOn as string[];
     if (new Set(dependencyIds).size !== dependencyIds.length ||
         dependencyIds.some(dep => !seen.has(dep))) reject('dependency');
