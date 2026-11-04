@@ -1,6 +1,6 @@
 # Nexa AI + AI Comms Agent: shared-product implementation plan
 Date: 2026-11-04
-Status: Phase 1 source implementation on isolated feature branches; NOT deployed or accepted in production.
+Status (2026-11-05): Phase 1 read-only source merged; ACA web deployed with owner-only controls and mobile flag OFF. Signed Nexa release and emulator QA verified at prior SHA; live account/physical-phone parity not accepted. Full shared product phases 2–6 remain outstanding.
 
 ## Verified starting point
 - ACA repository: Rilan-Dev/ai-comms-agent (Development), deployed frontend https://aca.starcitytechnical.com/.
@@ -70,7 +70,18 @@ Mobile:
 - Shared PostgreSQL is accessed by ACA services only; schema migrations/backup/recovery protected. Avoid bulk DB copying or dropping Nexa's local state.
 - Continuous contract tests for mobile API compatibility, migration safety, background voice/device permissions, tenant-security and approval flows.
 
-### Current verified evidence
-- ACA web typecheck passed; 19 focused Vitest tests passed (15 existing unread reports and 4 new mobile boundary tests).
-- Nexa root/app/agent-runtime TypeScript typecheck passed; full Node test suite 338/338 passed.
-- Android APK compilation, emulator/physical phone tests, authenticated live ACA login/mailbox tests, production deploy and feature toggle were NOT performed.
+### Verified progress and release gates — 2026-11-05
+**Implemented and verified in source**
+- ACA mobile v1 session, organizations/agents and read-only summary API merged to `Development`; current ACA production web image at `d1cda78b` serves HTTP 200 with `NEXA_MOBILE_EMAIL_ENABLED=false` and anonymous mobile targets HTTP 404. No production database migration or unapproved sending was performed for mobile.
+- ACA owner-canary allowlist is default-deny; inactive agents blocked even with configuration revisions OFF; mobile responses disclose their actual 50-message detailed-evidence cap. Latest API/web validation: TypeScript PASS; **1592/1592** tests across 247 files PASS. ACA PRs #69–#72.
+- Nexa source preserves Android AgentHarness, permission-grant model, WhatsApp review-only flow, voice providers and local journal. Existing signed APK `714b175b` passed native instrumented acceptance and **12/12** default Maestro Cloud flows ([#41804370133](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41804370133)); separate WhatsApp local review-only Cloud test passed **1/1** ([#41848990853](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41848990853)). No actual WhatsApp message was sent.
+- Nexa subsequent ACA organization-discovery rollback fix was merged in PR #88; **341/341** source tests and TypeScript checks passed. A new signed APK for that exact source was dispatched as [#41911002876](https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41911002876); do not attribute earlier Maestro results to the newer APK without a matching run.
+
+**Not yet accepted / must not be presented as complete**
+- Rotate the ACA password exposed in the original chat before broad access. Do not embed the credential in GitHub or the app, and do not enable the owner canary before authenticated acceptance.
+- Install the latest signed Nexa APK on a real Android phone, log in with a freshly rotated ACA credential, confirm authorized organization+agent selection, and compare 24-hour and all-history unread counts/report freshness against ACA web. Verify explicit logout, expired/revoked sessions, unauthorized org/agent rejection, offline and retry behavior.
+- Actual physical Android voice-provider/microphone sessions, wake-phrase reliability, external-app screen tapping, notification shade, WhatsApp contact selection and provider-approved sends need independent human-observed acceptance. The separate notification-shade Maestro experimental test remains NO-GO; 12/12 default flows do not certify it.
+- Unified SSO/PKCE, canonical cross-client chats, shared provider configuration and realtime voice sessions, email/WhatsApp reviewed send APIs, shared product operations and Phase 2–6 are roadmap items, not delivered. Keep ACA PostgreSQL server-side and Android device actions separate.
+- ACA host disk free space was under 5 GB after recent image builds: preserve one tagged rollback image and prioritize safe capacity remediation before more production rebuilds.
+
+**Deployment gate:** keep `NEXA_MOBILE_EMAIL_ENABLED=false` until password rotation, authenticated owner-account/mobile mailbox parity, permissions/revocation tests, and signed-APK acceptance are recorded. Only then enable a one-user canary with `NEXA_MOBILE_ALLOWED_EMAILS` explicitly set, verify health and rollback by disabling the flag.
