@@ -280,7 +280,9 @@ class NexaConversationDbAndroidTest {
         val session="owner-"+UUID.randomUUID()
         assertTrue(NexaConversationDb.saveProposedAgentTask(
             ctx,id,session,"chat","owner-review-v1","Review customer quotation"))
-        assertTrue(NexaConversationDb.cancelProposedAgentTask(ctx,id))
+        assertFalse("A different policy cannot cancel the owner task",
+            NexaConversationDb.cancelProposedAgentTask(ctx,id,"different-policy"))
+        assertTrue(NexaConversationDb.cancelProposedAgentTask(ctx,id,"owner-review-v1"))
         assertFalse("Cancellation must not replay",NexaConversationDb.cancelProposedAgentTask(ctx,id))
         assertFalse("Canceled ID cannot be recreated",NexaConversationDb.saveProposedAgentTask(
             ctx,id,session,"chat","owner-review-v1","Replacement"))
