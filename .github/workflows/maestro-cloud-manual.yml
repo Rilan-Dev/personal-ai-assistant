@@ -152,82 +152,8 @@ jobs:
           fi
           # Only shipped app/runtime changes invalidate the signed APK.
           # Source-only test additions in scripts/test/ do not enter the APK.
-          # Check the *entire* runtime tree and fail on any other drift.
           changed_source="$(git diff --name-only "$EXPECTED_SHA" HEAD -- apps/mobile packages services scripts package.json package-lock.json)"
-          runtime_changes="$(printf '%s\n' "$changed_source" | grep -Ev '^scripts/test/|^
-          echo "NEXA_RELEASE_APK=$apk" >> "$GITHUB_ENV"
-          echo "Maestro tests signed release APK from $EXPECTED_SHA" >> "$GITHUB_STEP_SUMMARY"
-          echo "Artifact run: ${{ steps.release.outputs.run_id }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "APK SHA256: $actual_hash" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - name: Install Maestro CLI
-        shell: bash
-        run: curl -fsSL https://get.maestro.mobile.dev | bash
-      - name: Check strict Maestro result classifier
-        run: node --test .maestro/validate-report.test.mjs .maestro/validate-cloud-cli.test.mjs
-      - name: Run selected Nexa UI acceptance flow in Maestro Cloud
-        shell: bash
-        env:
-          MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
-          MAESTRO_DISABLE_UPDATE_CHECK: "true"
-          MAESTRO_CLI_NO_ANALYTICS: "true"
-          TEST_SUITE: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-browser android-33' && 'agent-browser' || github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run agent-controls android-33' && 'agent-controls' || inputs.suite || 'all' }}
-          ANDROID_OS: ${{ inputs.android_os || 'android-33' }}
-        run: |
-          set -euo pipefail
-          case "$TEST_SUITE" in
-            all) target=".maestro/nexa" ;;
-            startup) target=".maestro/nexa/01-fresh-setup-and-navigation.yaml" ;;
-            wake-setup) target=".maestro/nexa/02-hey-nexa-wake-setup.yaml" ;;
-            overlay-settings) target=".maestro/nexa/03-overlay-permission-entry.yaml" ;;
-            voice-safety) target=".maestro/nexa/04-voice-without-provider.yaml" ;;
-            overlay-bubble) target=".maestro/nexa/05-overlay-bubble-end-to-end.yaml" ;;
-            wake-runtime) target=".maestro/nexa/06-hey-nexa-model-runtime.yaml" ;;
-            screen-assist) target=".maestro/nexa/07-screen-assist-settings-entry.yaml" ;;
-            resume-stress) target=".maestro/nexa/08-navigation-background-resume.yaml" ;;
-            agent-browser) target=".maestro/nexa/09-agent-chrome-ai-search.yaml" ;;
-            agent-controls) target=".maestro/experimental/10-agent-notification-shade.yaml" ;;
-            whatsapp-review) target=".maestro/experimental/11-whatsapp-owner-review.yaml" ;;
-            *) echo "::error::Invalid test suite"; exit 2 ;;
-          esac
-          # Never print the key. GitHub secret paste often includes a trailing
-          # CR or LF, which Maestro rejects inside an Authorization header.
-          MAESTRO_CLOUD_API_KEY="$(printf '%s' "$MAESTRO_CLOUD_API_KEY" | tr -d '\r\n')"
-          if [[ -z "$MAESTRO_CLOUD_API_KEY" || "$MAESTRO_CLOUD_API_KEY" == *[[:space:]]* ]]; then
-            echo "::error::Maestro API secret contains unsupported whitespace. Update the encrypted Actions secret."
-            exit 1
-          fi
-          export MAESTRO_CLOUD_API_KEY
-          "$HOME/.maestro/bin/maestro" cloud \
-            --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
-            --device-os "$ANDROID_OS" \
-            --device-model pixel_6 \
-            --branch "$GITHUB_REF_NAME" \
-            --name "Nexa $TEST_SUITE $ANDROID_OS $GITHUB_SHA" \
-            --app-file "$NEXA_RELEASE_APK" \
-            --format HTML-DETAILED \
-            --output "$RUNNER_TEMP/nexa-maestro-detailed.html" \
-            --flows "$target" 2>&1 | tee "$RUNNER_TEMP/nexa-maestro-cli.log"
-      - name: Validate every recorded Maestro flow independently
-        if: always()
-        shell: bash
-        env:
-          EXPECTED_FLOWS: ${{ (github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run all android-33') && '12' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') && '12' || '1' }}
-        run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-maestro-cli.log" "$EXPECTED_FLOWS"
-      - name: Retain detailed Maestro results and failed step evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nexa-maestro-detail-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/nexa-maestro-detailed.html
-            ${{ runner.temp }}/nexa-maestro-cli.log
-          if-no-files-found: ignore
-          retention-days: 7
- || true)"
+          runtime_changes="$(printf '%s\n' "$changed_source" | grep -Ev '^scripts/test/|^$' || true)"
           if [[ -n "$runtime_changes" ]]; then
             echo "::error::Nexa runtime source changed after this APK. Rebuild the Android release first."
             printf '%s\n' "$runtime_changes"
