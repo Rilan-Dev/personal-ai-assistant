@@ -177,6 +177,11 @@ class RealtimeVoiceService : Service() {
                         NexaBrowserTaskActions.goBackApproved(this)
                     pending.command == "list_installed_apps" ->
                         NexaPhoneVoiceTools.installedAppsApproved(this)
+                    pending.command.startsWith("open_whatsapp_chat:") ->
+                        ScreenAssistService.active?.let { service ->
+                            NexaWhatsAppChatActions.openApproved(service,
+                                pending.command.removePrefix("open_whatsapp_chat:"))
+                        } ?: "Screen Assist is disabled. No chat opened."
                     pending.command.startsWith("tap_visible_label:") ->
                         ScreenAssistService.active?.let { service ->
                             NexaScreenLabelTap.approved(service,pending.command.removePrefix("tap_visible_label:"))
@@ -322,6 +327,7 @@ class RealtimeVoiceService : Service() {
                         if(!assistantPanelEnabled)return false
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
+                            NexaWhatsAppChatIntent.followupRecipient(text)!=null ||
                             NexaGeneralMessageVoice.parse(text)!=null ||
                             NexaVoiceTextIntent.parse(text)!=null ||
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
@@ -706,6 +712,45 @@ class RealtimeVoiceService : Service() {
             closeCompound(cursor,"failed",outcome)
             return
         }
+        if(tool.command.startsWith("open_whatsapp_chat:")) {
+            // ACTION_CLICK alone never completes a chat-navigation task.
+            // Verify the actual new WhatsApp conversation header + composer
+            // after Android updates the foreground Accessibility window.
+            if(!outcome.startsWith("Android accepted a uniquely grounded WhatsApp chat-row tap") &&
+                !outcome.startsWith("Matching chat header and composer are already visible")) {
+                closeCompound(cursor,"unverified",outcome)
+                return
+            }
+            val name=tool.command.removePrefix("open_whatsapp_chat:")
+            val session=voiceSessionId
+            main.postDelayed({
+                if(!active.get() || currentCompound!==cursor || voiceSessionId!=session)
+                    return@postDelayed
+                Thread({
+                    val verified=NexaWhatsAppChatActions.verifiedOpen(
+                        ScreenAssistService.active,name)
+                    main.post {
+                        if(!active.get() || currentCompound!==cursor ||
+                            voiceSessionId!=session)return@post
+                        if(!verified) {
+                            closeCompound(cursor,"unverified",
+                                "WhatsApp conversation header not independently verified")
+                            sarvamApiTransport?.toolResult(
+                                "Chat-row tap was not confirmed in WhatsApp. No further action.")
+                            return@post
+                        }
+                        val next=cursor.advance(true)
+                        checkpointAndContinue(cursor,
+                            if(cursor.finished)"completed" else "verified",
+                            "Matching WhatsApp chat header and composer verified") {
+                            if(next==null)currentCompound=null
+                            else handleSarvamOwnerRequest(next,true)
+                        }
+                    }
+                },"nexa-chat-verification").start()
+            },1200L)
+            return
+        }
         val isAppOpen=tool.command.startsWith("open ") || tool.command=="open" ||
             tool.command.startsWith("chrome_search:")
         if(isAppOpen) {
@@ -840,6 +885,21 @@ class RealtimeVoiceService : Service() {
                 else "Nexa could not open text-field review. Nothing typed or submitted."
             message=lastToolResult
             sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
+        val whatsappChat=NexaWhatsAppChatIntent.followupRecipient(transcript)
+        if(whatsappChat!=null) {
+            if(!ScreenAssistState.connected || ScreenAssistService.active==null) {
+                lastToolResult="Enable Nexa Screen Assist before opening a WhatsApp chat. No chat opened."
+                message=lastToolResult
+                sarvamApiTransport?.toolResult(lastToolResult)
+                return
+            }
+            pendingAppTool=PendingAppTool("local-sarvam",
+                "WhatsApp chat "+whatsappChat,"open_whatsapp_chat:"+whatsappChat)
+            pendingAppTool?.let{offerOwnerTool(it)}
+            pendingApprovalSummary="Open the one uniquely verified WhatsApp chat matching the requested contact? Approve once or Deny. No text will be read or sent."
+            message="Contact navigation is ready for one owner review."
             return
         }
         val messageIntent=NexaGeneralMessageVoice.parse(transcript)
