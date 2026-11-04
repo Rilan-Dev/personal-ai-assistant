@@ -30,7 +30,7 @@ tags:
 - assertVisible: "Exact draft: I am in the meeting i will call you later"
 - scrollUntilVisible:
     element:
-      text: "Choose a messaging app"
+      text: "Messaging app decision"
     direction: DOWN
     timeout: 30000
 - scrollUntilVisible:
