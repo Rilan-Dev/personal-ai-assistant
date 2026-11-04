@@ -27,6 +27,10 @@ import javax.crypto.spec.GCMParameterSpec
 internal class NexaConversationDb(context: Context, databaseName: String = "custom.db") : SQLiteOpenHelper(
     context.applicationContext, databaseName, null, 3
 ) {
+    override fun onConfigure(db: SQLiteDatabase) {
+        super.onConfigure(db)
+        db.setForeignKeyConstraintsEnabled(true)
+    }
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE conversation_entries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,6 +44,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
         db.execSQL("CREATE INDEX conversation_session_idx ON conversation_entries(session_id,id)")
         createTaskTables(db)
         createUiActionClaimTable(db)
+        createAgentTaskTables(db)
     }
     private fun createTaskTables(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE IF NOT EXISTS voice_task_checkpoints (
@@ -64,11 +69,83 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
         )""")
         db.execSQL("CREATE INDEX IF NOT EXISTS agent_action_claims_at ON agent_action_claims(claimed_at)")
     }
+    /**
+     * Additive task-coordinator storage. The active Chat/Voice engines are NOT
+     * permitted to use this schema as execution authorization. Sensitive goals,
+     * arguments and event detail are BLOB ciphertext written only by future
+     * device-Keystore-verified stores.
+     */
+    private fun createAgentTaskTables(db: SQLiteDatabase) {
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_tasks (
+            task_id TEXT PRIMARY KEY NOT NULL,
+            session_id TEXT NOT NULL,
+            origin TEXT NOT NULL,
+            status TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            plan_revision INTEGER NOT NULL,
+            goal_cipher BLOB NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_tasks_session_idx ON agent_tasks(session_id,updated_at)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_task_steps (
+            step_id TEXT PRIMARY KEY NOT NULL,
+            task_id TEXT NOT NULL REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
+            ordinal INTEGER NOT NULL,
+            tool_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            risk TEXT NOT NULL,
+            expected_evidence TEXT NOT NULL,
+            arguments_cipher BLOB NOT NULL,
+            UNIQUE(task_id,ordinal)
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_task_steps_idx ON agent_task_steps(task_id,ordinal)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_task_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
+            step_id TEXT,
+            event_kind TEXT NOT NULL,
+            detail_cipher BLOB,
+            created_at INTEGER NOT NULL
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_task_events_idx ON agent_task_events(task_id,id)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_mandates (
+            mandate_id TEXT PRIMARY KEY NOT NULL,
+            task_id TEXT NOT NULL UNIQUE REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
+            owner_request_id TEXT NOT NULL,
+            scope_digest TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            revoked_at INTEGER
+        )""")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_step_approvals (
+            approval_id TEXT PRIMARY KEY NOT NULL,
+            step_id TEXT NOT NULL REFERENCES agent_task_steps(step_id) ON DELETE CASCADE,
+            target_digest TEXT NOT NULL,
+            input_digest TEXT NOT NULL,
+            state TEXT NOT NULL,
+            expires_at INTEGER NOT NULL,
+            consumed_at INTEGER
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_step_approvals_idx ON agent_step_approvals(step_id,state)")
+        db.execSQL("""CREATE TABLE IF NOT EXISTS agent_observations (
+            observation_id TEXT PRIMARY KEY NOT NULL,
+            step_id TEXT NOT NULL REFERENCES agent_task_steps(step_id) ON DELETE CASCADE,
+            source_kind TEXT NOT NULL,
+            verdict TEXT NOT NULL,
+            evidence_digest TEXT NOT NULL,
+            observed_at INTEGER NOT NULL
+        )""")
+        db.execSQL("CREATE INDEX IF NOT EXISTS agent_observations_idx ON agent_observations(step_id,observed_at)")
+    }
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion !in 1..2 || newVersion != 3)
             throw IllegalStateException("Unsupported conversation database migration")
         if (oldVersion <= 1) createTaskTables(db) // Keep v1 conversations/keys.
-        if (oldVersion <= 2) createUiActionClaimTable(db) // Add only; no v2 rows altered.
+        if (oldVersion <= 2) {
+            createUiActionClaimTable(db)
+            createAgentTaskTables(db) // New v3 structures only; no legacy rows altered.
+        }
     }
     companion object {
         private val lock=Any()
