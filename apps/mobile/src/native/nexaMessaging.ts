@@ -11,6 +11,8 @@ type MessagingBridge = {
   openSmsDraft(phone:string,message:string):Promise<DispatchOutcome>;
   stageManualComposer(appId:string,recipient:string,message:string):Promise<DispatchOutcome>;
   discardManualComposer():Promise<boolean>;
+  stageReviewedTextField(label:string,text:string):Promise<boolean>;
+  cancelReviewedTextField():Promise<boolean>;
 };
 type MemoryBridge = {
   rememberMessageApp(recipient:string,appId:string):Promise<boolean>;
@@ -80,3 +82,15 @@ export const openReviewedSmsDraft=async(phone:string,message:string)=>
 export const openManualMessageComposer=async(appId:'imo'|'botim'|'whatsapp-business',hint:string,text:string)=>
   validated(await messaging().stageManualComposer(appId,hint,text));
 export const discardManualMessage=()=>messaging().discardManualComposer();
+export const reviewedTextInputAvailable=()=>Platform.OS==='android' &&
+  typeof NativeModules.PAANexaMessaging?.stageReviewedTextField==='function';
+export async function stageReviewedTextInput(label:string,text:string):Promise<void> {
+  if(typeof messaging().stageReviewedTextField!=='function' ||
+    !await messaging().stageReviewedTextField(label,text))
+    throw new Error('Android could not safely stage a reviewed input field');
+}
+export async function cancelReviewedTextInput():Promise<void> {
+  if(typeof messaging().cancelReviewedTextField!=='function' ||
+    !await messaging().cancelReviewedTextField())
+    throw new Error('Android text-entry review could not be discarded');
+}
