@@ -1,0 +1,33 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa ambiguous Mom message asks channel and displays exact draft without sending
+tags:
+  - nexa
+  - messaging
+  - owner-review
+  - experimental
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- assertVisible: "Make your assistant yours."
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Assistant command"
+- inputText: "Hey Nexa Send Message to my Mom That I am in the meeting i will call you later"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible: "Nexa · Tools"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Message app & recipient review"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "Requested recipient: Mom"
+- assertVisible: "Exact draft: I am in the meeting i will call you later"
+- assertVisible: "Choose a messaging app"
+- assertVisible: "Discard message review — do not send"
+- takeScreenshot: nexa-ambiguous-messenger-explicit-owner-choice

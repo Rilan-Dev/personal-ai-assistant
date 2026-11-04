@@ -12,6 +12,8 @@ export { PROVIDERS, DIRECT_TOOL_IDS, validateProviderSettings, createDirectProvi
 export type { DirectProviderId, DirectProviderSettings, DirectProviderOptions } from "./direct-provider.ts";
 
 export {parseReviewedWhatsAppIntent} from "./owner-intents.ts";
+export {parseMessageRequest, decideMessageApp, recipientMemoryKey} from "./message-routing.ts";
+export type {MessageAppId, MessageRequest, InstalledMessageApp, MessageAppDecision} from "./message-routing.ts";
 export type {ReviewedWhatsAppIntent} from "./owner-intents.ts";
 
 export {identifyIconCrop, validateIconCrop} from './icon-vision.ts';
@@ -31,3 +33,6 @@ export {parsePairedIconObservation} from './paired-icon-capture.ts';
 
 export {createIconReviewSession} from './icon-review.ts';
 export type {IconReviewOffer,IconReviewResult,IconReviewSummary} from './icon-review.ts';
+
+export {parseReviewedTextEntry} from './text-entry-intent.ts';
+export type {ReviewedTextEntry} from './text-entry-intent.ts';

@@ -1,0 +1,67 @@
+package dev.rilandev.personalaiassistant
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.facebook.react.bridge.BridgeReactContext
+import com.facebook.react.bridge.Promise
+import java.lang.reflect.Proxy
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/**
+ * Android Keystore integration: recipient preference is an explicit owner
+ * choice, never a transcript-based guess or a recipient identity.
+ */
+@RunWith(AndroidJUnit4::class)
+class NexaMessageMemoryAndroidTest {
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+    @Suppress("DEPRECATION")
+    private fun journal()=AgentJournalModule(BridgeReactContext(context))
+
+    private fun invoke(block:(Promise)->Unit):Pair<Any?,String?> {
+        var value:Any?=null
+        var error:String?=null
+        var complete=false
+        val promise=Proxy.newProxyInstance(Promise::class.java.classLoader,
+            arrayOf(Promise::class.java)) { _,method,args ->
+            when(method.name) {
+                "resolve" -> {complete=true;value=args?.firstOrNull()}
+                "reject" -> {complete=true;error=args?.firstOrNull()?.toString()}
+            }
+            null
+        } as Promise
+        block(promise)
+        assertTrue("Native preference bridge must settle",complete)
+        return value to error
+    }
+
+    @Test fun explicitAppChoiceIsEncryptedScopedAndRevocable() {
+        val alias="mom test local"
+        val other="dad test local"
+        val module=journal()
+        try {
+            assertEquals(true,invoke{module.rememberMessageApp(alias,"whatsapp",it)}.first)
+            assertEquals("whatsapp",invoke{journal().rememberedMessageApp(alias,it)}.first)
+            assertNull(invoke{journal().rememberedMessageApp(other,it)}.first)
+            val prefs=context.getSharedPreferences("paa_secure_journal_v1",Context.MODE_PRIVATE)
+            assertFalse("Neither raw alias nor chosen app may be stored as plaintext",
+                prefs.all.entries.any { (key,v)->
+                    key.contains(alias) || v.toString().contains(alias) ||
+                    v.toString().contains("whatsapp")
+                })
+            assertEquals(true,invoke{journal().forgetMessageApp(alias,it)}.first)
+            assertNull(invoke{journal().rememberedMessageApp(alias,it)}.first)
+        } finally {
+            invoke{journal().forgetMessageApp(alias,it)}
+        }
+    }
+    @Test fun invalidAppsAndUnverifiedContactStringsAreRejected() {
+        assertEquals("MESSAGE_MEMORY_WRITE",
+            invoke{journal().rememberMessageApp("Mom","unknown-untrusted-app",it)}.second)
+        assertEquals("MESSAGE_MEMORY_WRITE",
+            invoke{journal().rememberMessageApp("+971551234567","sms",it)}.second)
+        assertNull(invoke{journal().rememberedMessageApp("never saved alias",it)}.first)
+    }
+}

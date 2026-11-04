@@ -33,6 +33,14 @@
       <category android:name="android.intent.category.HOME"/>
     </intent>
     <package android:name="com.whatsapp.w4b"/>
+    <!-- Explicit supported message-app candidates only; no broad app inventory. -->
+    <package android:name="com.imo.android.imoim"/>
+    <package android:name="im.thebot.messenger"/>
+    <!-- Determine only the user-selected default SMS handler. -->
+    <intent>
+      <action android:name="android.intent.action.SENDTO"/>
+      <data android:scheme="smsto"/>
+    </intent>
     <intent><action android:name="android.media.action.STILL_IMAGE_CAMERA"/></intent>
     <!-- Support checking for http(s) links via the Linking API -->
     <intent>

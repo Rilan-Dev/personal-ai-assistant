@@ -1,4 +1,5 @@
 import {NativeModules, Platform} from 'react-native';
+import type {MessageRequest,MessageAppId} from '@paa/agent-core';
 
 export type ToolOverlayStatus = {granted:boolean; visible:boolean};
 export type ReviewedVoiceDraft = {contactHint:string; message:string; mode:'review_only'};
@@ -9,6 +10,8 @@ type OverlayNative = {
   hide(): Promise<boolean>;
   consumePendingTab(): Promise<string>;
   consumePendingVoiceDraft(): Promise<ReviewedVoiceDraft | null>;
+  consumePendingMessageRequest(): Promise<unknown>;
+  consumePendingTextEntry(): Promise<unknown>;
 };
 function bridge(): OverlayNative {
   const value = NativeModules.PAANexaToolOverlay;
@@ -26,6 +29,42 @@ export const showToolOverlay = () => bridge().show();
 export const hideToolOverlay = () => bridge().hide();
 export const consumeToolOverlayNavigation = (): Promise<string> =>
   bridge().consumePendingTab();
+
+/** A spoken type request only opens a review UI, not another application's keyboard. */
+export async function consumeSpokenTextEntry(): Promise<{targetLabel:string,exactText:string,reviewOnly:true}|null> {
+  const api=bridge();
+  if(typeof api.consumePendingTextEntry!=='function')
+    throw Error('Updated Android voice text input handoff required');
+  const raw=await api.consumePendingTextEntry();
+  if(raw===null)return null;
+  if(!raw||typeof raw!=='object')throw Error('Invalid Android spoken text-entry request');
+  const data=raw as Record<string,unknown>;
+  if(data.reviewOnly!==true ||
+    typeof data.targetLabel!=='string'||data.targetLabel.length>60 ||
+    typeof data.exactText!=='string'||data.exactText.length>500||
+    !data.exactText.trim()) throw Error('Invalid text-entry request');
+  return {targetLabel:data.targetLabel,exactText:data.exactText,reviewOnly:true};
+}
+
+/** Single-use spoken request. A voice transcript grants no app or recipient authority. */
+export async function consumeSpokenMessageRequest():Promise<MessageRequest|null> {
+  const bridgeValue=bridge();
+  if(typeof bridgeValue.consumePendingMessageRequest!=='function')
+    throw Error('Updated Android voice message handoff required');
+  const raw=await bridgeValue.consumePendingMessageRequest();
+  if(raw===null)return null;
+  if(!raw||typeof raw!=='object')throw Error('Invalid spoken message request');
+  const data=raw as Record<string,unknown>;
+  const app:MessageAppId|null=data.explicitApp==null?null:
+    (['whatsapp','whatsapp-business','sms','imo','botim'].includes(String(data.explicitApp))
+      ? data.explicitApp as MessageAppId : null);
+  if(data.reviewOnly!==true ||
+    typeof data.recipientHint!=='string'||data.recipientHint.length>50||
+    typeof data.text!=='string'||!data.text.trim()||data.text.length>500||
+    (data.explicitApp!==null && data.explicitApp!==undefined && app===null))
+    throw Error('Invalid spoken message routing metadata');
+  return {recipientHint:data.recipientHint,text:data.text,explicitApp:app,reviewOnly:true};
+}
 
 /** Single-use, memory-only handoff. Contact remains an unverified hint. */
 export async function consumeReviewedVoiceDraft(): Promise<ReviewedVoiceDraft|null> {

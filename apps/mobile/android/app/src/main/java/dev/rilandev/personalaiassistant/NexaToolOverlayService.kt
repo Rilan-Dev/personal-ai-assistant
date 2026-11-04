@@ -111,14 +111,15 @@ class NexaToolOverlayService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_HIDE) { stopSelf(); return START_NOT_STICKY }
+        if (NexaMessageDraftState.peek()!=null || NexaTextInputState.peek()!=null) section="tools"
         if (intent?.action != ACTION_SHOW || !Settings.canDrawOverlays(this)) {
             stopSelf()
             return START_NOT_STICKY
         }
         if (view == null) {
             wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            render()
         }
+        render()
         return START_NOT_STICKY
     }
 
@@ -342,6 +343,11 @@ class NexaToolOverlayService : Service() {
         // Strict local intent grammar: inspection is read-only; scrolling only
         // PREPARES a pending confirmation and never fires automatically.
         when (query.lowercase(java.util.Locale.ROOT).trim().trimEnd('?','.','!')) {
+            "find input boxes", "find text fields", "inspect input boxes",
+            "list editable fields", "what input boxes are on screen" -> {
+                findSafeInputBoxes()
+                return
+            }
             "inspect screen", "inspect screen icons", "find screen icons",
             "what icons are on screen", "what icons are on my screen" -> {
                 section = "tools"
@@ -562,6 +568,61 @@ class NexaToolOverlayService : Service() {
         note = "Scroll cancelled."
         render()
     }
+    private fun findSafeInputBoxes() {
+        val service=ScreenAssistService.active
+        note=if(service==null)"Screen Assist is not connected; no input boxes inspected."
+            else NexaTextInputActions.inspectVisibleFields(service)
+        section="tools"
+        render()
+    }
+    private fun inspectNamedTextBox() {
+        val service=ScreenAssistService.active
+        note=if(service==null)"Screen Assist disconnected; nothing typed."
+            else NexaTextInputActions.prepare(service)
+        section="tools"
+        render()
+    }
+    private fun confirmNamedTextBox() {
+        val service=ScreenAssistService.active
+        note=if(service==null){
+            NexaTextInputActions.cancel()
+            NexaTextInputState.clear()
+            "Screen Assist disconnected. Text entry cancelled."
+        }else NexaTextInputActions.confirm(service)
+        expanded=false
+        render()
+    }
+    private fun cancelNamedTextBox() {
+        NexaTextInputActions.cancel()
+        NexaTextInputState.clear()
+        note="Text entry cancelled without sending or submitting."
+        render()
+    }
+
+    private fun inspectMessageInput() {
+        val service=ScreenAssistService.active
+        note=if(service==null) "Screen Assist disconnected. No message was typed."
+            else NexaMessageInputActions.prepare(service)
+        section="tools"
+        render()
+    }
+    private fun confirmMessageInput() {
+        val service=ScreenAssistService.active
+        note=if(service==null) {
+            NexaMessageInputActions.cancel()
+            NexaMessageDraftState.clear()
+            "Screen Assist disconnected. Message insertion cancelled."
+        } else NexaMessageInputActions.confirm(service)
+        expanded=false
+        render()
+    }
+    private fun cancelMessageInput() {
+        NexaMessageInputActions.cancel()
+        NexaMessageDraftState.clear()
+        note="Reviewed message entry cancelled. No message sent."
+        render()
+    }
+
     private fun showSection(name: String) {
         if (name != "tools") {
             inspectedScreen = null
@@ -685,6 +746,33 @@ class NexaToolOverlayService : Service() {
                         ))
                     }
                     "tools" -> {
+                        NexaTextInputState.peek()?.let { draft ->
+                            addView(text("REVIEW TEXT FIELD · "+draft.targetLabel,13f))
+                            addView(text("Exact proposed text: "+draft.exactText.take(500),12f))
+                            addView(text("Open the intended external app and one empty field. Nexa will only enter this text after one more confirmation; never submit or send.",11f,true))
+                            if(NexaTextInputActions.ready()) addView(row(
+                                button("Confirm type text") { confirmNamedTextBox() },
+                                button("Cancel typing") { cancelNamedTextBox() }
+                            )) else addView(row(
+                                button("Find input box") { inspectNamedTextBox() },
+                                button("Cancel typing") { cancelNamedTextBox() }
+                            ))
+                        }
+                        NexaMessageDraftState.peek()?.let { draft ->
+                            addView(text("MESSAGE DRAFT · ${draft.appId} · ${draft.recipientHint}",13f))
+                            addView(text("Open the correct conversation. Nexa checks its visible title and finds one empty message box. Your message will be inserted only after another tap; it will NEVER be sent by Nexa.",11f,true))
+                            if (NexaMessageInputActions.ready()) {
+                                addView(row(
+                                    button("Confirm fill draft") { confirmMessageInput() },
+                                    button("Cancel draft") { cancelMessageInput() }
+                                ))
+                            } else {
+                                addView(row(
+                                    button("Find message input") { inspectMessageInput() },
+                                    button("Cancel draft") { cancelMessageInput() }
+                                ))
+                            }
+                        }
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
                         val requestedAction=proposedDeviceAction
                         if(requestedAction!=null &&
@@ -717,6 +805,7 @@ class NexaToolOverlayService : Service() {
                             button("App permissions") { sendLocal("open app settings") },
                             button("Battery settings") { sendLocal("background settings") }
                         ))
+                        addView(button("Find visible input boxes") { findSafeInputBoxes() })
                         addView(text("Owner-guided navigation: one approved tap at each step.",11f,true))
                         addView(row(
                             button("Menu → Search") { startGuidedNavigation("find search in menu") },

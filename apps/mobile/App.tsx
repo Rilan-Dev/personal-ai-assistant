@@ -5,7 +5,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
-import {parseReviewedWhatsAppIntent} from "@paa/agent-core";
+import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
+import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
+import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
+  forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
+  reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
@@ -15,7 +19,8 @@ import { assistantRoleAvailable, getNexaAssistantRoleStatus, requestNexaAssistan
 import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/native/androidAppDiscovery';
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
-  hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft} from './src/native/androidToolOverlay';
+  hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
+  consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -597,6 +602,15 @@ export default function App() {
   const [whatsAppDraft,setWhatsAppDraft]=useState('');
   const [whatsAppDraftNotice,setWhatsAppDraftNotice]=useState('');
   const [whatsAppDraftBusy,setWhatsAppDraftBusy]=useState(false);
+  const [messageRequest,setMessageRequest]=useState<MessageRequest|null>(null);
+  const [messageOptions,setMessageOptions]=useState<InstalledMessageApp[]>([]);
+  const [messageChosen,setMessageChosen]=useState<InstalledMessageApp|null>(null);
+  const [messageBusy,setMessageBusy]=useState(false);
+  const [messageNotice,setMessageNotice]=useState('');
+  const [messageRecipientConfirmed,setMessageRecipientConfirmed]=useState(false);
+  const [textEntryRequest,setTextEntryRequest]=useState<ReviewedTextEntry|null>(null);
+  const [textEntryBusy,setTextEntryBusy]=useState(false);
+  const [textEntryNotice,setTextEntryNotice]=useState('');
   // Consume one explicitly spoken command only after Nexa's RN UI becomes
   // active. Native code never selects contacts or invokes WhatsApp Send.
   useEffect(()=>{
@@ -604,6 +618,48 @@ export default function App() {
     let mounted=true;
     const consume=async()=>{
       try {
+        const spokenText=await consumeSpokenTextEntry();
+        if(spokenText && mounted){
+          setTextEntryRequest(spokenText);
+          setTextEntryNotice('Spoken text-entry request is ready for review. Select the intended application and approve one safe input box. Nothing has been typed or submitted.');
+          setTab('tools');
+          return;
+        }
+        const spoken=await consumeSpokenMessageRequest();
+        if (spoken && mounted) {
+          // A spoken user command enters the same explicit channel chooser
+          // as a typed command. The transcript never grants send permission.
+          setMessageRequest(spoken);
+          setMessageChosen(null);
+          setMessageOptions([]);
+          setSelectedContact(null);
+          setMessageRecipientConfirmed(false);
+          setWhatsAppDraft(spoken.text);
+          setMessageBusy(true);
+          setMessageNotice('Spoken message queued for '+spoken.recipientHint+
+            '. Check the installed app and confirm the recipient. Nothing was sent.');
+          setTab('tools');
+          try {
+            const apps=await installedMessagingApps();
+            const key=recipientMemoryKey(spoken.recipientHint);
+            const remembered=key?await rememberedMessageApp(key):null;
+            if(!mounted)return;
+            const decision=decideMessageApp(spoken,apps,remembered);
+            setMessageOptions(apps);
+            if(decision.kind==='selected'&&decision.app){
+              setMessageChosen(decision.app);
+              setMessageNotice('Spoken request: '+decision.app.label+
+                (decision.reason==='remembered'?' remembered for this alias. ':' requested. ')+
+                'Choose and confirm the real recipient. Not sent.');
+            }else {
+              setMessageNotice(decision.kind==='unavailable'
+                ? 'Requested messaging app was not found. No alternative selected.'
+                : 'Choose a messaging app below for '+spoken.recipientHint+'. Nothing sent.');
+            }
+          }catch{if(mounted)setMessageNotice('Messaging app discovery or preference unavailable. No message sent.');}
+          finally{if(mounted)setMessageBusy(false);}
+          return;
+        }
         const pending=await consumeReviewedVoiceDraft();
         if (!mounted || !pending) return;
         setSelectedContact(null);
@@ -656,6 +712,7 @@ export default function App() {
     if(!engine.live||privacyToolBusy||running)return;
     setPrivacyToolBusy(true);setPrivacyToolNotice('');
     setSelectedContact(null);
+    setMessageRecipientConfirmed(false);
     setApproximateLocation(null);
     try {
       const contact=await pickOwnerContact();
@@ -669,7 +726,8 @@ export default function App() {
     }finally{setPrivacyToolBusy(false);}
   };
   const openSelectedWhatsAppDraft=async()=>{
-    if (!selectedContact || !whatsAppDraft.trim() || whatsAppDraftBusy ||
+    if (!selectedContact || (messageRequest!==null && !messageRecipientConfirmed) ||
+        !whatsAppDraft.trim() || whatsAppDraftBusy ||
         Date.now() > privateObservationDeadline.current) {
       setWhatsAppDraftNotice('Select one contact again, review the message, then choose Open draft.');
       return;
@@ -684,6 +742,88 @@ export default function App() {
       setWhatsAppDraftNotice(e instanceof Error ? e.message : 'Unable to prepare WhatsApp draft.');
     } finally {setWhatsAppDraftBusy(false);}
   };
+  const chooseMessageChannel=async(app:InstalledMessageApp,remember:boolean)=>{
+    if(!messageRequest||messageBusy||!messageOptions.some(x=>x.id===app.id&&x.packageName===app.packageName))return;
+    setMessageBusy(true);
+    try {
+      if(remember) {
+        const key=recipientMemoryKey(messageRequest.recipientHint);
+        if(!key)throw Error('This contact alias cannot be saved safely. Use once instead.');
+        await rememberMessageApp(key,app.id);
+      }
+      setMessageChosen(app);
+      setSelectedContact(null);
+      setMessageRecipientConfirmed(false);
+      setWhatsAppDraft(messageRequest.text);
+      setMessageNotice(app.label+' selected'+(remember?' and remembered on this phone':' for this request only')+
+        '. Confirm the correct recipient. Text remains local and unsent.');
+    }catch(e){
+      setMessageNotice(e instanceof Error?e.message:'Could not securely remember the app. No app was selected.');
+    }finally{setMessageBusy(false);}
+  };
+  const forgetRecipientChannel=async()=>{
+    if(!messageRequest||messageBusy)return;
+    const key=recipientMemoryKey(messageRequest.recipientHint);
+    if(!key)return;
+    setMessageBusy(true);
+    try{
+      await forgetMessageApp(key);
+      setMessageChosen(null);
+      setMessageRecipientConfirmed(false);
+      setMessageNotice('Saved app preference deleted for '+messageRequest.recipientHint+
+        '. Choose an installed app for the current request. Nothing was sent.');
+    }catch{setMessageNotice('Could not delete saved messaging preference.');}
+    finally{setMessageBusy(false);}
+  };
+  const openPreparedSms=async()=>{
+    if(!messageRequest||messageChosen?.id!=='sms'||!selectedContact||
+      !messageRecipientConfirmed||Date.now()>privateObservationDeadline.current)return;
+    setMessageBusy(true);
+    try{
+      await openReviewedSmsDraft(selectedContact.phone,messageRequest.text);
+      setMessageNotice('Android SMS composer opened. Verify the recipient and text, then press Send yourself. Nexa did not send anything.');
+    }catch(e){setMessageNotice(e instanceof Error?e.message:'SMS draft could not be opened. Nothing was sent.');}
+    finally{setMessageBusy(false);}
+  };
+  const openGuidedMessageInput=async()=>{
+    if(!messageRequest||!messageChosen||!['imo','botim','whatsapp-business'].includes(messageChosen.id)||
+      messageBusy)return;
+    setMessageBusy(true);
+    try{
+      await openManualMessageComposer(
+        messageChosen.id as 'imo'|'botim'|'whatsapp-business',
+        messageRequest.recipientHint,messageRequest.text);
+      setMessageNotice('Chosen app opened. Manually open '+messageRequest.recipientHint+
+        ' chat, then tap Nexa bubble → Tools → Find message input → Confirm fill draft. Verify the text and tap Send yourself. No message was sent.');
+    }catch(e){setMessageNotice(e instanceof Error?e.message:'Could not start protected message composer. No action performed.');}
+    finally{setMessageBusy(false);}
+  };
+  const beginReviewedTextEntry=async()=>{
+    if(!textEntryRequest||textEntryBusy)return;
+    setTextEntryBusy(true);
+    try{
+      if(!reviewedTextInputAvailable())throw Error('Updated Android text-entry bridge is unavailable.');
+      await stageReviewedTextInput(textEntryRequest.targetLabel,textEntryRequest.exactText);
+      setTextEntryNotice('Text staged only in device memory. Open the intended app, tap the Nexa bubble → Tools → Find input box, inspect the target, then tap Confirm type text. No submit or send.');
+    }catch(e){setTextEntryNotice(e instanceof Error?e.message:'Android rejected the text-entry review.');}
+    finally{setTextEntryBusy(false);}
+  };
+  const discardReviewedTextEntry=async()=>{
+    setTextEntryBusy(true);
+    try{if(reviewedTextInputAvailable())await cancelReviewedTextInput();}
+    catch{setTextEntryNotice('Could not clear Android staged text; it expires automatically within 90 seconds.');}
+    finally{
+      setTextEntryRequest(null);setTextEntryBusy(false);
+    }
+  };
+
+  const cancelMessageReview=()=>{
+    setMessageRequest(null);setMessageChosen(null);setMessageOptions([]);
+    setMessageRecipientConfirmed(false);
+    setWhatsAppDraft('');
+    setMessageNotice('Message review discarded. Nothing was sent.');
+  };
+
   const readPrivateLocation=async()=>{
     if(!engine.live||privacyToolBusy||running)return;
     setPrivacyToolBusy(true);setPrivacyToolNotice('');
@@ -1223,6 +1363,66 @@ export default function App() {
           ". Choose the correct contact using the Android picker. Nothing was sent.");
         append("assistant", "I prepared the exact WhatsApp text locally. Select the intended contact, review the recipient and message, then open the draft. You still tap Send in WhatsApp.");
         setTab("tools");
+        return;
+      }
+    }
+    // A generic message request is NOT an instruction to choose a messenger,
+    // locate a person, type into arbitrary controls or send. A remembered app
+    // is only a device-local, owner-selected channel hint.
+    if(!restore && engine.live) {
+      const requested=parseMessageRequest(request);
+      if(requested) {
+        setInput('');setEvents([]);append('user',request);
+        setMessageRequest(requested);
+        setMessageOptions([]);
+        setMessageChosen(null);
+        setMessageRecipientConfirmed(false);
+        setSelectedContact(null);
+        setWhatsAppDraft(requested.text);
+        setMessageBusy(true);
+        setTab('tools');
+        if(!messagingAvailable()) {
+          setMessageNotice('Updated Android messaging module is unavailable. Install the latest signed Nexa APK. No message was sent.');
+        } else {
+          try {
+            const apps=await installedMessagingApps();
+            const key=recipientMemoryKey(requested.recipientHint);
+            const remembered=key?await rememberedMessageApp(key):null;
+            const decision=decideMessageApp(requested,apps,remembered);
+            setMessageOptions(apps);
+            if(decision.kind==='selected' && decision.app) {
+              setMessageChosen(decision.app);
+              setMessageNotice('Using '+decision.app.label+
+                (decision.reason==='remembered'?' (your remembered choice)':' (you requested this app)')+
+                '. Select and confirm the intended recipient. No message was sent.');
+            } else {
+              setMessageNotice(decision.kind==='unavailable'
+                ? 'The requested messaging app was not found on this phone. No other app was substituted.'
+                : 'Choose a messaging app for '+requested.recipientHint+
+                  '. You may remember this choice on this device for future requests.');
+            }
+          } catch {
+            setMessageNotice('Android could not safely discover the supported messaging apps or read preference storage. No message sent.');
+          }
+        }
+        setMessageBusy(false);
+        append('assistant','I prepared your exact text for '+requested.recipientHint+
+          ' locally. Check the app and recipient in Tools. I will not automatically send anything.');
+        return;
+      }
+    }
+    // User-named external text inputs require an independent screen-grounded
+    // review. The AI never chooses a guessed box or submits the text.
+    if(!restore && engine.live){
+      const requestedText=parseReviewedTextEntry(request);
+      if(requestedText){
+        setInput('');setEvents([]);append('user',request);
+        setTextEntryRequest(requestedText);
+        setTextEntryNotice('Find and review one safe empty '+requestedText.targetLabel+
+          ' field in the intended app. No text was typed, submitted or sent.');
+        append('assistant','I prepared the exact requested text for a '+requestedText.targetLabel+
+          ' field. Open Tools to approve field discovery and typing. I will not submit it.');
+        setTab('tools');
         return;
       }
     }
@@ -1772,6 +1972,68 @@ export default function App() {
             <Text style={styles.cardHeading}>Private, one-time observations</Text>
             <Text style={styles.sectionTag}>On demand</Text>
           </View>
+          {textEntryRequest&&<View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Review text entry into another app</Text>
+            <Text style={styles.cardText}>Target input: {textEntryRequest.targetLabel}</Text>
+            <Text style={styles.cardText} selectable>Exact text: {textEntryRequest.exactText}</Text>
+            <Text style={styles.settingHelp}>Only a visible, unique, empty, non-sensitive field may be filled. Android Screen Assist and floating-bubble permissions are required. No Enter/Send/Submit press will occur.</Text>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" disabled={textEntryBusy}
+                onPress={()=>void beginReviewedTextEntry()} style={styles.primaryInline}>
+                <Text style={styles.primaryInlineText}>Prepare approved text entry</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={textEntryBusy}
+                onPress={()=>void discardReviewedTextEntry()} style={styles.outlineInline}>
+                <Text style={styles.outlineInlineText}>Discard text</Text>
+              </Pressable>
+            </View>
+            {textEntryNotice!==''&&<Text style={styles.feedback}>{textEntryNotice}</Text>}
+          </View>}
+          {messageRequest&&<View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>Message app & recipient review</Text>
+            <Text style={styles.cardText}>Requested recipient: {messageRequest.recipientHint}</Text>
+            <Text style={styles.cardText} selectable>Exact draft: {messageRequest.text}</Text>
+            <Text style={styles.settingHelp}>Nexa never guesses a recipient, sends this text or chooses an unfamiliar app. It remembers only an app you explicitly select for this alias.</Text>
+            {messageBusy&&<ActivityIndicator/>}
+            {!messageChosen&&<Text style={styles.cardHeading}>Choose a messaging app</Text>}
+            {!messageChosen&&messageOptions.map(app=><View key={app.id} style={styles.actionCard}>
+              <Text style={styles.settingTitle}>{app.label}</Text>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" disabled={messageBusy}
+                  style={styles.outlineInline} onPress={()=>void chooseMessageChannel(app,false)}>
+                  <Text style={styles.outlineInlineText}>Use {app.label} once</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={messageBusy||!recipientMemoryKey(messageRequest.recipientHint)}
+                  style={styles.primaryInline} onPress={()=>void chooseMessageChannel(app,true)}>
+                  <Text style={styles.primaryInlineText}>Remember {app.label} for {messageRequest.recipientHint}</Text>
+                </Pressable>
+              </View>
+            </View>)}
+            {messageChosen&&<>
+              <Text style={styles.settingTitle}>Chosen app: {messageChosen.label}</Text>
+              <Text style={styles.settingHelp}>Select the real recipient using Android for SMS/WhatsApp. For IMO, BOTIM or WhatsApp Business, open the right conversation yourself; the overlay will verify the visible title and empty message box before any text entry.</Text>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.outlineInline}
+                  onPress={()=>{setMessageChosen(null);setMessageRecipientConfirmed(false);}}>
+                  <Text style={styles.outlineInlineText}>Change messaging app</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.outlineInline}
+                  onPress={()=>void forgetRecipientChannel()}>
+                  <Text style={styles.outlineInlineText}>Forget saved app</Text>
+                </Pressable>
+              </View>
+              {['imo','botim','whatsapp-business'].includes(messageChosen.id)&&
+                <Pressable accessibilityRole="button" disabled={messageBusy} style={styles.primaryInline}
+                  onPress={()=>void openGuidedMessageInput()}>
+                  <Text style={styles.primaryInlineText}>Open {messageChosen.label} for reviewed text entry</Text>
+                </Pressable>}
+            </>}
+            {messageNotice!==''&&<Text style={styles.feedback}>{messageNotice}</Text>}
+            <Pressable accessibilityRole="button" style={styles.textAction}
+              onPress={cancelMessageReview}>
+              <Text style={styles.textActionText}>Discard message review — do not send</Text>
+            </Pressable>
+          </View>}
           <Text style={styles.cardText}>Choose one contact using Android's contact picker without reading your address book, or obtain one approximate location after Android permission. The result stays in memory for up to 60 seconds. It is not sent to AI unless you review and send it yourself.</Text>
           {engine.live&&ownerPrivacyAvailable()&&<>
             <View style={styles.buttonRow}>
@@ -1787,14 +2049,28 @@ export default function App() {
             {selectedContact&&<View style={styles.configContents}>
               <Text style={styles.groupLabel}>Selected contact · local preview</Text>
               <Text style={styles.cardText}>{selectedContact.name} · {selectedContact.phone}</Text>
-              {whatsAppDraftAvailable() && <>
+              {messageRequest && (messageChosen?.id==='whatsapp'||messageChosen?.id==='sms')&&
+                <View style={styles.actionCard}>
+                  <Text style={styles.cardText}>Requested: {messageRequest.recipientHint}. Android-selected contact: {selectedContact.name}. Nexa cannot assume these refer to the same person.</Text>
+                  <Pressable accessibilityRole="button" disabled={messageRecipientConfirmed}
+                    style={styles.primaryInline} onPress={()=>setMessageRecipientConfirmed(true)}>
+                    <Text style={styles.primaryInlineText}>{messageRecipientConfirmed?'Recipient confirmed':'Confirm this is '+messageRequest.recipientHint}</Text>
+                  </Pressable>
+                </View>}
+              {messageRequest && messageChosen?.id==='sms'&&
+                <Pressable accessibilityRole="button" style={styles.primaryInline}
+                  disabled={!messageRecipientConfirmed||messageBusy}
+                  onPress={()=>void openPreparedSms()}>
+                  <Text style={styles.primaryInlineText}>Open reviewed SMS draft — do not send</Text>
+                </Pressable>}
+              {whatsAppDraftAvailable() && (!messageRequest || messageChosen?.id==='whatsapp') && <>
                 <Text style={styles.settingHelp}>Compose only. The selected number must include +country code. Nexa only opens a draft; confirm recipient and tap Send in WhatsApp.</Text>
                 <TextInput style={styles.composerInput} placeholder="WhatsApp message to selected contact"
                   placeholderTextColor="#7f8ba5" value={whatsAppDraft}
                   onChangeText={setWhatsAppDraft} multiline maxLength={500}
                   accessibilityLabel="WhatsApp message preview" />
                 <Pressable accessibilityRole="button" style={styles.primaryInline}
-                  disabled={whatsAppDraftBusy || !whatsAppDraft.trim()}
+                  disabled={whatsAppDraftBusy || !whatsAppDraft.trim() || (messageRequest!==null && !messageRecipientConfirmed)}
                   onPress={openSelectedWhatsAppDraft}>
                   <Text style={styles.primaryInlineText}>{whatsAppDraftBusy ? 'Preparing…' : 'Open reviewed WhatsApp draft'}</Text>
                 </Pressable>

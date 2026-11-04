@@ -322,6 +322,8 @@ class RealtimeVoiceService : Service() {
                         if(!assistantPanelEnabled)return false
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
+                            NexaGeneralMessageVoice.parse(text)!=null ||
+                            NexaVoiceTextIntent.parse(text)!=null ||
                             NexaPhoneVoiceTools.wantsVisibleText(text) ||
                             NexaPhoneVoiceTools.wantsInstalledApps(text) ||
                             NexaPhoneVoiceTools.wantsScreenHelp(text) ||
@@ -547,6 +549,34 @@ class RealtimeVoiceService : Service() {
                         val transcript=json.optString("transcript").trim()
                         if(transcript.isNotBlank())NexaConversationDb.append(this@RealtimeVoiceService,
                             voiceSessionId,"voice","openai","user",transcript.take(3000))
+                        // A provider transcript is never authority to SEND.
+                        // A precise user-uttered message request can only
+                        // open Nexa's local app/recipient review screen.
+                        if(assistantPanelEnabled && transcript.isNotBlank()) {
+                            val field=NexaVoiceTextIntent.parse(transcript)
+                            if(field!=null)main.post {
+                                if(active.get() && selectedProvider=="openai"){
+                                    NexaVoiceTextIntent.queue(field)
+                                    try {
+                                        startActivity(Intent(this@RealtimeVoiceService,MainActivity::class.java)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                    }catch(_:Exception){NexaVoiceTextIntent.clear()}
+                                }
+                            }
+                            val request=NexaGeneralMessageVoice.parse(transcript)
+                            if(request!=null) main.post {
+                                if(active.get() && selectedProvider=="openai") {
+                                    NexaGeneralMessageVoice.queue(request)
+                                    try {
+                                        startActivity(Intent(this@RealtimeVoiceService,MainActivity::class.java)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                        message="Message review opened. Choose app, contact and exact text. Nothing sent."
+                                    } catch (_:Exception) {
+                                        message="Message review must be opened manually. No message sent."
+                                    }
+                                }
+                            }
+                        }
                     }
                     "response.output_audio_transcript.done","response.output_text.done" -> {
                         val transcript=json.optString("transcript",
@@ -796,6 +826,40 @@ class RealtimeVoiceService : Service() {
         }
         lastLocalUtterance = transcript
         lastLocalUtteranceAt = now
+        val textIntent=NexaVoiceTextIntent.parse(transcript)
+        if(textIntent!=null){
+            NexaVoiceTextIntent.queue(textIntent)
+            val opened=try{
+                startActivity(Intent(this,MainActivity::class.java).apply{
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                true
+            }catch(_:Exception){false}
+            lastToolResult=if(opened)
+                "Nexa text-field review opened. Find the correct empty field and approve typing. No submit."
+                else "Nexa could not open text-field review. Nothing typed or submitted."
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
+        val messageIntent=NexaGeneralMessageVoice.parse(transcript)
+        if(messageIntent!=null) {
+            // Speech supplies a local message draft request, not authorization
+            // to choose a channel, tap a recipient or send any external text.
+            NexaGeneralMessageVoice.queue(messageIntent)
+            val opened=try {
+                startActivity(Intent(this,MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                })
+                true
+            }catch(_:Exception){false}
+            lastToolResult=if(opened)
+                "Nexa message review opened. Select the app and confirm the recipient. Nothing sent."
+                else "Message held for local review. Open Nexa to choose an app; nothing sent."
+            message=lastToolResult
+            sarvamApiTransport?.toolResult(lastToolResult)
+            return
+        }
         val chromeQuery=NexaPhoneVoiceTools.chromeSearchQuery(transcript)
         if(chromeQuery!=null) {
             pendingAppTool=PendingAppTool("local-sarvam","Chrome search for $chromeQuery",

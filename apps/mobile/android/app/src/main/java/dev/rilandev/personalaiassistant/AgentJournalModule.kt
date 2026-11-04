@@ -356,6 +356,42 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         } catch (e: Exception) { rejectSafe(p,"SARVAM_VOICE_CLEAR",e) }
     }
 
+    /** An explicit app choice for a user-defined recipient alias, not a contact
+     * identity or proof of consent to transmit. Stored only in Android Keystore
+     * AES-GCM private preferences; no phone numbers or messages are remembered.
+     */
+    private fun messageAlias(raw: String): String {
+        val alias=raw.lowercase(java.util.Locale.ROOT).trim().replace(Regex("\\s+")," ")
+        require(alias.matches(Regex("[a-z][a-z0-9 '-]{1,49}")))
+        return alias
+    }
+    private fun messageApp(value: String): String {
+        require(value in setOf("whatsapp","whatsapp-business","sms","imo","botim"))
+        return value
+    }
+    @ReactMethod fun rememberMessageApp(recipientAlias: String, appId: String, p: Promise) {
+        try {
+            val key=name("private","message-app:"+messageAlias(recipientAlias))
+            val id=messageApp(appId)
+            synchronized(lock) { write(key,id) }
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_WRITE",e) }
+    }
+    @ReactMethod fun rememberedMessageApp(recipientAlias: String, p: Promise) {
+        try {
+            val key=name("private","message-app:"+messageAlias(recipientAlias))
+            val found=synchronized(lock){ read(key) }
+            p.resolve(found?.takeIf{ it in setOf("whatsapp","whatsapp-business","sms","imo","botim") })
+        } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_READ",e) }
+    }
+    @ReactMethod fun forgetMessageApp(recipientAlias: String, p: Promise) {
+        try {
+            val key=name("private","message-app:"+messageAlias(recipientAlias))
+            synchronized(lock) {check(prefs.edit().remove(key).commit())}
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_CLEAR",e) }
+    }
+
     @ReactMethod fun newSessionId(p: Promise) { p.resolve(UUID.randomUUID().toString()) }
 
     @ReactMethod fun loadSession(s: String, p: Promise) {
