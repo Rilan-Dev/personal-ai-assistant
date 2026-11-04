@@ -106,7 +106,7 @@ test('403 account/organization denial surfaces without leaking mailbox content',
     token:validToken,expiresAt:'2099-01-01T00:00:00.000Z',organizationId:orgId,agentId:id};
   await assert.rejects(h.client.acaMailSummary(session,{
     unreadOnly:true,inboxOnly:false,window:'24h'
-  }),e=>e instanceof Error && /access denied/.test(e.message) && !e.message.includes('DO-NOT-SHOW'));
+  }),e=>typeof e?.message==='string' && /access denied/.test(e.message) && !e.message.includes('DO-NOT-SHOW'));
 });
 test('bad credentials are rejected locally without contacting ACA',async()=>{
   const h=harness();
