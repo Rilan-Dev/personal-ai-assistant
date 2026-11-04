@@ -65,42 +65,13 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: |
-            set -e
-            cd apps/mobile/android
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
-            # Verify the compiled mobile UI can launch on the same emulator.
-            # All state is synthetic on this temporary GitHub runner.
-            adb shell am force-stop dev.rilandev.personalaiassistant || true
-            adb shell pm clear dev.rilandev.personalaiassistant || true
-            adb logcat -c || true
-            adb shell am start -W -n dev.rilandev.personalaiassistant/.MainActivity
-            sleep 6
-            if ! adb shell pidof dev.rilandev.personalaiassistant >/dev/null; then
-              echo "::error::Nexa Android process exited after launch; dumping synthetic emulator crash log."
-              adb logcat -d -s AndroidRuntime:E | tail -n 90
-              exit 1
-            fi
-            adb shell uiautomator dump /sdcard/nexa-startup-ui.xml || true
-            adb pull /sdcard/nexa-startup-ui.xml ./nexa-startup-ui.xml || true
-            adb shell screencap -p /sdcard/nexa-startup-ui.png || true
-            adb pull /sdcard/nexa-startup-ui.png ./nexa-startup-ui.png || true
-            python3 - <<'PY'
-            from pathlib import Path
-            from xml.etree import ElementTree as ET
-            p=Path("nexa-startup-ui.xml")
-            if p.exists():
-                root=ET.fromstring(p.read_bytes())
-                print("EMULATOR_STARTUP_UI_LABELS:", [
-                    n.attrib.get("text") or n.attrib.get("content-desc")
-                    for n in root.iter("node")
-                    if n.attrib.get("text") or n.attrib.get("content-desc")
-                ][:30])
-            PY
+          # The emulator runner executes each line separately. Use ONE shell
+          # command so the Gradle directory and QA state remain consistent.
+          script: bash scripts/acceptance/nexa-message-feature-qa.sh
       - name: Install Maestro CLI for user-visible messaging smoke test
         shell: bash
         run: curl -fsSL https://get.maestro.mobile.dev | bash
-      - name: Run Nexa message app chooser on Maestro Cloud
+      - name: Run Nexa message routing and generic input review on Maestro Cloud
         shell: bash
         env:
           MAESTRO_CLOUD_API_KEY: ${{ secrets.MAESTRO_CLOUD_API_KEY }}
@@ -108,7 +79,12 @@ jobs:
           MAESTRO_CLI_NO_ANALYTICS: "true"
         run: |
           set -euo pipefail
-          test -s apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          # React Native debug APK requires Metro and is not self-contained.
+          # The feature script creates a bundled, disposable-key-signed APK.
+          test -s apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p "$RUNNER_TEMP/nexa-input-qa-flows"
+          cp .maestro/experimental/12-message-app-chooser.yaml "$RUNNER_TEMP/nexa-input-qa-flows/"
+          cp .maestro/experimental/13-reviewed-generic-text-field.yaml "$RUNNER_TEMP/nexa-input-qa-flows/"
           MAESTRO_CLOUD_API_KEY="$(printf '%s' "$MAESTRO_CLOUD_API_KEY" | tr -d '\r\n')"
           if [[ -z "$MAESTRO_CLOUD_API_KEY" || "$MAESTRO_CLOUD_API_KEY" == *[[:space:]]* ]]; then
             echo "::error::Maestro API key is not configured safely."
@@ -119,14 +95,14 @@ jobs:
             --project-id proj_01m6fyb4qre3kvtx4jft00gvnh \
             --device-os android-33 --device-model pixel_6 \
             --name "Nexa messaging chooser ${{ github.run_id }} $(git rev-parse --short HEAD)" \
-            --app-file apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            --app-file apps/mobile/android/app/build/outputs/apk/release/app-release.apk \
             --format HTML-DETAILED \
             --output "$RUNNER_TEMP/nexa-message-maestro.html" \
-            --flows .maestro/experimental/12-message-app-chooser.yaml \
+            --flows "$RUNNER_TEMP/nexa-input-qa-flows" \
             2>&1 | tee "$RUNNER_TEMP/nexa-message-maestro-cli.log"
-      - name: Gate on individually passed message chooser flow
+      - name: Gate on both individually passed message and input review flows
         if: always()
-        run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-message-maestro-cli.log" 1
+        run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-message-maestro-cli.log" 2
       - name: Retain real UI validation evidence
         if: always()
         uses: actions/upload-artifact@v4
