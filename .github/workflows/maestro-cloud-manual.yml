@@ -209,18 +209,20 @@ jobs:
             --app-file "$NEXA_RELEASE_APK" \
             --format HTML-DETAILED \
             --output "$RUNNER_TEMP/nexa-maestro-detailed.html" \
-            --flows "$target"
+            --flows "$target" 2>&1 | tee "$RUNNER_TEMP/nexa-maestro-cli.log"
       - name: Validate every recorded Maestro flow independently
         if: always()
         shell: bash
         env:
           EXPECTED_FLOWS: ${{ (github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run all android-33') && '11' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') && '11' || '1' }}
-        run: node .maestro/validate-report.mjs "$RUNNER_TEMP/nexa-maestro-detailed.html" "$EXPECTED_FLOWS"
+        run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-maestro-cli.log" "$EXPECTED_FLOWS"
       - name: Retain detailed Maestro results and failed step evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nexa-maestro-detail-${{ github.run_id }}
-          path: ${{ runner.temp }}/nexa-maestro-detailed.html
+          path: |
+            ${{ runner.temp }}/nexa-maestro-detailed.html
+            ${{ runner.temp }}/nexa-maestro-cli.log
           if-no-files-found: ignore
           retention-days: 7
