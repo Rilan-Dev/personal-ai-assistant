@@ -30,9 +30,12 @@ test('Sarvam can propose bounded native tools but never grants execution itself'
 test('voice tasks are persisted encrypted before dispatch and each verified step',()=>{
   const db=read('NexaConversationDb.kt');
   const task=read('NexaVoiceTaskPlan.kt');
-  assert.match(db,/"custom\.db", null, 2/);
+  assert.match(db,/databaseName: String = "custom\.db"/);
+  assert.match(db,/context\.applicationContext, databaseName, null, 3/);
   assert.match(db,/voice_task_checkpoints/);
-  assert.match(db,/if \(oldVersion == 1 && newVersion >= 2\)/);
+  assert.match(db,/if \(oldVersion <= 1\) createTaskTables\(db\)/);
+  assert.match(db,/if \(oldVersion <= 2\) createUiActionClaimTable\(db\)/);
+  assert.match(db,/agent_action_claims/);
   assert.match(db,/fun saveTask/);
   assert.match(db,/encrypt\(payload\.toString\(\)\)/);
   assert.match(db,/fun taskHistory/);
