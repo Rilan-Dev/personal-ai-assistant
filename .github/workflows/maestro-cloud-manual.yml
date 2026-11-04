@@ -141,6 +141,8 @@ jobs:
       - name: Install Maestro CLI
         shell: bash
         run: curl -fsSL https://get.maestro.mobile.dev | bash
+      - name: Check strict Maestro result classifier
+        run: node --test .maestro/validate-report.test.mjs
       - name: Run selected Nexa UI acceptance flow in Maestro Cloud
         shell: bash
         env:
@@ -183,6 +185,12 @@ jobs:
             --format HTML-DETAILED \
             --output "$RUNNER_TEMP/nexa-maestro-detailed.html" \
             --flows "$target"
+      - name: Validate every recorded Maestro flow independently
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_FLOWS: ${{ (github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run all android-33') && '11' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') && '11' || '1' }}
+        run: node .maestro/validate-report.mjs "$RUNNER_TEMP/nexa-maestro-detailed.html" "$EXPECTED_FLOWS"
       - name: Retain detailed Maestro results and failed step evidence
         if: always()
         uses: actions/upload-artifact@v4
