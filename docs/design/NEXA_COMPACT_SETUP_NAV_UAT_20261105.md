@@ -80,3 +80,14 @@ full-UI screenshots. Do not confuse an APK success with screen acceptance.
   action-review controls, Reduce Motion, and actual mic Stop state on
   Android OEM builds. A synthetic emulator grant is not a substitute
   for the owner's real Android permission selection.
+
+## Signed-emulator capture gate incident
+
+Release run 41923156005 stopped before Gradle native compilation with
+`/usr/bin/sh: ./gradlew: not found`. GitHub emulator-runner executed each
+multiline action command as a separate shell; a prior `cd` was not retained.
+This is a **CI invocation failure**, not an app pass or fail. The follow-up
+workflow sends a single folded `bash -lc` command, preserving the repository
+working directory across native tests, signed APK bundle and exact-APK capture.
+The YAML parser confirms it resolves to exactly one shell command. Visual and
+physical-device acceptance remain unverified until a fresh successful run.

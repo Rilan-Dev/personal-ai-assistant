@@ -82,16 +82,16 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: |
-            set -euo pipefail
-            cd apps/mobile/android
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
-            # A debug APK needs Metro and is not reliable visual evidence.
-            # Build the same signed, bundled release artifact that will be
-            # uploaded below, using the pinned version, SHA and signer.
-            ./gradlew :app:assembleRelease --no-daemon --stacktrace
-            cd ../../..
-            bash scripts/ci/capture-nexa-ui.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          # Keep ONE bash process: the emulator runner executes separate
+          # script lines in fresh /bin/sh processes, losing the prior cd.
+          # Never capture a Metro-dependent debug APK as release UI proof.
+          script: >-
+            bash -lc 'set -euo pipefail;
+            cd apps/mobile/android;
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace;
+            ./gradlew :app:assembleRelease --no-daemon --stacktrace;
+            cd ../../..;
+            bash scripts/ci/capture-nexa-ui.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk'
       - name: Upload Android emulator screen evidence
         if: always()
         uses: actions/upload-artifact@v4

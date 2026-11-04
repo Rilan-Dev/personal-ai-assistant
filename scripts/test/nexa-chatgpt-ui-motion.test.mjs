@@ -48,6 +48,11 @@ test('release CI takes real screenshots through three tabs and contextual settin
   assert.match(capture, /sha256sum "\$release_apk"/);
   assert.match(workflow, /Pin release version and source for emulator and distributable APK/);
   assert.match(workflow, /:app:assembleRelease --no-daemon --stacktrace/);
+  // This workflow previously failed because each script line had its own cwd.
+  // A folded one-line bash command keeps Gradle and screencap in one shell.
+  assert.match(workflow, /script: >-\s+bash -lc 'set -euo pipefail;/);
+  assert.match(workflow, /cd apps\/mobile\/android;/);
+
   assert.match(capture, /adb exec-out screencap -p/);
   assert.match(capture, /adb shell uiautomator dump/);
   assert.match(capture, /for item in chat voice tools/);
