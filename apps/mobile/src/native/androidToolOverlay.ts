@@ -11,6 +11,7 @@ type OverlayNative = {
   consumePendingTab(): Promise<string>;
   consumePendingVoiceDraft(): Promise<ReviewedVoiceDraft | null>;
   consumePendingMessageRequest(): Promise<unknown>;
+  consumePendingTextEntry(): Promise<unknown>;
 };
 function bridge(): OverlayNative {
   const value = NativeModules.PAANexaToolOverlay;
@@ -28,6 +29,22 @@ export const showToolOverlay = () => bridge().show();
 export const hideToolOverlay = () => bridge().hide();
 export const consumeToolOverlayNavigation = (): Promise<string> =>
   bridge().consumePendingTab();
+
+/** A spoken type request only opens a review UI, not another application's keyboard. */
+export async function consumeSpokenTextEntry(): Promise<{targetLabel:string,exactText:string,reviewOnly:true}|null> {
+  const api=bridge();
+  if(typeof api.consumePendingTextEntry!=='function')
+    throw Error('Updated Android voice text input handoff required');
+  const raw=await api.consumePendingTextEntry();
+  if(raw===null)return null;
+  if(!raw||typeof raw!=='object')throw Error('Invalid Android spoken text-entry request');
+  const data=raw as Record<string,unknown>;
+  if(data.reviewOnly!==true ||
+    typeof data.targetLabel!=='string'||data.targetLabel.length>60 ||
+    typeof data.exactText!=='string'||data.exactText.length>500||
+    !data.exactText.trim()) throw Error('Invalid text-entry request');
+  return {targetLabel:data.targetLabel,exactText:data.exactText,reviewOnly:true};
+}
 
 /** Single-use spoken request. A voice transcript grants no app or recipient authority. */
 export async function consumeSpokenMessageRequest():Promise<MessageRequest|null> {
