@@ -270,7 +270,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                             if(requiredPolicyVersion==null)
                                 "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed'"
                             else
-                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=?"
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=? AND origin='chat'"
                         ).use { statement ->
                             statement.bindLong(1,now)
                             statement.bindString(2,taskId)
@@ -506,7 +506,13 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             return
         }
         try {
-            promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId,"owner-review-v1"))
+            // Read-only migration compatibility for previously saved preview
+            // requests. Both allowed policies must be owner-created chat notes.
+            val cancelled=NexaConversationDb.cancelProposedAgentTask(
+                reactContext,taskId,"owner-review-v1") ||
+                NexaConversationDb.cancelProposedAgentTask(
+                    reactContext,taskId,"owner-preview-v1")
+            promise.resolve(cancelled)
         }catch (_:Exception) {
             promise.reject("TASK_CANCEL","Cannot persist proposal cancellation")
         }
