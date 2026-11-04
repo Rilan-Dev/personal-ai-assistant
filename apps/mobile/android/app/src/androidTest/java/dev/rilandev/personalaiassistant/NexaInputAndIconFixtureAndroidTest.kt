@@ -42,7 +42,7 @@ class NexaInputAndIconFixtureAndroidTest {
             node.viewIdResourceName.orEmpty())
         return NexaTextInputPolicy.matches(label,hints,
             node.isEditable,node.isPassword,node.isVisibleToUser,node.isEnabled,
-            node.text.isNullOrEmpty(),
+            NexaEditableNode.isEmpty(node),
             node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT})
     }
     @Test fun identifiesOneRealInputAndFillsHarmlessTextWithoutSending() {
