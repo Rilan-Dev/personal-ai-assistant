@@ -171,6 +171,41 @@ class NexaConversationDbAndroidTest {
         }
     }
 
+    @Test fun v3ProposedTaskIsEncryptedAndNeverExecutable() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val task="task-"+UUID.randomUUID().toString()
+        val session="chat-"+UUID.randomUUID().toString()
+        val secretGoal="private task goal "+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,task,session,"chat","policy-v1",secretGoal))
+        assertFalse("Task ID reuse must not overwrite a proposal",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","policy-v1","another goal"))
+        assertFalse(NexaConversationDb.saveProposedAgentTask(
+            ctx,"bad",session,"chat","policy-v1",secretGoal))
+        assertFalse(NexaConversationDb.saveProposedAgentTask(
+            ctx,"task-"+UUID.randomUUID(),session,"provider","policy-v1",secretGoal))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT status,goal_cipher,plan_revision FROM agent_tasks WHERE task_id=?",
+                arrayOf(task)).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("proposed",c.getString(0))
+                val encrypted=c.getBlob(1)
+                assertFalse("No plaintext persisted",
+                    encrypted.contentEquals(secretGoal.toByteArray(Charsets.UTF_8)))
+                assertFalse(String(encrypted,Charsets.ISO_8859_1).contains(secretGoal))
+                assertEquals(1,c.getInt(2))
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",arrayOf(task)).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Proposal must not self-schedule execution",0,c.getInt(0))
+            }
+        } finally {helper.close()}
+    }
+
     @Test fun rejectsUnknownChannelsAndInvalidRoles() {
         val context=ApplicationProvider.getApplicationContext<Context>()
         val session="android-reject-"+UUID.randomUUID()
