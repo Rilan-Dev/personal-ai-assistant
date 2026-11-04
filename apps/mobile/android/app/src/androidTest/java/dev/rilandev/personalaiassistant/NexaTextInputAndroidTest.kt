@@ -61,6 +61,7 @@ class NexaTextInputAndroidTest {
             assertTrue(NexaTextInputActions.confirm(fake).contains("No pending"))
             assertTrue(NexaTextInputState.stage("Search","hello"))
             assertTrue(NexaTextInputActions.prepare(fake).contains("Screen Assist"))
+            assertTrue(NexaTextInputActions.inspectVisibleFields(fake).contains("Screen Assist"))
             assertFalse(NexaTextInputActions.ready())
         }finally{
             NexaTextInputActions.cancel()
