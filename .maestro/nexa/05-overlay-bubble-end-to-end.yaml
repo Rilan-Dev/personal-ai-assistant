@@ -10,6 +10,7 @@ tags:
     permissions:
       all: deny
 - assertVisible: "Make your assistant yours."
+- tapOn: "Show optional permissions and features"
 - scrollUntilVisible:
     element: "Floating quick tools"
     direction: DOWN

@@ -43,14 +43,16 @@ test('Android bubble animates only presentation and respects system disabled ani
   assert.match(overlay, /Settings\.canDrawOverlays/);
 });
 
-test('release CI takes actual on-device screenshots of five tabs without granting permissions', () => {
+test('release CI takes real screenshots through three tabs and contextual settings without granting permissions', () => {
   assert.match(capture, /adb install "\$release_apk"/);
   assert.match(capture, /sha256sum "\$release_apk"/);
   assert.match(workflow, /Pin release version and source for emulator and distributable APK/);
   assert.match(workflow, /:app:assembleRelease --no-daemon --stacktrace/);
   assert.match(capture, /adb exec-out screencap -p/);
   assert.match(capture, /adb shell uiautomator dump/);
-  assert.match(capture, /for item in chat voice tools setup settings/);
+  assert.match(capture, /for item in chat voice tools/);
+  assert.match(capture, /tap_accessible "Open settings"/);
+  assert.match(capture, /tap_accessible "Open permission setup"/);
   assert.match(capture, /adb shell pm clear/);
   assert.doesNotMatch(capture, /pm grant|appops set|input keyevent 223|MEDIA_PROJECTION/);
   assert.match(workflow, /bash scripts\/ci\/capture-nexa-ui\.sh/);

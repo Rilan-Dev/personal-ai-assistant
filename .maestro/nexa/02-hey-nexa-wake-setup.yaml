@@ -12,6 +12,12 @@ tags:
 - assertVisible: "Make your assistant yours."
 - scrollUntilVisible:
     element:
+      text: "Voice and wake activation advanced settings"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Voice and wake activation advanced settings"
+- scrollUntilVisible:
+    element:
       text: "Nexa activation.*"
     direction: DOWN
     timeout: 25000

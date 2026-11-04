@@ -29,5 +29,6 @@ tags:
 - assertVisible:
     text: ".*No live model selected.*"
 - takeScreenshot: nexa-voice-unconfigured
-- tapOn: "Setup"
+- tapOn: "Open settings"
+- tapOn: "Open permission setup"
 - assertVisible: "Make your assistant yours."
