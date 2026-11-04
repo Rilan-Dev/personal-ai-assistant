@@ -24,8 +24,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /** Private device-local custom.db with Android Keystore-encrypted transcript bodies. */
-internal class NexaConversationDb(context: Context) : SQLiteOpenHelper(
-    context.applicationContext, "custom.db", null, 3
+internal class NexaConversationDb(context: Context, databaseName: String = "custom.db") : SQLiteOpenHelper(
+    context.applicationContext, databaseName, null, 3
 ) {
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""CREATE TABLE conversation_entries (
