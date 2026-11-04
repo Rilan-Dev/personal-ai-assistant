@@ -9,6 +9,22 @@ import org.junit.runner.RunWith
 /** Safe, synthetic Accessibility callbacks. No third-party app is read or touched. */
 @RunWith(AndroidJUnit4::class)
 class NexaScreenAssistEventSafetyAndroidTest {
+    @Test fun detachedServiceCannotCrashOverlayScrollOrLeaveAnApprovalPending() {
+        val service = ScreenAssistService()
+        val initialConnection = ScreenAssistState.connected
+        try {
+            ScreenAssistState.connected = true
+            val response = NexaScreenScroll.prepare(service, "down")
+            org.junit.Assert.assertTrue(response.isNotBlank())
+            org.junit.Assert.assertFalse(NexaScreenScroll.isPending())
+            org.junit.Assert.assertTrue(NexaScreenScroll.confirm(service)
+                .contains("expired", ignoreCase = true))
+        } finally {
+            NexaScreenScroll.cancel()
+            ScreenAssistState.connected = initialConnection
+        }
+    }
+
     @Test fun detachedServiceIgnoresWindowChangesWithoutTerminatingTheProcess() {
         val service = ScreenAssistService()
         val initialConnection = ScreenAssistState.connected
