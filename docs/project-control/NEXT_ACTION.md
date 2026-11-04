@@ -1,3 +1,13 @@
+
+## 2026-11-05 — Next release gate: unified Nexa task lifecycle
+
+Completed source foundation: bounded non-executable DSH task plan contract, additive encrypted custom.db v3, permanent UI-action claim digests, owner-controlled proposed/cancelled event lifecycle, and one local task review screen in Tools. Manual review history and cancellation are restricted to chat-origin owner policy records.
+
+Still open: current-commit Android native test and signed APK; Maestro save/cancel/relaunch and messaging review flows on matching signed APK; single Kotlin-native task coordinator and step mandates; Chat/Voice/overlay ingress to that coordinator; real authorized provider E2E; physical Infinix Android Accessibility, wake, microphone and process-death validation; signing upgrade, rollback, Play policy and security-advisory closure. Keep execution features disabled and no automatic Send. Do not promote main or treat an earlier green CI run as current native acceptance.
+
+Detailed evidence: docs/qa/NEXA_DSH_OWNER_TASK_REVIEW_ACCEPTANCE_20261105.md.
+
+---
 # Current priority — DSH-inspired Nexa implementation
 
 **5 November 2026.** Source inventory and gates: docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md
