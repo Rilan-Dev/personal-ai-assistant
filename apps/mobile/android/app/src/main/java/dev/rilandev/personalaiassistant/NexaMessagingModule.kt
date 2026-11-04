@@ -41,7 +41,8 @@ internal object NexaMessageChannels {
     fun installedPackage(context: Context, id: String): String? =
         installed(context).firstOrNull { it.first == id }?.third
 
-    fun permitsManualComposer(id: String): Boolean = id == "imo" || id == "botim"
+    fun permitsManualComposer(id: String): Boolean =
+        id == "imo" || id == "botim" || id == "whatsapp-business"
 }
 
 /** Ephemeral and single-use; message body never enters SharedPreferences. */
@@ -143,7 +144,8 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
     }
 
     /**
-     * IMO/BOTIM have no verified contact deep links. Open only the selected
+     * IMO/BOTIM/WhatsApp Business have no trusted recipient deep-link guarantee.
+     * Open only the selected
      * installed app, then require the owner to navigate to the right chat,
      * inspect its title and confirm exact text insertion in the overlay.
      */
@@ -161,7 +163,7 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
         val pkg=if(NexaMessageChannels.permitsManualComposer(appId))
             NexaMessageChannels.installedPackage(context,appId) else null
         if(pkg==null || !NexaMessageDraftState.stage(appId,pkg,recipient,message)) {
-            p.reject("INVALID_APP_OR_MESSAGE","Choose an installed IMO/BOTIM and review a valid message")
+            p.reject("INVALID_APP_OR_MESSAGE","Choose an installed messaging app and review a valid message")
             return
         }
         val launch=context.packageManager.getLaunchIntentForPackage(pkg)
