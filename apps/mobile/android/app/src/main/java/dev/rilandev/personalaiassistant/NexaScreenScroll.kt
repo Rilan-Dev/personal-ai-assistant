@@ -29,16 +29,24 @@ internal object NexaScreenScroll {
 
     private fun safeRoot(service: ScreenAssistService): AccessibilityNodeInfo? {
         if (!ScreenAssistState.connected) return null
-        val guard=service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        if (guard?.isKeyguardLocked==true) return null
-        val root=service.externalWindowRoot() ?: return null
-        val pkg=root.packageName?.toString().orEmpty()
-        if (pkg.isBlank() || pkg==service.packageName || pkg=="com.android.systemui" ||
-            pkg=="android" || pkg.startsWith("com.google.android.inputmethod")) {
-            root.recycle()
-            return null
-        }
-        return root
+        // OEM Accessibility getters can throw after the service disconnects.
+        // An overlay tap must not terminate Nexa's main process.
+        return try {
+            val guard=service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            if (guard?.isKeyguardLocked==true) return null
+            val root=service.externalWindowRoot() ?: return null
+            try {
+                val pkg=root.packageName?.toString().orEmpty()
+                if (pkg.isBlank() || pkg==service.packageName || pkg=="com.android.systemui" ||
+                    pkg=="android" || pkg.startsWith("com.google.android.inputmethod")) {
+                    try { root.recycle() } catch (_: Exception) {}
+                    null
+                } else root
+            } catch (_: Exception) {
+                try { root.recycle() } catch (_: Exception) {}
+                null
+            }
+        } catch (_: Exception) { null }
     }
     fun prepare(service: ScreenAssistService, direction: String): String {
         cancel()
@@ -89,7 +97,10 @@ internal object NexaScreenScroll {
                 SystemClock.elapsedRealtime()+10_000L)
             synchronized(lock){ pending=tgt }
             return "Confirm scroll ${direction} in ${tgt.pkg} within 10 seconds."
-        } finally {root.recycle()}
+        } catch (_: Exception) {
+            cancel()
+            return "Screen changed during scroll inspection. No action requested."
+        } finally { try { root.recycle() } catch (_: Exception) {} }
     }
 
     fun isPending(): Boolean = synchronized(lock) {
@@ -157,6 +168,6 @@ internal object NexaScreenScroll {
                 "Android refused the scroll. No automatic retry."
             }
         }catch(_:Exception){NexaUiActionVerifier.cancel(approved.token);return "Scroll outcome uncertain; no automatic retry."}
-        finally{root.recycle()}
+        finally{try{root.recycle()}catch(_:Exception){}}
     }
 }
