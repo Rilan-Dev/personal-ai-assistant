@@ -1946,38 +1946,9 @@ export default function App() {
       {tab === 'tools' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
-        <View style={styles.sectionCard}>
-          <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
-          <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
-          <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
-            onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
-            <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
-              <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
-            <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
-          </Pressable>
-          {engine.live&&nativeFlashlightAvailable()&&<>
-            <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('hardware.flashlight')}}
-              onPress={()=>toggle('hardware.flashlight')} style={styles.settingRow}>
-              <View style={styles.settingText}><Text style={styles.settingTitle}>Flashlight</Text>
-                <Text style={styles.settingHelp}>Allow approved one-time on/off changes</Text></View>
-              <View style={[styles.toggleTrack,capabilities.includes('hardware.flashlight')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('hardware.flashlight')&&styles.toggleThumbOn]}/></View>
-            </Pressable>
-            <Pressable accessibilityRole="button" disabled={running||flashBusy} onPress={grantFlashlightAccess} style={styles.outlineAction}>
-              <Text style={styles.outlineActionText}>{flashBusy?'Checking…':'Grant Android flashlight permission'}</Text>
-            </Pressable>
-            {flashNotice!==''&&<Text style={styles.feedback}>{flashNotice}</Text>}
-          </>}
-          {!engine.live&&<Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('messaging.compose')}}
-            onPress={()=>toggle('messaging.compose')} style={styles.settingRow}>
-            <View style={styles.settingText}><Text style={styles.settingTitle}>Simulated message draft</Text></View>
-            <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
-          </Pressable>}
-        </View>
-        <View style={styles.sectionCard}>
-          <View style={styles.cardHeadingRow}>
-            <Text style={styles.cardHeading}>Private, one-time observations</Text>
-            <Text style={styles.sectionTag}>On demand</Text>
-          </View>
+        {(textEntryRequest || messageRequest) && <View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Active task review</Text>
+          <Text style={styles.settingHelp}>The request is kept local. Choose an app or an input field here before completing a device action.</Text>
           {textEntryRequest&&<View style={styles.actionCard}>
             <Text style={styles.actionTitle}>Review text entry into another app</Text>
             <Text style={styles.cardText}>Target input: {textEntryRequest.targetLabel}</Text>
@@ -2040,6 +2011,39 @@ export default function App() {
               <Text style={styles.textActionText}>Discard message review — do not send</Text>
             </Pressable>
           </View>}
+        </View>}
+        <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
+          <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
+            onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
+            <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
+              <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
+            <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
+          </Pressable>
+          {engine.live&&nativeFlashlightAvailable()&&<>
+            <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('hardware.flashlight')}}
+              onPress={()=>toggle('hardware.flashlight')} style={styles.settingRow}>
+              <View style={styles.settingText}><Text style={styles.settingTitle}>Flashlight</Text>
+                <Text style={styles.settingHelp}>Allow approved one-time on/off changes</Text></View>
+              <View style={[styles.toggleTrack,capabilities.includes('hardware.flashlight')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('hardware.flashlight')&&styles.toggleThumbOn]}/></View>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={running||flashBusy} onPress={grantFlashlightAccess} style={styles.outlineAction}>
+              <Text style={styles.outlineActionText}>{flashBusy?'Checking…':'Grant Android flashlight permission'}</Text>
+            </Pressable>
+            {flashNotice!==''&&<Text style={styles.feedback}>{flashNotice}</Text>}
+          </>}
+          {!engine.live&&<Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('messaging.compose')}}
+            onPress={()=>toggle('messaging.compose')} style={styles.settingRow}>
+            <View style={styles.settingText}><Text style={styles.settingTitle}>Simulated message draft</Text></View>
+            <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
+          </Pressable>}
+        </View>
+        <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardHeading}>Private, one-time observations</Text>
+            <Text style={styles.sectionTag}>On demand</Text>
+          </View>
           <Text style={styles.cardText}>Choose one contact using Android's contact picker without reading your address book, or obtain one approximate location after Android permission. The result stays in memory for up to 60 seconds. It is not sent to AI unless you review and send it yourself.</Text>
           {engine.live&&ownerPrivacyAvailable()&&<>
             <View style={styles.buttonRow}>
