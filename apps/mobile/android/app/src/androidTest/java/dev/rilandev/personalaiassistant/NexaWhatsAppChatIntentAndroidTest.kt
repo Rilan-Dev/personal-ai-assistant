@@ -33,6 +33,10 @@ class NexaWhatsAppChatIntentAndroidTest {
     @Test fun observedEmojiAndASROneCharacterErrorCanBeGroundedSafely() {
         assertEquals(100,NexaWhatsAppChatMatch.evidence(
             "Nova Forever","Nova Forever 🖤"))
+        assertEquals("Exact short aliases can be selected only when unique",100,
+            NexaWhatsAppChatMatch.evidence("Mom","Mom"))
+        assertEquals("Short aliases never receive fuzzy permission",0,
+            NexaWhatsAppChatMatch.evidence("Mom","Mum"))
         assertEquals(85,NexaWhatsAppChatMatch.evidence(
             "Nva Forever","Nova Forever 🖤"))
         assertEquals(0,NexaWhatsAppChatMatch.evidence(
