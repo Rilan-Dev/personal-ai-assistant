@@ -20,7 +20,7 @@ import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/nati
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
-  consumeSpokenMessageRequest} from './src/native/androidToolOverlay';
+  consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -567,6 +567,13 @@ export default function App() {
     let mounted=true;
     const consume=async()=>{
       try {
+        const spokenText=await consumeSpokenTextEntry();
+        if(spokenText && mounted){
+          setTextEntryRequest(spokenText);
+          setTextEntryNotice('Spoken text-entry request is ready for review. Select the intended application and approve one safe input box. Nothing has been typed or submitted.');
+          setTab('tools');
+          return;
+        }
         const spoken=await consumeSpokenMessageRequest();
         if (spoken && mounted) {
           // A spoken user command enters the same explicit channel chooser
