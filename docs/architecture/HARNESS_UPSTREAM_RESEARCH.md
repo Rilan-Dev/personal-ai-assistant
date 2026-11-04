@@ -175,3 +175,13 @@ not receive Android app or private-device tool capabilities.
 - Sarvam realtime remains the owner-selected managed voice turn loop. Nexa listens for user-role transcripts and can **independently propose** a limited app-open action via `NexaVoiceIntentGate` and show Android approval. Bot transcripts, multi-action speech, unknown tools and unsupported phone actions never execute. This is a client-side guarded transcript sidecar, not a complete managed Sarvam model function-tool integration; Sarvam cannot be told the native result without a separately configured, authenticated agent API-tool/webhook bridge.
 - Sarvam official documentation (reviewed November 2026): https://docs.sarvam.ai/voice-agents/build/concepts/harness and https://docs.sarvam.ai/voice-agents/build/tools/https-tool. Native mobile actions cannot be made directly from server-to-server Sarvam webhooks without an authenticated per-device command channel and owner-controlled approval.
 - No new dependency or new cloud-held private device authorization introduced. The Android listener stores no transcripts, limits repeated requests and actions per session, requires an actual user approval tap to launch an app, and reports Intent dispatch as a request, not verified foreground navigation.
+
+
+## 2026-11-05 — DSH Superagent task-admission baseline (source only)
+- Inspected DeepSeek DSH prototype 8c32a9dc5d72c033816c6a8110b37f40cf94fba4: src/core/model.ts, tickets.ts, ports.ts, engine.ts, src/app/store.ts, effects.ts, outbox.ts, src/policy.ts. MIT licensed; no source copied.
+- Inspected LangGraph.js a1d182f065d5cc8802ef6d5c2edd8ef55a9922b5 libs/checkpoint/src/base.ts; existing maintained LangGraph planning dependency remains authoritative on the server.
+- Inspected Deep Agents JS 1b56802c3b6608d139f045ecf1486d53881b42b1 libs/deepagents/src/permissions/enforce.ts. Unmatched filesystem rule returns allow; NEVER import it as Android authorization.
+- The existing Chat AgentHarness and Kotlin RealtimeVoiceService both own different task/approval paths. The first adaptation adds only a non-executable versioned task-plan binder to packages/agent-contracts/src/task-plan.ts. Android native execution still owns policy/approval.
+- Default disabled: NEXA_TASK_V2_ENABLED=false. Models cannot inject approval/risk/evidence or an unrelated owner request. High-risk tools are denied and medium risk needs separate opt-in.
+- Full inventory, policy sources and proposed encrypted v3 migration: docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md.
+- Do NOT copy DSH Node workers into Hermes, introduce generic shell/MCP control, or layer another live autonomous loop.
