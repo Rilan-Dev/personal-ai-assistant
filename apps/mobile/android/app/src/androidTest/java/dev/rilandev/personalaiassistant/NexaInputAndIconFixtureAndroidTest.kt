@@ -25,17 +25,9 @@ class NexaInputAndIconFixtureAndroidTest {
         }
         return result
     }
-    private fun foregroundRoot(): AccessibilityNodeInfo {
-        val instrument=InstrumentationRegistry.getInstrumentation()
-        for(attempt in 0..14) {
-            instrument.waitForIdleSync()
-            val root=instrument.uiAutomation.rootInActiveWindow
-            if(root!=null &&
-                root.packageName?.toString()=="dev.rilandev.personalaiassistant") return root
-            SystemClock.sleep(180L)
-        }
-        throw AssertionError("Synthetic Android test window was not accessible")
-    }
+    private fun foregroundRoot(): AccessibilityNodeInfo =
+        NexaQaAccessibilityRoot.ownWindow()
+
     private fun safeEditable(node:AccessibilityNodeInfo,label:String):Boolean {
         val hints=listOf(node.hintText?.toString().orEmpty(),
             node.contentDescription?.toString().orEmpty(),
