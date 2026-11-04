@@ -17,9 +17,12 @@ Do **not** commit real chat labels, contacts, phone numbers, personal transcript
 
 ## Verification gates
 
-- Source and TypeScript checks on feature branch: `npm ci`, `npm test` (378/378), `npm run typecheck` passed at SHA `abe241f`.
+- Feature branch source and TypeScript checks: `npm ci`, `npm test` (378/378), `npm run typecheck` passed.
+- Clean integration with latest Development at SHA `9f4f731`: 380/380 source tests and TypeScript checks passed; exact merge Git tree was verified SHA-for-SHA through GitHub before updating the feature branch.
 - New API35 synthetic instrumentation: task grammar, one-letter matching, dangerous/ambiguous name exclusion, actual accessible chat-list rows, duplicate labels, header/composer proof, no Send, and privacy-safe Sarvam error classification. Only nonexported debug-only synthetic screens and invented aliases are used.
 - Manual owner-triggered GitHub Actions: https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41930376493 (result pending until verified).
+- Synthetic chat fixture now actually taps a unique chat row, verifies a new conversation header and a single empty composer, inserts the benign test text using Android `ACTION_SET_TEXT`, and asserts the Send button was never clicked. This tests Android Accessibility mechanics, **not** a real WhatsApp account.
+- Owner-triggered API readiness now probes the actual Sarvam live tool declarations using an additional synthetic, non-microphone chat request, which the prior tool-free preflight did not validate. A real credential-backed provider response remains unverified.
 - **Not established by source/emulator tests:** real phone's current APK version, physical Android Accessibility grant, actual WhatsApp contact/chat DOM on the owner's device, live Sarvam-key-backed conversation API response, real message entry in WhatsApp/IMO/BOTIM, or end-to-end approved delivery. Those still require separate authorized phone acceptance before production release.
 
 ## Security boundaries
