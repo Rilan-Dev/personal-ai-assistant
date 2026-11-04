@@ -29,7 +29,7 @@ import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
 import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
-import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, parseAcaMailSummaryIntent } from './src/native/acaEmail';
+import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, authorizedAcaSelection, AcaRequestError, parseAcaMailSummaryIntent } from './src/native/acaEmail';
 import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
@@ -397,6 +397,7 @@ export default function App() {
   // Separate ACA business connection; this never changes the device planner,
   // selected model provider, native tools, approvals or live voice transport.
   const [acaSession,setAcaSession]=useState<AcaSession|null>(null);
+  const [acaVerified,setAcaVerified]=useState(false);
   const [acaOrganizations,setAcaOrganizations]=useState<AcaOrganization[]>([]);
   const [acaEmailInput,setAcaEmailInput]=useState('');
   const [acaPasswordInput,setAcaPasswordInput]=useState('');
@@ -407,9 +408,30 @@ export default function App() {
     let active=true;
     void loadAcaSession().then(async(session)=>{
       if(!active || !session)return;
+      // A stored token is not proof that membership/agent access is still valid.
       setAcaSession(session);
-      try { const targets=await acaTargets(session); if(active)setAcaOrganizations(targets); }
-      catch { if(active)setAcaNotice('ACA saved session cannot be verified. Reconnect if it expired.'); }
+      setAcaVerified(false);
+      try {
+        const targets=await acaTargets(session);
+        if(!active)return;
+        const staleTarget=Boolean(session.organizationId||session.agentId) &&
+          !authorizedAcaSelection(session,targets);
+        if(staleTarget){
+          const withoutTarget={...session,organizationId:'',agentId:''};
+          await storeAcaSession(withoutTarget);
+          if(!active)return;
+          setAcaSession(withoutTarget);
+          setAcaNotice('Your saved ACA organization or agent access changed. Select an authorized source again.');
+        }
+        setAcaOrganizations(targets);
+        setAcaVerified(true);
+      } catch {
+        if(active){
+          setAcaVerified(false);
+          setAcaOrganizations([]);
+          setAcaNotice('Saved ACA connection could not be verified. Disconnect or reconnect before reading mail.');
+        }
+      }
     }).catch(()=>{if(active)setAcaNotice('ACA secure storage is unavailable.');});
     return ()=>{active=false;};
   },[engine.live]);
@@ -428,17 +450,20 @@ export default function App() {
       if(selected!==provisional)await storeAcaSession(selected);
       setAcaOrganizations(organizations);
       setAcaSession(selected);
+      setAcaVerified(true);
       provisional=null; // Ownership transferred to the verified UI session.
       setAcaNotice(selectable.length
         ? 'Connected. Select an organization and agent below to enable read-only summaries.'
         : 'Connected, but no email-readable organization/agent is available for this user.');
     }catch(error){
+      setAcaVerified(false);
       if(provisional){
         // Never leave a seemingly disconnected but still usable device token
         // in the Android vault after target discovery/selection failed.
         try{await disconnectAca(provisional);}
         catch{
           setAcaSession(provisional);
+          setAcaVerified(false);
           setAcaNotice('ACA verification failed and secure cleanup could not finish. Tap Disconnect ACA before reconnecting.');
           return;
         }
@@ -448,7 +473,11 @@ export default function App() {
     finally {setAcaPasswordInput('');setAcaBusy(false);}
   };
   const selectAcaTarget=async(organizationId:string,agentId:string)=>{
-    if(!acaSession || acaBusy || running)return;
+    if(!acaSession || acaBusy || running || !acaVerified)return;
+    if(!authorizedAcaSelection({...acaSession,organizationId,agentId},acaOrganizations)){
+      setAcaNotice('This ACA organization or agent is no longer in your authorized choices.');
+      return;
+    }
     setAcaBusy(true);
     try {
       const next={...acaSession,organizationId,agentId};
@@ -460,7 +489,13 @@ export default function App() {
   const disconnectAcaAccount=async()=>{
     if(acaBusy || running)return;
     setAcaBusy(true);
-    try{await disconnectAca(acaSession);setAcaSession(null);setAcaOrganizations([]);setAcaEmailInput('');setAcaNotice('ACA disconnected on this device.');}
+    try{
+      const {serverRevoked}=await disconnectAca(acaSession);
+      setAcaSession(null);setAcaVerified(false);setAcaOrganizations([]);setAcaEmailInput('');
+      setAcaNotice(serverRevoked
+        ? 'ACA session revoked and removed from this device.'
+        : 'ACA was removed from this phone, but server revocation could not be verified. The old session may remain valid until expiry.');
+    }
     catch{setAcaNotice('Could not clear secure ACA account storage.');}
     finally{setAcaPasswordInput('');setAcaBusy(false);}
   };
@@ -1200,6 +1235,10 @@ export default function App() {
         append('assistant','Connect AI Comms Agent in Settings to read synchronized emails. Nexa has not accessed a mailbox.');
         return;
       }
+      if(!acaVerified || !authorizedAcaSelection(acaSession,acaOrganizations)){
+        append('assistant','Verify your ACA account and choose a currently authorized organization and agent in Settings before reading mail. No mailbox was accessed.');
+        return;
+      }
       const mailAbort=new AbortController();
       activeAbort.current=mailAbort;setRunning(true);
       try{
@@ -1207,7 +1246,14 @@ export default function App() {
         if(!mailAbort.signal.aborted)append('assistant',summary.report +
           (summary.hasMore ? '\\nThis is a partial result; refine your request in ACA for more details.' : ''));
       }catch(error){
-        if(!mailAbort.signal.aborted)append('assistant',error instanceof Error?error.message:'Email summary unavailable. No mail action was performed.');
+        if(!mailAbort.signal.aborted){
+          if(error instanceof AcaRequestError && [401,403,404].includes(error.httpStatus)){
+            setAcaVerified(false);
+            setAcaOrganizations([]);
+            setAcaNotice('ACA account or mobile access was revoked or disabled. Reconnect or disconnect before further mailbox reads.');
+          }
+          append('assistant',error instanceof Error?error.message:'Email summary unavailable. No mail action was performed.');
+        }
       }finally{setRunning(false);activeAbort.current=null;}
       return;
     }
@@ -2004,7 +2050,7 @@ export default function App() {
         {engine.live && <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
             <Text style={styles.cardHeading}>AI Comms Agent · Email</Text>
-            <Text style={[styles.sectionTag,acaSession&&styles.sectionTagActive]}>{acaSession?'Connected':'Not connected'}</Text>
+            <Text style={[styles.sectionTag,acaSession&&acaVerified&&styles.sectionTagActive]}>{!acaSession?'Not connected':acaVerified?'Connected':'Needs verification'}</Text>
           </View>
           <Text style={styles.cardText}>Use your existing ACA organization, permitted mailboxes and synchronized email summary engine. Device tools, WhatsApp handoff, AI provider and live voice remain unchanged. No auto-send.</Text>
           <Text style={styles.settingHelp}>{ACA_ORIGIN} · Read-only access · Android Keystore session</Text>
