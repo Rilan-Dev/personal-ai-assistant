@@ -416,19 +416,35 @@ export default function App() {
   const connectAcaAccount=async()=>{
     if(acaBusy || running || !acaVaultAvailable())return;
     setAcaBusy(true);setAcaNotice('');
+    let provisional:AcaSession|null=null;
     try {
-      const session=await connectAca(acaEmailInput,acaPasswordInput);
-      const organizations=await acaTargets(session);
-      setAcaOrganizations(organizations);
+      // A login alone does not establish a usable mailbox connection.
+      // Verify the current member/agent targets before showing Connected.
+      provisional=await connectAca(acaEmailInput,acaPasswordInput);
+      const organizations=await acaTargets(provisional);
       const selectable=organizations.flatMap(org=>org.agents.map(agent=>({org,agent})));
       const selected=selectable.length===1
-        ?{...session,organizationId:selectable[0]!.org.id,agentId:selectable[0]!.agent.id}:session;
-      if(selected!==session)await storeAcaSession(selected);
+        ?{...provisional,organizationId:selectable[0]!.org.id,agentId:selectable[0]!.agent.id}:provisional;
+      if(selected!==provisional)await storeAcaSession(selected);
+      setAcaOrganizations(organizations);
       setAcaSession(selected);
+      provisional=null; // Ownership transferred to the verified UI session.
       setAcaNotice(selectable.length
         ? 'Connected. Select an organization and agent below to enable read-only summaries.'
         : 'Connected, but no email-readable organization/agent is available for this user.');
-    }catch(error){setAcaNotice(error instanceof Error?error.message:'ACA connection failed.');}
+    }catch(error){
+      if(provisional){
+        // Never leave a seemingly disconnected but still usable device token
+        // in the Android vault after target discovery/selection failed.
+        try{await disconnectAca(provisional);}
+        catch{
+          setAcaSession(provisional);
+          setAcaNotice('ACA verification failed and secure cleanup could not finish. Tap Disconnect ACA before reconnecting.');
+          return;
+        }
+      }
+      setAcaNotice(error instanceof Error?error.message:'ACA connection failed.');
+    }
     finally {setAcaPasswordInput('');setAcaBusy(false);}
   };
   const selectAcaTarget=async(organizationId:string,agentId:string)=>{
