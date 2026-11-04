@@ -874,3 +874,12 @@
 - Added packages/agent-core/test/task-plan.test.mjs with 12 cases. Initial focused 12/12 and full 377/377 pass; Expo web export passed. TypeScript narrowing initially failed and was corrected in commit ce12c334629c628be7fbb07075016d4e860c48bf; repeat exact-commit check before claiming certification.
 - Pinned DSH MIT, LangGraph and Deep Agents source review, documented the existing duplicated task lifecycles, Android Play Accessibility constraints and exact future migration/release requirements in docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md.
 - Production Android acceptance and DSH task execution integration remain explicitly NOT ACCEPTED. VPS free disk ~7 GB; no unrelated Docker restart, no live redeploy, no main promotion.
+
+## 2026-11-05 — DSH-inspired native task storage and UI replay hardening
+- GitHub Development contains additive custom.db v3 database schema (v1/v2 upgrades), task/step/event/mandate/approval/observation relations and FK constraints. Existing encrypted conversations and voice checkpoints are retained.
+- New native task proposals are stored AES-GCM encrypted, rejected on duplicate ID and never executable from this API.
+- Old 40-entry encrypted UI-action journal now reserves permanent SHA-256 token tombstones in SQLite before actions; audit eviction cannot cause a duplicate UI claim.
+- Android tests added for isolated v1/v2→v3 migrations, all task table/FK checks, encrypted proposed tasks and denial of replay after >40 ledger events.
+- CI #41923323315 failed before Gradle on obsolete v2 source assertion; scripts/test/nexa-next-agentic-milestone.test.mjs fixed at e9ef608. Local 377/377 Node tests, TS, web export passed on e9ef608. CI #41923776222 was requested on e9ef608; check final native status. Later storage changes need new native test on exact SHA.
+- Read-only npm audit --omit=dev found 10 advisories (2 high, 7 moderate, 1 low), mostly Expo. Avoid automated major Expo downgrade without compatibility/security review.
+- All autonomy remains disabled, no live Android APK rollout, no main promotion, no other Docker services touched. Physical phone/providing real Android OS grants requires separate authenticated owner acceptance.
