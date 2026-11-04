@@ -279,12 +279,23 @@ class NexaConversationDbAndroidTest {
         assertTrue(NexaConversationDb.saveProposedAgentTask(
             ctx,voiceId,"voice-"+UUID.randomUUID(),"live-voice",
             "voice-policy-v1","Private voice goal must not enter review list"))
+        val spoofedVoiceId="task-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,spoofedVoiceId,"voice-"+UUID.randomUUID(),"live-voice",
+            "owner-review-v1","Provider origin with misleading policy"))
+        assertFalse("Owner UI must not cancel non-chat tasks with similar policy",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,spoofedVoiceId,"owner-review-v1"))
+        assertTrue("Earlier manual preview requests remain cancellable",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,legacyId,"owner-preview-v1"))
         val visible=NexaConversationDb.agentTaskHistory(ctx,200,manualOnly=true)
         val ids=(0 until visible.length()).map {visible.getJSONObject(it).getString("taskId")}
         assertTrue(ids.contains(manualId))
         assertTrue(ids.contains(legacyId))
         assertFalse("Voice task data must never cross manual owner-review bridge",
             ids.contains(voiceId))
+        assertFalse(ids.contains(spoofedVoiceId))
         assertFalse(visible.toString().contains("Private voice goal must not enter review list"))
         // Explicit owner export is a separate foreground-approved operation and
         // may include all history; the UI preview only gets the selected scope.
