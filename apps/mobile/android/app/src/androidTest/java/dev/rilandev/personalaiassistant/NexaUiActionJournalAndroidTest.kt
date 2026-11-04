@@ -71,6 +71,22 @@ class NexaUiActionJournalAndroidTest {
         assertNull(NexaUiActionJournal.outcomeFor(ctx,other))
     }
 
+    @Test fun replayDeniedEvenAfterFortyAuditEntriesAreEvicted() {
+        val first="test-"+UUID.randomUUID().toString()
+        val pkg="com.example.auditretention"
+        assertTrue(NexaUiActionJournal.claim(ctx,first,"tap",pkg))
+        assertTrue(NexaUiActionJournal.finish(ctx,first,"android_accepted"))
+        repeat(45) {
+            val next="test-"+UUID.randomUUID().toString()
+            assertTrue(NexaUiActionJournal.claim(ctx,next,"tap",pkg))
+            assertTrue(NexaUiActionJournal.finish(ctx,next,"android_accepted"))
+        }
+        // The first diagnostic event is no longer present, but its durable
+        // SQLite token tombstone still refuses any further dispatch.
+        assertFalse("A pruned audit must not permit replay",
+            NexaUiActionJournal.claim(ctx,first,"tap",pkg))
+    }
+
     @Test fun unsafeOrMalformedClaimsAreRejected() {
         assertFalse(NexaUiActionJournal.claim(ctx,"short","tap","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),
