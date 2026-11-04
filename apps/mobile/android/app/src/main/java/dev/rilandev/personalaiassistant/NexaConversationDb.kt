@@ -295,12 +295,16 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
         /** A foreground-only caller may obtain these locally decrypted owner
          * summaries. Never include them in model tool observations or telemetry.
          */
-        fun agentTaskHistory(context:Context,limit:Int):JSONArray = synchronized(lock) {
+        fun agentTaskHistory(context:Context,limit:Int,
+                             manualOnly:Boolean=false):JSONArray = synchronized(lock) {
             val results=JSONArray()
             val helper=NexaConversationDb(context)
             try {
                 helper.readableDatabase.rawQuery(
-                    "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
+                    if(manualOnly)
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks WHERE origin='chat' AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
+                    else
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
                     arrayOf(limit.coerceIn(1,200).toString())
                 ).use { cursor ->
                     while(cursor.moveToNext()) {
@@ -489,7 +493,7 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
         try {
             promise.resolve(NexaConversationDb.agentTaskHistory(
-                reactContext,limit.coerceIn(1,50)
+                reactContext,limit.coerceIn(1,50),manualOnly=true
             ).toString())
         } catch (_:Exception) {
             promise.reject("TASK_LIST","Cannot read encrypted task proposals")
