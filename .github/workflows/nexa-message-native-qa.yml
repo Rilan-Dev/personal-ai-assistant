@@ -18,13 +18,14 @@ jobs:
        github.event.issue.pull_request != null &&
        github.event.comment.user.login == 'Rilan-Dev' &&
        github.event.comment.author_association == 'OWNER' &&
-       github.event.comment.body == '/nexa-message native-qa')
+       (github.event.comment.body == '/nexa-message native-qa' ||
+        github.event.comment.body == '/nexa-autonomy native-qa'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/nexa-message-routing-input-20261104
+          ref: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-autonomy native-qa' && 'fix/nexa-autonomous-tool-qa-20261105' || 'feature/nexa-message-routing-input-20261104' }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
