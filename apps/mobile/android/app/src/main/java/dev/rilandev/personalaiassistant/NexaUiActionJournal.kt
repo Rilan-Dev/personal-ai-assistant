@@ -82,7 +82,7 @@ internal object NexaUiActionJournal {
     fun claim(ctx: Context, approvalToken: String, kind: String, packageName: String): Boolean =
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
-                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right") ||
+                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill") ||
                 !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}"))) {
                 return@synchronized false
             }
