@@ -15,6 +15,17 @@ internal object NexaMessageInputPolicy {
             .replace(Regex("[^\\p{L}\\p{N}]"),"")
         return a.length in 2..50 && a==b
     }
+    /** A matching name in a chat bubble is not the conversation title.
+     * Only consider a bounded, visible label near the top app header. */
+    fun isHeaderLabel(bounds:Rect,window:Rect):Boolean {
+        if(window.width()<=0 || window.height()<=0 ||
+            bounds.width()<=0 || bounds.height()<=0 ||
+            !window.contains(bounds)) return false
+        val headerBottom=window.top + window.height()/3
+        return bounds.top >= window.top &&
+            bounds.bottom <= headerBottom &&
+            bounds.height() <= window.height()/8
+    }
     fun isMessageField(description:String, editable:Boolean, password:Boolean,
         enabled:Boolean, visible:Boolean, hasSetText:Boolean, hasExistingText:Boolean):Boolean {
         if(!editable || password || !enabled || !visible || !hasSetText || hasExistingText)
@@ -60,13 +71,18 @@ internal object NexaMessageInputActions {
         var count=0
         var target:AccessibilityNodeInfo?=null
         var recipientSeen=false
+        val windowRect=Rect().also{root.getBoundsInScreen(it)}
         while(queue.isNotEmpty() && visited++<200) {
             val node=queue.removeFirst()
             if(!node.isVisibleToUser || node.isPassword) continue
             if(!node.isEditable) {
                 val labels=listOf(node.text?.toString().orEmpty(),
                     node.contentDescription?.toString().orEmpty())
-                if(labels.any{NexaMessageInputPolicy.recipientMatches(hint,it)})recipientSeen=true
+                if(labels.any{NexaMessageInputPolicy.recipientMatches(hint,it)}) {
+                    val labelBounds=Rect().also{node.getBoundsInScreen(it)}
+                    if(NexaMessageInputPolicy.isHeaderLabel(labelBounds,windowRect))
+                        recipientSeen=true
+                }
             }
             if(node.isEditable) {
                 val desc=listOf(node.hintText?.toString().orEmpty(),
