@@ -13,6 +13,7 @@ tags:
     permissions:
       all: deny
 - assertVisible: "Make your assistant yours."
+- tapOn: "Show optional permissions and features"
 # Reuse the independently proven overlay-permission flow before Accessibility.
 - scrollUntilVisible:
     element: "Floating quick tools"

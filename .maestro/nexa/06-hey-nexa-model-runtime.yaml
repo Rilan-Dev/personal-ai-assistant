@@ -11,6 +11,12 @@ tags:
       all: allow
 - assertVisible: "Make your assistant yours."
 - scrollUntilVisible:
+    element:
+      text: "Voice and wake activation advanced settings"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Voice and wake activation advanced settings"
+- scrollUntilVisible:
     element: "Download offline model"
     direction: DOWN
     timeout: 25000

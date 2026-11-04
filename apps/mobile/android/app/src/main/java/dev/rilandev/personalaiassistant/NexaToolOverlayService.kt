@@ -645,12 +645,9 @@ class NexaToolOverlayService : Service() {
                 background=NexaOverlayTheme.card(this@NexaToolOverlayService,
                     NexaOverlayTheme.palette(this@NexaToolOverlayService))
                 elevation=dp(12).toFloat()
-                addView(text("✦   NEXA",13f,true))
+                addView(text("✦  NEXA  ·  QUICK ASSISTANT",12f,true))
                 addView(text("How can I help?",19f))
-                addView(text("On-device tools · Actions need your approval",11f,true))
-                addView(NexaOverlayTheme.waveform(this@NexaToolOverlayService,
-                    NexaOverlayTheme.palette(this@NexaToolOverlayService)),
-                    LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(25)))
+                addView(text("On-device actions need your approval",11f,true))
                 addView(row(
                     button("Chat") { showSection("chat") },
                     button("Tools") { showSection("tools") },
@@ -802,8 +799,11 @@ class NexaToolOverlayService : Service() {
                         addView(text("Messages require recipient review in full Nexa.",11f,true))
                     }
                     else -> {
-                        addView(text("Microphone access and model status",12f,true))
+                        addView(text("Voice status",13f,true))
                         addView(text(NexaOverlayCommands.status(this@NexaToolOverlayService),12f))
+                        addView(NexaOverlayTheme.waveform(this@NexaToolOverlayService,
+                            NexaOverlayTheme.palette(this@NexaToolOverlayService)),
+                            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,dp(34)))
                         addView(button("Talk to Nexa · one device command") { talkToNexa() })
                         addView(row(
                             button("Arm Hey Nexa") { startWake() },
@@ -819,12 +819,14 @@ class NexaToolOverlayService : Service() {
                 }
                 addView(text("Actions need approval  ·  Screen access requires permission",11f,true))
                 addView(text(note,11f,true))
-                addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
-                    " (tap to change)") {
-                    val newMode=NexaOverlayTheme.cycleMode(this@NexaToolOverlayService)
-                    note="Appearance updated: " + newMode + ". Auto follows Android and wallpaper colors."
-                    render()
-                })
+                if (section == "tools") {
+                    addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
+                        " (tap to change)") {
+                        val newMode=NexaOverlayTheme.cycleMode(this@NexaToolOverlayService)
+                        note="Appearance updated: " + newMode + ". Auto follows Android and wallpaper colors."
+                        render()
+                    })
+                }
                 addView(row(
                     button("Collapse") { collapse() },
                     button("Hide Nexa") { stopSelf() }
