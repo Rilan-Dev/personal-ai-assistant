@@ -214,7 +214,7 @@ jobs:
         if: always()
         shell: bash
         env:
-          EXPECTED_FLOWS: ${{ (github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run all android-33') && '11' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') && '11' || '1' }}
+          EXPECTED_FLOWS: ${{ (github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run all android-33') && '12' || (github.event_name == 'workflow_dispatch' && inputs.suite == 'all') && '12' || '1' }}
         run: node .maestro/validate-cloud-cli.mjs "$RUNNER_TEMP/nexa-maestro-cli.log" "$EXPECTED_FLOWS"
       - name: Retain detailed Maestro results and failed step evidence
         if: always()
