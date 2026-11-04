@@ -548,6 +548,24 @@ class RealtimeVoiceService : Service() {
                         val transcript=json.optString("transcript").trim()
                         if(transcript.isNotBlank())NexaConversationDb.append(this@RealtimeVoiceService,
                             voiceSessionId,"voice","openai","user",transcript.take(3000))
+                        // A provider transcript is never authority to SEND.
+                        // A precise user-uttered message request can only
+                        // open Nexa's local app/recipient review screen.
+                        if(assistantPanelEnabled && transcript.isNotBlank()) {
+                            val request=NexaGeneralMessageVoice.parse(transcript)
+                            if(request!=null) main.post {
+                                if(active.get() && selectedProvider=="openai") {
+                                    NexaGeneralMessageVoice.queue(request)
+                                    try {
+                                        startActivity(Intent(this@RealtimeVoiceService,MainActivity::class.java)
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                        message="Message review opened. Choose app, contact and exact text. Nothing sent."
+                                    } catch (_:Exception) {
+                                        message="Message review must be opened manually. No message sent."
+                                    }
+                                }
+                            }
+                        }
                     }
                     "response.output_audio_transcript.done","response.output_text.done" -> {
                         val transcript=json.optString("transcript",
