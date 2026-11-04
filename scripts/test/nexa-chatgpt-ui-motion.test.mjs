@@ -8,6 +8,7 @@ const motion = read('apps/mobile/src/components/NexaMotion.tsx');
 const overlay = read('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaToolOverlayService.kt');
 const theme = read('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaOverlayTheme.kt');
 const capture = read('scripts/ci/capture-nexa-ui.sh');
+const emulatorRunner = read('scripts/ci/run-nexa-emulator-acceptance.sh');
 const workflow = read('.github/workflows/android-main-promotion.yml');
 
 test('chat uses response-first text, no repeated shortcut rail in every conversation', () => {
@@ -53,7 +54,9 @@ test('release CI takes actual on-device screenshots of five tabs without grantin
   assert.match(capture, /for item in chat voice tools setup settings/);
   assert.match(capture, /adb shell pm clear/);
   assert.doesNotMatch(capture, /pm grant|appops set|input keyevent 223|MEDIA_PROJECTION/);
-  assert.match(workflow, /bash scripts\/ci\/capture-nexa-ui\.sh/);
+  assert.match(workflow, /bash scripts\/ci\/run-nexa-emulator-acceptance\.sh/);
+  assert.match(emulatorRunner, /bash scripts\/ci\/capture-nexa-ui\.sh/);
+  assert.match(emulatorRunner, /:app:connectedDebugAndroidTest/);
   assert.match(workflow, /name: nexa-ui-screenshots/);
   assert.match(workflow, /if: always\(\)/);
 });
