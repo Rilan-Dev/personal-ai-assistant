@@ -29,6 +29,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
   requestApproximateLocationSetup, setAutoStartVoiceOnInvocation} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
+import {LocalTaskProposals} from './src/components/LocalTaskProposals';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -2004,6 +2005,7 @@ export default function App() {
       {tab === 'tools' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
+        {engine.live && <LocalTaskProposals/>}
         {(textEntryRequest || messageRequest) && <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Active task review</Text>
           <Text style={styles.settingHelp}>The request is kept local. Choose an app or an input field here before completing a device action.</Text>

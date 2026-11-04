@@ -18,6 +18,7 @@ import org.json.JSONObject
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.security.KeyStore
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -473,6 +474,64 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         try { promise.resolve(NexaConversationDb.taskHistory(reactContext,limit.coerceIn(1,200)).toString()) }
         catch (_:Exception) { promise.reject("TASK_HISTORY","Cannot read local task history") }
     }
+    /**
+     * Explicit in-foreground owner action. The Android service mints the task
+     * identity; neither provider/model text nor another app can select an ID.
+     * This saves encrypted review-only data, never a runnable mandate.
+     */
+    @ReactMethod fun createOwnerTaskProposal(goal:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to save a task proposal")
+            return
+        }
+        val text=goal.trim()
+        if(text.length !in 1..500 || text.any {
+            it == '\u0000' || (it.code<32 && it!='\n' && it!='\t')
+        }) {
+            promise.reject("TASK_INVALID","Enter a short task description")
+            return
+        }
+        try {
+            val id="task-"+UUID.randomUUID().toString()
+            val session="owner-"+UUID.randomUUID().toString()
+            if(!NexaConversationDb.saveProposedAgentTask(
+                reactContext,id,session,"chat","owner-review-v1",text
+            )) {
+                promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
+                return
+            }
+            promise.resolve(id)
+        }catch (_:Exception) {
+            promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
+        }
+    }
+    /** Decrypted only to an owner-visible foreground app; never a model tool. */
+    @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review local tasks")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.agentTaskHistory(
+                reactContext,limit.coerceIn(1,50)
+            ).toString())
+        } catch (_:Exception) {
+            promise.reject("TASK_LIST","Cannot read encrypted task proposals")
+        }
+    }
+    /** A canceled proposal cannot execute, be resumed or be uncanceled. */
+    @ReactMethod fun cancelOwnerTaskProposal(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to cancel a proposal")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.cancelProposedAgentTask(reactContext,taskId))
+        }catch (_:Exception) {
+            promise.reject("TASK_CANCEL","Cannot persist proposal cancellation")
+        }
+    }
+
     @ReactMethod fun recentAndroidProcessExits(promise:Promise) {
         try {promise.resolve(NexaCrashDiagnostics.recent(reactContext,12).toString())}
         catch (_:Exception) {promise.reject("EXIT_REPORT","Cannot read Android process exits")}

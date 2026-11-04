@@ -274,4 +274,37 @@ class NexaConversationDbAndroidTest {
         val current=NexaConversationDb.history(context,200).toString()
         assertFalse(current.contains(session))
     }
+    @Test fun localOwnerProposalLifecycleIsOneShotAndEventAudited() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val id="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Review customer quotation"))
+        assertTrue(NexaConversationDb.cancelProposedAgentTask(ctx,id))
+        assertFalse("Cancellation must not replay",NexaConversationDb.cancelProposedAgentTask(ctx,id))
+        assertFalse("Canceled ID cannot be recreated",NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Replacement"))
+        val history=NexaConversationDb.agentTaskHistory(ctx,50)
+        val entry=(0 until history.length()).map{history.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==id}
+        assertEquals("cancelled",entry?.optString("status"))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT event_kind FROM agent_task_events WHERE task_id=? ORDER BY id",
+                arrayOf(id)
+            ).use { cursor ->
+                val actual=mutableListOf<String>()
+                while(cursor.moveToNext())actual.add(cursor.getString(0))
+                assertEquals(listOf("proposed","owner_cancelled"),actual)
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",arrayOf(id)
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0,cursor.getInt(0))
+            }
+        } finally{helper.close()}
+    }
+
 }
