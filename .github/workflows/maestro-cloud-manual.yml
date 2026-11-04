@@ -34,6 +34,11 @@ on:
           - android-34
           - android-35
           - android-36
+      release_run_id:
+        description: "Optional successful signed Android main-promotion workflow run ID, from this exact branch"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -81,13 +86,33 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          PINNED_RELEASE_RUN_ID: ${{ inputs.release_run_id || '' }}
         run: |
           set -euo pipefail
-          runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-main-promotion.yml/runs?branch=main&status=success&per_page=10")"
-          release_id="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .id // empty' <<< "$runs")"
-          release_sha="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' <<< "$runs")"
+          if [[ -n "$PINNED_RELEASE_RUN_ID" ]]; then
+            if [[ ! "$PINNED_RELEASE_RUN_ID" =~ ^[0-9]{1,20}$ ]]; then
+              echo "::error::Invalid signed APK run ID."
+              exit 1
+            fi
+            selected="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/runs/$PINNED_RELEASE_RUN_ID")"
+            release_id="$(jq -r '.id // empty' <<< "$selected")"
+            release_sha="$(jq -r '.head_sha // empty' <<< "$selected")"
+            release_branch="$(jq -r '.head_branch // empty' <<< "$selected")"
+            release_path="$(jq -r '.path // empty' <<< "$selected")"
+            release_conclusion="$(jq -r '.conclusion // empty' <<< "$selected")"
+            if [[ "$release_branch" != "$GITHUB_REF_NAME" ||
+                  "$release_path" != ".github/workflows/android-main-promotion.yml" ||
+                  "$release_conclusion" != "success" ]]; then
+              echo "::error::Pinned signed APK run must have succeeded on this exact branch."
+              exit 1
+            fi
+          else
+            runs="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/android-main-promotion.yml/runs?branch=main&status=success&per_page=10")"
+            release_id="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .id // empty' <<< "$runs")"
+            release_sha="$(jq -r '.workflow_runs | map(select(.conclusion == "success")) | first | .head_sha // empty' <<< "$runs")"
+          fi
           if [[ -z "$release_id" || ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::No successful Android main-promotion release artifact run found."
+            echo "::error::No matching successful signed APK release artifact run found."
             exit 1
           fi
           echo "run_id=$release_id" >> "$GITHUB_OUTPUT"
