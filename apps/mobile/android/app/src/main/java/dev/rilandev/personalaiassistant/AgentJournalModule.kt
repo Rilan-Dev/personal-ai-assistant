@@ -175,6 +175,48 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
      * AsyncStorage, logging, crash analytics or source control copies.
      * React Native receives the key only for direct, owner-initiated HTTPS API calls.
      */
+    /**
+     * ACA device-only session. Separate key namespace from BYOK provider keys.
+     * The email password is NEVER persisted. The bearer token uses Android
+     * Keystore AES-GCM, with no cloud backup or plaintext logging.
+     */
+    @ReactMethod fun saveAcaSession(data: String, p: Promise) {
+        try {
+            require(data.toByteArray(StandardCharsets.UTF_8).size <= 1200)
+            val obj = JSONObject(data)
+            require(obj.length() == 6 && obj.optInt("version") == 1)
+            require(obj.optString("origin") == "https://aca.starcitytechnical.com")
+            require(obj.optString("token").matches(Regex("nexa_m1_[A-Za-z0-9_-]{43}")))
+            // Avoid java.time APIs that require Android API 26 on older phones.
+            val expires = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }.parse(obj.getString("expiresAt"))
+            require(expires != null && expires.time > System.currentTimeMillis())
+            for (field in listOf("organizationId", "agentId")) {
+                val value = obj.getString(field)
+                require(value.isEmpty() || value.matches(Regex("[0-9a-fA-F-]{36}")))
+            }
+            synchronized(lock) { write(name("private", "aca-device-session"), data) }
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p, "ACA_DEVICE_SESSION_SAVE", e) }
+    }
+
+    @ReactMethod fun loadAcaSession(p: Promise) {
+        try {
+            synchronized(lock) { p.resolve(read(name("private", "aca-device-session"))) }
+        } catch (e: Exception) { rejectSafe(p, "ACA_DEVICE_SESSION_READ", e) }
+    }
+
+    @ReactMethod fun clearAcaSession(p: Promise) {
+        try {
+            synchronized(lock) {
+                check(prefs.edit().remove(name("private", "aca-device-session")).commit())
+            }
+            p.resolve(true)
+        } catch (e: Exception) { rejectSafe(p, "ACA_DEVICE_SESSION_CLEAR", e) }
+    }
+
     @ReactMethod fun saveProviderSettings(data: String, p: Promise) {
         try {
             require(data.toByteArray(StandardCharsets.UTF_8).size <= 2048)
