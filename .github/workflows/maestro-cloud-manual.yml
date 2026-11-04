@@ -150,10 +150,13 @@ jobs:
             echo "::error::APK checksum verification failed."
             exit 1
           fi
-          # Test the exact release APK only if Nexa app source remains unchanged.
-          # Updating Maestro tests or workflow YAML does not invalidate the APK.
-          if ! git diff --quiet "$EXPECTED_SHA" HEAD -- apps/mobile packages services scripts package.json package-lock.json; then
-            echo "::error::Nexa source changed after this APK. Run the Android release pipeline first."
+          # Only shipped app/runtime changes invalidate the signed APK.
+          # Source-only test additions in scripts/test/ do not enter the APK.
+          changed_source="$(git diff --name-only "$EXPECTED_SHA" HEAD -- apps/mobile packages services scripts package.json package-lock.json)"
+          runtime_changes="$(printf '%s\n' "$changed_source" | grep -Ev '^scripts/test/|^$' || true)"
+          if [[ -n "$runtime_changes" ]]; then
+            echo "::error::Nexa runtime source changed after this APK. Rebuild the Android release first."
+            printf '%s\n' "$runtime_changes"
             exit 1
           fi
           echo "NEXA_RELEASE_APK=$apk" >> "$GITHUB_ENV"
