@@ -12,6 +12,7 @@ type LocalTaskBridge={
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
 };
 const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,99}$/;
+const ownerReviewPolicy=(value:unknown)=>value==='owner-review-v1'||value==='owner-preview-v1';
 const bridge=():LocalTaskBridge=>{
   const api=NativeModules.PAAConversationHistory;
   if(Platform.OS!=='android'||typeof api?.createOwnerTaskProposal!=='function'||
@@ -38,7 +39,7 @@ function decodeProposal(value:unknown):LocalTaskProposal{
   const item=value as Record<string,unknown>;
   if(typeof item.taskId!=='string'||!id.test(item.taskId)||
     typeof item.sessionId!=='string'||!id.test(item.sessionId)||
-    item.origin!=='chat'||item.policyVersion!=='owner-review-v1'||
+    item.origin!=='chat'||!ownerReviewPolicy(item.policyVersion)||
     !['proposed','cancelled'].includes(String(item.status))||
     typeof item.goal!=='string'||item.goal.length>500||
     !Number.isSafeInteger(item.createdAt)||!Number.isSafeInteger(item.updatedAt))
@@ -50,9 +51,10 @@ export async function listLocalTaskProposals():Promise<LocalTaskProposal[]>{
   if(typeof raw!=='string'||raw.length>150_000)throw Error('Local task history response too large');
   const records:unknown=JSON.parse(raw);
   if(!Array.isArray(records)||records.length>50)throw Error('Unexpected local task history');
-  // New v3 tasks from other origins are not exposed through this manual UI.
+  // Defense in depth: native history already scopes this to manual owner records.
+  // Continue to support any preview-only entries created on an earlier APK.
   return records.filter(x=>x&&typeof x==='object'&&
-    (x as {policyVersion?:unknown}).policyVersion==='owner-review-v1')
+    ownerReviewPolicy((x as {policyVersion?:unknown}).policyVersion))
    .map(decodeProposal);
 }
 export async function cancelLocalTaskProposal(idToCancel:string):Promise<boolean>{
