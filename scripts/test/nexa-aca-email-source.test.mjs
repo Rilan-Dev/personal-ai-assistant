@@ -34,3 +34,11 @@ test('read-only mail request parsing preserves user scope and blocks writes',()=
   assert.equal(parseAcaMailSummaryIntent('Summarize emails today'),null);
   assert.equal(parseAcaMailSummaryIntent('Open Chrome and search what is AI'),null);
 });
+
+test('ACA sign-in reverses its provisional device session when agent discovery fails',()=>{
+  assert.match(app,/let provisional:AcaSession\|null=null/);
+  assert.match(app,/provisional=await connectAca\(acaEmailInput,acaPasswordInput\)/);
+  assert.match(app,/await acaTargets\(provisional\)/);
+  assert.match(app,/await disconnectAca\(provisional\)/);
+  assert.match(app,/secure cleanup could not finish/);
+});
