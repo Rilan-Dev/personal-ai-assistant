@@ -72,3 +72,11 @@ new v3 transition code compiles or works on a physical device.
 **Release decision:** Development source milestone, not production certified.
 Do not label native or physical phone acceptance complete without run/device
 evidence. No unsafe migration or unapproved send is authorized by this document.
+
+## 2026-11-05 — Consolidation and policy isolation
+
+The separate Settings review form was removed. The native review bridge and owner task UI now have one implementation in Tools, with active messaging and text-entry approval cards rendered first.
+
+Manual review history is restricted in native SQL to chat-origin proposals with owner-review-v1 or legacy owner-preview-v1 policy. Cancellation is matched to owner policy and chat origin, excluding voice-origin proposals even if they reuse the same policy name. Native instrumentation cases now cover this separation, older policy compatibility, duplicate and terminal cancellation, encryption and event audit.
+
+A new manual Maestro Cloud task-proposals suite tests save, review, cancel and relaunch persistence; previously successful GitHub Android run 41926075781 covered an earlier source SHA. Local 380/380 Node tests, TypeScript, and web export passed after UI consolidation at a68dd26b5; subsequent native privacy changes require exact-current-SHA verification. No autonomous execution or production promotion is enabled.
