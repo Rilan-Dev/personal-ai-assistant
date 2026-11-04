@@ -54,9 +54,18 @@ read-only node refresh before claiming a text insertion was verified.
 ## Verified and open
 
 - Latest local clean checkout: 365/365 source tests passed, TypeScript passed.
-- Owner-triggered Android/API35 + Maestro acceptance:
+- **Verified on earlier QA source SHA 57cf84a:** owner-triggered API35 run
   https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41922174301
-  (result must be checked before certification).
+  completed successfully: **365/365 source tests**, **130/130 Android
+  instrumentation tests**, disposable standalone APK signed with a throwaway
+  identity, emulator boot/visible UI and **2/2 Maestro Cloud review flows**.
+  The Maestro flows verify requested review UI, not live external-app text entry.
+- The newer QA branch includes the bounded three-step autonomy test and
+  one-installed-app auto-selection; owner-only validation run
+  https://github.com/Rilan-Dev/personal-ai-assistant/actions/runs/41925172179
+  was started to test that exact newer source. Latest direct source tests
+  **366/366** and isolated current Development merge tests **378/378** pass.
+  Do not mark the newer build as native accepted until its run completes.
 - Real WhatsApp, IMO, BOTIM and SMS conversation input behavior, actual
   contact identity, physical phone Accessibility grants and per-app
   confirmation have **not** been verified. No physical phone is connected.
