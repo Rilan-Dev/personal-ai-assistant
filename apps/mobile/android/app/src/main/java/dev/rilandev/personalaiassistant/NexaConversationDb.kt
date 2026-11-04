@@ -423,6 +423,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                 .put("exportedAt",System.currentTimeMillis())
                 .put("entries",history(context,10000))
                 .put("tasks",taskHistory(context,1000))
+                .put("agentTasks",agentTaskHistory(context,200))
                 .put("androidProcessExits",NexaCrashDiagnostics.recent(context,12)).toString(2)
     }
 }
