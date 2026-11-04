@@ -223,6 +223,12 @@ class NexaConversationDbAndroidTest {
         assertEquals("proposed",record!!.getString("status"))
         assertEquals(goal,record.getString("goal"))
         assertEquals("owner-preview-v1",record.getString("policyVersion"))
+        val ownerExport=JSONObject(NexaConversationDb.export(ctx))
+        val proposals=ownerExport.getJSONArray("agentTasks")
+        assertTrue("Explicit owner export should include the saved encrypted-at-rest request",
+            (0 until proposals.length()).any {
+                proposals.getJSONObject(it).optString("taskId")==task
+            })
         assertTrue("Owner may cancel an unexecuted proposal",
             NexaConversationDb.cancelProposedAgentTask(ctx,task))
         assertFalse("Cancellation is terminal and must not replay",
