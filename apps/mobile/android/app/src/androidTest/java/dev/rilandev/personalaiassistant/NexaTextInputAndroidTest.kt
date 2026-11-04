@@ -20,6 +20,9 @@ class NexaTextInputAndroidTest {
         assertFalse("Safe hint cannot override sensitive resource ID",
             NexaTextInputPolicy.matches("Search",listOf("Search","password_text"),
                 true,false,true,true,true,true))
+        assertFalse("CamelCase resource IDs identifying credentials must be rejected",
+            NexaTextInputPolicy.matches("Search",listOf("Search","com.test:id/otpCodeInput"),
+                true,false,true,true,true,true))
         assertFalse(NexaTextInputPolicy.matches("Search",listOf("Search"),
             true,true,true,true,true,true))
         assertFalse(NexaTextInputPolicy.matches("Search",listOf("Search"),
@@ -33,7 +36,7 @@ class NexaTextInputAndroidTest {
     }
     @Test fun dangerousFieldLabelsAreNotEligible() {
         for(field in listOf("Password","OTP","Payment amount","Bank account",
-            "CVV","Verification code","Recipient","Submit","PIN","Email address")) {
+            "CVV","Verification code","Recipient","Submit","PIN","Email address","To","CC","BCC","Phone")) {
             assertFalse(field,NexaTextInputPolicy.safeTarget(field))
         }
     }
