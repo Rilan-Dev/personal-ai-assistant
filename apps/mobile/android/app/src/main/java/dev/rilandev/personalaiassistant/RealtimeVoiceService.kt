@@ -702,6 +702,47 @@ class RealtimeVoiceService : Service() {
         },"nexa-task-terminal").start()
     }
 
+    /** Slow OEM launches may expose the old window briefly. Retry only
+     * READ-ONLY foreground observation, never the app launch or tap. */
+    private fun verifyCompoundAppForeground(cursor:NexaVoiceTaskCursor,
+                                            expected:String,session:String,attempt:Int=0) {
+        val delays=longArrayOf(800L,1400L,2200L)
+        if(attempt !in delays.indices)return
+        main.postDelayed({
+            if(!active.get() || currentCompound!==cursor || voiceSessionId!=session)
+                return@postDelayed
+            Thread({
+                val root=try{ScreenAssistService.active?.externalWindowRoot()}
+                    catch(_:Exception){null}
+                val pkg=try{root?.packageName?.toString()}
+                    catch(_:Exception){null}
+                    finally{try{root?.recycle()}catch(_:Exception){}}
+                main.post {
+                    if(!active.get() || currentCompound!==cursor ||
+                        voiceSessionId!=session)return@post
+                    if(pkg!=expected) {
+                        if(attempt<delays.lastIndex)
+                            verifyCompoundAppForeground(cursor,expected,session,attempt+1)
+                        else {
+                            closeCompound(cursor,"uncertain",
+                                "Foreground package not verified after bounded observations")
+                            sarvamApiTransport?.toolResult(
+                                "Android could not verify the requested app on screen. No further action.")
+                        }
+                        return@post
+                    }
+                    val next=cursor.advance(true)
+                    checkpointAndContinue(cursor,
+                        if(cursor.finished)"completed" else "verified",
+                        "Foreground package verified: "+expected) {
+                        if(next==null)currentCompound=null
+                        else handleSarvamOwnerRequest(next,true)
+                    }
+                }
+            },"nexa-task-app-verification").start()
+        },delays[attempt])
+    }
+
     private fun advanceCompoundAfterVerifiedAction(tool:PendingAppTool,outcome:String,
                                                    approved:Boolean) {
         val cursor=currentCompound ?: return
@@ -772,36 +813,7 @@ class RealtimeVoiceService : Service() {
                 closeCompound(cursor,"uncertain","Unknown launched package")
                 return
             }
-            val session=voiceSessionId
-            main.postDelayed({
-                if(!active.get() || currentCompound!==cursor || voiceSessionId!=session)
-                    return@postDelayed
-                Thread({
-                    val root=try{ScreenAssistService.active?.externalWindowRoot()}
-                        catch(_:Exception){null}
-                    val pkg=try{root?.packageName?.toString()}
-                        catch(_:Exception){null}
-                        finally{try{root?.recycle()}catch(_:Exception){}}
-                    main.post {
-                        if(!active.get() || currentCompound!==cursor ||
-                            voiceSessionId!=session)return@post
-                        if(pkg!=expected) {
-                            closeCompound(cursor,"uncertain",
-                                "Foreground package not verified: "+(pkg?:"unavailable"))
-                            sarvamApiTransport?.toolResult(
-                                "Android did not verify $expected on screen. No further action.")
-                            return@post
-                        }
-                        val next=cursor.advance(true)
-                        checkpointAndContinue(cursor,
-                            if(cursor.finished)"completed" else "verified",
-                            "Foreground package verified: $expected") {
-                            if(next==null)currentCompound=null
-                            else handleSarvamOwnerRequest(next,true)
-                        }
-                    }
-                },"nexa-task-app-verification").start()
-            },1600L)
+            verifyCompoundAppForeground(cursor,expected,voiceSessionId)
             return
         }
         val verified=outcome.startsWith("Visible screen labels") ||
