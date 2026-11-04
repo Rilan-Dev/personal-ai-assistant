@@ -53,6 +53,10 @@ test('release CI takes actual on-device screenshots of five tabs without grantin
   assert.match(capture, /adb shell uiautomator dump/);
   assert.match(capture, /for item in chat voice tools setup settings/);
   assert.match(capture, /adb shell pm clear/);
+  assert.match(capture, /wait_for_nav_ui/);
+  assert.match(capture, /pixel launcher isn't responding/);
+  assert.match(capture, /text.*lower\(\)=="wait"/);
+  assert.match(capture, /return 1/);
   assert.doesNotMatch(capture, /pm grant|appops set|input keyevent 223|MEDIA_PROJECTION/);
   assert.match(workflow, /bash scripts\/ci\/run-nexa-emulator-acceptance\.sh/);
   assert.match(emulatorRunner, /bash scripts\/ci\/capture-nexa-ui\.sh/);
