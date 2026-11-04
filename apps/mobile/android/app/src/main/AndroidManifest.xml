@@ -33,7 +33,7 @@
       <category android:name="android.intent.category.HOME"/>
     </intent>
     <package android:name="com.whatsapp.w4b"/>
-    <!-- Explicit supported message-app candidates. No QUERY_ALL_PACKAGES. -->
+    <!-- Explicit supported message-app candidates only; no broad app inventory. -->
     <package android:name="com.imo.android.imoim"/>
     <package android:name="im.thebot.messenger"/>
     <!-- Determine only the user-selected default SMS handler. -->
