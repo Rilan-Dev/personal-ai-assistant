@@ -51,7 +51,7 @@ import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakS
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
-const quickPrompts = ['Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Check battery level', 'Turn flashlight on', 'Turn flashlight off', 'Test approval'];
+const quickPrompts = ['Check battery', 'Open camera', 'Open WhatsApp', 'Open WhatsApp Business', 'Check device status', 'Turn flashlight on', 'Turn flashlight off', 'Test approval'];
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
@@ -1439,7 +1439,7 @@ export default function App() {
       />}
       {tab === 'chat' && <>
         <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}
-          ref={chatScroll} onContentSizeChange={() => chatScroll.current?.scrollToEnd({animated: true})}
+          ref={chatScroll} onContentSizeChange={() => messages.length ? chatScroll.current?.scrollToEnd({animated: true}) : chatScroll.current?.scrollTo({y:0,animated:false})}
           keyboardShouldPersistTaps="handled">
           {messages.length <= 1 && <View style={styles.welcome}>
             <View style={styles.welcomeGlow}><Text style={styles.welcomeIcon}>✦</Text></View>
@@ -1450,7 +1450,7 @@ export default function App() {
                 {label:'Open camera',prompt:'Open camera'},
                 {label:'Flashlight on',prompt:'Turn flashlight on'},
                 {label:'What can you do?',prompt:'What can you do?'}].map(item=>
-                  <Pressable key={item.label} accessibilityRole="button" disabled={running}
+                  <Pressable key={item.label} accessibilityRole="button" accessibilityLabel={item.label} disabled={running}
                     style={styles.suggestion} onPress={() => send(item.prompt)}>
                     <Text style={styles.suggestionLabel}>{item.label}  ↗</Text>
                   </Pressable>)}
@@ -1495,8 +1495,9 @@ export default function App() {
         <View style={styles.chatComposerArea}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.promptRail}>
-            {quickPrompts.slice(0,6).map(prompt=><Pressable key={prompt} accessibilityRole="button" disabled={running}
-              onPress={() => send(prompt)} style={styles.promptChip}><Text style={styles.promptChipText}>{prompt}</Text></Pressable>)}
+            {quickPrompts.slice(0,6).map(prompt=><Pressable key={prompt} accessibilityRole="button" accessibilityLabel={prompt} disabled={running}
+              onPress={() => send(prompt === 'Check battery' ? 'Check battery level' : prompt)}
+              style={styles.promptChip}><Text style={styles.promptChipText}>{prompt}</Text></Pressable>)}
           </ScrollView>
           <View style={styles.composerRow}>
             <Pressable accessibilityRole="button" accessibilityLabel="Open tools" onPress={() => navigate('tools')} style={styles.composerIcon}>
