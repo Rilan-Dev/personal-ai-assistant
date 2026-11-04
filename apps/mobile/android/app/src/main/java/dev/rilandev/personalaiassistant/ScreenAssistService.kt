@@ -141,8 +141,22 @@ class ScreenAssistService : AccessibilityService() {
         super.onDestroy()
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event != null) NexaUiActionVerifier.onAccessibilityEvent(event)
-        if ((!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) || event == null) return
+        if (event == null) return
+        // Android delivers AccessibilityEvent callbacks on the service main
+        // thread. A third-party window may disappear while its nodes are read;
+        // OEM accessibility implementations can throw at any binder getter.
+        // Never allow that transient failure to crash the entire Nexa process.
+        try {
+            handleScreenEvent(event)
+        } catch (_: Exception) {
+            // Leave one-shot consent/expiry intact for a later valid event.
+            // No automatic action, retry, screen text or crash detail is sent.
+        }
+    }
+
+    private fun handleScreenEvent(event: AccessibilityEvent) {
+        NexaUiActionVerifier.onAccessibilityEvent(event)
+        if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -186,7 +200,7 @@ class ScreenAssistService : AccessibilityService() {
             }
         }
         if (text.isNotBlank()) ScreenAssistState.capture(pkg, text.toString())
-        } finally { root.recycle() }
+        } finally { try { root.recycle() } catch (_: Exception) {} }
     }
 }
 
