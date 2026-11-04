@@ -24,7 +24,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/nexa-message-routing-input-20261104
+          # Manual dispatch must test the exact requested source SHA, not a stale feature branch.
+          # Legacy owner comment command retains its original feature-branch target.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || 'feature/nexa-message-routing-input-20261104' }}
+      - name: Verify manual QA is testing the dispatched commit
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "Tested source SHA: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
