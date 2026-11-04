@@ -1954,7 +1954,6 @@ export default function App() {
       {tab === 'tools' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
-        {engine.live && <LocalTaskProposals/>}
         {(textEntryRequest || messageRequest) && <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Active task review</Text>
           <Text style={styles.settingHelp}>The request is kept local. Choose an app or an input field here before completing a device action.</Text>
@@ -2022,6 +2021,7 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
+        {engine.live && <LocalTaskProposals/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
