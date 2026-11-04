@@ -242,9 +242,37 @@ export default function App() {
       return;
     }
     let mounted=true;
+    let connectionPollGeneration=0;
+    let connectionPollTimer:ReturnType<typeof setTimeout>|null=null;
+    const cancelConnectionPoll=()=>{
+      connectionPollGeneration++;
+      if(connectionPollTimer!==null){clearTimeout(connectionPollTimer);connectionPollTimer=null;}
+    };
+    // Android may bind a newly authorized AccessibilityService after the app
+    // has resumed. One immediate check can leave Setup displaying a stale
+    // disconnected state indefinitely. Re-read the *actual* OS state a bounded
+    // number of times; never assume that a Settings toggle grants access.
+    const pollScreenAssistConnection=async(remaining:number,generation:number):Promise<void>=>{
+      if(!mounted || generation!==connectionPollGeneration || AppState.currentState!=='active')return;
+      try{
+        const current=await readNexaSetupStatus();
+        if(!mounted || generation!==connectionPollGeneration)return;
+        setSetupStatus(current);
+        if(current.screenAssist && !current.screenAssistConnected && remaining>0){
+          connectionPollTimer=setTimeout(()=>{void pollScreenAssistConnection(remaining-1,generation);},750);
+        }
+      }catch{
+        if(mounted && generation===connectionPollGeneration)
+          setSetupNotice('Android permission status could not be refreshed. Try Refresh status.');
+      }
+    };
     readNexaSetupStatus().then(status=>{
       if (!mounted) return;
       setSetupStatus(status);
+      if(status.screenAssist && !status.screenAssistConnected && AppState.currentState==='active'){
+        const generation=connectionPollGeneration;
+        connectionPollTimer=setTimeout(()=>{void pollScreenAssistConnection(8,generation);},750);
+      }
       if (status.setupAcknowledged) setTab(prev=>prev==='setup'&&!voiceShortcutRequested.current?'chat':prev);
       // Explicit overlay navigation is consumed once. No background AI action.
       if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
@@ -255,15 +283,16 @@ export default function App() {
       if (mounted) setSetupNotice('Android permission center is unavailable. You can still use basic Chat.');
     });
     const subscription=AppState.addEventListener('change',state=>{
+      cancelConnectionPoll();
       if (state==='active') {
-        void refreshSetupStatus();
+        void pollScreenAssistConnection(8,connectionPollGeneration);
         if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
           .then(target=>{
             if (target==='chat'||target==='voice'||target==='tools') setTab(target);
           }).catch(()=>{});
       }
     });
-    return ()=>{mounted=false;subscription.remove();};
+    return ()=>{mounted=false;cancelConnectionPoll();subscription.remove();};
   },[engine.live]);
   const [nexaPermissionBusy, setNexaPermissionBusy] = useState(false);
   const [githubStatus, setGithubStatus] = useState<AppAvailability | null>(null);
