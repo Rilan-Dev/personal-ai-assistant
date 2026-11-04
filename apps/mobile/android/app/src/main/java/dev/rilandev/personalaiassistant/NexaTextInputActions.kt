@@ -100,6 +100,42 @@ internal object NexaTextInputActions {
         }
         return Found(count,selected)
     }
+    /** Read-only owner-requested discovery. Returns ONLY safe field labels,
+     * never contents, screenshots, numbers or package inventories. */
+    fun inspectVisibleFields(service:ScreenAssistService):String {
+        if(!ScreenAssistState.connected || ScreenAssistService.active !== service)
+            return "Enable Nexa Screen Assist to identify input boxes."
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+            ?:return "No permitted external application is visible."
+        try {
+            val labels=linkedSetOf<String>()
+            val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            var visited=0
+            while(queue.isNotEmpty()&&visited++<160&&labels.size<8) {
+                val node=queue.removeFirst()
+                if(!node.isVisibleToUser || node.isPassword)continue
+                if(node.isEditable && node.isEnabled && node.text.isNullOrEmpty() &&
+                    node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT}) {
+                    val hints=listOf(node.hintText?.toString().orEmpty(),
+                        node.contentDescription?.toString().orEmpty(),
+                        node.viewIdResourceName?.substringAfterLast('/')?.replace('_',' ').orEmpty())
+                    // Use the first suitable hint; don't leak any field contents.
+                    val label=hints.firstOrNull { hint ->
+                        NexaTextInputPolicy.matches(hint,hints,true,false,true,true,true,true)
+                    }
+                    if(label!=null) labels.add(label.take(50))
+                }
+                for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
+            }
+            return if(labels.isEmpty())
+                "No safe named empty input boxes were found in this app. Nothing typed."
+            else "Safe empty input boxes: "+labels.joinToString(", ")+
+                ". In full Nexa Chat, request: type your text into the named field. No text was read or entered."
+        }catch(_:Exception){return "The app changed during input inspection; no text was read."}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
     fun prepare(service:ScreenAssistService):String {
         cancel()
         val draft=NexaTextInputState.peek() ?:return "No active reviewed text-entry request."
