@@ -1,3 +1,16 @@
+## 2026-11-05 — DSH Phase 1/2 development progress
+
+- Added a provider-neutral task proposal admission adapter around the actual Chat planner path for deterministic intent, direct BYOK, and LangGraph suggestions; new execution remains gated OFF.
+- Added encrypted native plan admission in existing custom.db v3: native rechecks owner identity/policy, step expiry/dependencies, exact no-side-effect registry, and atomically inserts read-only task steps and a plan event without granting a mandate.
+- Owner cancellation atomically invalidates child planned steps. Existing native fact task coordinator now reconciles stale claimed steps as uncertain and revokes their mandate without retrying the Android read.
+- Added Node admission and Android plan-storage/recovery instrumented tests.
+- Fixed debug-only Kotlin compilation error identified in Actions #41992588796.
+- Targeted Node and full TypeScript source checks passed during implementation (389 tests at prior exact commit e25828488ae3). Later source revisions require a fresh exact-commit check; Android native CI for new changes is still needed.
+- No unattended sends, general model-driven Accessibility actions, production Docker restart, automatic CI triggers or main branch promotion.
+
+Remaining DEVELOPMENT work before calling general Phase 2 finished: full general-purpose step state transitions/approval and observation APIs across Chat/Voice; one shared Kotlin final execution coordinator for all supported tools; cross-interface stable task identities and complete interruption recovery. Keep flag OFF until these changes are implemented.
+
+---
 
 ## 2026-11-05 — Next release gate: unified Nexa task lifecycle
 
