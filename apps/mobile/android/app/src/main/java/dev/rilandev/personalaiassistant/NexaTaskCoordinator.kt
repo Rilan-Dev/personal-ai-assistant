@@ -436,6 +436,188 @@ internal object NexaTaskCoordinator {
         return results.joinToString(" ")
     }
 
+
+    /** Owner-reviewed execution of an already-admitted read-only plan.
+     * Model-authored capabilities cannot bypass the native disabled gate.
+     */
+    private const val REVIEW_POLICY="owner-review-v1"
+    private val reviewId=Regex("task-[0-9a-f-]{36}")
+    private val reviewTools=setOf("device.status","device.battery_status")
+    private data class ReviewedStep(val stepId:String,val ordinal:Int,
+                                    val tool:String,val deps:List<String>,val seal:String)
+    private data class ReviewedPlan(val taskId:String,val scope:String,
+                                    val steps:List<ReviewedStep>)
+    private fun reviewedSteps(db:SQLiteDatabase,taskId:String):List<ReviewedStep>? {
+        val result=mutableListOf<ReviewedStep>()
+        db.rawQuery(
+            "SELECT step_id,ordinal,tool_id,status,risk,expected_evidence,arguments_cipher " +
+            "FROM agent_task_steps WHERE task_id=? ORDER BY ordinal",
+            arrayOf(taskId)
+        ).use {cursor->
+            while(cursor.moveToNext()){
+                val stepId=cursor.getString(0)
+                val ordinal=cursor.getInt(1)
+                val tool=cursor.getString(2)
+                if(ordinal!=result.size||result.size>=8||
+                    !stepId.matches(Regex("step-[0-9a-f-]{36}"))||
+                    tool !in reviewTools||cursor.getString(3)!="planned"||
+                    cursor.getString(4)!="low"||
+                    cursor.getString(5)!="native_reading")return null
+                val cipher=cursor.getBlob(6)
+                val args=org.json.JSONObject(NexaConversationDb.openNativeTaskArguments(cipher))
+                if(args.length()!=3||!args.has("sourceStepId")||
+                    !args.has("input")||!args.has("dependsOn")||
+                    args.optString("sourceStepId").isBlank()||
+                    args.optJSONObject("input")?.length()!=0)return null
+                val dependencies=args.optJSONArray("dependsOn")?:return null
+                if(dependencies.length()>8)return null
+                val deps=mutableListOf<String>()
+                for(i in 0 until dependencies.length()){
+                    val dep=dependencies.optString(i)
+                    if(dep in deps||result.none{it.stepId==dep})return null
+                    deps.add(dep)
+                }
+                val seal=digest(cipher.joinToString(""){"%02x".format(it.toInt() and 255)})
+                result.add(ReviewedStep(stepId,ordinal,tool,deps,seal))
+            }
+        }
+        return result.takeIf{it.isNotEmpty()}
+    }
+    private fun scopeForReviewed(taskId:String,steps:List<ReviewedStep>):String{
+        val fingerprint=(listOf(taskId,REVIEW_POLICY)+steps.map {
+            it.stepId+":"+it.ordinal+":"+it.tool+":"+it.seal+
+                ":"+it.deps.joinToString(",")
+        }).joinToString("|")
+        return digest(fingerprint)
+    }
+    private fun activateReviewed(context:Context,taskId:String,revision:Int):ReviewedPlan?=
+        transaction(context){db->
+            val owner=db.rawQuery(
+                "SELECT 1 FROM agent_tasks WHERE task_id=? AND origin='chat' "+
+                    "AND session_id LIKE 'owner-%' AND policy_version=? "+
+                    "AND status='proposed' AND plan_revision=?",
+                arrayOf(taskId,REVIEW_POLICY,revision.toString())
+            ).use{it.moveToFirst()}
+            check(owner)
+            val steps=reviewedSteps(db,taskId)?:error("Invalid read-only plan")
+            val scope=scopeForReviewed(taskId,steps)
+            val now=System.currentTimeMillis()
+            val changed=db.compileStatement(
+                "UPDATE agent_tasks SET status='ready',plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status='proposed' AND "+
+                    "policy_version=? AND plan_revision=?"
+            ).use{
+                it.bindLong(1,now);it.bindString(2,taskId)
+                it.bindString(3,REVIEW_POLICY);it.bindLong(4,revision.toLong())
+                it.executeUpdateDelete()
+            }
+            check(changed==1)
+            db.execSQL(
+                "UPDATE agent_task_steps SET status='pending' "+
+                    "WHERE task_id=? AND status='planned'",arrayOf(taskId)
+            )
+            db.execSQL(
+                "INSERT INTO agent_mandates(mandate_id,task_id,owner_request_id,"+
+                    "scope_digest,policy_version,expires_at) VALUES(?,?,?,?,?,?)",
+                arrayOf(id("mandate-"),taskId,taskId,scope,REVIEW_POLICY,now+120_000L)
+            )
+            event(db,taskId,steps.first().stepId,"owner_read_plan_activated",now)
+            ReviewedPlan(taskId,scope,steps)
+        }
+    private fun reviewedMandate(db:SQLiteDatabase,plan:ReviewedPlan):Boolean=
+        db.rawQuery(
+            "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON m.task_id=t.task_id "+
+            "WHERE t.task_id=? AND t.origin='chat' AND t.policy_version=? "+
+            "AND t.status IN ('ready','running') AND m.policy_version=? "+
+            "AND m.scope_digest=? AND m.revoked_at IS NULL AND m.expires_at>?",
+            arrayOf(plan.taskId,REVIEW_POLICY,REVIEW_POLICY,plan.scope,
+                System.currentTimeMillis().toString())
+        ).use{it.moveToFirst()}
+
+    private fun claimReviewed(context:Context,plan:ReviewedPlan,step:ReviewedStep):Boolean=
+        transaction(context){db->
+            check(reviewedMandate(db,plan))
+            for(dep in step.deps){
+                val verified=db.rawQuery(
+                    "SELECT 1 FROM agent_task_steps WHERE task_id=? AND step_id=? "+
+                        "AND status='verified'",arrayOf(plan.taskId,dep)
+                ).use{it.moveToFirst()}
+                check(verified)
+            }
+            val now=System.currentTimeMillis()
+            val changed=db.compileStatement(
+                "UPDATE agent_task_steps SET status='outcome_unknown' "+
+                    "WHERE task_id=? AND step_id=? AND status='pending'"
+            ).use{
+                it.bindString(1,plan.taskId);it.bindString(2,step.stepId)
+                it.executeUpdateDelete()
+            }
+            check(changed==1)
+            db.execSQL(
+                "UPDATE agent_tasks SET status='running',plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status IN ('ready','running')",
+                arrayOf(now,plan.taskId)
+            )
+            event(db,plan.taskId,step.stepId,"claimed_before_read",now)
+            true
+        }==true
+    private fun verifyReviewed(context:Context,plan:ReviewedPlan,step:ReviewedStep,
+                               reading:String):Boolean=
+        transaction(context){db->
+            check(reviewedMandate(db,plan))
+            val now=System.currentTimeMillis()
+            val changed=db.compileStatement(
+                "UPDATE agent_task_steps SET status='verified' WHERE "+
+                    "task_id=? AND step_id=? AND status='outcome_unknown'"
+            ).use{
+                it.bindString(1,plan.taskId);it.bindString(2,step.stepId)
+                it.executeUpdateDelete()
+            }
+            check(changed==1)
+            val finished=step.ordinal==plan.steps.lastIndex
+            db.execSQL(
+                "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status='running'",
+                arrayOf(if(finished)"completed" else "running",now,plan.taskId)
+            )
+            db.execSQL(
+                "INSERT INTO agent_observations(observation_id,step_id,source_kind,"+
+                    "verdict,evidence_digest,observed_at) "+
+                    "VALUES(?,?,'android_framework','verified',?,?)",
+                arrayOf(id("observation-"),step.stepId,digest(reading),now)
+            )
+            event(db,plan.taskId,step.stepId,"native_read_verified",now)
+            true
+        }==true
+
+    /** A model-selected action cannot call this directly. This method is
+     * reached only after the trusted owner explicitly chooses Run in the UI.
+     */
+    fun executeReviewedReadOnlyPlan(context:Context,taskId:String,revision:Int):String{
+        if(!BuildConfig.NEXA_REVIEWED_READ_PLAN_ENABLED)
+            return "Reviewed task execution is disabled. No action performed."
+        if(!reviewId.matches(taskId)||revision<1)
+            return "Invalid reviewed task. No action performed."
+        val plan=activateReviewed(context,taskId,revision)
+            ?:return "Task was changed or review authorization failed. No action performed."
+        val results=mutableListOf<String>()
+        for(step in plan.steps){
+            if(!claimReviewed(context,plan,step))
+                return "Task blocked at step "+(step.ordinal+1)+". No automatic retry."
+            val command=if(step.tool=="device.battery_status")"battery" else "device status"
+            val reading=try{NexaPhoneVoiceTools.deviceFacts(context,command)}
+                catch(_:Exception){null}
+            if(reading.isNullOrBlank()||reading.contains("unavailable",true)||
+                reading.contains("did not provide",true)||
+                reading.contains("did not allow",true))
+                return "Task outcome unresolved. No automatic retry."
+            if(!verifyReviewed(context,plan,step,reading))
+                return "Could not commit task evidence. No automatic retry."
+            results.add(reading)
+        }
+        return results.joinToString(" ")
+    }
+
     /**
      * Called only by a trusted explicit user-intent path. Raw model tool
      * calls cannot invoke this. There is NO general tool dispatch mechanism.
