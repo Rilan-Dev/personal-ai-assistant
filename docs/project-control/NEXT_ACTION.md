@@ -1,5 +1,12 @@
 
 
+## 2026-11-06 — Completed partial authorization/memory development
+Implemented: encrypted provenance-aware recipient app preference with owner-selected retention, display/forget in Tools, and exact per-request approval binding for reviewed message and generic text field preparation. The native request's exact recipient/label, package and text cannot be changed between prepare and confirm without cancelling the attempt.
+Remaining core engineering (not merely testing): unify all approved UI action claims beneath the parent Kotlin coordinator and versioned per-step mandate, replace the independent Voice gesture cursor, add evidence-grounded multi-step continuation for target app/chat and approved field, complete owner-controlled memory corrections and full release-flag rollback.
+Critical safety policy: never silently send or submit; approved text insertion only, no automatic replays; Android permission and provider grants required.
+---
+
+
 ## 2026-11-06 — Voice privacy and process-recovery source milestone
 Canonical audit-only mirroring, process-restart quarantine, and terminal Voice detail redaction are implemented in Development. Existing Android native UI and Voice executor permissions remain unchanged.
 Unfinished implementation: consolidate the legacy Voice action executor into Kotlin coordinator step/mandate authority, bind screen/recipient/message fields to exact per-step approvals, add observation-grounded continuation, owner-facing preference provenance/retention, and release switching/rollback. Android native compilation and physical-phone acceptance are still required before any production assertion.
