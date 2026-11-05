@@ -31,6 +31,8 @@ class NexaChatListQaActivity:Activity() {
         val area=base()
         area.addView(TextView(this).apply {
             text="WhatsApp - Synthetic QA only";textSize=18f
+            contentDescription="WhatsApp - Synthetic QA only"
+            isImportantForAccessibility=true
         })
         area.addView(TextView(this).apply { text="Ask Meta AI or Search" })
         fun addRow(name:String) {

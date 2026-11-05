@@ -36,8 +36,11 @@ internal object NexaQaAccessibilityRoot {
             automation.serviceInfo=info
         }catch(_:Exception){ /* rootInActiveWindow remains the fallback */ }
         var observedPackage=""
-        repeat(24) {
-            instrument.waitForIdleSync()
+        // ActivityScenario.launch waits for RESUMED, which can precede the
+        // first accessibility window snapshot on a cold emulator. Poll the
+        // condition without blocking the main thread on repeated idle checks.
+        instrument.waitForIdleSync()
+        repeat(120) {
             val active=try{automation.rootInActiveWindow}catch(_:Exception){null}
             if(active!=null) {
                 val pkg=active.packageName?.toString().orEmpty()
@@ -50,7 +53,7 @@ internal object NexaQaAccessibilityRoot {
                 if(root.packageName?.toString()==app &&
                     matchesFixture(root,marker))return root
             }
-            SystemClock.sleep(150L)
+            SystemClock.sleep(100L)
         }
         // Report package identity only. Never print screen text, screenshots
         // or any credential or personal contact.
