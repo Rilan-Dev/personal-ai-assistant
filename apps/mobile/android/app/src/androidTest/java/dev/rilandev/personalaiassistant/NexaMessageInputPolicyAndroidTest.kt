@@ -73,4 +73,26 @@ class NexaMessageInputPolicyAndroidTest {
         assertNotNull(NexaMessageDraftState.take())
         assertNull(NexaMessageDraftState.take())
     }
+
+    @Test fun approvalBindingRejectsAReplacedRecipientChannelOrMessage() {
+        val exact=NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.imo.android.imoim","Mom","I am in a meeting")
+        assertEquals(exact,NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.imo.android.imoim","Mom","I am in a meeting"))
+        assertNotEquals(exact,NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.imo.android.imoim","Mom","Please transfer money"))
+        assertNotEquals(exact,NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.imo.android.imoim","Dad","I am in a meeting"))
+        assertNotEquals(exact,NexaMessageInputPolicy.approvedDraftDigest(
+            "botim","com.imo.android.imoim","Mom","I am in a meeting"))
+        assertNotEquals(exact,NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.other.messaging","Mom","I am in a meeting"))
+        assertTrue(exact.matches(Regex("[0-9a-f]{64}")))
+        assertFalse("The digest must never expose the raw content",
+            exact.contains("meeting",true))
+        assertNotEquals(
+            NexaMessageInputPolicy.approvedDraftDigest("a","bc","d","e"),
+            NexaMessageInputPolicy.approvedDraftDigest("ab","c","d","e"))
+    }
+
 }
