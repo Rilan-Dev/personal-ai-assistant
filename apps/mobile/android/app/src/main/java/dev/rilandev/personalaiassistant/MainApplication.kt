@@ -29,6 +29,10 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
+    // Android may have killed a previous Voice process between owner-approved
+    // steps. Fence old cursor checkpoints before starting any new agent UI.
+    // This never resumes a claimed third-party UI action.
+    NexaLegacyVoiceTaskMirror.recoverAbandonedAfterProcessRestart(this)
     DefaultNewArchitectureEntryPoint.releaseLevel = try {
       ReleaseLevel.valueOf(BuildConfig.REACT_NATIVE_RELEASE_LEVEL.uppercase())
     } catch (e: IllegalArgumentException) {
