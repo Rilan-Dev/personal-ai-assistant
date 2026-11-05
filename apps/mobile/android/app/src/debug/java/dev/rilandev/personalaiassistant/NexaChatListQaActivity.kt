@@ -2,6 +2,7 @@ package dev.rilandev.personalaiassistant
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.View
 import android.text.InputType
 import android.widget.Button
 import android.widget.EditText
@@ -32,7 +33,7 @@ class NexaChatListQaActivity:Activity() {
         area.addView(TextView(this).apply {
             text="WhatsApp - Synthetic QA only";textSize=18f
             contentDescription="WhatsApp - Synthetic QA only"
-            isImportantForAccessibility=true
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_YES
         })
         area.addView(TextView(this).apply { text="Ask Meta AI or Search" })
         fun addRow(name:String) {
