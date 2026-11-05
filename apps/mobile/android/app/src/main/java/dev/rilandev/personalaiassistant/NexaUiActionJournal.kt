@@ -79,11 +79,15 @@ internal object NexaUiActionJournal {
     }
 
     /** Commits before touching another app; false blocks the action entirely. */
-    fun claim(ctx: Context, approvalToken: String, kind: String, packageName: String): Boolean =
+    fun claim(ctx: Context, approvalToken: String, kind: String, packageName: String,
+              reviewedInputDigest:String?=null): Boolean =
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
                 kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","text_fill") ||
-                !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}"))) {
+                !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
+                (kind in setOf("message_fill","text_fill") &&
+                    !Regex("[0-9a-f]{64}").matches(reviewedInputDigest.orEmpty())) ||
+                (kind !in setOf("message_fill","text_fill") && reviewedInputDigest!=null)) {
                 return@synchronized false
             }
             try {
@@ -95,7 +99,8 @@ internal object NexaUiActionJournal {
                 // Commit a durable, unique SQLite tombstone BEFORE changing the
                 // bounded diagnostic ledger or touching the external app.
                 // If the diagnostic write fails, the claim is still consumed.
-                if(!NexaConversationDb.reserveUiActionClaim(ctx,id,kind,digest(packageName)))
+                if(!NexaConversationDb.reserveUiActionClaim(
+                    ctx,id,kind,digest(packageName),reviewedInputDigest))
                     return@synchronized false
                 entries.put(JSONObject()
                     .put("id",id)
