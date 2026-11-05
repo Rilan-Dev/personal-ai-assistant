@@ -36,3 +36,35 @@ Date: 2026-11-05. Target: Development. GitHub is source of record.
 - NexaTaskCoordinatorRecoveryAndroidTest.kt verifies one-time recovery and permanent mandate revocation.
 - A prior Android CI attempt (#41992588796 on 101ff60c7e98) exposed an unrelated debug-only Kotlin property error in NexaChatListQaActivity.kt. The writable importantForAccessibility property is now used instead of assigning isImportantForAccessibility.
 - The new task execution feature remains disabled; full Chat and Voice unification and all consequential Android actions still require native policy and owner approval.
+
+## 2026-11-05 — Encrypted owner corrections, dependency review and unified history
+
+- NexaTaskLifecycle.kt implements compare-and-swap owner corrections using
+  plan_revision, encrypted replacement goals, transactional invalidation of
+  unclaimed draft steps, and append-only redacted revision events. Corrections
+  are blocked for cancelled, mandated, approved, observed or claimed work.
+- The foreground-only native bridge now exposes owner review details and
+  revision-safe correction; Tools shows step/event metadata without exposing
+  encrypted tool arguments or screen/contact contents.
+- NexaTaskStore.reviewDependencies decrypts edges inside Kotlin only, returns
+  blockers and always sets executable=false; satisfied dependencies never grant
+  permission to dispatch a device action.
+- NexaUnifiedTaskTimeline.kt provides a unified read-only index across native
+  agent_tasks and legacy voice_task_checkpoints. Legacy voice checkpoints
+  remain distinguishable and do not count as verified execution evidence.
+- normalizeMultiStepPlannerProposal accepts a provider envelope with version
+  and steps, binding all authority and IDs from native-trusted context.
+  This is safe plan normalization, not generic provider execution.
+- Android regression sources were added for optimistic concurrency, legacy
+  separation, mandatory denial, dependency blockers, and owner redaction.
+- Local source checks at Development 79c1f3a0e82d: 392/392 Node tests and
+  TypeScript PASS. Native compilation on later revisions is not implied.
+
+Remaining development: make the legacy Voice cursor, Chat, overlay, and system
+assistant share one final Kotlin task coordinator, enforce approvals and
+outcome evidence per action, migrate authorized screen/messaging adapters,
+and complete controlled memory and rollback integration.
+
+Execution feature flags remain OFF, no auto send, no permission bypass.
+The Nexa Android APK is not a Docker Compose service; no unrelated production
+containers were modified.
