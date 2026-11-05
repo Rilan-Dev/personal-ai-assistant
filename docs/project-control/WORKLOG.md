@@ -891,3 +891,20 @@ Confirmed older signed Android workflow 41926075781 passed on 0724292f. Implemen
 ## 2026-11-05 — Maestro proposal flow fix
 
 Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact-match assertion for proposal safety text embedded in a wrapped paragraph. Exposed the disclosure as a dedicated accessibility-labeled element and updated the flow assertion; added a source regression test. Focused test, TypeScript checks, and Expo web export pass. Full Android signed build and Maestro rerun still required for this revision.
+
+## 2026-11-05 — Task lifecycle development milestone
+
+- Added owner-correctable encrypted task goals with compare-and-swap revision
+  checks and preservation of append-only event provenance.
+- Editing a proposal atomically invalidates its tentative read-only steps.
+  Existing mandates, observations, approvals and claimed steps fence edits.
+- Added native encrypted dependency inspection with non-executable status,
+  foreground-only owner step/event history and one local review panel.
+- Added a combined native and legacy Voice task index while clearly labeling
+  legacy checkpoints as not independently verified task outcomes.
+- Added bounded multi-step model proposal normalization with local risk and
+  task ownership; provider outputs still cannot grant permission.
+- Local Node 392/392 and TypeScript passed at 79c1f3a0e82d. Android
+  compilation and physical device acceptance remain separate.
+- GitHub Development only, no main promotion, automatic sending, or Docker
+  service mutation.
