@@ -45,7 +45,7 @@ internal object NexaTaskStore {
         if(raw.length !in 32..12_000)return null
         val plan=try{JSONObject(raw)}catch(_:Exception){return null}
         if(!exactKeys(plan,rootKeys) || plan.optInt("version",-1)!=1 ||
-            plan.opt("executable")!==false ||
+            plan.opt("executable")!=false ||
             plan.optString("origin")!="chat" ||
             plan.optString("policyVersion")!=POLICY)return null
         val taskId=plan.optString("taskId")
