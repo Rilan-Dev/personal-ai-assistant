@@ -878,6 +878,21 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
      * Read-only index of native tasks and legacy Voice checkpoints.
      * No legacy checkpoint may become authorization for a native action.
      */
+    /** Owner-only redaction of a TERMINAL Voice task's private content.
+     * Does not erase audit events, claims or task identities; never executes.
+     */
+    @ReactMethod fun redactTerminalLegacyVoiceTask(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to clear Voice task details")
+            return
+        }
+        try {
+            promise.resolve(NexaLegacyVoiceTaskMirror.redactTerminal(reactContext,taskId))
+        }catch (_:Exception) {
+            promise.reject("VOICE_REDACTION","Could not clear Voice task details")
+        }
+    }
+
     @ReactMethod fun recentUnifiedTaskTimeline(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
             promise.reject("NOT_FOREGROUND","Open Nexa to inspect your task timeline")
