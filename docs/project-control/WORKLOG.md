@@ -915,3 +915,11 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Extended owner correction, cancellation, privacy redaction and history for all native review sources.
 - Added native regression tests for token replay, expiry, forged goals and cross-origin save/cancel.
 - Local source verification at be04a843c050: Node 392/392 PASS and TypeScript PASS. Later commits need exact native compilation.
+
+## 2026-11-05 — Android coordinator shared safe-read milestone
+- Routed direct owner battery/storage requests from assistant role and overlay to NexaTaskCoordinator, joining Chat and Sarvam/OpenAI Voice read authority.
+- Added origin-aware mandate checks, revocation and native timeline validation for role/overlay task rows.
+- Removed a duplicate direct BatteryManager path from the overlay command dispatcher.
+- Added explicit owner Discard for unpersisted origin-bound task review tokens; no task or message is created by discard.
+- Added Android instrumentation test source for cross-origin native fact runs and secure discard; production Android behavior still needs exact-SHA native evidence.
+- Kept external message Send and unrestricted screen automation disabled; no server Docker restart or main release promotion.
