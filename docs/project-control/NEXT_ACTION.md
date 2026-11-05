@@ -1,5 +1,12 @@
 
 
+## 2026-11-05 — Native device-fact coordinator now shared by four origins
+Completed source: direct owner Chat/Voice/assistant-role/overlay battery and storage facts now go through NexaTaskCoordinator, with encrypted task, one-shot claim, Android observation, mandate and owner-visible origin. Unsaved handoffs have a native Discard operation.
+Remaining implementation: general-purpose safe app/screen/messaging multi-step executor; exact per-action consent and recipient binding; one coordinator for legacy Voice task cursor and model-directed Chat execution; controlled memory provenance and rollback/release integration.
+Current scope is low-risk Android facts only. Release flag gates, user-approved send and Android platform permissions must remain intact.
+---
+
+
 ## 2026-11-05 — Shared task ingress implemented in source
 The same owner review now accepts Chat, Voice (Sarvam/OpenAI), assistant-role and overlay input. Trusted source is retained at explicit Save in encrypted custom.db. No model action is authorized.
 Still unfinished DEVELOPMENT: migrate legacy Voice cursor and Chat tools to one native coordinator; general step mandates, approval binding, cancellation and recovery; observed third-party screen navigation and messaging composition; provenance-aware memory; feature flag and rollback integration.
