@@ -369,6 +369,14 @@ class RealtimeVoiceService : Service() {
                                     "Rejected: voice device action budget exhausted.")
                                 return@post
                             }
+                            // Sarvam model tool calls do not carry a verified owner
+                            // speech identity. Exact owner-spoken reads are routed
+                            // through handleSarvamOwnerRequest and the coordinator.
+                            if(name=="get_battery_level" || name=="get_storage_usage") {
+                                sarvamApiTransport?.completeNativeTool(callId,
+                                    "Use an explicit owner request for a native device reading.")
+                                return@post
+                            }
                             when(val decision=NexaLiveToolPolicy.decide(
                                 this@RealtimeVoiceService,name,args)){
                                 is NexaLiveToolPolicy.Decision.Immediate -> {
