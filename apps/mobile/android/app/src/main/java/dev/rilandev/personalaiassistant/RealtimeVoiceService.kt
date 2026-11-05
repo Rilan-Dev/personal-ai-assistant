@@ -1018,6 +1018,24 @@ class RealtimeVoiceService : Service() {
             sarvamApiTransport?.toolResult(help)
             return
         }
+        // A literal owner-spoken battery/storage request is handled by the
+        // same durable Kotlin coordinator as Chat. Do not take a second read.
+        if(!fromPlan && NexaTaskCoordinator.classifyOwnerFact(transcript)!=null) {
+            val session=voiceSessionId
+            Thread({
+                val result=NexaTaskCoordinator.executeOwnerDeviceRead(
+                    this@RealtimeVoiceService,transcript,"live-voice")
+                main.post {
+                    if(active.get() && selectedProvider=="sarvam-api" &&
+                        voiceSessionId==session) {
+                        lastToolResult=result.take(320)
+                        message=lastToolResult
+                        sarvamApiTransport?.toolResult(result)
+                    }
+                }
+            },"nexa-sarvam-task-read").start()
+            return
+        }
         val fact=NexaPhoneVoiceTools.deviceFacts(this,transcript)
         if(fact!=null) {
             lastToolResult=fact.take(320)
