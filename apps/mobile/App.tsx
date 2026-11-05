@@ -30,6 +30,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {LocalTaskProposals} from './src/components/LocalTaskProposals';
+import {parseOwnerTaskReviewIntent,consumePendingOwnerTaskReview} from './src/native/localTaskProposals';
 import {ownerDeviceFactKind,nativeTaskCoordinatorAvailable,runOwnerDeviceRead} from './src/native/nativeTaskCoordinator';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
@@ -146,6 +147,13 @@ export default function App() {
   const exportHistory=async()=>{
     try {await shareConversationHistory();setHistoryNotice('Choose where to save or share the JSON export.');}
     catch {setHistoryNotice('Could not open the JSON export chooser.');}
+  };
+  const [taskReviewPrefill,setTaskReviewPrefill]=useState<{nonce:number;goal:string}|null>(null);
+  const taskReviewNonce=useRef(0);
+  const stageOwnerTaskForReview=(goal:string)=>{
+    taskReviewNonce.current+=1;
+    setTaskReviewPrefill({nonce:taskReviewNonce.current,goal});
+    setTab('tools');
   };
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
@@ -633,6 +641,11 @@ export default function App() {
     let mounted=true;
     const consume=async()=>{
       try {
+        const task=await consumePendingOwnerTaskReview().catch(()=>null);
+        if(task && mounted){
+          stageOwnerTaskForReview(task);
+          return;
+        }
         const spokenText=await consumeSpokenTextEntry();
         if(spokenText && mounted){
           setTextEntryRequest(spokenText);
@@ -1384,6 +1397,17 @@ export default function App() {
       }finally{setRunning(false);}
       return;
     }
+    // Saving a task always requires the owner to tap Save in the existing
+    // Tools review panel. AI, voice transcripts and gestures cannot auto-save.
+    if(!restore && engine.live){
+      const taskGoal=parseOwnerTaskReviewIntent(request);
+      if(taskGoal){
+        setInput('');setEvents([]);append('user',request);
+        stageOwnerTaskForReview(taskGoal);
+        append('assistant','Your task is ready to review in Tools. Tap Save to store it privately. No action was executed.');
+        return;
+      }
+    }
     // Explicit owner text routes only to a local message review UI.
     // The contact hint cannot resolve an address book or send a message.
     if (!restore && engine.live && whatsAppDraftAvailable()) {
@@ -2074,7 +2098,7 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
-        {engine.live && <LocalTaskProposals/>}
+        {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
