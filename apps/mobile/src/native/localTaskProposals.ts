@@ -14,6 +14,7 @@ export type LocalTaskReviewDetail={
 };
 type LocalTaskBridge={
   createOwnerTaskProposal(goal:string):Promise<string>;
+  createOwnerTaskFromHandoff?(token:string,goal:string):Promise<string>;
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
   clearCancelledOwnerTaskDetails?(taskId:string):Promise<boolean>;
@@ -39,11 +40,20 @@ export const localTaskProposalsAvailable=()=>Platform.OS==='android' &&
   typeof NativeModules.PAAConversationHistory?.recentOwnerTaskProposals==='function' &&
   typeof NativeModules.PAAConversationHistory?.cancelOwnerTaskProposal==='function';
 
-export async function saveLocalTaskProposal(goal:string):Promise<string>{
+export async function saveLocalTaskProposal(goal:string,handoffToken?:string):Promise<string>{
   const description=goal.trim();
   if(description.length<1||description.length>500||/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(description))
     throw Error('Task description must be 1–500 safe characters');
-  const taskId=await bridge().createOwnerTaskProposal(description);
+  const api=bridge();
+  let taskId:string;
+  if(handoffToken!==undefined){
+    if(!/^[0-9a-f-]{36}$/.test(handoffToken)||
+       typeof api.createOwnerTaskFromHandoff!=='function')
+      throw Error('Native owner review handoff is unavailable');
+    taskId=await api.createOwnerTaskFromHandoff(handoffToken,description);
+  }else {
+    taskId=await api.createOwnerTaskProposal(description);
+  }
   if(typeof taskId!=='string'||!id.test(taskId))throw Error('Local task receipt could not be verified');
   return taskId;
 }
@@ -52,7 +62,9 @@ function decodeProposal(value:unknown):LocalTaskProposal{
   const item=value as Record<string,unknown>;
   if(typeof item.taskId!=='string'||!id.test(item.taskId)||
     typeof item.sessionId!=='string'||!id.test(item.sessionId)||
-    item.origin!=='chat'||!ownerReviewPolicy(item.policyVersion)||
+    !item.sessionId.startsWith('owner-')||
+    !['chat','live-voice','assistant-role','overlay'].includes(String(item.origin))||
+    !ownerReviewPolicy(item.policyVersion)||
     !['proposed','cancelled','ready','running','completed','uncertain'].includes(String(item.status))||
     typeof item.goal!=='string'||item.goal.length>500||
     !Number.isSafeInteger(item.createdAt)||!Number.isSafeInteger(item.updatedAt)||
@@ -160,19 +172,33 @@ export function parseOwnerTaskReviewIntent(input:unknown):string|null {
   const goal=match?.[1]?.trim().replace(/[.!?]+$/,'').trim();
   return goal&&goal.length>=5&&goal.length<=320?goal:null;
 }
-/** No task is persisted until the owner taps Save in the existing Tools view. */
-export async function consumePendingOwnerTaskReview():Promise<string|null>{
+/** A native-origin handoff is a short-lived one-shot review token, not an
+ * approval to perform Android actions. Typed Chat requests do not have one.
+ */
+export type PendingOwnerTaskReview={
+  goal:string;
+  origin:'chat'|'live-voice'|'assistant-role'|'overlay';
+  token:string;
+};
+/** Nothing is persisted until the owner explicitly taps Save in Tools. */
+export async function consumePendingOwnerTaskReview():Promise<PendingOwnerTaskReview|null>{
   if(Platform.OS!=='android')return null;
   const module=NativeModules.PAAConversationHistory as LocalTaskBridge|undefined;
   if(typeof module?.consumePendingOwnerTaskReview!=='function')return null;
-  const value=await module.consumePendingOwnerTaskReview();
-  if(value===null)return null;
-  if(typeof value!=='string'||value.length<5||value.length>320||
-     Array.from(value).some(char=>char.charCodeAt(0)<32))
-    throw Error('Invalid spoken task review draft');
-  return value;
+  const raw=await module.consumePendingOwnerTaskReview();
+  if(raw===null)return null;
+  if(typeof raw!=='string'||raw.length>650)throw Error('Invalid owner review receipt');
+  const value:unknown=JSON.parse(raw);
+  if(!value||typeof value!=='object'||Array.isArray(value))
+    throw Error('Invalid owner review receipt');
+  const item=value as Record<string,unknown>;
+  if(typeof item.goal!=='string'||item.goal.length<5||item.goal.length>320||
+    Array.from(item.goal).some(x=>x.charCodeAt(0)<32)||
+    !['chat','live-voice','assistant-role','overlay'].includes(String(item.origin))||
+    typeof item.token!=='string'||!/^[0-9a-f-]{36}$/.test(item.token))
+    throw Error('Untrusted owner review receipt');
+  return value as PendingOwnerTaskReview;
 }
-
 
 /** Native-only reviewed plan metadata; plaintext arguments never reach React Native. */
 export type OwnerReadOnlyStep={
