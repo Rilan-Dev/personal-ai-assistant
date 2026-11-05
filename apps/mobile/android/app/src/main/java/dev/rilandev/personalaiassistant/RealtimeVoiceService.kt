@@ -892,6 +892,21 @@ class RealtimeVoiceService : Service() {
 
     private fun handleSarvamOwnerRequest(rawTranscript: String, fromPlan:Boolean=false) {
         if (!assistantPanelEnabled || pendingAppTool != null || activeToolOperation)return
+        // A legacy compound Voice step may run ONLY while its one canonical
+        // task/checkpoint pair still agrees on session, ordinal and state.
+        // This is a denial fence, never a new authority to tap or send.
+        if(fromPlan){
+            val cursor=currentCompound
+            if(cursor==null || cursor.current()!=rawTranscript ||
+                !NexaLegacyVoiceTaskMirror.mayContinue(
+                    this,cursor.taskId,voiceSessionId,cursor.stepIndex)){
+                cursor?.let{closeCompound(it,"uncertain",
+                    "Native task checkpoint no longer authorizes continuation")}
+                sarvamApiTransport?.toolResult(
+                    "Voice task state changed or is unavailable. No further device action.")
+                return
+            }
+        }
         if(!fromPlan) {
             taskRequestEpoch++
             currentCompound?.let { closeCompound(it,"cancelled","New owner request") }
