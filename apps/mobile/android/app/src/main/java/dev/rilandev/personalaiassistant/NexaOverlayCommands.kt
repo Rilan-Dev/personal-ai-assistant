@@ -114,10 +114,14 @@ internal object NexaOverlayCommands {
             }
         }
         val text = normalize(raw)
+        // Task progress is always obtained from the same durable native index.
+        // It is a LOCAL, owner-requested status read; never an AI approval.
+        if (NexaTaskStatusSummary.matches(text))
+            return NexaTaskStatusSummary.localOwnerReport(context)
         return when (text) {
             "help", "commands", "what can you do" ->
                 "Try: device status, battery, check github, check whatsapp, open github, " +
-                "open whatsapp, open brave, find my github app, launcher status. Messages require review."
+                "open whatsapp, open brave, find my github app, launcher status, task status. Messages require review."
             "status", "permissions", "device status", "check device status", "privacy",
             "background status", "background voice status", "hey nexa status" -> status(context)
             "battery", "battery level", "check battery", "check battery level" -> {
