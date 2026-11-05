@@ -336,7 +336,7 @@ class RealtimeVoiceService : Service() {
                                 if(active.get() && selectedProvider=="sarvam-api" &&
                                     session==voiceSessionId) {
                                     message=if(NexaOwnerTaskReview.offerInForeground(
-                                            this@RealtimeVoiceService,task))
+                                            this@RealtimeVoiceService,task,"live-voice"))
                                         "Task ready for owner review in Nexa. Nothing executed."
                                     else "Task review is unavailable or already pending. Nothing executed."
                                 }
@@ -597,7 +597,7 @@ class RealtimeVoiceService : Service() {
                             if(task!=null)main.post {
                                 if(active.get() && selectedProvider=="openai") {
                                     message=if(NexaOwnerTaskReview.offerInForeground(
-                                            this@RealtimeVoiceService,task))
+                                            this@RealtimeVoiceService,task,"live-voice"))
                                         "Task ready for owner review in Nexa. Nothing executed."
                                     else "Task review is unavailable or already pending. Nothing executed."
                                 }
