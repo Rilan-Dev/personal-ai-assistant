@@ -27,7 +27,7 @@ test('system assistant loops on-device speech turns and does not force cloud fal
 test('system spoken commands use the same deterministic gate as typed overlay tools',()=>{
   const commands = readFileSync('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaOverlayCommands.kt','utf8');
   assert.ok(code.includes('private fun applyDeviceCommand(raw: String)'));
-  assert.ok(code.includes('NexaOverlayCommands.handle(app, command)'));
+  assert.ok(code.includes('NexaOverlayCommands.handle(app, command, "assistant-role")'));
   assert.ok(commands.includes('"open github", "open github app"'));
   assert.ok(commands.includes('"open whatsapp", "open my whatsapp"'));
   assert.ok(commands.includes('"find github", "find github app"'));
