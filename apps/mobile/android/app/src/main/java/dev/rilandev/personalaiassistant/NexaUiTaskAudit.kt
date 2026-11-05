@@ -41,9 +41,14 @@ internal object NexaUiTaskAudit {
 
     /** Must be called only inside the caller's outer SQLite transaction. */
     fun createInTransaction(db:SQLiteDatabase,tokenDigest:String,
-                            actionKind:String,packageDigest:String,now:Long):Boolean{
+                            actionKind:String,packageDigest:String,now:Long,
+                            reviewedInputDigest:String?=null):Boolean{
         if(!sha.matches(tokenDigest)||!sha.matches(packageDigest)||
-            actionKind !in allowed)return false
+            actionKind !in allowed ||
+            (actionKind in setOf("message_fill","text_fill") &&
+                !sha.matches(reviewedInputDigest.orEmpty())) ||
+            (actionKind !in setOf("message_fill","text_fill") &&
+                reviewedInputDigest!=null))return false
         val taskId=id("task-",tokenDigest)
         val stepId=id("step-",tokenDigest)
         // The exact package and user-visible labels never enter this task.
@@ -89,7 +94,8 @@ internal object NexaUiTaskAudit {
             stmt.bindString(1,id("approval-",tokenDigest))
             stmt.bindString(2,stepId)
             stmt.bindString(3,packageDigest)
-            stmt.bindString(4,digest("ui-action-v1:"+actionKind+":"+tokenDigest))
+            stmt.bindString(4,reviewedInputDigest ?:
+                digest("ui-action-v1:"+actionKind+":"+tokenDigest))
             stmt.bindLong(5,now+300_000L)
             stmt.bindLong(6,now)
             check(stmt.executeInsert()!=-1L)
