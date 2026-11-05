@@ -280,6 +280,13 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                             statement.executeUpdateDelete()
                         }
                         if(updated!=1)return@synchronized false
+                        // Cancellation of a review-only plan is a durable fence:
+                        // no associated pending step may remain eligible for
+                        // future coordinator scheduling.
+                        db.execSQL(
+                            "UPDATE agent_task_steps SET status='cancelled' WHERE task_id=? AND status IN ('planned','pending','awaiting_approval')",
+                            arrayOf(taskId)
+                        )
                         db.compileStatement(
                             "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) VALUES(?,NULL,'owner_cancelled',?)"
                         ).use { statement ->
