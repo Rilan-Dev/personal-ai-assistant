@@ -3,11 +3,11 @@ import {NativeModules,Platform} from 'react-native';
 /** Manual, non-executable owner task — never a provider or model instruction. */
 export type LocalTaskProposal={
   taskId:string;sessionId:string;origin:'chat'|'live-voice'|'assistant-role'|'overlay';
-  status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain';policyVersion:string;goal:string;
+  status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain'|'failed';policyVersion:string;goal:string;
   createdAt:number;updatedAt:number;revision?:number;
 };
 export type LocalTaskReviewDetail={
-  taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain';revision:number;updatedAt:number;
+  taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain'|'failed';revision:number;updatedAt:number;
   steps:Array<{ordinal:number;toolId:string;status:string;evidence:string;
     dependencies?:number;missingDependencies?:number;dependenciesSatisfied?:boolean;executable?:false}>;
   events:Array<{kind:string;createdAt:number}>;
@@ -19,6 +19,7 @@ type LocalTaskBridge={
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
   clearCancelledOwnerTaskDetails?(taskId:string):Promise<boolean>;
+  clearFinishedOwnerTaskDetails?(taskId:string):Promise<boolean>;
   consumePendingOwnerTaskReview?():Promise<string|null>;
   admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
   reviseOwnerTaskProposal(taskId:string,expectedRevision:number,goal:string):Promise<boolean>;
@@ -77,7 +78,7 @@ function decodeProposal(value:unknown):LocalTaskProposal{
     !item.sessionId.startsWith('owner-')||
     !['chat','live-voice','assistant-role','overlay'].includes(String(item.origin))||
     !ownerReviewPolicy(item.policyVersion)||
-    !['proposed','cancelled','ready','running','completed','uncertain'].includes(String(item.status))||
+    !['proposed','cancelled','ready','running','completed','uncertain','failed'].includes(String(item.status))||
     typeof item.goal!=='string'||item.goal.length>500||
     !Number.isSafeInteger(item.createdAt)||!Number.isSafeInteger(item.updatedAt)||
     (item.revision!==undefined&&(!Number.isSafeInteger(item.revision)||Number(item.revision)<1)))
@@ -133,7 +134,7 @@ export async function readLocalTaskDetail(taskId:string):Promise<LocalTaskReview
   if(!value||typeof value!=='object'||Array.isArray(value))
     throw Error('Invalid task detail record');
   const d=value as Record<string,unknown>;
-  if(d.taskId!==taskId||!['proposed','cancelled','ready','running','completed','uncertain'].includes(String(d.status))||
+  if(d.taskId!==taskId||!['proposed','cancelled','ready','running','completed','uncertain','failed'].includes(String(d.status))||
      !Number.isSafeInteger(d.revision)||Number(d.revision)<1||
      !Number.isSafeInteger(d.updatedAt)||!Array.isArray(d.steps)||
      d.steps.length>8||!Array.isArray(d.events)||d.events.length>40)
@@ -276,4 +277,16 @@ export async function continueOwnerReviewedReadOnlyPlan(
   if(typeof result!=='string'||!result||result.length>1200)
     throw Error('Unable to verify native task continuation result');
   return result;
+}
+
+
+/** Explicit owner redaction after permanent terminal status; immutable step
+ * evidence, approval history and no-replay tombstones remain intact.
+ */
+export async function clearFinishedOwnerTaskDetails(taskId:string):Promise<boolean>{
+  if(!id.test(taskId))throw Error('Invalid task identity');
+  const api=bridge();
+  if(typeof api.clearFinishedOwnerTaskDetails!=='function')
+    throw Error('Native terminal task privacy is unavailable');
+  return (await api.clearFinishedOwnerTaskDetails(taskId))===true;
 }
