@@ -68,3 +68,10 @@ and complete controlled memory and rollback integration.
 Execution feature flags remain OFF, no auto send, no permission bypass.
 The Nexa Android APK is not a Docker Compose service; no unrelated production
 containers were modified.
+
+## 2026-11-05 — Origin-bound handoff milestone
+- Trusted native entry points pass their origin to NexaOwnerTaskReview; the original goal and source cannot be rewritten by an LLM.
+- An Android-minted one-shot receipt must match the original goal at owner Save, producing one encrypted task ID in custom.db.
+- Edited review text is saved as a new manual Chat-origin request instead of misattributing it to Voice or overlay.
+- Private history, corrections, cancellation and goal-redaction now accept owner-saved native-origin tasks.
+- Android instrumentation test sources cover replay, expiry, source provenance and non-execution. Execution flags remain OFF.
