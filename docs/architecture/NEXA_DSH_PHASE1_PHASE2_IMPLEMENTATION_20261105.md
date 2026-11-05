@@ -84,3 +84,11 @@ containers were modified.
 - The Tools owner review now offers explicit Discard of pending unsaved cross-origin task handoff, invalidating the one-use token without creating a task.
 - Added Android instrumentation tests for same-origin durable reads, two-step facts, absence of message execution, and discarding unsaved reviews.
 - Higher-risk Accessibility and messaging workflows are still NOT part of a general native task scheduler; do not infer completion of Phases 3-6.
+
+## 2026-11-06 — Audit-only convergence of legacy Voice task state
+- custom.db v3 is unchanged; no schema migration is needed. NexaConversationDb.saveTask is now transactional over its legacy checkpoint and a new voice-checkpoint-audit-v1 native task projection.
+- A legacy cursor's step advances are recorded as checkpoint_advanced, NOT verified or completed external actions. No observation, mandate or approval row is generated.
+- A known Voice task ID cannot overwrite a native task or change its original session, request, steps or monotonically increasing index. Terminal tasks cannot reopen.
+- MainApplication fences abandoned Voice cursors as uncertain on process restart before React Native starts. No automatic third-party action replay occurs.
+- NexaUnifiedTaskTimeline returns a single legacy_voice_checkpoint entry with verifiedSteps=0 even when the native audit projection exists.
+- This is task state persistence convergence, NOT complete migration of the separate Voice executor; screen/messaging final native coordinator remains open.
