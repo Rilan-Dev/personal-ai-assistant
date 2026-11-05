@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
@@ -30,6 +30,8 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {LocalTaskProposals} from './src/components/LocalTaskProposals';
+import {parseOwnerTaskReviewIntent,consumePendingOwnerTaskReview} from './src/native/localTaskProposals';
+import {ownerDeviceFactKind,ownerReadOnlyPlanKinds,nativeTaskCoordinatorAvailable,runOwnerDeviceRead,runOwnerReadOnlyPlan} from './src/native/nativeTaskCoordinator';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -56,7 +58,9 @@ import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
 import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
+import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
+import {saveLocalTaskProposal,admitLocalReadOnlyTaskPlan} from './src/native/localTaskProposals';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
@@ -143,6 +147,13 @@ export default function App() {
   const exportHistory=async()=>{
     try {await shareConversationHistory();setHistoryNotice('Choose where to save or share the JSON export.');}
     catch {setHistoryNotice('Could not open the JSON export chooser.');}
+  };
+  const [taskReviewPrefill,setTaskReviewPrefill]=useState<{nonce:number;goal:string}|null>(null);
+  const taskReviewNonce=useRef(0);
+  const stageOwnerTaskForReview=(goal:string)=>{
+    taskReviewNonce.current+=1;
+    setTaskReviewPrefill({nonce:taskReviewNonce.current,goal});
+    setTab('tools');
   };
   const [input, setInput] = useState('');
   const [running, setRunning] = useState(false);
@@ -630,6 +641,11 @@ export default function App() {
     let mounted=true;
     const consume=async()=>{
       try {
+        const task=await consumePendingOwnerTaskReview().catch(()=>null);
+        if(task && mounted){
+          stageOwnerTaskForReview(task);
+          return;
+        }
         const spokenText=await consumeSpokenTextEntry();
         if(spokenText && mounted){
           setTextEntryRequest(spokenText);
@@ -1364,6 +1380,35 @@ export default function App() {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    // Explicit owner device-fact questions use the ONE Kotlin task authority.
+    // No model call, Accessibility action or external message can enter here.
+    if(!restore && engine.live && (ownerDeviceFactKind(request)||ownerReadOnlyPlanKinds(request))){
+      setInput('');setEvents([]);append('user',request);
+      if(!nativeTaskCoordinatorAvailable()){
+        append('assistant','Update Nexa to enable secure on-device task execution. No action was performed.');
+        return;
+      }
+      setRunning(true);
+      try{
+        const answer=ownerReadOnlyPlanKinds(request)
+          ? await runOwnerReadOnlyPlan(request) : await runOwnerDeviceRead(request);
+        append('assistant',answer);
+      }catch{
+        append('assistant','Android could not confirm this task result. Review task status before retrying.');
+      }finally{setRunning(false);}
+      return;
+    }
+    // Saving a task always requires the owner to tap Save in the existing
+    // Tools review panel. AI, voice transcripts and gestures cannot auto-save.
+    if(!restore && engine.live){
+      const taskGoal=parseOwnerTaskReviewIntent(request);
+      if(taskGoal){
+        setInput('');setEvents([]);append('user',request);
+        stageOwnerTaskForReview(taskGoal);
+        append('assistant','Your task is ready to review in Tools. Tap Save to store it privately. No action was executed.');
+        return;
+      }
+    }
     // Explicit owner text routes only to a local message review UI.
     // The contact hint cannot resolve an address book or send a message.
     if (!restore && engine.live && whatsAppDraftAvailable()) {
@@ -1489,8 +1534,27 @@ export default function App() {
             availableToolIds: engine.registry.describe().map(tool=>tool.id)
           })
         : engine.live ? androidIntentPlanner : demoPlanner;
-      const harness=new AgentHarness(engine.registry,
-        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion));
+      const admittedPlanner=createTaskAdmissionPlanner(
+        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion),{
+          enabled:NEXA_TASK_V2_ENABLED,
+          // When enabled, only a direct, owner-selected native read can be
+          // admitted. This preflight precedes saving a native task ID.
+          context:async decision=>{
+            if(decision.type!=='tool' ||
+              !['device.status','device.battery_status'].includes(decision.call.toolId) ||
+              Object.keys(decision.call.input).length!==0)
+              throw Error('Only owner-requested, read-only native tools can be admitted');
+            const taskId=await saveLocalTaskProposal(request);
+            return {taskId,ownerRequestId:taskId,origin:'chat',
+              policyVersion:'owner-review-v1',tools:engine.registry.describe(),
+              nowMs:Date.now()};
+          },
+          persistProposal:async plan=>{
+            if(!await admitLocalReadOnlyTaskPlan(plan))
+              throw Error('Native coordinator refused the proposed plan');
+          }
+        });
+      const harness=new AgentHarness(engine.registry,admittedPlanner);
       const result = await harness.run({
         request,
         sessionId,
@@ -2035,7 +2099,7 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
-        {engine.live && <LocalTaskProposals/>}
+        {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>

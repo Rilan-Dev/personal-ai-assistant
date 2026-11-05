@@ -87,6 +87,9 @@ class RealtimeVoiceService : Service() {
     )
     private var pendingAppTool: PendingAppTool? = null
     private var currentCompound: NexaVoiceTaskCursor? = null
+    // A model function name is not owner authority: this short-lived, one-use
+    // identity is minted only from an exact user microphone transcript.
+    private var ownerFactSpeech: Pair<String,Long>? = null
     private var taskRequestEpoch = 0L
     private var activeToolOperation = false
     private var voiceSessionId = "voice-" + java.util.UUID.randomUUID().toString()
@@ -273,6 +276,7 @@ class RealtimeVoiceService : Service() {
         assistantPanelEnabled = intent.getBooleanExtra(EXTRA_ASSISTANT_PANEL, false)
         pendingAppTool = null
         currentCompound=null
+        ownerFactSpeech=null
         taskRequestEpoch++
         activeToolOperation=false
         pendingApprovalSummary = null
@@ -325,6 +329,28 @@ class RealtimeVoiceService : Service() {
                     }
                     override fun ownerRequest(text:String):Boolean {
                         if(!assistantPanelEnabled)return false
+                        val task=NexaOwnerTaskReview.parse(text)
+                        if(task!=null){
+                            val session=voiceSessionId
+                            main.post {
+                                if(active.get() && selectedProvider=="sarvam-api" &&
+                                    session==voiceSessionId) {
+                                    if(NexaOwnerTaskReview.queue(task)){
+                                        try{
+                                            startActivity(Intent(this@RealtimeVoiceService,
+                                                MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                    Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                            message="Task ready for review in Nexa. Nothing executed."
+                                        }catch(_:Exception){
+                                            NexaOwnerTaskReview.clear()
+                                            message="Open Nexa to review your task. Nothing executed."
+                                        }
+                                    }else message="Review your previous task request first."
+                                }
+                            }
+                            return true
+                        }
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
                             NexaWhatsAppChatIntent.followupRecipient(text)!=null ||
@@ -363,6 +389,14 @@ class RealtimeVoiceService : Service() {
                             if(++toolCallsInSession>40) {
                                 sarvamApiTransport?.completeNativeTool(callId,
                                     "Rejected: voice device action budget exhausted.")
+                                return@post
+                            }
+                            // Sarvam model tool calls do not carry a verified owner
+                            // speech identity. Exact owner-spoken reads are routed
+                            // through handleSarvamOwnerRequest and the coordinator.
+                            if(name=="get_battery_level" || name=="get_storage_usage") {
+                                sarvamApiTransport?.completeNativeTool(callId,
+                                    "Use an explicit owner request for a native device reading.")
                                 return@post
                             }
                             when(val decision=NexaLiveToolPolicy.decide(
@@ -555,10 +589,35 @@ class RealtimeVoiceService : Service() {
                         val transcript=json.optString("transcript").trim()
                         if(transcript.isNotBlank())NexaConversationDb.append(this@RealtimeVoiceService,
                             voiceSessionId,"voice","openai","user",transcript.take(3000))
+                        main.post {
+                            if(active.get() && selectedProvider=="openai"){
+                                ownerFactSpeech=if(assistantPanelEnabled &&
+                                    NexaTaskCoordinator.classifyOwnerFact(transcript)!=null)
+                                    Pair(transcript,SystemClock.elapsedRealtime()+15_000L)
+                                    else null
+                            }
+                        }
                         // A provider transcript is never authority to SEND.
                         // A precise user-uttered message request can only
                         // open Nexa's local app/recipient review screen.
                         if(assistantPanelEnabled && transcript.isNotBlank()) {
+                            val task=NexaOwnerTaskReview.parse(transcript)
+                            if(task!=null)main.post {
+                                if(active.get() && selectedProvider=="openai") {
+                                    if(NexaOwnerTaskReview.queue(task)){
+                                        try{
+                                            startActivity(Intent(this@RealtimeVoiceService,
+                                                MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                    Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                            message="Task ready for review in Nexa. Nothing executed."
+                                        }catch(_:Exception){
+                                            NexaOwnerTaskReview.clear()
+                                            message="Open Nexa to review your task. Nothing executed."
+                                        }
+                                    }else message="Review your previous task request first."
+                                }
+                            }
                             val field=NexaVoiceTextIntent.parse(transcript)
                             if(field!=null)main.post {
                                 if(active.get() && selectedProvider=="openai"){
@@ -853,6 +912,23 @@ class RealtimeVoiceService : Service() {
             taskRequestEpoch++
             currentCompound?.let { closeCompound(it,"cancelled","New owner request") }
         }
+        if(!fromPlan && NexaTaskCoordinator.classifyOwnerReadOnlyPlan(rawTranscript)!=null) {
+            val session=voiceSessionId
+            val epoch=taskRequestEpoch
+            Thread({
+                val result=NexaTaskCoordinator.executeOwnerReadOnlyPlan(
+                    this@RealtimeVoiceService,rawTranscript,"live-voice")
+                main.post {
+                    if(active.get() && selectedProvider=="sarvam-api" &&
+                        session==voiceSessionId && epoch==taskRequestEpoch) {
+                        lastToolResult=result.take(320)
+                        message=lastToolResult
+                        sarvamApiTransport?.toolResult(result)
+                    }
+                }
+            },"nexa-sarvam-read-plan").start()
+            return
+        }
         val plan=if(fromPlan)null else NexaVoiceTaskPlan.parse(rawTranscript)
         if(plan!=null){
             val cursor=NexaVoiceTaskCursor(plan)
@@ -1018,6 +1094,24 @@ class RealtimeVoiceService : Service() {
             sarvamApiTransport?.toolResult(help)
             return
         }
+        // A literal owner-spoken battery/storage request is handled by the
+        // same durable Kotlin coordinator as Chat. Do not take a second read.
+        if(!fromPlan && NexaTaskCoordinator.classifyOwnerFact(transcript)!=null) {
+            val session=voiceSessionId
+            Thread({
+                val result=NexaTaskCoordinator.executeOwnerDeviceRead(
+                    this@RealtimeVoiceService,transcript,"live-voice")
+                main.post {
+                    if(active.get() && selectedProvider=="sarvam-api" &&
+                        voiceSessionId==session) {
+                        lastToolResult=result.take(320)
+                        message=lastToolResult
+                        sarvamApiTransport?.toolResult(result)
+                    }
+                }
+            },"nexa-sarvam-task-read").start()
+            return
+        }
         val fact=NexaPhoneVoiceTools.deviceFacts(this,transcript)
         if(fact!=null) {
             lastToolResult=fact.take(320)
@@ -1090,6 +1184,7 @@ class RealtimeVoiceService : Service() {
     private fun handleRealtimeToolCalls(event: JSONObject) {
         val output = event.optJSONObject("response")?.optJSONArray("output") ?: return
         var handled = false
+        var deferred = false
         for (i in 0 until minOf(output.length(), 12)) {
             val item = output.optJSONObject(i) ?: continue
             if (item.optString("type") != "function_call") continue
@@ -1108,6 +1203,35 @@ class RealtimeVoiceService : Service() {
             }
             val name = item.optString("name")
             val args = item.optString("arguments")
+            if(name=="get_battery_level" || name=="get_storage_usage") {
+                val expected=ownerFactSpeech
+                ownerFactSpeech=null // one model call consumes this owner utterance
+                val matched=expected?.first?.takeIf {
+                    SystemClock.elapsedRealtime()<expected.second &&
+                    NexaTaskCoordinator.classifyOwnerFact(it)==name
+                }
+                if(!assistantPanelEnabled || matched==null || args.trim()!="{}") {
+                    sendRealtimeToolOutput(id,
+                        "Rejected: a fresh exact owner request is required for device facts.")
+                    continue
+                }
+                deferred=true
+                val session=voiceSessionId
+                Thread({
+                    val response=NexaTaskCoordinator.executeOwnerDeviceRead(
+                        this@RealtimeVoiceService,matched,"live-voice")
+                    main.post {
+                        if(active.get() && selectedProvider=="openai" &&
+                            session==voiceSessionId) {
+                            lastToolResult=response.take(320)
+                            message=lastToolResult
+                            sendRealtimeToolOutput(id,response)
+                            socket?.send(JSONObject().put("type","response.create").toString())
+                        }
+                    }
+                },"nexa-openai-task-read").start()
+                continue
+            }
             when (val decision = NexaLiveToolPolicy.decide(this, name, args)) {
                 is NexaLiveToolPolicy.Decision.Immediate -> {
                     lastToolResult = decision.result.take(320)
@@ -1138,7 +1262,7 @@ class RealtimeVoiceService : Service() {
         }
         // The next model turn is requested only after all pending owner
         // approvals have been resolved. Realtime does not auto-continue tools.
-        if (handled && pendingAppTool == null)
+        if (handled && pendingAppTool == null && !deferred)
             socket?.send(JSONObject().put("type", "response.create").toString())
     }
 
@@ -1313,6 +1437,7 @@ class RealtimeVoiceService : Service() {
         pendingAppTool = null
         currentCompound?.let { closeCompound(it,"cancelled","Voice session ended") }
         currentCompound=null
+        ownerFactSpeech=null
         taskRequestEpoch++
         activeToolOperation=false
         pendingApprovalSummary = null

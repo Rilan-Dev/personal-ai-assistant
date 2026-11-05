@@ -18,7 +18,7 @@ test('manual Nexa task proposals are always explicit, encrypted and non-executab
  assert.ok(ui.includes('Save for review') && ui.includes('Cancel proposal'));
  assert.match(ui,/accessibilityLabel="Proposal safety: no AI agent, message or phone action runs from a proposal\."/);
  assert.ok(read('.maestro/nexa/14-local-task-proposals.yaml').includes('Proposal safety: no AI agent, message or phone action runs from a proposal.'));
- assert.ok(app.includes('engine.live && <LocalTaskProposals/>'));
+ assert.match(app,/engine\.live\s*&&\s*<LocalTaskProposals(?:\s+[^>]*)?\/>/);
  for(const forbidden of ['startOwnerLiveVoice(', 'queueWhatsApp', 'sendMessage(', 'NEXA_TASK_V2_ENABLED=true']){
   assert.equal(ui.includes(forbidden),false);
  }

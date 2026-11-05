@@ -167,6 +167,8 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             cipher.init(Cipher.ENCRYPT_MODE,key())
             return cipher.iv + cipher.doFinal(text.toByteArray(StandardCharsets.UTF_8))
         }
+        /** Encrypt native task arguments with the existing non-exportable Android key. */
+        internal fun sealNativeTaskArguments(text:String):ByteArray = encrypt(text)
         private fun decrypt(bytes:ByteArray):String {
             require(bytes.size>28)
             val cipher=Cipher.getInstance("AES/GCM/NoPadding")
@@ -278,6 +280,13 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                             statement.executeUpdateDelete()
                         }
                         if(updated!=1)return@synchronized false
+                        // Cancellation of a review-only plan is a durable fence:
+                        // no associated pending step may remain eligible for
+                        // future coordinator scheduling.
+                        db.execSQL(
+                            "UPDATE agent_task_steps SET status='cancelled' WHERE task_id=? AND status IN ('planned','pending','awaiting_approval')",
+                            arrayOf(taskId)
+                        )
                         db.compileStatement(
                             "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) VALUES(?,NULL,'owner_cancelled',?)"
                         ).use { statement ->
@@ -290,6 +299,53 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                     } finally {db.endTransaction()}
                 } finally {helper.close()}
             }} catch (_:Exception) {false}
+        }
+
+        /**
+         * Privacy retention: wipe a cancelled manual proposal's encrypted goal
+         * without removing the immutable task/event identity or replay tombstones.
+         * A pending or already redacted proposal cannot be silently erased.
+         */
+        fun redactCancelledOwnerProposal(context:Context,taskId:String):Boolean {
+            if(!taskId.matches(Regex("task-[0-9a-f-]{36}")))return false
+            return try{synchronized(lock){
+                val helper=NexaConversationDb(context)
+                try{
+                    val db=helper.writableDatabase
+                    db.beginTransaction()
+                    try{
+                        val current=db.rawQuery(
+                            "SELECT goal_cipher FROM agent_tasks WHERE task_id=? " +
+                                "AND origin='chat' AND status='cancelled' " +
+                                "AND policy_version IN ('owner-review-v1','owner-preview-v1')",
+                            arrayOf(taskId)
+                        ).use{cursor->
+                            if(!cursor.moveToFirst())return@synchronized false
+                            decrypt(cursor.getBlob(0))
+                        }
+                        if(current=="[details cleared]")return@synchronized false
+                        val now=System.currentTimeMillis()
+                        val changed=db.compileStatement(
+                            "UPDATE agent_tasks SET goal_cipher=?,updated_at=? WHERE task_id=? " +
+                                "AND status='cancelled' AND origin='chat' " +
+                                "AND policy_version IN ('owner-review-v1','owner-preview-v1')"
+                        ).use{stmt->
+                            stmt.bindBlob(1,encrypt("[details cleared]"))
+                            stmt.bindLong(2,now)
+                            stmt.bindString(3,taskId)
+                            stmt.executeUpdateDelete()
+                        }
+                        if(changed!=1)return@synchronized false
+                        db.execSQL(
+                            "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) " +
+                                "VALUES(?,NULL,'owner_redacted',?)",
+                            arrayOf(taskId,now)
+                        )
+                        db.setTransactionSuccessful()
+                        true
+                    }finally{db.endTransaction()}
+                }finally{helper.close()}
+            }}catch(_:Exception){false}
         }
 
         /** A foreground-only caller may obtain these locally decrypted owner
@@ -485,6 +541,59 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
         }
     }
+    /** Explicit foreground owner request, never a model-supplied tool call.
+     * The native coordinator persists a claim and evidence before reporting success.
+     */
+    @ReactMethod fun runOwnerDeviceRead(request:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before requesting device information")
+            return
+        }
+        Thread({
+            val result=NexaTaskCoordinator.executeOwnerDeviceRead(reactContext,request,"chat")
+            promise.resolve(result)
+        },"nexa-task-owner-read").start()
+    }
+
+    /**
+     * Phase-2 read-only plan admission, never native execution. The task ID
+     * must already correspond to a native owner-created, foreground proposal.
+     * This does not create a device mandate or approve any future action.
+     */
+    @ReactMethod fun admitOwnerReadOnlyPlan(planJson:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review a proposed plan")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskStore.admitOwnerReadOnlyPlan(reactContext,planJson))
+        } catch (_:Exception) {
+            promise.reject("PLAN_STORE","Could not store the read-only task plan")
+        }
+    }
+
+    /** One owner-requested battery/storage plan with ordered native evidence. */
+    @ReactMethod fun runOwnerReadOnlyPlan(request:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before running a device plan")
+            return
+        }
+        Thread({
+            val answer=NexaTaskCoordinator.executeOwnerReadOnlyPlan(
+                reactContext,request,"chat")
+            promise.resolve(answer)
+        },"nexa-task-owner-plan").start()
+    }
+    /** Consume a voice-origin request into the existing owner review UI.
+     * It does not create, approve or execute a task.
+     */
+    @ReactMethod fun consumePendingOwnerTaskReview(promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review the spoken task")
+            return
+        }
+        promise.resolve(NexaOwnerTaskReview.take())
+    }
     /** Decrypted only to an owner-visible foreground app; never a model tool. */
     @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
@@ -515,6 +624,32 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.resolve(cancelled)
         }catch (_:Exception) {
             promise.reject("TASK_CANCEL","Cannot persist proposal cancellation")
+        }
+    }
+
+    /** Native task status is private to the focused owner UI. */
+    @ReactMethod fun recentNativeTaskTimeline(limit:Int,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to inspect task history")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskCoordinator.recentOwnerTimeline(
+                reactContext,limit.coerceIn(1,50)).toString())
+        }catch (_:Exception) {
+            promise.reject("TASK_TIMELINE","Native task history unavailable")
+        }
+    }
+    /** Owner revocation is persisted and fences any concurrent result. */
+    @ReactMethod fun revokeNativeTask(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before cancelling a task")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskCoordinator.revokeOwnerTask(reactContext,taskId))
+        }catch (_:Exception) {
+            promise.reject("TASK_REVOKE","Native task cancellation unavailable")
         }
     }
 

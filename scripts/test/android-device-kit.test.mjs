@@ -18,8 +18,12 @@ test("physical Android UAT kit is opt-in, reads no PII, and never controls hardw
   assert.doesNotMatch(source,/am", "broadcast"|sms|content", "query"/);
 });
 test("owner acceptance kit fails closed when no ADB/phone is connected", () => {
-  const result = spawnSync("python3",["scripts/acceptance/android_device.py","--check"],
-    {encoding:"utf8",env:{PATH:"/usr/bin:/bin"}});
+  const windows=process.platform==="win32";
+  const python=windows
+    ? spawnSync("where.exe",["python3"],{encoding:"utf8"}).stdout.trim().split(/\r?\n/)[0]
+    : "python3";
+  const result = spawnSync(python,["scripts/acceptance/android_device.py","--check"],
+    {encoding:"utf8",env:{...process.env,PATH:windows?"":"/usr/bin:/bin"}});
   // No authorized device is connected on CI; invalid setups must not claim success.
   assert.equal(result.status,2);
   assert.match(result.stderr,/ADB missing|Connect exactly one|ADB could not discover devices|App not installed/);
