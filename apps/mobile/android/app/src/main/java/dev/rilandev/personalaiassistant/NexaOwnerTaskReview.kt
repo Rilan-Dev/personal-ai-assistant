@@ -102,5 +102,15 @@ internal object NexaOwnerTaskReview {
         viewed=null
         id
     }
+    /** Owner chose Discard in the focused UI. Revokes an unpersisted handoff
+     * immediately so another trusted interaction can propose a task.
+     * Never deletes an already-saved task or its permanent replay records.
+     */
+    fun discardViewed(token:String):Boolean=synchronized(lock){
+        val active=viewed?:return@synchronized false
+        if(token!=active.token)return@synchronized false
+        viewed=null
+        true
+    }
     fun clear()=synchronized(lock){waiting=null;viewed=null}
 }
