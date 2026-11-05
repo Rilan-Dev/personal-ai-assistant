@@ -551,6 +551,32 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** Native task status is private to the focused owner UI. */
+    @ReactMethod fun recentNativeTaskTimeline(limit:Int,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to inspect task history")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskCoordinator.recentOwnerTimeline(
+                reactContext,limit.coerceIn(1,50)).toString())
+        }catch (_:Exception) {
+            promise.reject("TASK_TIMELINE","Native task history unavailable")
+        }
+    }
+    /** Owner revocation is persisted and fences any concurrent result. */
+    @ReactMethod fun revokeNativeTask(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before cancelling a task")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskCoordinator.revokeOwnerTask(reactContext,taskId))
+        }catch (_:Exception) {
+            promise.reject("TASK_REVOKE","Native task cancellation unavailable")
+        }
+    }
+
     @ReactMethod fun recentAndroidProcessExits(promise:Promise) {
         try {promise.resolve(NexaCrashDiagnostics.recent(reactContext,12).toString())}
         catch (_:Exception) {promise.reject("EXIT_REPORT","Cannot read Android process exits")}
