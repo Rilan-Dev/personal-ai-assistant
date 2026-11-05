@@ -167,6 +167,8 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             cipher.init(Cipher.ENCRYPT_MODE,key())
             return cipher.iv + cipher.doFinal(text.toByteArray(StandardCharsets.UTF_8))
         }
+        /** Encrypt native task arguments with the existing non-exportable Android key. */
+        internal fun sealNativeTaskArguments(text:String):ByteArray = encrypt(text)
         private fun decrypt(bytes:ByteArray):String {
             require(bytes.size>28)
             val cipher=Cipher.getInstance("AES/GCM/NoPadding")
