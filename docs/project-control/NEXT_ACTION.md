@@ -1,3 +1,27 @@
+## 2026-11-05 — New development priorities (release testing separate)
+
+Completed source additions: native owner task correction with encrypted CAS
+and draft-plan invalidation; local redacted event/dependency history; combined
+native/legacy Voice timeline; bounded multi-step provider plan normalization.
+
+Remaining PRODUCT DEVELOPMENT:
+1. Migrate all Chat, Sarvam/OpenAI Voice, overlay and system assistant tasks to
+   one task identity and Kotlin final coordinator. Legacy checkpoints currently
+   have unified read-only visibility, not shared execution authority.
+2. General native step transitions, permission mandates, exact action binding,
+   one-shot approval consumption and verified observations for approved tools.
+3. Integrate existing safe Android app discovery, screen grounding, navigation
+   and reviewed message preparation into that coordinator; no blanket
+   Accessibility autonomy or unapproved external Send.
+4. Owner-visible correction provenance, retention and memory controls shared
+   across entry points, with interruption recovery and unknown outcomes.
+5. Gate activation, rollback implementation and conflict-aware main branch
+   reconciliation only after engineering work is actually complete.
+
+NEXA_TASK_V2_ENABLED and reviewed read-only BuildConfig remain OFF.
+Testing/CI/device certification is separate from these implementation gaps.
+
+---
 ## 2026-11-05 — DSH Phase 1/2 development progress
 
 - Added a provider-neutral task proposal admission adapter around the actual Chat planner path for deterministic intent, direct BYOK, and LangGraph suggestions; new execution remains gated OFF.
