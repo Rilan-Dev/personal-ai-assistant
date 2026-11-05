@@ -93,4 +93,62 @@ class NexaUiActionJournalAndroidTest {
             "send_message","com.example.test"))
         assertFalse(NexaUiActionJournal.claim(ctx,UUID.randomUUID().toString(),"tap","invalid package name"))
     }
+
+    @Test fun reviewedTextClaimPersistsExactBindingNotRawContentsAndCannotReplay() {
+        val token="owner-"+UUID.randomUUID()
+        val pkg="com.example.messagetest"
+        val recipient="Mom"
+        val privateText="Meeting until six, will call later"
+        val reviewed=NexaMessageInputPolicy.approvedDraftDigest(
+            "imo",pkg,recipient,privateText)
+        assertFalse("Unbound message confirmation must fail closed",
+            NexaUiActionJournal.claim(ctx,token,"message_fill",pkg))
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"message_fill",pkg,"invalid"))
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"message_fill",pkg,reviewed))
+        assertFalse("One irreversible action token cannot be reused",
+            NexaUiActionJournal.claim(ctx,token,"message_fill",pkg,reviewed))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        val key=java.security.MessageDigest.getInstance("SHA-256")
+            .digest(token.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        val taskId="task-"+UUID.nameUUIDFromBytes(
+            ("task-:"+key).toByteArray(Charsets.UTF_8)).toString()
+        val helper=NexaConversationDb(ctx)
+        try{
+            helper.readableDatabase.rawQuery(
+                "SELECT a.input_digest,a.target_digest,a.state,a.consumed_at "+
+                    "FROM agent_step_approvals a JOIN agent_task_steps s "+
+                    "ON s.step_id=a.step_id WHERE s.task_id=?",
+                arrayOf(taskId)
+            ).use{c->
+                assertTrue("Exactly one native consumed approval record",c.moveToFirst())
+                assertEquals(reviewed,c.getString(0))
+                assertEquals(64,c.getString(1).length)
+                assertEquals("consumed",c.getString(2))
+                assertTrue(c.getLong(3)>0L)
+                assertFalse(c.moveToNext())
+            }
+            val entries=NexaUiTaskAudit.POLICY
+            helper.readableDatabase.rawQuery(
+                "SELECT policy_version FROM agent_tasks WHERE task_id=?",
+                arrayOf(taskId)).use{c->
+                assertTrue(c.moveToFirst())
+                assertEquals(entries,c.getString(0))
+            }
+        }finally{helper.close()}
+        assertFalse(reviewed.contains(privateText))
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"message_fill",pkg,
+            NexaMessageInputPolicy.approvedDraftDigest("imo",pkg,"Dad",privateText)))
+    }
+
+    @Test fun genericTextClaimRequiresBoundFieldAndExactText() {
+        val token="owner-"+UUID.randomUUID()
+        val pkg="com.example.notes"
+        val digest=NexaTextInputPolicy.approvedDraftDigest(pkg,"Notes","private note")
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"text_fill",pkg))
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"text_fill",pkg,digest))
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"text_fill",pkg,digest))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_rejected"))
+    }
+
 }
