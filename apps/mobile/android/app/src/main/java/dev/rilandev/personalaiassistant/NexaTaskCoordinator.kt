@@ -481,11 +481,8 @@ internal object NexaTaskCoordinator {
         for((position,operation) in operations.withIndex()){
             if(!claimPlanStep(context,plan,position))
                 return "Task stopped at step "+(position+1)+": claim refused. No retry."
-            val command=if(operation=="get_battery_level")"battery" else "storage"
-            val observed=try{NexaPhoneVoiceTools.deviceFacts(context,command)}
-                catch(_:Exception){null}
-            if(observed.isNullOrBlank() || observed.contains("unavailable",true) ||
-               observed.contains("did not provide",true))
+            val observed=NexaTaskNativeRead.observe(context,operation)
+            if(observed==null)
                 return "Task stopped at step "+(position+1)+": no verified reading. No retry."
             if(!completePlanStep(context,plan,position,observed))
                 return "Task stopped: native step evidence could not be committed. No retry."
@@ -500,7 +497,7 @@ internal object NexaTaskCoordinator {
      */
     private const val REVIEW_POLICY="owner-review-v1"
     private val reviewId=Regex("task-[0-9a-f-]{36}")
-    private val reviewTools=setOf("device.status","device.battery_status")
+    private val reviewTools=NexaTaskNativeRead.proposedReadTools
     private data class ReviewedStep(val stepId:String,val ordinal:Int,
                                     val tool:String,val deps:List<String>,val seal:String)
     private data class ReviewedPlan(val taskId:String,val scope:String,
@@ -689,12 +686,8 @@ internal object NexaTaskCoordinator {
         for(step in plan.steps){
             if(!claimReviewed(context,plan,step))
                 return "Task blocked at step "+(step.ordinal+1)+". No automatic retry."
-            val command=if(step.tool=="device.battery_status")"battery" else "device status"
-            val reading=try{NexaPhoneVoiceTools.deviceFacts(context,command)}
-                catch(_:Exception){null}
-            if(reading.isNullOrBlank()||reading.contains("unavailable",true)||
-                reading.contains("did not provide",true)||
-                reading.contains("did not allow",true))
+            val reading=NexaTaskNativeRead.observe(context,step.tool)
+            if(reading==null)
                 return "Task outcome unresolved. No automatic retry."
             if(!verifyReviewed(context,plan,step,reading))
                 return "Could not commit task evidence. No automatic retry."
@@ -716,11 +709,8 @@ internal object NexaTaskCoordinator {
             ?: return "Secure task storage unavailable. No device action performed."
         if (!claim(context, c))
             return "Could not reserve this task safely. No device action performed."
-        val command = if (operation == "get_battery_level") "battery" else "storage"
-        val value = try { NexaPhoneVoiceTools.deviceFacts(context, command) }
-            catch (_: Exception) { null }
-        if (value.isNullOrBlank() || value.contains("unavailable", ignoreCase = true)
-            || value.contains("did not provide", ignoreCase = true))
+        val value = NexaTaskNativeRead.observe(context,operation)
+        if (value==null)
             return "Android device reading was not verified. Task requires attention."
         return if (complete(context, c, value)) value
             else "Android reading was not recorded reliably. Task requires attention."

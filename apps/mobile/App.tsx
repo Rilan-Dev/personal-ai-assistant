@@ -1547,7 +1547,7 @@ export default function App() {
           // admitted. This preflight precedes saving a native task ID.
           context:async decision=>{
             if(decision.type!=='tool' ||
-              !['device.status','device.battery_status'].includes(decision.call.toolId) ||
+              !['device.status','device.battery_status','device.storage_status'].includes(decision.call.toolId) ||
               Object.keys(decision.call.input).length!==0)
               throw Error('Only owner-requested, read-only native tools can be admitted');
             const taskId=await saveLocalTaskProposal(request);

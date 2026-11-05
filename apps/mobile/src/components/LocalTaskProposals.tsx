@@ -264,7 +264,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
           {detail.steps.length===0&&<Text style={styles.help}>No plan steps saved.</Text>}
           {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
              detail.steps.length>0&&detail.steps.every(step=>
-               ['device.status','device.battery_status'].includes(step.toolId)&&
+               ['device.status','device.battery_status','device.storage_status'].includes(step.toolId)&&
                step.status==='planned'&&step.evidence==='native_reading')&&
              detail.revision===item.revision&&<Pressable
                accessibilityRole="button"

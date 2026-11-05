@@ -13,6 +13,7 @@ import type {Planner} from "./runtime.ts";
 const evidenceByTool: Readonly<Record<string, TaskEvidenceKind>> = Object.freeze({
   "device.status": "native_reading",
   "device.battery_status": "native_reading",
+  "device.storage_status": "native_reading",
   "device.set_flashlight": "owner_review",
   "device.open_camera": "foreground_package",
   "device.open_app": "foreground_package",

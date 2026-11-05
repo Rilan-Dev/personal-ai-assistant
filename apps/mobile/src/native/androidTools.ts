@@ -18,6 +18,7 @@ type LaunchOutcome = {
 interface DeviceControlBridge {
   getStatus(): Promise<NativeStatus>;
   getBatteryStatus(): Promise<{ levelPercent: number; charging: boolean; source: string }>;
+  getStorageStatus(): Promise<{ totalGb:number; freeGb:number; usedGb:number; source:string }>;
   openSupportedApp(app: string): Promise<LaunchOutcome>;
   openCamera(): Promise<LaunchOutcome>;
   openChromeSearch(query: string): Promise<LaunchOutcome>;
@@ -71,6 +72,15 @@ export function createAndroidTools(): Tool[] {
       hasExternalSideEffect: false,
       validateInput: emptyInput,
       execute: async () => ({ status: "success", data: await getBridge().getBatteryStatus() })
+    },
+    {
+      id: "device.storage_status",
+      description: "Read local total, free and used device storage; never inspect files",
+      capabilities: [],
+      risk: "low",
+      hasExternalSideEffect: false,
+      validateInput: emptyInput,
+      execute: async () => ({ status: "success", data: await getBridge().getStorageStatus() })
     },
     {
       id: "device.set_flashlight",

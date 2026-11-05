@@ -22,7 +22,7 @@ internal object NexaTaskStore {
     private const val MAX_PLAN_AGE_MS=300_000L
 
     /** The ONLY initial admitted registry is a native, no-side-effect read. */
-    private val readOnlyRegistry=setOf("device.status","device.battery_status")
+    private val readOnlyRegistry=NexaTaskNativeRead.proposedReadTools
     private val rootKeys=setOf("version","taskId","ownerRequestId","origin",
         "policyVersion","expiresAtMs","steps","executable")
     private val stepKeys=setOf("stepId","toolId","input","dependsOn",

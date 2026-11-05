@@ -54,6 +54,28 @@ class DeviceControlModule(
         }
     }
 
+    /** Local read-only storage measurements; no file paths or app data. */
+    @ReactMethod
+    fun getStorageStatus(promise:Promise) {
+        try {
+            val stat=android.os.StatFs(android.os.Environment.getDataDirectory().path)
+            val total=stat.totalBytes
+            val free=stat.availableBytes
+            if(total<=0 || free<0 || free>total) {
+                promise.reject("STORAGE_UNAVAILABLE","Android storage values invalid")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putDouble("totalGb",total.toDouble()/1_000_000_000.0)
+            result.putDouble("freeGb",free.toDouble()/1_000_000_000.0)
+            result.putDouble("usedGb",(total-free).toDouble()/1_000_000_000.0)
+            result.putString("source","android-statfs")
+            promise.resolve(result)
+        }catch (_:Exception){
+            promise.reject("STORAGE_UNAVAILABLE","Could not read Android storage")
+        }
+    }
+
     @ReactMethod
     fun getStatus(promise: Promise) {
         val status = Arguments.createMap()

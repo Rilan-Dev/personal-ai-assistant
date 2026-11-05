@@ -203,7 +203,7 @@ export async function consumePendingOwnerTaskReview():Promise<PendingOwnerTaskRe
 /** Native-only reviewed plan metadata; plaintext arguments never reach React Native. */
 export type OwnerReadOnlyStep={
   ordinal:number;
-  toolId:'device.status'|'device.battery_status';
+  toolId:'device.status'|'device.battery_status'|'device.storage_status';
   status:'planned'|'pending'|'outcome_unknown'|'verified'|'uncertain'|'cancelled';
   evidence:'native_reading';
 };
@@ -220,7 +220,7 @@ export async function inspectOwnerReadOnlyPlan(taskId:string):Promise<OwnerReadO
   for(let index=0;index<steps.length;index++){
     const step=steps[index];
     if(!step||typeof step!=='object'||step.ordinal!==index||
-      !['device.status','device.battery_status'].includes(String(step.toolId))||
+      !['device.status','device.battery_status','device.storage_status'].includes(String(step.toolId))||
       !['planned','pending','outcome_unknown','verified','uncertain','cancelled'].includes(String(step.status))||
       step.evidence!=='native_reading')throw Error('Unrecognized native step');
   }
