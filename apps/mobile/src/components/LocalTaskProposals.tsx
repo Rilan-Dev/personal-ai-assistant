@@ -1,7 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal} from '../native/localTaskProposals';
-import type {LocalTaskProposal} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail} from '../native/localTaskProposals';
+import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask} from '../native/nativeTaskCoordinator';
 import type {NativeTaskSummary} from '../native/nativeTaskCoordinator';
 
@@ -15,6 +15,9 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
   const busyRef=useRef(false);
   const [loading,setLoading]=useState(false);
   const [notice,setNotice]=useState('');
+  const [detail,setDetail]=useState<LocalTaskReviewDetail|null>(null);
+  const [editingId,setEditingId]=useState<string|null>(null);
+  const [correction,setCorrection]=useState('');
   const available=localTaskProposalsAvailable();
   const lastReviewNonce=useRef<number|null>(null);
   useEffect(()=>{
@@ -28,6 +31,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     setLoading(true);
     try{
       setItems(await listLocalTaskProposals());
+      setDetail(null);
       setNotice('');
     }catch{setNotice('Could not securely read your local task proposals.');}
     try{setNativeTasks(await listNativeTaskTimeline());}
@@ -68,6 +72,32 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
       catch{setNotice('Proposal canceled. History refresh unavailable; tap Refresh.');}
     }catch{
       setNotice('Cancellation could not be confirmed. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
+  async function inspect(item:LocalTaskProposal){
+    if(busyRef.current||loading)return;
+    setLoading(true);
+    try {
+      const next=await readLocalTaskDetail(item.taskId);
+      setDetail(next);
+      setNotice('');
+    }catch {
+      setNotice('Task history could not be read. Check the current device and refresh.');
+    }finally {setLoading(false);}
+  }
+  async function revise(item:LocalTaskProposal){
+    if(busyRef.current||loading||item.status!=='proposed'||
+       !Number.isSafeInteger(item.revision))return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      const saved=await reviseLocalTaskProposal(item.taskId,item.revision!,correction);
+      if(!saved)throw Error('Conflicting task revision');
+      setEditingId(null);setCorrection('');setDetail(null);
+      setNotice('Correction saved. Any previous unclaimed plan steps were invalidated; nothing executed.');
+      try {setItems(await listLocalTaskProposals());}
+      catch {setNotice('Correction saved. History refresh unavailable; tap Refresh before further edits.');}
+    }catch{
+      setNotice('Correction was not confirmed. Refresh before editing again; do not overwrite another revision.');
     }finally{busyRef.current=false;setBusy(false);}
   }
   async function cancelNative(item:NativeTaskSummary){
@@ -116,6 +146,41 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
           disabled={busy} onPress={()=>void cancel(item)} style={styles.action}>
           <Text style={styles.buttonText}>Cancel proposal</Text>
         </Pressable>}
+        {item.status==='proposed'&&Number.isSafeInteger(item.revision)&&<Pressable
+          accessibilityRole="button" accessibilityLabel="Correct saved task request"
+          disabled={busy||loading} onPress={()=>{
+            setEditingId(item.taskId);setCorrection(item.goal);setDetail(null);
+          }} style={styles.action}>
+          <Text style={styles.buttonText}>Correct request</Text>
+        </Pressable>}
+        {editingId===item.taskId&&item.status==='proposed'&&<View style={styles.item}>
+          <Text style={styles.help}>This replaces the unexecuted request and invalidates draft plan steps.</Text>
+          <TextInput style={styles.input} accessibilityLabel="Correct task request"
+            value={correction} onChangeText={setCorrection} multiline maxLength={500}
+            editable={!busy} placeholderTextColor="#9AA9C4"/>
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" disabled={busy||!correction.trim()}
+              onPress={()=>void revise(item)} style={styles.action}>
+              <Text style={styles.buttonText}>Save correction</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={busy}
+              onPress={()=>{setEditingId(null);setCorrection('');}} style={styles.action}>
+              <Text style={styles.buttonText}>Discard correction</Text>
+            </Pressable>
+          </View>
+        </View>}
+        <Pressable accessibilityRole="button" accessibilityLabel="View task step and event history"
+          disabled={busy||loading} onPress={()=>void inspect(item)} style={styles.action}>
+          <Text style={styles.buttonText}>View steps and history</Text>
+        </Pressable>
+        {detail?.taskId===item.taskId&&<View style={styles.item}>
+          <Text style={styles.help}>Revision {detail.revision} · {detail.status} · review-only</Text>
+          {detail.steps.length===0&&<Text style={styles.help}>No plan steps saved.</Text>}
+          {detail.steps.map((step,index)=><Text key={step.ordinal+':'+index}
+            style={styles.help}>Step {step.ordinal+1}: {step.toolId} · {step.status}</Text>)}
+          {detail.events.map((event,index)=><Text key={event.kind+':'+index}
+            style={styles.help}>{new Date(event.createdAt).toLocaleString()} · {event.kind}</Text>)}
+        </View>}
       </View>)}
       <Text style={styles.heading}>Native task activity</Text>
       <Text style={styles.help}>Locally verified battery/storage tasks. An unknown outcome is never automatically replayed.</Text>
