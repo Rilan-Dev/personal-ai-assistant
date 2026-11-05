@@ -513,7 +513,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         }
         val ownerTask=NexaOwnerTaskReview.parse(raw)
         if(ownerTask!=null){
-            if(NexaOwnerTaskReview.offerInForeground(app,ownerTask)){
+            if(NexaOwnerTaskReview.offerInForeground(app,ownerTask,"assistant-role")){
                 localConversationActive=false
                 feedback("Task request opened in Nexa for owner review. Nothing executed.")
                 handler.postDelayed({hide()},900L)
