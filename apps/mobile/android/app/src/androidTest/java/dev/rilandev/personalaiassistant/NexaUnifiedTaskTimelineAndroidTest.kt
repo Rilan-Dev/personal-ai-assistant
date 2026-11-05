@@ -44,9 +44,10 @@ class NexaUnifiedTaskTimelineAndroidTest {
         assertTrue(NexaConversationDb.saveProposedAgentTask(
             context,id,"owner-"+UUID.randomUUID(),"chat",
             "owner-review-v1","Owner request"))
-        assertTrue(NexaConversationDb.saveTask(
-            context,id,"voice-"+UUID.randomUUID(),"planned",0,
-            "Legacy checkpoint",listOf("read phone storage"),""))
+        assertFalse("A legacy Voice writer cannot take over a native task ID",
+            NexaConversationDb.saveTask(
+                context,id,"voice-"+UUID.randomUUID(),"planned",0,
+                "Legacy checkpoint",listOf("read phone storage"),""))
         val result=NexaUnifiedTaskTimeline.recent(context,60)
         val matches=(0 until result.length()).map{result.getJSONObject(it)}
             .filter{it.optString("taskId")==id}
