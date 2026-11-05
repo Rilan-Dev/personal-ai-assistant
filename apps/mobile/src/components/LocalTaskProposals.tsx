@@ -120,8 +120,8 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
       <Text style={styles.heading}>Native task activity</Text>
       <Text style={styles.help}>Locally verified battery/storage tasks. An unknown outcome is never automatically replayed.</Text>
       {nativeTasks.length===0&&<Text style={styles.help}>No native task activity on this device.</Text>}
-      {nativeTasks.map(task=><View key={task.taskId} style={styles.item}>
-        <Text style={styles.goal}>{task.operation==='get_battery_level'?'Battery reading':'Storage reading'} · {task.origin==='chat'?'Chat':'Voice'}</Text>
+      {nativeTasks.map(task=><View key={task.taskId+':'+task.stepId} style={styles.item}>
+        <Text style={styles.goal}>{task.operation==='get_battery_level'?'Battery reading':'Storage reading'} · Step {task.ordinal+1} · {task.origin==='chat'?'Chat':'Voice'}</Text>
         <Text style={styles.help}>{task.status==='running'&&task.stepStatus==='outcome_unknown'?
           'Outcome unresolved · no automatic retry':task.status} · evidence: {task.observation}</Text>
         {(task.status==='ready'||task.status==='running')&&<Pressable accessibilityRole="button"
