@@ -329,6 +329,28 @@ class RealtimeVoiceService : Service() {
                     }
                     override fun ownerRequest(text:String):Boolean {
                         if(!assistantPanelEnabled)return false
+                        val task=NexaOwnerTaskReview.parse(text)
+                        if(task!=null){
+                            val session=voiceSessionId
+                            main.post {
+                                if(active.get() && selectedProvider=="sarvam-api" &&
+                                    session==voiceSessionId) {
+                                    if(NexaOwnerTaskReview.queue(task)){
+                                        try{
+                                            startActivity(Intent(this@RealtimeVoiceService,
+                                                MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                    Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                            message="Task ready for review in Nexa. Nothing executed."
+                                        }catch(_:Exception){
+                                            NexaOwnerTaskReview.clear()
+                                            message="Open Nexa to review your task. Nothing executed."
+                                        }
+                                    }else message="Review your previous task request first."
+                                }
+                            }
+                            return true
+                        }
                         val recognizable=try {
                             NexaVoiceTaskPlan.parse(text)!=null ||
                             NexaWhatsAppChatIntent.followupRecipient(text)!=null ||
@@ -579,6 +601,23 @@ class RealtimeVoiceService : Service() {
                         // A precise user-uttered message request can only
                         // open Nexa's local app/recipient review screen.
                         if(assistantPanelEnabled && transcript.isNotBlank()) {
+                            val task=NexaOwnerTaskReview.parse(transcript)
+                            if(task!=null)main.post {
+                                if(active.get() && selectedProvider=="openai") {
+                                    if(NexaOwnerTaskReview.queue(task)){
+                                        try{
+                                            startActivity(Intent(this@RealtimeVoiceService,
+                                                MainActivity::class.java)
+                                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
+                                                    Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                                            message="Task ready for review in Nexa. Nothing executed."
+                                        }catch(_:Exception){
+                                            NexaOwnerTaskReview.clear()
+                                            message="Open Nexa to review your task. Nothing executed."
+                                        }
+                                    }else message="Review your previous task request first."
+                                }
+                            }
                             val field=NexaVoiceTextIntent.parse(transcript)
                             if(field!=null)main.post {
                                 if(active.get() && selectedProvider=="openai"){
