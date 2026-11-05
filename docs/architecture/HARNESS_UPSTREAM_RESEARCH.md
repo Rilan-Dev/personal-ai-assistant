@@ -191,3 +191,37 @@ not receive Android app or private-device tool capabilities.
 - Chat, Sarvam/OpenAI Voice, Android assistant role, overlay and wake fallback now share the native owner review queue.
 - Native origin and exact request are bound to a one-use expiring token; only foreground owner Save creates a review-only encrypted task.
 - No new authority is given to models or provider tools. General Voice, Accessibility and messaging execution remain separate and gated.
+
+## 2026-11-06 — Voice checkpoint continuity, no alternate executor
+
+Upstream source checked before this implementation:
+- LangGraph.js checkpoint source `libs/checkpoint/src/base.ts`, pinned
+  `1631fd895723c4553345ceb5d9fc425b68bda959`, MIT project.
+  `CheckpointTuple.pendingWrites` and `WritesSortKey` keep ordering
+  metadata; they are not Android OS side-effect authorization.
+- Deep Agents JS `libs/deepagents/src/permissions/enforce.ts`, pinned
+  `5f42f2df3c814bebbac445c759a34f96c10bc036`, MIT project.
+  Its unmatched filesystem rule returns allow; Nexa does NOT reuse this
+  as a phone permission or native step grant.
+- DeepSeek DSH Superagent Prototype `src/core/engine.ts`, pinned
+  `8c32a9dc5d72c033816c6a8110b37f40cf94fba4`, MIT.
+  The transactional assignment and event model inspired this adaptation;
+  no DSH source was copied, and no worker runtime is installed in Android.
+
+Implementation: `NexaConversationDb.saveTask` now writes its existing
+Keystore-encrypted Voice checkpoint and an AUDIT-ONLY
+`agent_tasks`/`agent_task_steps` projection in one SQLite transaction.
+The projection's policy `voice-checkpoint-audit-v1`, tool identifier
+`legacy.voice.checkpoint`, and absence of mandates, approvals or native
+observations mean it cannot be executed by the final coordinator. Voice
+progress is not represented as independent screen or business verification.
+Updates reject stale step indexes, mismatched sessions, changed plan
+arguments and attempts to reopen terminal tasks; conflicting task policies
+roll back both writes. The unified timeline coalesces the two records by
+task ID and continues to show the Voice source as unverified.
+
+This is an incremental convergence of task STORAGE and observability,
+not migration of legacy Voice execution ownership. General screen/messaging
+steps and shared native scheduling remain separately gated. No new
+dependency, database schema version, cloud provider privilege or Android
+permission was added.
