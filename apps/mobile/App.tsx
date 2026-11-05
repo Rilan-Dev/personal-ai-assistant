@@ -32,7 +32,7 @@ import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {LocalTaskProposals} from './src/components/LocalTaskProposals';
 import {parseOwnerTaskReviewIntent,consumePendingOwnerTaskReview} from './src/native/localTaskProposals';
 import type {PendingOwnerTaskReview} from './src/native/localTaskProposals';
-import {ownerDeviceFactKind,ownerReadOnlyPlanKinds,nativeTaskCoordinatorAvailable,runOwnerDeviceRead,runOwnerReadOnlyPlan} from './src/native/nativeTaskCoordinator';
+import {ownerDeviceFactKind,ownerDeviceStatusIntent,ownerReadOnlyPlanKinds,nativeTaskCoordinatorAvailable,runOwnerDeviceRead,runOwnerReadOnlyPlan} from './src/native/nativeTaskCoordinator';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -1544,15 +1544,13 @@ export default function App() {
         createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion),{
           // Debug-only proposal admission requires an actual native Android
           // coordinator; demo/web must retain their existing planner behavior.
-          enabled:NEXA_TASK_V2_ENABLED && engine.live && nativeTaskCoordinatorAvailable(),
+          enabled:NEXA_TASK_V2_ENABLED && engine.live && nativeTaskCoordinatorAvailable() &&
+            (ownerDeviceFactKind(request)!==null || ownerDeviceStatusIntent(request)),
           // When enabled, only a direct, owner-selected native read can be
           // admitted. This preflight precedes saving a native task ID.
           context:async decision=>{
             const fact=ownerDeviceFactKind(request);
-            const statusRequest=new Set(['device status','check device status',
-              'phone status','check my phone status']).has(
-              request.trim().toLowerCase().replace(/^hey nexa(?:,|\s)+/,'')
-                .replace(/[.?!,]+$/,'').trim());
+            const statusRequest=ownerDeviceStatusIntent(request);
             const exactMatch=decision.type==='tool' && (
               decision.call.toolId==='device.battery_status'&&fact==='battery' ||
               decision.call.toolId==='device.storage_status'&&fact==='storage' ||
