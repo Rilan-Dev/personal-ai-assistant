@@ -959,3 +959,12 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Wired the guard into RealtimeVoiceService before each legacy multi-action step; changed, completed or aborted tasks stop without further action.
 - Kept all existing native approval, Accessibility window targeting, journal claim and owner-send requirements. No new automatic action capability.
 - Added instrumentation coverage of the continuation-denial cases.
+
+## 2026-11-06 — Owner memory retention and exact cross-app text binding
+- Extended encrypted Android recipient-to-messaging-app choice records to version 2 with owner_confirmed provenance, savedAt and expiry (1–365 days); legacy owner choices remain readable until explicitly replaced/forgotten.
+- Added React Native metadata validation, provenance and expiry display, and owner-selectable 30/90/365-day retention for remembered app channels; Use once and Forget remain separate.
+- Remembered channels still do not establish recipient identity or authorization to send messages.
+- Closed an approved-text substitution gap: existing one-shot Message composer and generic text-entry approvals now bind the exact app, recipient/field label and message body in an ephemeral structured SHA-256 digest checked again after the draft is consumed at confirmation.
+- Unmatched or replaced drafts fail closed before ACTION_SET_TEXT or the durable action claim. Existing Accessibility, screen-window, empty-field and recipient checks are preserved.
+- Added Android instrumentation negative cases for different recipient/app/message and field/text payload replacement.
+- No automatic Send, call, payment, arbitrary screen executor, main release promotion, or production Docker mutation.
