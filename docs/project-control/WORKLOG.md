@@ -908,3 +908,10 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
   compilation and physical device acceptance remain separate.
 - GitHub Development only, no main promotion, automatic sending, or Docker
   service mutation.
+
+## 2026-11-05 — Shared task review entry points
+- Committed native one-use owner task review handoff from Voice, Android assistant-role, overlay and wake fallback.
+- React Native owner Save persists the trusted native origin with encrypted task identity; no action or message is sent.
+- Extended owner correction, cancellation, privacy redaction and history for all native review sources.
+- Added native regression tests for token replay, expiry, forged goals and cross-origin save/cancel.
+- Local source verification at be04a843c050: Node 392/392 PASS and TypeScript PASS. Later commits need exact native compilation.
