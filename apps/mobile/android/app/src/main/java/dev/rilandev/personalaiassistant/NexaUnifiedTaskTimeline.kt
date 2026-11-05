@@ -33,13 +33,15 @@ internal object NexaUnifiedTaskTimeline {
     private val origins=setOf("chat","live-voice","assistant-role","overlay")
 
     fun recent(context:Context,limit:Int):JSONArray {
+        // Claimed external UI actions never replay after a process interruption.
+        NexaUiTaskAudit.recoverStale(context)
         val maximum=limit.coerceIn(1,60)
         val helper=NexaConversationDb(context)
         try{
             val db=helper.readableDatabase
             val all=mutableListOf<Summary>()
             db.rawQuery(
-                "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at," +
+                "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at,t.policy_version," +
                     "(SELECT COUNT(*) FROM agent_task_steps s WHERE s.task_id=t.task_id)," +
                     "(SELECT COUNT(*) FROM agent_task_steps s " +
                         "WHERE s.task_id=t.task_id AND s.status='verified') " +
@@ -52,8 +54,10 @@ internal object NexaUnifiedTaskTimeline {
                     val current=c.getString(2)
                     if(!id.matches(taskId)||origin !in origins||
                         !status.matches(current))continue
-                    all.add(Summary(taskId,"native",origin,current,
-                        c.getInt(3),c.getLong(4),c.getInt(5),c.getInt(6)))
+                    val source=if(c.getString(5)==NexaUiTaskAudit.POLICY)
+                        "ui_action_audit" else "native"
+                    all.add(Summary(taskId,source,origin,current,
+                        c.getInt(3),c.getLong(4),c.getInt(6),c.getInt(7)))
                 }
             }
             db.rawQuery(
