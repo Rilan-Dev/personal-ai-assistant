@@ -321,7 +321,7 @@ class NexaToolOverlayService : Service() {
         // create executable work or substitute for the Save review action.
         val task=NexaOwnerTaskReview.parse(raw.trim())
         if(task!=null){
-            if(NexaOwnerTaskReview.offerInForeground(this,task)){
+            if(NexaOwnerTaskReview.offerInForeground(this,task,"overlay")){
                 note="Task opened in Nexa for review. Nothing executed or sent."
                 collapse()
             }else{
