@@ -114,4 +114,19 @@ class NexaOwnerTaskReviewIngressAndroidTest {
             "Do not resurrect a cancelled task"))
     }
 
+
+    @Test fun deliberateDiscardReleasesQueueButNeverCreatesARecord() {
+        val goal="Review tomorrow's project estimate"
+        assertTrue(NexaOwnerTaskReview.queue(goal,"overlay",1_000L))
+        val receipt=NexaOwnerTaskReview.takeEnvelope(1_100L)!!
+        val token=receipt.getString("token")
+        assertFalse(NexaOwnerTaskReview.discardViewed(
+            "00000000-0000-0000-0000-000000000000"))
+        assertTrue(NexaOwnerTaskReview.discardViewed(token))
+        assertFalse(NexaOwnerTaskReview.discardViewed(token))
+        assertNull(NexaOwnerTaskReview.saveViewed(context,token,goal,1_200L))
+        assertTrue(NexaOwnerTaskReview.queue("Review a different request",
+            "assistant-role",1_300L))
+    }
+
 }
