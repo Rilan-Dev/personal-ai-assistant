@@ -50,6 +50,14 @@ class NexaTaskStoreAndroidTest {
         assertEquals(2,summary.length())
         assertEquals("planned",summary.getJSONObject(0).getString("status"))
         assertEquals("device.status",summary.getJSONObject(1).getString("toolId"))
+        val dependencyReview=NexaTaskStore.reviewDependencies(context,id)
+        assertEquals(2,dependencyReview.length())
+        assertEquals(0,dependencyReview.getJSONObject(0).getInt("missingDependencies"))
+        assertTrue(dependencyReview.getJSONObject(0).getBoolean("dependenciesSatisfied"))
+        assertFalse("A satisfied dependency is never authorization",
+            dependencyReview.getJSONObject(0).getBoolean("executable"))
+        assertEquals(1,dependencyReview.getJSONObject(1).getInt("missingDependencies"))
+        assertFalse(dependencyReview.getJSONObject(1).getBoolean("dependenciesSatisfied"))
         val db=NexaConversationDb(context)
         try {
             db.readableDatabase.rawQuery(
@@ -139,5 +147,9 @@ class NexaTaskStoreAndroidTest {
         val summary=NexaTaskStore.readSafeStepSummary(context,id)
         assertEquals(1,summary.length())
         assertEquals("cancelled",summary.getJSONObject(0).getString("status"))
+        val review=NexaTaskStore.reviewDependencies(context,id)
+        assertEquals(1,review.length())
+        assertFalse("Cancelled task must never become runnable",
+            review.getJSONObject(0).getBoolean("dependenciesSatisfied"))
     }
 }
