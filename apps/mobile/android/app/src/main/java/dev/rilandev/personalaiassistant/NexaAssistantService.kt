@@ -511,6 +511,16 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
             endLocalConversation("Conversation ended · Hey Nexa is ready")
             return
         }
+        val ownerTask=NexaOwnerTaskReview.parse(raw)
+        if(ownerTask!=null){
+            if(NexaOwnerTaskReview.offerInForeground(app,ownerTask)){
+                localConversationActive=false
+                feedback("Task request opened in Nexa for owner review. Nothing executed.")
+                handler.postDelayed({hide()},900L)
+            }else replyAndListen(
+                "Task review is already pending or Android blocked opening Nexa. No action performed.")
+            return
+        }
         localTurnCount++
         // Native spoken and overlay typed requests share the same restricted
         // tool gateway. General LLM-generated actions never bypass approval.
