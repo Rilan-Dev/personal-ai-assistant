@@ -40,6 +40,16 @@ internal object NexaTaskCoordinator {
             else -> null
         }
     }
+    /** Parse a bounded, literal owner request; never a model-authored tool plan. */
+    internal fun classifyOwnerReadOnlyPlan(raw:String):List<String>? {
+        if(raw.length !in 15..420 || raw.any { it.code<32 })return null
+        val pieces=Regex("""\s+(?:and then|then|and)\s+""",RegexOption.IGNORE_CASE)
+            .split(raw.trim())
+        if(pieces.size !in 2..4)return null
+        val operations=pieces.map { classifyOwnerFact(it) ?:return null }
+        if(operations.toSet().size!=operations.size)return null
+        return operations
+    }
     private data class Claim(val taskId: String, val stepId: String,
                              val operation: String, val scope: String)
     private fun id(prefix: String) = prefix + UUID.randomUUID().toString()
