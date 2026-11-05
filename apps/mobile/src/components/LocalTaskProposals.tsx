@@ -6,7 +6,7 @@ import {listNativeTaskTimeline,revokeNativeTask} from '../native/nativeTaskCoord
 import type {NativeTaskSummary} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
-export function LocalTaskProposals(){
+export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string}|null}){
   const [goal,setGoal]=useState('');
   const [items,setItems]=useState<LocalTaskProposal[]>([]);
   const [nativeTasks,setNativeTasks]=useState<NativeTaskSummary[]>([]);
@@ -16,6 +16,13 @@ export function LocalTaskProposals(){
   const [loading,setLoading]=useState(false);
   const [notice,setNotice]=useState('');
   const available=localTaskProposalsAvailable();
+  const lastReviewNonce=useRef<number|null>(null);
+  useEffect(()=>{
+    if(!prefill||prefill.nonce===lastReviewNonce.current)return;
+    lastReviewNonce.current=prefill.nonce;
+    setGoal(prefill.goal);
+    setNotice('Review the task and tap Save for review. Nothing has started.');
+  },[prefill]);
   async function refresh(){
     if(!available||busyRef.current||loading)return;
     setLoading(true);
