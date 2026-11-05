@@ -10,6 +10,7 @@ type LocalTaskBridge={
   createOwnerTaskProposal(goal:string):Promise<string>;
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
+  consumePendingOwnerTaskReview?():Promise<string|null>;
   admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
 };
 const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,99}$/;
@@ -75,4 +76,26 @@ export async function admitLocalReadOnlyTaskPlan(plan:unknown):Promise<boolean>{
   if(typeof api.admitOwnerReadOnlyPlan!=='function')
     throw Error('Native task coordinator storage unavailable');
   return await api.admitOwnerReadOnlyPlan(serialized)===true;
+}
+
+
+/** Typed requests and spoken owner transcripts only prefill an existing review. */
+export function parseOwnerTaskReviewIntent(input:unknown):string|null {
+  if(typeof input!=='string'||input.length<10||input.length>420||
+     Array.from(input).some(char=>char.charCodeAt(0)<32))return null;
+  const match=/^(?:hey\s+nexa[,!]?\s+)?(?:please\s+)?(?:save|create|add)\s+(?:a\s+)?task\s+(?:to\s+|:\s*)(.+)$/i.exec(input.trim());
+  const goal=match?.[1]?.trim().replace(/[.!?]+$/,'').trim();
+  return goal&&goal.length>=5&&goal.length<=320?goal:null;
+}
+/** No task is persisted until the owner taps Save in the existing Tools view. */
+export async function consumePendingOwnerTaskReview():Promise<string|null>{
+  if(Platform.OS!=='android')return null;
+  const module=NativeModules.PAAConversationHistory as LocalTaskBridge|undefined;
+  if(typeof module?.consumePendingOwnerTaskReview!=='function')return null;
+  const value=await module.consumePendingOwnerTaskReview();
+  if(value===null)return null;
+  if(typeof value!=='string'||value.length<5||value.length>320||
+     Array.from(value).some(char=>char.charCodeAt(0)<32))
+    throw Error('Invalid spoken task review draft');
+  return value;
 }
