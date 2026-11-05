@@ -177,6 +177,11 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             cipher.init(Cipher.DECRYPT_MODE,key(),GCMParameterSpec(128,bytes.copyOfRange(0,12)))
             return String(cipher.doFinal(bytes.copyOfRange(12,bytes.size)),StandardCharsets.UTF_8)
         }
+        /** Kotlin-only dependency inspection. Never return unsealed values to
+         * JavaScript, providers, logging, or Android Accessibility commands.
+         */
+        internal fun unsealNativeTaskArguments(bytes:ByteArray):String = decrypt(bytes)
+
         /** Atomically retain a one-shot native UI action identity before dispatch.
          * Failure (including storage/Keystore errors) fails closed. A claimed
          * token is not released when the diagnostic ledger trims old records.
