@@ -487,6 +487,20 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
         }
     }
+    /** Explicit foreground owner request, never a model-supplied tool call.
+     * The native coordinator persists a claim and evidence before reporting success.
+     */
+    @ReactMethod fun runOwnerDeviceRead(request:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before requesting device information")
+            return
+        }
+        Thread({
+            val result=NexaTaskCoordinator.executeOwnerDeviceRead(reactContext,request,"chat")
+            promise.resolve(result)
+        },"nexa-task-owner-read").start()
+    }
+
     /** Decrypted only to an owner-visible foreground app; never a model tool. */
     @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
