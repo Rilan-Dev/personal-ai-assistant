@@ -179,7 +179,8 @@ internal object NexaMessageInputActions {
                 node.className?.toString().orEmpty()!=approval.fieldClass ||
                 node.viewIdResourceName.orEmpty()!=approval.fieldId)
                 return "Message field moved or changed. No text was entered."
-            if(!NexaUiActionJournal.claim(service,approval.token,"message_fill",approval.packageName))
+            if(!NexaUiActionJournal.claim(service,approval.token,"message_fill",
+                    approval.packageName,approval.reviewedDigest))
                 return "The durable one-time action journal is unavailable. No text entered."
             return try {
                 val args=Bundle().apply{
