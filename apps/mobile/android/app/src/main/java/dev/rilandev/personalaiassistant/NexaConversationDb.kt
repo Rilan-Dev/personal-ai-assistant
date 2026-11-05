@@ -424,7 +424,11 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
          * summaries. Never include them in model tool observations or telemetry.
          */
         fun agentTaskHistory(context:Context,limit:Int,
-                             manualOnly:Boolean=false):JSONArray = synchronized(lock) {
+                             manualOnly:Boolean=false):JSONArray {
+            // Reconcile stale claims before taking the DB history mutex.
+            // Paused reviewed tasks remain owner-resumable; uncertain ones do not.
+            if(manualOnly)NexaTaskCoordinator.recoverStaleInFlight(context)
+            return synchronized(lock) {
             val results=JSONArray()
             val helper=NexaConversationDb(context)
             try {
@@ -451,6 +455,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                 }
             } finally {helper.close()}
             results
+            }
         }
 
         fun append(context:Context, session:String, channel:String, provider:String,
