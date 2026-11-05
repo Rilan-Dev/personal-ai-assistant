@@ -720,6 +720,22 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** Clear a cancelled owner task's encrypted description without deleting
+     * the permanent identity, event history or action-replay evidence.
+     */
+    @ReactMethod fun clearCancelledOwnerTaskDetails(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before clearing task details")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.redactCancelledOwnerProposal(
+                reactContext,taskId))
+        } catch (_:Exception) {
+            promise.reject("TASK_REDACT","Unable to confirm encrypted task redaction")
+        }
+    }
+
     /** Native task status is private to the focused owner UI. */
     @ReactMethod fun recentNativeTaskTimeline(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
