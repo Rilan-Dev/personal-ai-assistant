@@ -226,13 +226,13 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         approvalRow?.let { panel.addView(it) }
         panel.addView(row(
             button("Battery") {
-                feedback(NexaOverlayCommands.handle(app, "battery").take(250))
+                feedback(NexaOverlayCommands.handle(app, "battery", "assistant-role").take(250))
             },
             button("Check GitHub") {
-                feedback(NexaOverlayCommands.handle(app, "check github").take(250))
+                feedback(NexaOverlayCommands.handle(app, "check github", "assistant-role").take(250))
             },
             button("Find app") {
-                feedback(NexaOverlayCommands.handle(app, "find my github app").take(250))
+                feedback(NexaOverlayCommands.handle(app, "find my github app", "assistant-role").take(250))
             }
         ))
         panel.addView(NexaOverlayTheme.label(app,
@@ -524,7 +524,7 @@ internal class NexaVoiceSession(private val app: Context) : VoiceInteractionSess
         localTurnCount++
         // Native spoken and overlay typed requests share the same restricted
         // tool gateway. General LLM-generated actions never bypass approval.
-        val result = NexaOverlayCommands.handle(app, command)
+        val result = NexaOverlayCommands.handle(app, command, "assistant-role")
         if (result.startsWith("Launcher search started") ||
             result.contains("launch requested") ||
             result.startsWith("Android settings opened") ||
