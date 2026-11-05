@@ -232,3 +232,8 @@ permission was added.
 - Existing stable API reused: local `AgentHarness.run()` returns `awaiting_approval` for tools with `hasExternalSideEffect: true`; Android's existing one-use journal and owner approval remain authoritative.
 - New behavior stays in the existing exact-intent allowlist, React Native native-tool registry, and Kotlin `AccessibilityService.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)` adapter. No framework code is copied, no new dependency is added, and no alternative harness is proposed because this request is a single typed Android action.
 - Capability boundary: empty arguments, exact single owner intent, bound Screen Assist, foreground Nexa, one-time approval, and no read of SystemUI notification text. The result says Android accepted the request; actual shade visibility is verified by the device UI flow.
+
+### Voice audit retention and startup behavior
+- Process-start reconciliation marks abandoned Voice checkpoints uncertain; it does not infer external app success or automatically replay a gesture.
+- Terminal voice audit goal/steps/evidence are eligible for explicit foreground owner privacy redaction. Both encrypted representations are cleared in one SQLite transaction, while identity and event/claim evidence remain for non-replay and incident history.
+- A minimal metadata flag indicates redaction in Tools without exposing private Voice text.
