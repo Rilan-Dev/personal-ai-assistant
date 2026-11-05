@@ -744,6 +744,26 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.resolve(answer)
         },"nexa-task-owner-plan").start()
     }
+    /** The focused owner may prepare an exact battery/storage request as a
+     * review-only plan. The saved origin and revision are checked inside Kotlin.
+     * No mandate, approval, or device action is created by this method.
+     */
+    @ReactMethod fun prepareOwnerGoalReadPlan(taskId:String,expectedRevision:Int,
+                                               promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before preparing a native task plan")
+            return
+        }
+        Thread({
+            try {
+                promise.resolve(NexaTaskStore.prepareOwnerGoalReadPlan(
+                    reactContext,taskId,expectedRevision))
+            }catch (_:Exception) {
+                promise.reject("PLAN_PREPARE","Could not prepare owner task plan")
+            }
+        },"nexa-owner-goal-read-plan").start()
+    }
+
     /**
      * View metadata only for an owner-minted plan; never expose encrypted
      * argument bytes, model input, approvals or a provider send capability.
