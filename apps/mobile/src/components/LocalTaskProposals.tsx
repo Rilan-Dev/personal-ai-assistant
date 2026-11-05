@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
@@ -140,6 +140,29 @@ export function LocalTaskProposals({prefill}:{prefill?:{
     }catch{
       setDetail(null);
       setNotice('Task activation was not confirmed. Refresh before another action.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
+  /** Explicit owner continuation; no retry after a claimed/uncertain outcome. */
+  async function continueReviewed(item:LocalTaskProposal){
+    if(!NEXA_TASK_V2_ENABLED||busyRef.current||loading||
+      !['ready','running'].includes(item.status)||
+      item.policyVersion!=='owner-review-v1'||detail?.taskId!==item.taskId||
+      !Number.isSafeInteger(item.revision)||item.revision!==detail.revision)return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      const fresh=await readLocalTaskDetail(item.taskId);
+      if(fresh.revision!==item.revision||
+        !['ready','running'].includes(fresh.status)||
+        !fresh.steps.some(step=>step.status==='pending')||
+        fresh.steps.some(step=>!['pending','verified'].includes(step.status)))
+        throw Error('Stale or unsafe task continuation');
+      const result=await continueOwnerReviewedReadOnlyPlan(item.taskId,item.revision!);
+      setDetail(null);setNotice(result);
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice(result+' Refresh the task list before further actions.');}
+    }catch{
+      setDetail(null);
+      setNotice('Continuation was not confirmed. Refresh task history; do not retry an uncertain action.');
     }finally{busyRef.current=false;setBusy(false);}
   }
   /** Revocation is an atomic native task/mandate fence, never a UI-only flag. */
@@ -290,6 +313,18 @@ export function LocalTaskProposals({prefill}:{prefill?:{
                disabled={busy||loading} onPress={()=>void runReviewed(item)}
                style={styles.action}>
                <Text style={styles.buttonText}>Run reviewed read-only plan</Text>
+             </Pressable>}
+          {NEXA_TASK_V2_ENABLED&&['ready','running'].includes(item.status)&&
+             item.policyVersion==='owner-review-v1'&&detail.revision===item.revision&&
+             detail.steps.some(step=>step.status==='pending')&&
+             detail.steps.every(step=>['pending','verified'].includes(step.status)&&
+               ['device.status','device.battery_status','device.storage_status'].includes(step.toolId)&&
+               step.evidence==='native_reading')&&<Pressable
+               accessibilityRole="button"
+               accessibilityLabel="Continue unclaimed native device reads with owner approval"
+               disabled={busy||loading} onPress={()=>void continueReviewed(item)}
+               style={styles.action}>
+               <Text style={styles.buttonText}>Continue remaining read-only steps</Text>
              </Pressable>}
           {detail.steps.map((step,index)=><Text key={step.ordinal+':'+index}
             style={styles.help}>Step {step.ordinal+1}: {step.toolId} · {step.status}{typeof step.missingDependencies==='number'&&step.missingDependencies>0
