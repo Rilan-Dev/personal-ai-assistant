@@ -6,6 +6,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.facebook.react.bridge.BridgeReactContext
 import com.facebook.react.bridge.Promise
 import java.lang.reflect.Proxy
+import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,4 +65,33 @@ class NexaMessageMemoryAndroidTest {
             invoke{journal().rememberMessageApp("+971551234567","sms",it)}.second)
         assertNull(invoke{journal().rememberedMessageApp("never saved alias",it)}.first)
     }
+
+    @Test fun ownerChoiceHasExplicitProvenanceAndBoundedRetention() {
+        val alias="project tester "+System.nanoTime().toString().takeLast(6)
+        try{
+            assertEquals(true,invoke {
+                journal().rememberMessageAppForDays(alias,"sms",7,it)
+            }.first)
+            val raw=invoke { journal().messageAppPreferenceDetails(alias,it) }.first
+            assertTrue(raw is String)
+            val record=JSONObject(raw as String)
+            assertEquals(2,record.getInt("version"))
+            assertEquals("owner_confirmed",record.getString("source"))
+            assertEquals("sms",record.getString("appId"))
+            assertTrue(record.getLong("savedAt")>0L)
+            val validity=record.getLong("expiresAt")-record.getLong("savedAt")
+            assertEquals(7L*86_400_000L,validity)
+            assertFalse("Recipient aliases are not returned in preference details",
+                raw.contains(alias))
+            assertEquals("sms",invoke{journal().rememberedMessageApp(alias,it)}.first)
+            assertEquals("MESSAGE_MEMORY_WRITE",
+                invoke{journal().rememberMessageAppForDays(alias,"imo",0,it)}.second)
+            assertEquals("MESSAGE_MEMORY_WRITE",
+                invoke{journal().rememberMessageAppForDays(alias,"imo",366,it)}.second)
+            assertEquals("sms",invoke{journal().rememberedMessageApp(alias,it)}.first)
+            assertEquals(true,invoke{journal().forgetMessageApp(alias,it)}.first)
+            assertNull(invoke{journal().messageAppPreferenceDetails(alias,it)}.first)
+        }finally{invoke{journal().forgetMessageApp(alias,it)}}
+    }
+
 }
