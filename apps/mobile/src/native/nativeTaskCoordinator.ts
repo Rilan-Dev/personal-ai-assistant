@@ -155,6 +155,7 @@ export type UnifiedTaskSummary={
   updatedAt:number;
   stepCount:number;
   verifiedSteps:number;
+  detailsRedacted?:boolean;
 };
 export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
   const native=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
@@ -176,7 +177,8 @@ export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
       Number.isSafeInteger(t.updatedAt)&&Number(t.updatedAt)>0&&
       Number.isSafeInteger(t.stepCount)&&Number(t.stepCount)>=0&&
       Number(t.stepCount)<=8&&Number.isSafeInteger(t.verifiedSteps)&&
-      Number(t.verifiedSteps)>=0&&Number(t.verifiedSteps)<=Number(t.stepCount);
+      Number(t.verifiedSteps)>=0&&Number(t.verifiedSteps)<=Number(t.stepCount)&&
+      (t.detailsRedacted===undefined||typeof t.detailsRedacted==='boolean');
   };
   if(parsed.some(x=>!valid(x)))throw Error('Unrecognized task index entry');
   return parsed;
