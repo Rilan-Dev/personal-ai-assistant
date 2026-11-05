@@ -48,11 +48,11 @@ export async function runOwnerDeviceRead(request:string):Promise<string>{
 export type NativeTaskSummary={
   taskId:string;
   origin:'chat'|'live-voice';
-  status:'ready'|'running'|'completed'|'cancelled';
+  status:'ready'|'running'|'completed'|'cancelled'|'uncertain';
   revision:number;
   updatedAt:number;
   operation:'get_battery_level'|'get_storage_usage';
-  stepStatus:'pending'|'outcome_unknown'|'verified'|'cancelled';
+  stepStatus:'pending'|'outcome_unknown'|'verified'|'cancelled'|'uncertain';
   observation:'none'|'verified';
 };
 const nativeId=/^task-[0-9a-f-]{36}$/;
@@ -61,11 +61,11 @@ const validSummary=(input:unknown):input is NativeTaskSummary=>{
   const x=input as Record<string,unknown>;
   return typeof x.taskId==='string'&&nativeId.test(x.taskId)&&
     (x.origin==='chat'||x.origin==='live-voice')&&
-    ['ready','running','completed','cancelled'].includes(String(x.status))&&
+    ['ready','running','completed','cancelled','uncertain'].includes(String(x.status))&&
     Number.isSafeInteger(x.revision)&&Number(x.revision)>0&&
     Number.isSafeInteger(x.updatedAt)&&Number(x.updatedAt)>0&&
     ['get_battery_level','get_storage_usage'].includes(String(x.operation))&&
-    ['pending','outcome_unknown','verified','cancelled'].includes(String(x.stepStatus))&&
+    ['pending','outcome_unknown','verified','cancelled','uncertain'].includes(String(x.stepStatus))&&
     ['none','verified'].includes(String(x.observation));
 };
 export async function listNativeTaskTimeline():Promise<NativeTaskSummary[]>{
