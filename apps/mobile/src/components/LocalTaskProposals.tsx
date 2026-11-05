@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
@@ -125,6 +125,24 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     }finally{busyRef.current=false;setBusy(false);}
   }
   /** Revocation is an atomic native task/mandate fence, never a UI-only flag. */
+  /** Erase the encrypted description only; retain the event/replay history. */
+  async function clearCancelled(item:LocalTaskProposal){
+    if(busyRef.current||loading||item.status!=='cancelled'||
+       item.goal==='[details cleared]')return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      if(!await clearCancelledOwnerTaskDetails(item.taskId))
+        throw Error('Redaction was already applied or is unavailable');
+      setItems(previous=>previous.map(x=>x.taskId===item.taskId
+        ? {...x,goal:'[details cleared]'}:x));
+      setDetail(null);
+      setNotice('Encrypted task details cleared. Permanent no-replay history is retained.');
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice('Details cleared securely. Refresh history when available.');}
+    }catch{
+      setNotice('Task privacy change could not be confirmed. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   async function revokeReviewed(item:LocalTaskProposal){
     if(busyRef.current||loading||!['ready','running'].includes(item.status)||
        item.policyVersion!=='owner-review-v1')return;
@@ -185,6 +203,13 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
           item.status==='cancelled'?'Canceled permanently':
           item.status==='uncertain'?'Outcome uncertain · never automatically retried':
           'Status: '+item.status}</Text>
+        {item.status==='cancelled'&&item.goal!=='[details cleared]'&&
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={'Clear encrypted details for cancelled task'}
+            disabled={busy||loading} onPress={()=>void clearCancelled(item)}
+            style={styles.action}>
+            <Text style={styles.buttonText}>Clear saved details</Text>
+          </Pressable>}
         {['ready','running'].includes(item.status)&&item.policyVersion==='owner-review-v1'&&
           <Pressable accessibilityRole="button"
             accessibilityLabel={'Revoke active task: '+item.goal.slice(0,50)}
