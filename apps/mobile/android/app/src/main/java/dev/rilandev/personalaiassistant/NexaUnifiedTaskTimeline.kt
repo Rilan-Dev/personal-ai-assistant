@@ -16,7 +16,7 @@ internal object NexaUnifiedTaskTimeline {
     private data class Summary(
         val taskId:String,val source:String,val origin:String,
         val status:String,val revision:Int,val updatedAt:Long,
-        val stepCount:Int,val verifiedSteps:Int
+        val stepCount:Int,val verifiedSteps:Int,val detailsRedacted:Boolean=false
     ) {
         fun json():JSONObject=JSONObject()
             .put("taskId",taskId)
@@ -27,6 +27,7 @@ internal object NexaUnifiedTaskTimeline {
             .put("updatedAt",updatedAt)
             .put("stepCount",stepCount)
             .put("verifiedSteps",verifiedSteps)
+            .put("detailsRedacted",detailsRedacted)
     }
     private val id=Regex("task-[A-Za-z0-9_-]{8,96}")
     private val status=Regex("[a-z_]{1,40}")
@@ -44,7 +45,9 @@ internal object NexaUnifiedTaskTimeline {
                 "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at,t.policy_version," +
                     "(SELECT COUNT(*) FROM agent_task_steps s WHERE s.task_id=t.task_id)," +
                     "(SELECT COUNT(*) FROM agent_task_steps s " +
-                        "WHERE s.task_id=t.task_id AND s.status='verified') " +
+                        "WHERE s.task_id=t.task_id AND s.status='verified')," +
+                    "(SELECT COUNT(*) FROM agent_task_events e WHERE e.task_id=t.task_id " +
+                        "AND e.event_kind='owner_redacted_legacy_voice') " +
                     "FROM agent_tasks t ORDER BY t.updated_at DESC LIMIT ?",
                 arrayOf(maximum.toString())
             ).use{c->
@@ -63,7 +66,8 @@ internal object NexaUnifiedTaskTimeline {
                     // that an external app completed the requested outcome.
                     val verified=if(source=="native")c.getInt(7) else 0
                     all.add(Summary(taskId,source,origin,current,
-                        c.getInt(3),c.getLong(4),c.getInt(6),verified))
+                        c.getInt(3),c.getLong(4),c.getInt(6),verified,
+                        c.getInt(8)>0))
                 }
             }
             db.rawQuery(
