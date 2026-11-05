@@ -185,3 +185,9 @@ not receive Android app or private-device tool capabilities.
 - Default disabled: NEXA_TASK_V2_ENABLED=false. Models cannot inject approval/risk/evidence or an unrelated owner request. High-risk tools are denied and medium risk needs separate opt-in.
 - Full inventory, policy sources and proposed encrypted v3 migration: docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md.
 - Do NOT copy DSH Node workers into Hermes, introduce generic shell/MCP control, or layer another live autonomous loop.
+
+## 2026-11-05 — Native owner review ingress
+- Adapted the previously reviewed DSH task-intake patterns in original Kotlin; no upstream code copied and no duplicate agent loop.
+- Chat, Sarvam/OpenAI Voice, Android assistant role, overlay and wake fallback now share the native owner review queue.
+- Native origin and exact request are bound to a one-use expiring token; only foreground owner Save creates a review-only encrypted task.
+- No new authority is given to models or provider tools. General Voice, Accessibility and messaging execution remain separate and gated.
