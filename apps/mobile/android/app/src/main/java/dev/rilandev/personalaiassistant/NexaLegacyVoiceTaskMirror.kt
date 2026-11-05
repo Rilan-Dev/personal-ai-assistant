@@ -143,6 +143,58 @@ internal object NexaLegacyVoiceTaskMirror {
     }
 
     /**
+     * Read-only state fence consulted BEFORE a legacy Voice cursor considers
+     * its next step. This is necessary but NOT sufficient for execution:
+     * owner approval, target binding and native action claims remain mandatory
+     * in the existing tool-specific controllers.
+     *
+     * A claimed/recovered/terminal or mismatched task cannot advance.
+     * The mirror can never authorize a new action or recover an old one.
+     */
+    fun mayContinue(context:android.content.Context,taskId:String,
+                    sessionId:String,ordinal:Int):Boolean{
+        if(!Regex("task-[A-Za-z0-9_-]{8,96}").matches(taskId) ||
+            sessionId.length !in 1..100 || ordinal !in 0..7)return false
+        return try{
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.readableDatabase
+                val state=db.rawQuery(
+                    "SELECT v.status,v.step_index,t.status FROM voice_task_checkpoints v " +
+                        "JOIN agent_tasks t ON t.task_id=v.task_id " +
+                        "WHERE v.task_id=? AND v.session_id=? AND t.session_id=? "+
+                        "AND t.policy_version=? AND t.origin='live-voice'",
+                    arrayOf(taskId,sessionId,sessionId,POLICY)
+                ).use{c->
+                    if(c.moveToFirst())Triple(c.getString(0),c.getInt(1),c.getString(2))
+                    else null
+                }?:return false
+                if(state.first !in setOf("planned","awaiting_approval",
+                    "executing","verifying","verified") ||
+                    state.second!=ordinal ||
+                    state.third!=allowed[state.first])return false
+                val step=db.rawQuery(
+                    "SELECT tool_id,status FROM agent_task_steps " +
+                        "WHERE task_id=? AND ordinal=?",
+                    arrayOf(taskId,ordinal.toString())
+                ).use{c->
+                    if(c.moveToFirst())Pair(c.getString(0),c.getString(1))
+                    else null
+                }?:return false
+                if(step.first!=TOOL || step.second=="checkpoint_advanced" ||
+                    step.second=="uncertain")return false
+                // No legacy Voice cursor may use a final coordinator mandate
+                // as a way around its own reviewed UI action policy.
+                val mandate=db.rawQuery(
+                    "SELECT 1 FROM agent_mandates WHERE task_id=? LIMIT 1",
+                    arrayOf(taskId)
+                ).use{it.moveToFirst()}
+                !mandate
+            }finally{helper.close()}
+        }catch(_:Exception){false}
+    }
+
+    /**
      * Called once when the Android application process is created. No Voice
      * executor from a previous process can still be running. Persist a
      * permanent uncertain state BEFORE any new spoken work is admitted.
