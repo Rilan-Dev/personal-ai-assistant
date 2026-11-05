@@ -536,16 +536,42 @@ internal object NexaTaskCoordinator {
     private fun reviewedMandate(db:SQLiteDatabase,plan:ReviewedPlan):Boolean=
         db.rawQuery(
             "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON m.task_id=t.task_id "+
-            "WHERE t.task_id=? AND t.origin='chat' AND t.policy_version=? "+
-            "AND t.status IN ('ready','running') AND m.policy_version=? "+
+            "WHERE t.task_id=? AND t.origin='chat' AND t.session_id LIKE 'owner-%' "+
+            "AND t.policy_version=? AND t.status IN ('ready','running') "+
+            "AND m.policy_version=? AND m.owner_request_id=t.task_id "+
             "AND m.scope_digest=? AND m.revoked_at IS NULL AND m.expires_at>?",
             arrayOf(plan.taskId,REVIEW_POLICY,REVIEW_POLICY,plan.scope,
                 System.currentTimeMillis().toString())
         ).use{it.moveToFirst()}
 
+    /** Execution-time step/target binding. A saved mandate must not authorize
+     * a replaced operation, altered arguments, or changed dependencies.
+     */
+    private fun reviewedStepBound(db:SQLiteDatabase,plan:ReviewedPlan,
+                                  step:ReviewedStep,expectedStatus:String):Boolean {
+        return db.rawQuery(
+            "SELECT tool_id,ordinal,risk,expected_evidence,arguments_cipher " +
+                "FROM agent_task_steps WHERE task_id=? AND step_id=? AND status=?",
+            arrayOf(plan.taskId,step.stepId,expectedStatus)
+        ).use{rows->
+            if(!rows.moveToFirst() || rows.getString(0)!=step.tool ||
+                rows.getInt(1)!=step.ordinal || rows.getString(2)!="low" ||
+                rows.getString(3)!="native_reading")return@use false
+            val cipher=rows.getBlob(4)
+            val seal=digest(cipher.joinToString(""){"%02x".format(it.toInt() and 255)})
+            if(seal!=step.seal)return@use false
+            val parsed=org.json.JSONObject(NexaConversationDb.openNativeTaskArguments(cipher))
+            if(parsed.length()!=3 || parsed.optJSONObject("input")?.length()!=0)
+                return@use false
+            val deps=parsed.optJSONArray("dependsOn")?:return@use false
+            val values=(0 until deps.length()).map{deps.optString(it)}
+            values==step.deps
+        }
+    }
     private fun claimReviewed(context:Context,plan:ReviewedPlan,step:ReviewedStep):Boolean=
         transaction(context){db->
             check(reviewedMandate(db,plan))
+            check(reviewedStepBound(db,plan,step,"pending"))
             for(dep in step.deps){
                 val verified=db.rawQuery(
                     "SELECT 1 FROM agent_task_steps WHERE task_id=? AND step_id=? "+
@@ -574,6 +600,7 @@ internal object NexaTaskCoordinator {
                                reading:String):Boolean=
         transaction(context){db->
             check(reviewedMandate(db,plan))
+            check(reviewedStepBound(db,plan,step,"outcome_unknown"))
             val now=System.currentTimeMillis()
             val changed=db.compileStatement(
                 "UPDATE agent_task_steps SET status='verified' WHERE "+
