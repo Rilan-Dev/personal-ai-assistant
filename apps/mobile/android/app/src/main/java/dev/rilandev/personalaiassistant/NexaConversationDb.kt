@@ -480,10 +480,18 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
         /** Encrypted durable checkpoint. Write before any dependent native action.
          * Only the owner-created task and verified observations are persisted.
          */
+        /**
+         * Atomically checkpoint the existing multi-action Voice cursor and
+         * mirror its non-executable metadata into the canonical v3 task ledger.
+         * Progress is NOT evidence that an external app action succeeded.
+         *
+         * Never move a checkpoint backwards, replace its original request,
+         * change its step topology, or reopen a terminal Voice task.
+         */
         fun saveTask(context:Context,taskId:String,sessionId:String,status:String,
                      stepIndex:Int,request:String,steps:List<String>,evidence:String=""):Boolean {
             if(!taskId.matches(Regex("[A-Za-z0-9-]{8,100}")) ||
-                sessionId.length !in 1..100 || stepIndex !in 0..8 ||
+                sessionId.length !in 1..100 || stepIndex !in 0..steps.size ||
                 steps.isEmpty() || steps.size>8 || steps.any{it.length !in 1..160} ||
                 request.length !in 1..500 || evidence.length>350 ||
                 status !in setOf("planned","awaiting_approval","executing","verifying",
@@ -491,21 +499,65 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             return try { synchronized(lock) {
                 val helper=NexaConversationDb(context)
                 try {
+                    val db=helper.writableDatabase
                     val payload=JSONObject().put("request",request)
                         .put("steps",JSONArray(steps)).put("evidence",evidence)
-                    helper.writableDatabase.compileStatement(
-                        "INSERT OR REPLACE INTO voice_task_checkpoints(task_id,session_id,status,step_index,payload,updated_at) VALUES(?,?,?,?,?,?)"
-                    ).use { statement ->
-                        statement.bindString(1,taskId)
-                        statement.bindString(2,sessionId)
-                        statement.bindString(3,status)
-                        statement.bindLong(4,stepIndex.toLong())
-                        statement.bindBlob(5,encrypt(payload.toString()))
-                        statement.bindLong(6,System.currentTimeMillis())
-                        statement.executeInsert()
-                    }
-                    true
-                } finally { helper.close() }
+                    // Perform all Keystore operations before starting the
+                    // transaction, so one write never exposes partial state.
+                    val checkpointCipher=encrypt(payload.toString())
+                    val goalCipher=encrypt(request)
+                    val argsCipher=encrypt("{}")
+                    db.beginTransaction()
+                    try {
+                        data class Prior(val session:String,val status:String,
+                                         val index:Int,val payload:ByteArray)
+                        val old=db.rawQuery(
+                            "SELECT session_id,status,step_index,payload "+
+                                "FROM voice_task_checkpoints WHERE task_id=?",
+                            arrayOf(taskId)
+                        ).use { row ->
+                            if(row.moveToFirst())Prior(
+                                row.getString(0),row.getString(1),
+                                row.getInt(2),row.getBlob(3)) else null
+                        }
+                        if(old!=null){
+                            if(old.session!=sessionId || stepIndex<old.index ||
+                                old.status in setOf("completed","cancelled","failed","uncertain"))
+                                return@synchronized false
+                            // A reused task identity cannot silently swap
+                            // recipient/app/goal or previously saved step text.
+                            val prior=JSONObject(decrypt(old.payload))
+                            val oldSteps=prior.optJSONArray("steps")
+                                ?:return@synchronized false
+                            val unchanged=oldSteps.length()==steps.size &&
+                                (0 until oldSteps.length()).all {
+                                    oldSteps.optString(it)==steps[it]
+                                }
+                            if(prior.optString("request")!=request || !unchanged)
+                                return@synchronized false
+                        }
+                        val now=System.currentTimeMillis()
+                        db.compileStatement(
+                            "INSERT OR REPLACE INTO voice_task_checkpoints("+
+                                "task_id,session_id,status,step_index,payload,updated_at) "+
+                                "VALUES(?,?,?,?,?,?)"
+                        ).use { statement ->
+                            statement.bindString(1,taskId)
+                            statement.bindString(2,sessionId)
+                            statement.bindString(3,status)
+                            statement.bindLong(4,stepIndex.toLong())
+                            statement.bindBlob(5,checkpointCipher)
+                            statement.bindLong(6,now)
+                            check(statement.executeInsert()!=-1L)
+                        }
+                        NexaLegacyVoiceTaskMirror.writeInTransaction(
+                            db,taskId,sessionId,status,stepIndex,steps.size,
+                            goalCipher,argsCipher,now
+                        )
+                        db.setTransactionSuccessful()
+                        true
+                    }finally{db.endTransaction()}
+                } finally {helper.close()}
             }} catch (_:Exception) {false}
         }
         fun taskHistory(context:Context,limit:Int):JSONArray = synchronized(lock) {
