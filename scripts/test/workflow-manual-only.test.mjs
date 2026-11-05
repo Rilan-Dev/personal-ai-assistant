@@ -8,7 +8,7 @@ const promotion="android-main-promotion.yml";
 const source=file=>readFileSync(dir+"/"+file,"utf8");
 const triggerHeader=file=>source(file).split(/^jobs:/m)[0];
 
-test("only one guarded main-branch promotion pipeline can launch on a push",()=>{
+test("all GitHub Actions remain explicit owner-triggered; branch synchronization never starts release",()=>{
   assert.ok(files.length>=6);
   assert.ok(files.includes(promotion));
   for(const file of files){
@@ -16,15 +16,8 @@ test("only one guarded main-branch promotion pipeline can launch on a push",()=>
     assert.match(yaml,/^on:\s*\n/m,file);
     assert.match(yaml,/^\s+workflow_dispatch:\s*$/m,file);
     assert.doesNotMatch(yaml,/^\s+(pull_request|schedule|workflow_run|repository_dispatch|create|delete):/m,file);
-    if (file===promotion) {
-      assert.match(yaml,/^\s+push:\s*$/m);
-      assert.match(yaml,/^\s+branches: \[main\]\s*$/m);
-      assert.match(yaml,/^\s+paths:\s*$/m);
-      assert.doesNotMatch(yaml,/^\s+branches: \[Development\]\s*$/m);
-    } else {
-      assert.doesNotMatch(yaml,/^\s+push:\s*$/m,file);
-      assert.doesNotMatch(yaml,/^\s+branches:/m,file);
-    }
+    assert.doesNotMatch(yaml,/^\s+push:\s*$/m,file);
+    assert.doesNotMatch(yaml,/^\s+branches:/m,file);
   }
 });
 

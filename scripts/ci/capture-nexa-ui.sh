@@ -39,12 +39,13 @@ capture() {
   test -s "$out/$name.xml"
 }
 
-select_tab() {
-  local tab="$1"
+tap_accessible() {
+  local label="$1"
+  local slug="$2"
   adb shell uiautomator dump /sdcard/nexa-audit.xml >/dev/null
-  adb pull /sdcard/nexa-audit.xml "$out/before-$tab.xml" >/dev/null
+  adb pull /sdcard/nexa-audit.xml "$out/before-$slug.xml" >/dev/null
   local tap
-  tap="$(python3 - "$out/before-$tab.xml" "$tab tab" <<'PY'
+  tap="$(python3 - "$out/before-$slug.xml" "$label" <<'PY'
 import re,sys,xml.etree.ElementTree as ET
 root=ET.parse(sys.argv[1]).getroot()
 label=sys.argv[2].lower()
@@ -56,7 +57,7 @@ for node in root.iter('node'):
       x1,y1,x2,y2=map(int,match.groups())
       print((x1+x2)//2,(y1+y2)//2)
       raise SystemExit(0)
-print(f'Could not locate accessibility tab: {label}',file=sys.stderr)
+print(f'Could not locate accessible control: {label}',file=sys.stderr)
 raise SystemExit(1)
 PY
 )"
@@ -64,7 +65,6 @@ PY
   adb shell input tap "$x" "$y"
   sleep 2
 }
-
 # First-run setup is an important screenshot because the user reported missing grants.
 # Android cloud emulators can show a Pixel Launcher ANR directly above Nexa
 # while instrumentation, release packaging and UIAutomator compete for CPU.
@@ -126,12 +126,23 @@ PY
   return 1
 }
 
+
+# Capture setup and current compact three-tab navigation.
 wait_for_nav_ui
 capture "01-first-run-setup"
-for item in chat voice tools setup settings; do
+for item in chat voice tools; do
   wait_for_nav_ui
-  select_tab "${item^}"
-  # Deterministic, flat filenames; no accidental nested directories.
+  tap_accessible "${item^} tab" "tab-$item"
   capture "tab-$item"
 done
-echo "Captured five tab screenshots and first-run setup from the installed APK." >> "$out/README.txt"
+tap_accessible "Open settings" "settings"
+capture "tab-settings"
+tap_accessible "Open permission setup" "setup"
+capture "tab-setup"
+# Reveal optional permissions without changing any Android permission state.
+# Initial Setup is vertically scrollable; make the expansion control visible.
+adb shell input swipe 510 1540 510 820 380
+sleep 1
+tap_accessible "Show optional permissions and features" "optional-permissions"
+capture "tab-setup-optional-expanded"
+echo "Captured first-run Setup, 3 bottom destinations and 2 header/shortcut destinations from the signed APK." >> "$out/README.txt"
