@@ -22,6 +22,7 @@ export function ownerDeviceFactKind(value:unknown):'battery'|'storage'|null {
 }
 type TaskNativeBridge={
   runOwnerDeviceRead(request:string):Promise<string>;
+  runOwnerReadOnlyPlan(request:string):Promise<string>;
   recentNativeTaskTimeline(limit:number):Promise<string>;
   revokeNativeTask(taskId:string):Promise<boolean>;
 };
@@ -85,4 +86,27 @@ export async function revokeNativeTask(taskId:string):Promise<boolean>{
     typeof NativeModules.PAAConversationHistory?.revokeNativeTask!=='function')
     throw Error('Native task revocation unavailable');
   return (await (NativeModules.PAAConversationHistory as TaskNativeBridge).revokeNativeTask(taskId))===true;
+}
+
+
+/** Two independent read-only facts may share one bounded durable task ID. */
+export function ownerReadOnlyPlanKinds(value:unknown):Array<'battery'|'storage'>|null{
+  if(typeof value!=='string'||value.length<15||value.length>420||
+     Array.from(value).some(x=>x.charCodeAt(0)<32))return null;
+  const pieces=value.trim().split(/\s+(?:and then|then|and)\s+/i);
+  if(pieces.length<2||pieces.length>4)return null;
+  const kinds=pieces.map(x=>ownerDeviceFactKind(x));
+  if(kinds.some(x=>x===null))return null;
+  const confirmed=kinds as Array<'battery'|'storage'>;
+  return new Set(confirmed).size===confirmed.length?confirmed:null;
+}
+export async function runOwnerReadOnlyPlan(request:string):Promise<string>{
+  if(!ownerReadOnlyPlanKinds(request))throw Error('Unsupported multi-step device plan');
+  const api=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
+  if(Platform.OS!=='android'||typeof api?.runOwnerReadOnlyPlan!=='function')
+    throw Error('Update Nexa to run secure multi-step device plans');
+  const result=await api.runOwnerReadOnlyPlan(request);
+  if(typeof result!=='string'||result.length<1||result.length>1000)
+    throw Error('Native task plan returned no verified outcome');
+  return result;
 }
