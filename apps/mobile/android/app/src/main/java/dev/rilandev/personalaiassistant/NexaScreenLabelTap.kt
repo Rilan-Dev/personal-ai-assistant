@@ -29,8 +29,10 @@ internal object NexaScreenLabelTap {
             val rootRect=Rect().also{root.getBoundsInScreen(it)}
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
-            var matches=0
-            var target:AccessibilityNodeInfo?=null
+            // A single chat-list row often exposes its title in multiple
+            // descendant nodes. Count the actual clickable target, not each
+            // repeated accessibility label.
+            val targets=linkedMapOf<String,AccessibilityNodeInfo>()
             var inspected=0
             while(queue.isNotEmpty() && inspected++<200) {
                 val node=queue.removeFirst()
@@ -53,7 +55,9 @@ internal object NexaScreenLabelTap {
                 val requestedKey=labelKey(label)
                 val match=visible.any {
                     it.trim().equals(label,ignoreCase=true) ||
-                        requestedKey.isNotBlank() && labelKey(it)==requestedKey
+                        requestedKey.isNotBlank() && labelKey(it)==requestedKey ||
+                        (pkg=="com.whatsapp" &&
+                            NexaWhatsAppChatMatch.evidence(label,it)>=85)
                 } ||
                     isSearchInput && label.equals("search",ignoreCase=true)
                 if(match) {
@@ -66,15 +70,16 @@ internal object NexaScreenLabelTap {
                     candidate?.getBoundsInScreen(rect)
                     if(candidate!=null && (candidate!!.isClickable || isSearchInput) && candidate!!.isEnabled &&
                         rect.width()>0 && rect.height()>0 && rootRect.contains(rect)) {
-                        matches++
-                        target=candidate
+                        val key=listOf(rect.left,rect.top,rect.right,rect.bottom)
+                            .joinToString(":")
+                        targets[key]=candidate
                     }
                 }
                 for(i in 0 until node.childCount)node.getChild(i)?.let{ queue.addLast(it) }
             }
-            if(matches==0)return "No enabled clickable control named $label was found on this screen."
-            if(matches!=1)return "Multiple controls named $label are visible. No tap performed."
-            val found=target ?: return "Target is not available."
+            if(targets.isEmpty())return "No enabled clickable control named $label was found on this screen."
+            if(targets.size!=1)return "Multiple controls named $label are visible. No tap performed."
+            val found=targets.values.single()
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap",pkg))

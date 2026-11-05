@@ -15,6 +15,13 @@ internal object NexaVoiceTaskPlan {
         """\s+(?:and then|then|and)\s+(?=(?:(?:please|can you|could you)\s+)?(?:open|launch|start|read|check|inspect|describe|scroll|swipe|tap|click|press|list|show)\b)""",
         RegexOption.IGNORE_CASE)
     fun parse(raw:String):Plan? {
+        // Speech such as "open WhatsApp and find the contact X and open
+        // the conversation chat" is ONE bounded owner task. Previously the
+        // generic 'and open' split left a fictitious app name at step 0.
+        NexaWhatsAppChatIntent.parse(raw)?.let { chat ->
+            return Plan(raw,listOf("open WhatsApp",
+                "open chat with "+chat.recipientHint))
+        }
         val request=raw.trim().take(450)
             .replace(Regex("""^(?:hey\s+nexa[,\s]*)""",RegexOption.IGNORE_CASE),"")
         val steps=boundary.split(request).map { it.trim().trimEnd('.','?','!') }

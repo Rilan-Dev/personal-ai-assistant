@@ -27,7 +27,8 @@ test('voice exposes and approves real screen inspection, gestures, app discovery
   assert.match(voice,/assistantPanelEnabled && pending != null/);
   assert.match(voice,/pendingApprovalSummary="Scroll/);
   assert.match(actions,/NexaUiActionJournal\.claim/);
-  assert.match(actions,/matches!=1/);
+  assert.match(actions,/targets\.size!=1/);
+  assert.match(actions,/targets\[key\]=candidate/);
   assert.match(screen,/setOf\("up","down","left","right"\)/);
 });
 test('Sarvam routes user speech through the owner gate instead of disabling screen help',()=>{

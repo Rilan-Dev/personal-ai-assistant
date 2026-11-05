@@ -39,6 +39,40 @@ internal object SarvamModelApiReadiness {
                 http.connectionPool.evictAll()
             }
         }
+        // The earlier key check sent no tools, so it could succeed while
+        // live voice consistently failed with HTTP 400 on the tool schema.
+        // Probe the SAME declarations with a harmless synthetic prompt.
+        fun probeToolSchema() {
+            val request=JSONObject().put("model",SarvamApiVoiceTransport.CHAT_MODEL)
+                .put("max_tokens",20).put("messages",JSONArray()
+                    .put(JSONObject().put("role","user")
+                        .put("content","Reply OK only. Do not call a function.")))
+                .put("tools",NexaSarvamActionTools.definitions())
+                .put("tool_choice","auto")
+            http.newCall(Request.Builder().url("https://api.sarvam.ai/v1/chat/completions")
+                .header("api-subscription-key",key)
+                .post(request.toString().toRequestBody("application/json".toMediaType()))
+                .build()).enqueue(object:Callback {
+                override fun onFailure(call:Call,e:IOException) {
+                    finish(false,"MODEL_TOOL_NETWORK",
+                        "Sarvam conversation tool-schema probe could not connect.")
+                }
+                override fun onResponse(call:Call,response:Response) {
+                    response.use {
+                        if(it.isSuccessful)finish(true,"AUTHORIZED",
+                            "Saaras, Bulbul, a synthetic chat turn and Nexa's live tool declarations were accepted. No phone content, microphone audio or device action was sent.")
+                        else {
+                            val safe=NexaSarvamChatError.classify(it.code,
+                                try{it.body?.string().orEmpty().take(5000)}
+                                catch(_:Exception){""})
+                            finish(false,"MODEL_TOOL_"+safe.code.uppercase(java.util.Locale.ROOT),
+                                "Sarvam tool-schema readiness failed: "+safe.explanation+
+                                    " No device tool was executed.")
+                        }
+                    }
+                }
+            })
+        }
         fun probeChat() {
             val body=JSONObject().put("model",SarvamApiVoiceTransport.CHAT_MODEL)
                 .put("max_tokens",12).put("messages",JSONArray()
@@ -52,8 +86,7 @@ internal object SarvamModelApiReadiness {
                 }
                 override fun onResponse(call:Call,response:Response) {
                     response.use {
-                        if(it.isSuccessful)finish(true,"AUTHORIZED",
-                            "Saaras v3 Realtime and Bulbul WebSockets accepted the key, and Sarvam Conversations answered a synthetic test. No microphone audio was sent.")
+                        if(it.isSuccessful)probeToolSchema()
                         else finish(false,"MODEL_AUTH",
                             "Sarvam Conversations returned HTTP ${it.code}; verify the Model API key, quota or model access.")
                     }

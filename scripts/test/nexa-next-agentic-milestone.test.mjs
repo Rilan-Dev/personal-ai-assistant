@@ -70,7 +70,8 @@ test('visible search box focusing is owner-approved and cannot type credentials'
   assert.match(tap,/val isSearchInput=node\.isEditable/);
   assert.match(tap,/node\.hintText/);
   assert.match(tap,/node\.isPassword/);
-  assert.match(tap,/matches!=1/);
+  assert.match(tap,/targets\.size!=1/);
+  assert.match(tap,/targets\[key\]=candidate/);
   assert.match(tap,/NexaUiActionJournal\.claim/);
   assert.doesNotMatch(tap,/performAction\(AccessibilityNodeInfo\.ACTION_SET_TEXT\)/);
   assert.doesNotMatch(policy,/\"screen\.tap_label\",\"apps\.open\"/);
