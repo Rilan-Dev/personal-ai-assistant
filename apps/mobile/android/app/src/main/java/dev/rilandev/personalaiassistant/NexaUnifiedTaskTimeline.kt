@@ -34,7 +34,9 @@ internal object NexaUnifiedTaskTimeline {
     private val origins=setOf("chat","live-voice","assistant-role","overlay")
 
     fun recent(context:Context,limit:Int):JSONArray {
-        // Claimed external UI actions never replay after a process interruption.
+        // Reconcile native and UI claims before calculating an owner timeline.
+        // Neither recovery path ever dispatches or retries an Android action.
+        NexaTaskCoordinator.recoverStaleInFlight(context)
         NexaUiTaskAudit.recoverStale(context)
         val maximum=limit.coerceIn(1,60)
         val helper=NexaConversationDb(context)
