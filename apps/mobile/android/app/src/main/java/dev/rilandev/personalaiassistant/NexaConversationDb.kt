@@ -279,7 +279,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                             if(requiredPolicyVersion==null)
                                 "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed'"
                             else
-                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=? AND origin='chat'"
+                                "UPDATE agent_tasks SET status='cancelled',updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=? AND origin IN ('chat','live-voice','assistant-role','overlay') AND session_id LIKE 'owner-%'"
                         ).use { statement ->
                             statement.bindLong(1,now)
                             statement.bindString(2,taskId)
@@ -323,7 +323,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                     try{
                         val current=db.rawQuery(
                             "SELECT goal_cipher FROM agent_tasks WHERE task_id=? " +
-                                "AND origin='chat' AND status='cancelled' " +
+                                "AND origin IN ('chat','live-voice','assistant-role','overlay') AND session_id LIKE 'owner-%' AND status='cancelled' " +
                                 "AND policy_version IN ('owner-review-v1','owner-preview-v1')",
                             arrayOf(taskId)
                         ).use{cursor->
@@ -334,7 +334,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                         val now=System.currentTimeMillis()
                         val changed=db.compileStatement(
                             "UPDATE agent_tasks SET goal_cipher=?,updated_at=? WHERE task_id=? " +
-                                "AND status='cancelled' AND origin='chat' " +
+                                "AND status='cancelled' AND origin IN ('chat','live-voice','assistant-role','overlay') AND session_id LIKE 'owner-%' " +
                                 "AND policy_version IN ('owner-review-v1','owner-preview-v1')"
                         ).use{stmt->
                             stmt.bindBlob(1,encrypt("[details cleared]"))
@@ -365,7 +365,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             try {
                 helper.readableDatabase.rawQuery(
                     if(manualOnly)
-                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at,plan_revision FROM agent_tasks WHERE origin='chat' AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at,plan_revision FROM agent_tasks WHERE session_id LIKE 'owner-%' AND origin IN ('chat','live-voice','assistant-role','overlay') AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
                     else
                         "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at,plan_revision FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
                     arrayOf(limit.coerceIn(1,200).toString())
