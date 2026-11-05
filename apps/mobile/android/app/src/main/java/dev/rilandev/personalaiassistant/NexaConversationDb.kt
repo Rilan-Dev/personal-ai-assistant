@@ -594,6 +594,40 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
         promise.resolve(NexaOwnerTaskReview.take())
     }
+    /**
+     * Correct an unexecuted owner proposal using optimistic revision locking.
+     * Any old tentative plan steps are invalidated transactionally.
+     */
+    @ReactMethod fun reviseOwnerTaskProposal(
+        taskId:String,expectedRevision:Int,goal:String,promise:Promise
+    ) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to correct the task")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskLifecycle.reviseOwnerProposal(
+                reactContext,taskId,expectedRevision,goal))
+        }catch (_:Exception) {
+            promise.reject("TASK_REVISION","Task revision could not be saved")
+        }
+    }
+
+    /** Owner task detail is metadata-only: no stored arguments or approvals. */
+    @ReactMethod fun ownerTaskReviewDetail(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to inspect the task")
+            return
+        }
+        try {
+            val detail=NexaTaskLifecycle.ownerReviewDetail(reactContext,taskId)
+            if(detail==null)promise.reject("TASK_NOT_FOUND","Task detail unavailable")
+            else promise.resolve(detail.toString())
+        }catch (_:Exception) {
+            promise.reject("TASK_DETAIL","Could not read the task timeline")
+        }
+    }
+
     /** Decrypted only to an owner-visible foreground app; never a model tool. */
     @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
