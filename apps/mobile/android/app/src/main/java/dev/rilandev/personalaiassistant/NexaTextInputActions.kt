@@ -199,7 +199,8 @@ internal object NexaTextInputActions {
             if(box!=approval.box || node.className?.toString().orEmpty()!=approval.clazz ||
                node.viewIdResourceName.orEmpty()!=approval.resource)
                return "Field identity or position changed. Nothing entered."
-            if(!NexaUiActionJournal.claim(service,approval.token,"text_fill",approval.packageName))
+            if(!NexaUiActionJournal.claim(service,approval.token,"text_fill",
+                    approval.packageName,approval.reviewedDigest))
                 return "Encrypted action journal unavailable; text entry cancelled."
             return try {
                 val args=Bundle().apply {
