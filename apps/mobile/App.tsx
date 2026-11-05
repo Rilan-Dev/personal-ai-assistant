@@ -31,6 +31,7 @@ import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {LocalTaskProposals} from './src/components/LocalTaskProposals';
 import {parseOwnerTaskReviewIntent,consumePendingOwnerTaskReview} from './src/native/localTaskProposals';
+import type {PendingOwnerTaskReview} from './src/native/localTaskProposals';
 import {ownerDeviceFactKind,ownerReadOnlyPlanKinds,nativeTaskCoordinatorAvailable,runOwnerDeviceRead,runOwnerReadOnlyPlan} from './src/native/nativeTaskCoordinator';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
@@ -148,11 +149,16 @@ export default function App() {
     try {await shareConversationHistory();setHistoryNotice('Choose where to save or share the JSON export.');}
     catch {setHistoryNotice('Could not open the JSON export chooser.');}
   };
-  const [taskReviewPrefill,setTaskReviewPrefill]=useState<{nonce:number;goal:string}|null>(null);
+  const [taskReviewPrefill,setTaskReviewPrefill]=useState<{
+    nonce:number;goal:string;origin?:PendingOwnerTaskReview['origin'];handoffToken?:string;
+  }|null>(null);
   const taskReviewNonce=useRef(0);
-  const stageOwnerTaskForReview=(goal:string)=>{
+  const stageOwnerTaskForReview=(request:string|PendingOwnerTaskReview)=>{
     taskReviewNonce.current+=1;
-    setTaskReviewPrefill({nonce:taskReviewNonce.current,goal});
+    const review=typeof request==='string'
+      ? {goal:request}
+      : {goal:request.goal,origin:request.origin,handoffToken:request.token};
+    setTaskReviewPrefill({nonce:taskReviewNonce.current,...review});
     setTab('tools');
   };
   const [input, setInput] = useState('');
