@@ -191,9 +191,10 @@ internal object NexaTaskCoordinator {
             val now = System.currentTimeMillis()
             val changed = db.compileStatement(
                 "UPDATE agent_tasks SET status='cancelled',plan_revision=plan_revision+1," +
-                    "updated_at=? WHERE task_id=? AND status IN ('ready','running') " +
+                    "updated_at=? WHERE task_id=? AND status IN ('ready','running','paused') " +
                     "AND ((policy_version=? AND origin IN ('chat','live-voice','assistant-role','overlay')) " +
-                    "OR (policy_version='owner-review-v1' AND origin='chat' " +
+                    "OR (policy_version='owner-review-v1' " +
+                    "AND origin IN ('chat','live-voice','assistant-role','overlay') " +
                     "AND session_id LIKE 'owner-%'))"
             ).use {
                 it.bindLong(1, now)
