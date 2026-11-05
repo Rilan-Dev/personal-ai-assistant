@@ -17,10 +17,10 @@ class NexaTaskLifecycleAndroidTest {
     private fun manualTask(policy:String="owner-review-v1"):String {
         val id="task-"+UUID.randomUUID()
         assertTrue(NexaConversationDb.saveProposedAgentTask(context,
-            id,"owner-"+UUID.randomUUID(),"chat",policy,"Original secret goal"))
+            id,"owner-"+UUID.randomUUID(),"chat",policy,"battery level"))
         return id
     }
-    private fun draftPlan(taskId:String):String=JSONObject()
+    private fun draftPlan(taskId:String,tool:String="device.battery_status"):String=JSONObject()
         .put("version",1)
         .put("taskId",taskId)
         .put("ownerRequestId",taskId)
@@ -29,7 +29,7 @@ class NexaTaskLifecycleAndroidTest {
         .put("expiresAtMs",System.currentTimeMillis()+120_000)
         .put("steps",JSONArray().put(JSONObject()
             .put("stepId","step-0001")
-            .put("toolId","device.battery_status")
+            .put("toolId",tool)
             .put("input",JSONObject())
             .put("dependsOn",JSONArray())
             .put("risk","low")
@@ -65,13 +65,14 @@ class NexaTaskLifecycleAndroidTest {
         assertTrue(NexaTaskStore.admitOwnerReadOnlyPlan(context,draftPlan(id)))
         assertEquals(1,NexaTaskStore.readSafeStepSummary(context,id).length())
         assertTrue(NexaTaskLifecycle.reviseOwnerProposal(
-            context,id,1,"Different request, all tentative steps invalid"))
+            context,id,1,"storage status"))
         assertEquals(0,NexaTaskStore.readSafeStepSummary(context,id).length())
         val details=NexaTaskLifecycle.ownerReviewDetail(context,id)
         assertEquals(0,details!!.getJSONArray("steps").length())
         // A newly corrected owner proposal may still be reviewed; it remains
         // non-executable and a prior draft can never be replayed.
-        assertTrue(NexaTaskStore.admitOwnerReadOnlyPlan(context,draftPlan(id)))
+        assertTrue(NexaTaskStore.admitOwnerReadOnlyPlan(
+            context,draftPlan(id,"device.storage_status")))
         assertEquals(1,NexaTaskStore.readSafeStepSummary(context,id).length())
     }
 

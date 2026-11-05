@@ -15,10 +15,11 @@ import java.util.UUID
 class NexaTaskStoreAndroidTest {
     private val context:Context get()=ApplicationProvider.getApplicationContext()
     private fun newTask(origin:String="chat",policy:String="owner-review-v1",
-                        session:String="owner-"+UUID.randomUUID()):String {
+                        session:String="owner-"+UUID.randomUUID(),
+                        goal:String="battery level"):String {
         val id="task-"+UUID.randomUUID()
         assertTrue(NexaConversationDb.saveProposedAgentTask(
-            context,id,session,origin,policy,"Private owner request "+UUID.randomUUID()))
+            context,id,session,origin,policy,goal))
         return id
     }
     private fun step(id:String="step-0001",tool:String="device.battery_status",
@@ -41,15 +42,15 @@ class NexaTaskStoreAndroidTest {
             .put("executable",false)
 
     @Test fun ownerTaskReadPlanIsSavedAtomicallyAndNeverAuthorizesExecution() {
-        val id=newTask()
-        val p=plan(id,listOf(step(),step("step-0002","device.status",listOf("step-0001"))))
+        val id=newTask(goal="battery level and storage status")
+        val p=plan(id,listOf(step(),step("step-0002","device.storage_status",listOf("step-0001"))))
         assertTrue(NexaTaskStore.admitOwnerReadOnlyPlan(context,p.toString()))
         assertFalse("A plan cannot be admitted twice",
             NexaTaskStore.admitOwnerReadOnlyPlan(context,p.toString()))
         val summary=NexaTaskStore.readSafeStepSummary(context,id)
         assertEquals(2,summary.length())
         assertEquals("planned",summary.getJSONObject(0).getString("status"))
-        assertEquals("device.status",summary.getJSONObject(1).getString("toolId"))
+        assertEquals("device.storage_status",summary.getJSONObject(1).getString("toolId"))
         val dependencyReview=NexaTaskStore.reviewDependencies(context,id)
         assertEquals(2,dependencyReview.length())
         assertEquals(0,dependencyReview.getJSONObject(0).getInt("missingDependencies"))

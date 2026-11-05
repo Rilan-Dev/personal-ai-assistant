@@ -55,9 +55,13 @@ internal object NexaUiTaskAudit {
         // The preexisting UI action tombstone separately binds their digests.
         val goal=NexaConversationDb.sealNativeTaskArguments(
             "Owner-approved UI action: "+actionKind)
-        val args=NexaConversationDb.sealNativeTaskArguments(
-            JSONObject().put("kind",actionKind)
-                .put("packageDigest",packageDigest).toString())
+        val actionArgs=JSONObject().put("kind",actionKind)
+            .put("packageDigest",packageDigest)
+        // Keep the reviewed-text digest with its audit receipt so an outcome
+        // can verify the exact approval without storing field contents.
+        if(actionKind in setOf("message_fill","text_fill"))
+            actionArgs.put("reviewedInputDigest",reviewedInputDigest)
+        val args=NexaConversationDb.sealNativeTaskArguments(actionArgs.toString())
         db.compileStatement(
             "INSERT INTO agent_tasks(task_id,session_id,origin,status,policy_version,"+
                 "plan_revision,goal_cipher,created_at,updated_at) "+
@@ -127,9 +131,14 @@ internal object NexaUiTaskAudit {
                 .openNativeTaskArguments(row.getBlob(0)))
             val kind=args.optString("kind")
             val pkg=args.optString("packageDigest")
-            val valid=args.length()==2 && kind in allowed &&
+            val textAction=kind in setOf("message_fill","text_fill")
+            val reviewed=args.optString("reviewedInputDigest","")
+            val expectedInput=if(textAction)reviewed
+                else digest("ui-action-v1:"+kind+":"+tokenDigest)
+            val valid=args.length()==(if(textAction)3 else 2) && kind in allowed &&
                 sha.matches(pkg) && row.getString(1)==pkg &&
-                row.getString(2)==digest("ui-action-v1:"+kind+":"+tokenDigest) &&
+                (!textAction || sha.matches(reviewed)) &&
+                row.getString(2)==expectedInput &&
                 row.getString(3)=="consumed" && row.getLong(4)>0L
             valid && !row.moveToNext()
         }

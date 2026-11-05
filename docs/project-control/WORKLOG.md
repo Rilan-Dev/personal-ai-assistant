@@ -975,3 +975,8 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Added synthetic Android instrumentation checks for missing/malformed binding rejection, consumed approval identity, target digest, no replay, and no Send.
 - All native on-device UI target, empty field and owner approval checks continue to run before the claim, and no content is sent to a model.
 - Node 395/395 and TypeScript PASS at 79e77304c433; Android native instrumentation pending exact-commit results.
+
+## 2026-11-06 — Android instrumentation follow-up
+- Exact-SHA emulator run `42119945280` exposed five instrumentation failures on Development `1469be4`: three read-plan fixtures used owner goals that native policy correctly rejects, and two text-action outcome checks compared the reviewed-input digest to the generic gesture digest.
+- Fixed the audit receipt to retain the reviewed text digest encrypted with the action arguments and validate that exact digest on outcome. The audit stores no raw field contents. Updated plan fixtures to use owner-authored battery/storage requests and verify that correction invalidates the prior draft.
+- Current-source JS checks on `1469be4`: 395/395 tests, TypeScript, and web export passed. The new native fixes still require the sequential Android debug, emulator, and signed release-test gates on a fresh exact Development SHA.

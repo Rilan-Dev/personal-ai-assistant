@@ -116,7 +116,7 @@ class NexaUiActionJournalAndroidTest {
         val helper=NexaConversationDb(ctx)
         try{
             helper.readableDatabase.rawQuery(
-                "SELECT a.input_digest,a.target_digest,a.state,a.consumed_at "+
+                "SELECT a.input_digest,a.target_digest,a.state,a.consumed_at,s.arguments_cipher "+
                     "FROM agent_step_approvals a JOIN agent_task_steps s "+
                     "ON s.step_id=a.step_id WHERE s.task_id=?",
                 arrayOf(taskId)
@@ -126,6 +126,12 @@ class NexaUiActionJournalAndroidTest {
                 assertEquals(64,c.getString(1).length)
                 assertEquals("consumed",c.getString(2))
                 assertTrue(c.getLong(3)>0L)
+                val auditArgs=JSONObject(NexaConversationDb
+                    .openNativeTaskArguments(c.getBlob(4)))
+                assertEquals(setOf("kind","packageDigest","reviewedInputDigest"),
+                    auditArgs.keys().asSequence().toSet())
+                assertEquals(reviewed,auditArgs.getString("reviewedInputDigest"))
+                assertFalse(auditArgs.toString().contains(privateText))
                 assertFalse(c.moveToNext())
             }
             val entries=NexaUiTaskAudit.POLICY
