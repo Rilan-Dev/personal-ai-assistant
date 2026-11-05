@@ -25,7 +25,9 @@ test('local commands use a closed allowlist and do not grant the AI arbitrary de
   assert.match(commands,/internal object NexaOverlayCommands/);
   assert.match(commands,/when \(text\)/);
   assert.match(commands,/PackageManager\.PERMISSION_GRANTED/);
-  assert.match(commands,/BatteryManager\.BATTERY_PROPERTY_CAPACITY/);
+  assert.match(commands,/NexaTaskCoordinator\.executeOwnerDeviceRead/);
+  assert.match(commands,/NexaTaskCoordinator\.executeOwnerReadOnlyPlan/);
+  assert.match(read(path+'NexaTaskNativeRead.kt'),/BatteryManager\.BATTERY_PROPERTY_CAPACITY/);
   assert.match(commands,/com\.github\.android/);
   assert.match(commands,/com\.whatsapp/);
   assert.match(commands,/LauncherNavigationState\.begin/);
@@ -83,7 +85,7 @@ test('owner tapped voice opens an existing system assistant session, not arbitra
   assert.ok(assistant.includes('fun showFromOwnerTap(): Boolean'));
   assert.ok(assistant.includes('requestSession("nexa_overlay_tap")'));
   assert.ok(assistant.includes('args?.getBoolean("nexa_overlay_tap") == true'));
-  assert.ok(assistant.includes('NexaOverlayCommands.handle(app, command)'));
+  assert.ok(assistant.includes('NexaOverlayCommands.handle(app, command, "assistant-role")'));
   assert.ok(assistant.includes('listenOneDeviceCommand()'));
   assert.ok(overlay.includes('Talk to Nexa · one device command'));
   assert.ok(overlay.includes('NexaAssistantService.showFromOwnerTap()'));
