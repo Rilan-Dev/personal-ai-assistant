@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {mkdtempSync,writeFileSync,chmodSync,readFileSync,existsSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {delimiter,join} from "node:path";
 
 const script="scripts/ci/manual-actions.sh";
 const sha="e68d6fa7296cfd72ff702dac11293713e0b33112";
+const bash=process.platform==="win32"
+  ? join(process.env.ProgramFiles||"C:\\Program Files","Git","bin","bash.exe")
+  : "/bin/bash";
 
 function harness(scenario,args){
   const root=mkdtempSync(join(tmpdir(),"paa-gh-run-"));
@@ -50,10 +53,10 @@ function harness(scenario,args){
   ].join("\n").replaceAll("\\x27","'");
   writeFileSync(bin,mock);
   chmodSync(bin,0o755);
-  const result=spawnSync("/bin/bash",[script,...args],{
+  const result=spawnSync(bash,[script,...args],{
     encoding:"utf8",timeout:15000,
     env:{...process.env,MOCK_SCENARIO:scenario,MOCK_SHA:sha,MOCK_LOG:log,
-      PATH:root+":"+process.env.PATH}
+      PATH:root+delimiter+process.env.PATH}
   });
   const calls=existsSync(log)?readFileSync(log,"utf8"):"";
   rmSync(root,{recursive:true,force:true});

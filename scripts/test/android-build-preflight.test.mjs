@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join} from "node:path";
+import {delimiter,join} from "node:path";
 
 const script="scripts/acceptance/android_build_preflight.py";
 
@@ -37,12 +37,15 @@ test("Emulator preflight checks hardware acceleration and stricter capacity",()=
 test("JDK version check runs under Python 3.6 using portable subprocess arguments",()=>{
   const work=mkdtempSync(join(tmpdir(),"paa-preflight-java-"));
   try {
-    const fake=join(work,"java");
-    writeFileSync(fake, ["#!/bin/sh", "echo 'openjdk version \"21.0.12.1\"' >&2", ""].join("\n"));
-    chmodSync(fake,0o755);
+    const windows=process.platform==="win32";
+    const fake=join(work,windows?"java.cmd":"java");
+    writeFileSync(fake,windows
+      ? "@echo off\r\necho openjdk version \"21.0.12.1\" 1>&2\r\n"
+      : ["#!/bin/sh", "echo 'openjdk version \"21.0.12.1\"' >&2", ""].join("\n"));
+    if(!windows)chmodSync(fake,0o755);
     const result=spawnSync("python3",[script,"--mode","compile","--json"],{
       encoding:"utf8",timeout:10000,
-      env:{...process.env,PATH:work+":"+process.env.PATH}
+      env:{...process.env,PATH:work+delimiter+process.env.PATH}
     });
     assert.ok([0,2].includes(result.status),result.stderr);
     assert.equal(JSON.parse(result.stdout).java_major,21);
