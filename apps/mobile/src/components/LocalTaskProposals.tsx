@@ -2,14 +2,15 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
 import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail} from '../native/localTaskProposals';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
-import {listNativeTaskTimeline,revokeNativeTask} from '../native/nativeTaskCoordinator';
-import type {NativeTaskSummary} from '../native/nativeTaskCoordinator';
+import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
+import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
 export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string}|null}){
   const [goal,setGoal]=useState('');
   const [items,setItems]=useState<LocalTaskProposal[]>([]);
   const [nativeTasks,setNativeTasks]=useState<NativeTaskSummary[]>([]);
+  const [allTasks,setAllTasks]=useState<UnifiedTaskSummary[]>([]);
   const [busy,setBusy]=useState(false);
   // A rapid double-tap must not persist two different task IDs before React rerenders.
   const busyRef=useRef(false);
@@ -36,6 +37,8 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     }catch{setNotice('Could not securely read your local task proposals.');}
     try{setNativeTasks(await listNativeTaskTimeline());}
     catch{setNotice('Native task history could not be refreshed. Existing records remain.');}
+    try{setAllTasks(await listUnifiedTaskTimeline());}
+    catch{setNotice('Unified task index unavailable. Other local history remains accessible.');}
     finally{setLoading(false);}
   }
   useEffect(()=>{if(available)void refresh();},[available]);
@@ -181,6 +184,15 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
           {detail.events.map((event,index)=><Text key={event.kind+':'+index}
             style={styles.help}>{new Date(event.createdAt).toLocaleString()} · {event.kind}</Text>)}
         </View>}
+      </View>)}
+      <Text style={styles.heading}>All task progress</Text>
+      <Text style={styles.help}>Read-only index across device tasks and older voice checkpoints. A voice checkpoint is not verified external-app delivery or permission to resume.</Text>
+      {allTasks.length===0&&<Text style={styles.help}>No task records found.</Text>}
+      {allTasks.map(task=><View key={task.source+':'+task.taskId} style={styles.item}>
+        <Text style={styles.goal}>{task.origin==='live-voice'?'Voice':task.origin==='chat'?'Chat':task.origin} · {task.status}</Text>
+        <Text style={styles.help}>Source: {task.source==='native'?'Native task store':'Legacy voice checkpoint'} · {new Date(task.updatedAt).toLocaleString()}</Text>
+        {task.source==='native'&&<Text style={styles.help}>Verified local steps: {task.verifiedSteps}/{task.stepCount}</Text>}
+        {task.source==='legacy_voice_checkpoint'&&<Text style={styles.help}>Older voice task · completion not independently verified here</Text>}
       </View>)}
       <Text style={styles.heading}>Native task activity</Text>
       <Text style={styles.help}>Locally verified battery/storage tasks. An unknown outcome is never automatically replayed.</Text>
