@@ -78,7 +78,7 @@ export function normalizePlannerTaskDecision(
 export type TaskAdmissionPlannerOptions=Readonly<{
   /** Caller must keep this false until the native coordinator is ready. */
   enabled: boolean;
-  context: () => TrustedPlannerTaskContext;
+  context: (decision:PlannerDecision) => TrustedPlannerTaskContext | Promise<TrustedPlannerTaskContext>;
   /** Must durably persist a review-only plan before reporting it as saved. */
   persistProposal?: (plan:BoundTaskPlan) => Promise<void>;
 }>;
@@ -100,7 +100,9 @@ export function createTaskAdmissionPlanner(
       if(signal?.aborted) return {type:"clarify",question:"Task was cancelled."};
       if(decision.type!=="tool") return decision;
       try {
-        const plan=normalizePlannerTaskDecision(decision,options.context());
+        const context=await options.context(decision);
+        if(signal?.aborted)return {type:"clarify",question:"Task was cancelled."};
+        const plan=normalizePlannerTaskDecision(decision,context);
         if(!options.persistProposal)
           return {type:"clarify",question:"Task execution is disabled until the native coordinator is available. Nothing was executed."};
         await options.persistProposal(plan);
