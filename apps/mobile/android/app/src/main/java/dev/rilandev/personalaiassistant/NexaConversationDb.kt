@@ -358,9 +358,9 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             try {
                 helper.readableDatabase.rawQuery(
                     if(manualOnly)
-                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks WHERE origin='chat' AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at,plan_revision FROM agent_tasks WHERE origin='chat' AND policy_version IN ('owner-review-v1','owner-preview-v1') ORDER BY updated_at DESC LIMIT ?"
                     else
-                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
+                        "SELECT task_id,session_id,origin,status,policy_version,goal_cipher,created_at,updated_at,plan_revision FROM agent_tasks ORDER BY updated_at DESC LIMIT ?",
                     arrayOf(limit.coerceIn(1,200).toString())
                 ).use { cursor ->
                     while(cursor.moveToNext()) {
@@ -373,7 +373,8 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
                             .put("policyVersion",cursor.getString(4))
                             .put("goal",text)
                             .put("createdAt",cursor.getLong(6))
-                            .put("updatedAt",cursor.getLong(7)))
+                            .put("updatedAt",cursor.getLong(7))
+                            .put("revision",cursor.getInt(8)))
                     }
                 }
             } finally {helper.close()}
