@@ -20,6 +20,18 @@ export function ownerDeviceFactKind(value:unknown):'battery'|'storage'|null {
     .replace(/[.?!,]+$/,'').trim();
   return battery.has(normalized)?'battery':storage.has(normalized)?'storage':null;
 }
+/** Exact owner request for non-sensitive device diagnostics. A model tool
+ * selection cannot broaden this grammar into screen or application controls.
+ */
+export function ownerDeviceStatusIntent(value:unknown):boolean{
+  if(typeof value!=='string'||value.length<5||value.length>150||
+    Array.from(value).some(char=>char.charCodeAt(0)<32))return false;
+  const normalized=value.trim().toLowerCase()
+    .replace(/^hey nexa(?:,|\s)+/,'').replace(/[.?!,]+$/,'').trim();
+  return ['device status','check device status','phone status',
+    'check my phone status'].includes(normalized);
+}
+
 type TaskNativeBridge={
   runOwnerDeviceRead(request:string):Promise<string>;
   runOwnerReadOnlyPlan(request:string):Promise<string>;
