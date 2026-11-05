@@ -928,3 +928,12 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Physical Infinix X6831 (Android 13/API 33) was connected; Screen Assist and Launcher Navigation were both enabled and bound. Approved one four-flow Maestro test batch; no actual messages are to be sent.
 - A local debug build fails in Windows Ninja native C++ codegen due to long generated safe-area-context object paths. The D: project fixes stale OneDrive autolinking when its generated cache is refreshed, but still hits the Windows path limit.
 - Current task commit `d129b55` contains Maestro/test/app changes and is being rebased onto newly advanced `origin/Development`; `NEXT_ACTION.md` changes remain uncommitted to preserve its earlier notes.
+
+## 2026-11-06 — Durable Voice checkpoint projection into the canonical Android task ledger
+- Added NexaLegacyVoiceTaskMirror as a non-executable audit adapter for existing NexaVoiceTaskCursor checkpoints. The original encrypted voice_task_checkpoints write and a matching agent_tasks/agent_task_steps audit projection now commit in ONE custom.db v3 transaction.
+- Added immutable plan/goal and session checks, monotonic step index, terminal state fences, and rejection of cross-policy task-ID reuse. A bad update rolls back both stores.
+- Only trusted native Android Voice maintains the actual interaction cursor. The projection has no mandate, per-step approval, native observation or dispatch privilege and never becomes an executor.
+- Unified task history deduplicates voice_task_checkpoints with native mirror rows but continues to label them legacy_voice_checkpoint, with zero independently verified steps.
+- On Android application process start, abandoned nonterminal Voice checkpoint rows are marked uncertain in both stores; the old cursor cannot be revived or automatically replayed.
+- Added Android instrumentation cases for atomic persistence, no mandate, collisions, monotonic updates, terminal non-reopen, and restart quarantine.
+- No new database schema version, network dependency, API key, broad Android tool permissions, automated send or production Docker deployment.
