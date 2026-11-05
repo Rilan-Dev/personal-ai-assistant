@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan} from '../native/localTaskProposals';
+import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
 import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
@@ -103,6 +104,26 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
       setNotice('Correction was not confirmed. Refresh before editing again; do not overwrite another revision.');
     }finally{busyRef.current=false;setBusy(false);}
   }
+  /** This button cannot execute without an explicit review and matching revision. */
+  async function runReviewed(item:LocalTaskProposal){
+    if(!NEXA_TASK_V2_ENABLED||busyRef.current||loading||
+      item.status!=='proposed'||detail?.taskId!==item.taskId||
+      !Number.isSafeInteger(item.revision)||item.revision!==detail.revision)return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      const fresh=await inspectOwnerReadOnlyPlan(item.taskId);
+      if(fresh.length===0||fresh.some(step=>step.status!=='planned'))
+        throw Error('No eligible native read-only plan');
+      const result=await runOwnerReviewedReadOnlyPlan(item.taskId,item.revision!);
+      setDetail(null);
+      setNotice(result);
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice(result+' Refresh to inspect the durable task state.');}
+    }catch{
+      setDetail(null);
+      setNotice('Task activation was not confirmed. Refresh before another action.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   async function cancelNative(item:NativeTaskSummary){
     if(busyRef.current||loading||!['ready','running'].includes(item.status))return;
     busyRef.current=true;setBusy(true);setNotice('');
@@ -143,7 +164,10 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
       {items.length===0&&!loading&&<Text style={styles.help}>No saved proposals.</Text>}
       {items.map(item=><View key={item.taskId} style={styles.item}>
         <Text style={styles.goal}>{item.goal}</Text>
-        <Text style={styles.help}>{item.status==='proposed'?'Awaiting your review · execution disabled':'Canceled permanently'}</Text>
+        <Text style={styles.help}>{item.status==='proposed'?'Awaiting owner review · no action started':
+          item.status==='cancelled'?'Canceled permanently':
+          item.status==='uncertain'?'Outcome uncertain · never automatically retried':
+          'Status: '+item.status}</Text>
         {item.status==='proposed'&&<Pressable accessibilityRole="button"
           accessibilityLabel={'Cancel task proposal: '+item.goal.slice(0,50)}
           disabled={busy} onPress={()=>void cancel(item)} style={styles.action}>
@@ -179,6 +203,17 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
         {detail?.taskId===item.taskId&&<View style={styles.item}>
           <Text style={styles.help}>Revision {detail.revision} · {detail.status} · review-only</Text>
           {detail.steps.length===0&&<Text style={styles.help}>No plan steps saved.</Text>}
+          {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
+             detail.steps.length>0&&detail.steps.every(step=>
+               ['device.status','device.battery_status'].includes(step.toolId)&&
+               step.status==='planned'&&step.evidence==='native_reading')&&
+             detail.revision===item.revision&&<Pressable
+               accessibilityRole="button"
+               accessibilityLabel="Run the owner-reviewed native read-only plan"
+               disabled={busy||loading} onPress={()=>void runReviewed(item)}
+               style={styles.action}>
+               <Text style={styles.buttonText}>Run reviewed read-only plan</Text>
+             </Pressable>}
           {detail.steps.map((step,index)=><Text key={step.ordinal+':'+index}
             style={styles.help}>Step {step.ordinal+1}: {step.toolId} · {step.status}</Text>)}
           {detail.events.map((event,index)=><Text key={event.kind+':'+index}
