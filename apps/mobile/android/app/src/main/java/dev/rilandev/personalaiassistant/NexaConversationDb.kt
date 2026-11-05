@@ -501,6 +501,23 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         },"nexa-task-owner-read").start()
     }
 
+    /**
+     * Phase-2 read-only plan admission, never native execution. The task ID
+     * must already correspond to a native owner-created, foreground proposal.
+     * This does not create a device mandate or approve any future action.
+     */
+    @ReactMethod fun admitOwnerReadOnlyPlan(planJson:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review a proposed plan")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskStore.admitOwnerReadOnlyPlan(reactContext,planJson))
+        } catch (_:Exception) {
+            promise.reject("PLAN_STORE","Could not store the read-only task plan")
+        }
+    }
+
     /** Decrypted only to an owner-visible foreground app; never a model tool. */
     @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
