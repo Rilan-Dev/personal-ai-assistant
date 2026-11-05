@@ -23,6 +23,7 @@ internal object NexaTaskStore {
 
     /** The ONLY initial admitted registry is a native, no-side-effect read. */
     private val readOnlyRegistry=NexaTaskNativeRead.proposedReadTools
+    private val ownerOrigins=setOf("chat","live-voice","assistant-role","overlay")
     private val rootKeys=setOf("version","taskId","ownerRequestId","origin",
         "policyVersion","expiresAtMs","steps","executable")
     private val stepKeys=setOf("stepId","toolId","input","dependsOn",
@@ -30,8 +31,8 @@ internal object NexaTaskStore {
 
     private data class ReadStep(val sourceId:String,val tool:String,
                                 val dependencies:List<String>)
-    private data class AdmittedPlan(val taskId:String,val policy:String,
-                                    val steps:List<ReadStep>)
+    private data class AdmittedPlan(val taskId:String,val origin:String,
+                                    val policy:String,val steps:List<ReadStep>)
 
     private fun exactKeys(value:JSONObject,allowed:Set<String>):Boolean {
         if(value.length()!=allowed.size)return false
@@ -46,7 +47,7 @@ internal object NexaTaskStore {
         val plan=try{JSONObject(raw)}catch(_:Exception){return null}
         if(!exactKeys(plan,rootKeys) || plan.optInt("version",-1)!=1 ||
             plan.opt("executable")!=false ||
-            plan.optString("origin")!="chat" ||
+            plan.optString("origin") !in ownerOrigins ||
             plan.optString("policyVersion")!=POLICY)return null
         val taskId=plan.optString("taskId")
         if(!id.matches(taskId) || plan.optString("ownerRequestId")!=taskId)
@@ -81,7 +82,7 @@ internal object NexaTaskStore {
             }
             steps.add(ReadStep(sid,tool,deps))
         }
-        return AdmittedPlan(taskId,POLICY,steps)
+        return AdmittedPlan(taskId,plan.optString("origin"),POLICY,steps)
     }
 
     /**
@@ -113,7 +114,7 @@ internal object NexaTaskStore {
                         "SELECT origin,status,policy_version,session_id FROM agent_tasks WHERE task_id=?",
                         arrayOf(plan.taskId)
                     ).use{row->
-                        row.moveToFirst() && row.getString(0)=="chat" &&
+                        row.moveToFirst() && row.getString(0)==plan.origin &&
                             row.getString(1)=="proposed" &&
                             row.getString(2)==plan.policy &&
                             row.getString(3).startsWith("owner-")
@@ -145,6 +146,95 @@ internal object NexaTaskStore {
                                 .put("executionEnabled",false).toString()))
                         stmt.bindLong(3,now)
                         if(stmt.executeInsert()==-1L)return@synchronized false
+                    }
+                    db.setTransactionSuccessful()
+                    true
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }}catch(_:Exception){false}
+    }
+
+    /**
+     * Build a review-only native plan from the owner's SAVED, encrypted goal,
+     * not from model-provided parameters. Revision, origin, and the immutable
+     * plan are bound in one transaction. This grants no mandate or approval.
+     */
+    fun prepareOwnerGoalReadPlan(context:Context,taskId:String,
+                                 expectedRevision:Int):Boolean {
+        if(!id.matches(taskId)||expectedRevision !in 1..1_000_000)return false
+        return try{synchronized(lock){
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.writableDatabase
+                db.beginTransaction()
+                try{
+                    val goal=db.rawQuery(
+                        "SELECT origin,status,policy_version,session_id,plan_revision,goal_cipher "+
+                            "FROM agent_tasks WHERE task_id=?",arrayOf(taskId)
+                    ).use{row->
+                        if(!row.moveToFirst() ||
+                            row.getString(0) !in ownerOrigins ||
+                            row.getString(1)!="proposed" ||
+                            row.getString(2)!=POLICY ||
+                            !row.getString(3).startsWith("owner-") ||
+                            row.getInt(4)!=expectedRevision)
+                            return@synchronized false
+                        NexaConversationDb.openNativeTaskArguments(row.getBlob(5))
+                    }
+                    if(db.rawQuery(
+                        "SELECT 1 FROM agent_task_steps WHERE task_id=? LIMIT 1",
+                        arrayOf(taskId)
+                    ).use{it.moveToFirst()})return@synchronized false
+
+                    val operations=NexaTaskCoordinator.classifyOwnerReadOnlyPlan(goal)
+                        ?:listOfNotNull(NexaTaskCoordinator.classifyOwnerFact(goal))
+                    val tools=operations.map{
+                        when(it){
+                            "get_battery_level"->"device.battery_status"
+                            "get_storage_usage"->"device.storage_status"
+                            else->return@synchronized false
+                        }
+                    }
+                    if(tools.isEmpty()||tools.size>MAX_STEPS ||
+                        tools.any{it !in readOnlyRegistry})
+                        return@synchronized false
+                    val steps=tools.map{"step-"+UUID.randomUUID().toString()}
+                    val now=System.currentTimeMillis()
+                    for((ordinal,tool) in tools.withIndex()){
+                        val deps=if(ordinal==0)JSONArray() else
+                            JSONArray().put(steps[ordinal-1])
+                        val arguments=JSONObject()
+                            .put("sourceStepId","step-"+(ordinal+1).toString().padStart(4,'0'))
+                            .put("input",JSONObject())
+                            .put("dependsOn",deps)
+                        db.compileStatement(
+                            "INSERT INTO agent_task_steps(step_id,task_id,ordinal,tool_id,status,"+
+                                "risk,expected_evidence,arguments_cipher) "+
+                                "VALUES(?,?,?,?,'planned','low','native_reading',?)"
+                        ).use{statement->
+                            statement.bindString(1,steps[ordinal])
+                            statement.bindString(2,taskId)
+                            statement.bindLong(3,ordinal.toLong())
+                            statement.bindString(4,tool)
+                            statement.bindBlob(5,NexaConversationDb
+                                .sealNativeTaskArguments(arguments.toString()))
+                            check(statement.executeInsert()!=-1L)
+                        }
+                    }
+                    val detail=NexaConversationDb.sealNativeTaskArguments(
+                        JSONObject().put("stepCount",steps.size)
+                            .put("executionEnabled",false)
+                            .put("source","saved_owner_request").toString()
+                    )
+                    db.compileStatement(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,"+
+                            "detail_cipher,created_at) VALUES(?,NULL,?,?,?)"
+                    ).use{statement->
+                        statement.bindString(1,taskId)
+                        statement.bindString(2,"owner_goal_read_plan_prepared")
+                        statement.bindBlob(3,detail)
+                        statement.bindLong(4,now)
+                        check(statement.executeInsert()!=-1L)
                     }
                     db.setTransactionSuccessful()
                     true
@@ -230,7 +320,7 @@ internal object NexaTaskStore {
         val helper=NexaConversationDb(context)
         try{
             helper.readableDatabase.rawQuery(
-                "SELECT s.ordinal,s.tool_id,s.status,s.expected_evidence FROM agent_task_steps s JOIN agent_tasks t ON s.task_id=t.task_id WHERE s.task_id=? AND t.origin=\'chat\' AND t.session_id LIKE \'owner-%\' AND t.policy_version=\'owner-review-v1\' ORDER BY s.ordinal",
+                "SELECT s.ordinal,s.tool_id,s.status,s.expected_evidence FROM agent_task_steps s JOIN agent_tasks t ON s.task_id=t.task_id WHERE s.task_id=? AND t.origin IN (\'chat\',\'live-voice\',\'assistant-role\',\'overlay\') AND t.session_id LIKE \'owner-%\' AND t.policy_version=\'owner-review-v1\' ORDER BY s.ordinal",
                 arrayOf(taskId)
             ).use{cursor->
                 while(cursor.moveToNext()){
