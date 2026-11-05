@@ -211,4 +211,24 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
         assertEquals(0,row.getInt("verifiedSteps"))
     }
 
+
+    @Test fun nativeVoiceContinuationGateDeniesStaleOrTamperedStepIdentity(){
+        val id="task-"+UUID.randomUUID()
+        val session="voice-"+UUID.randomUUID()
+        val steps=listOf("open GitHub","inspect visible controls")
+        val goal="open GitHub and inspect visible controls"
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,"planned",0,goal,steps))
+        assertTrue(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,session,0))
+        assertFalse(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,session,1))
+        assertFalse(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,
+            "voice-"+UUID.randomUUID(),0))
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "verified",1,goal,steps))
+        assertFalse(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,session,0))
+        assertTrue(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,session,1))
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "cancelled",1,goal,steps))
+        assertFalse(NexaLegacyVoiceTaskMirror.mayContinue(ctx,id,session,1))
+    }
+
 }
