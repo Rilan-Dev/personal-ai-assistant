@@ -209,6 +209,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
       {items.length===0&&!loading&&<Text style={styles.help}>No saved proposals.</Text>}
       {items.map(item=><View key={item.taskId} style={styles.item}>
         <Text style={styles.goal}>{item.goal}</Text>
+        <Text style={styles.help}>Source: {item.origin==='live-voice'?'Voice':item.origin==='assistant-role'?'Android assistant':item.origin==='overlay'?'Overlay':'Chat'} · private owner review</Text>
         <Text style={styles.help}>{item.status==='proposed'?'Awaiting owner review · no action started':
           item.status==='cancelled'?'Canceled permanently':
           item.status==='uncertain'?'Outcome uncertain · never automatically retried':
