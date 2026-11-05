@@ -25,6 +25,7 @@ type LocalTaskBridge={
   ownerTaskReviewDetail(taskId:string):Promise<string>;
   reviewOwnerReadOnlyPlan?(taskId:string):Promise<string>;
   runReviewedOwnerReadOnlyPlan?(taskId:string,revision:number):Promise<string>;
+  continueReviewedOwnerReadOnlyPlan?(taskId:string,revision:number):Promise<string>;
 };
 const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,99}$/;
 const ownerReviewPolicy=(value:unknown)=>value==='owner-review-v1'||value==='owner-preview-v1';
@@ -257,4 +258,22 @@ export async function clearCancelledOwnerTaskDetails(taskId:string):Promise<bool
   if(typeof api.clearCancelledOwnerTaskDetails!=='function')
     throw Error('Update Nexa to clear encrypted task details');
   return (await api.clearCancelledOwnerTaskDetails(taskId))===true;
+}
+
+
+/** A deliberate owner-only continuation of still-unclaimed native read steps.
+ * Already claimed or uncertain outcomes can never be retried through this.
+ */
+export async function continueOwnerReviewedReadOnlyPlan(
+  taskId:string,revision:number
+):Promise<string>{
+  if(!id.test(taskId)||!Number.isSafeInteger(revision)||revision<1)
+    throw Error('Invalid task continuation revision');
+  const api=bridge();
+  if(typeof api.continueReviewedOwnerReadOnlyPlan!=='function')
+    throw Error('Update Nexa before continuing a native task');
+  const result=await api.continueReviewedOwnerReadOnlyPlan(taskId,revision);
+  if(typeof result!=='string'||!result||result.length>1200)
+    throw Error('Unable to verify native task continuation result');
+  return result;
 }
