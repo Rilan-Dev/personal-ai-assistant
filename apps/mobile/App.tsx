@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
@@ -57,7 +57,9 @@ import {ownerPrivacyAvailable,getOwnerApproximateLocation,pickOwnerContact} from
 import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/ownerPrivacy';
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
 import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
+import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
+import {saveLocalTaskProposal,admitLocalReadOnlyTaskPlan} from './src/native/localTaskProposals';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
@@ -1507,8 +1509,27 @@ export default function App() {
             availableToolIds: engine.registry.describe().map(tool=>tool.id)
           })
         : engine.live ? androidIntentPlanner : demoPlanner;
-      const harness=new AgentHarness(engine.registry,
-        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion));
+      const admittedPlanner=createTaskAdmissionPlanner(
+        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion),{
+          enabled:NEXA_TASK_V2_ENABLED,
+          // When enabled, only a direct, owner-selected native read can be
+          // admitted. This preflight precedes saving a native task ID.
+          context:async decision=>{
+            if(decision.type!=='tool' ||
+              !['device.status','device.battery_status'].includes(decision.call.toolId) ||
+              Object.keys(decision.call.input).length!==0)
+              throw Error('Only owner-requested, read-only native tools can be admitted');
+            const taskId=await saveLocalTaskProposal(request);
+            return {taskId,ownerRequestId:taskId,origin:'chat',
+              policyVersion:'owner-review-v1',tools:engine.registry.describe(),
+              nowMs:Date.now()};
+          },
+          persistProposal:async plan=>{
+            if(!await admitLocalReadOnlyTaskPlan(plan))
+              throw Error('Native coordinator refused the proposed plan');
+          }
+        });
+      const harness=new AgentHarness(engine.registry,admittedPlanner);
       const result = await harness.run({
         request,
         sessionId,
