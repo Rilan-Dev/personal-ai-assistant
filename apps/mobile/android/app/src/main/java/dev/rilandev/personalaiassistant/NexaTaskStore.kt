@@ -153,6 +153,73 @@ internal object NexaTaskStore {
         }}catch(_:Exception){false}
     }
 
+    /**
+     * Interpret encrypted dependency edges for an owner-visible review only.
+     * Satisfied dependencies NEVER imply permission to execute a step.
+     *
+     * All typed arguments stay within Kotlin. Corrupt/tampered ciphertext
+     * fails closed, returning no candidate rather than guessing a dependency.
+     */
+    fun reviewDependencies(context:Context,taskId:String):JSONArray {
+        if(!id.matches(taskId))return JSONArray()
+        return try{synchronized(lock){
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.readableDatabase
+                val status=db.rawQuery(
+                    "SELECT status FROM agent_tasks WHERE task_id=? AND origin='chat' " +
+                        "AND policy_version=? AND session_id LIKE 'owner-%'",
+                    arrayOf(taskId,POLICY)
+                ).use{c->
+                    if(c.moveToFirst())c.getString(0) else ""
+                }
+                if(status !in setOf("proposed","cancelled"))return@synchronized JSONArray()
+                data class Step(val id:String,val ordinal:Int,val tool:String,
+                                val state:String,val dependencies:List<String>)
+                val rows=mutableListOf<Step>()
+                db.rawQuery(
+                    "SELECT step_id,ordinal,tool_id,status,arguments_cipher " +
+                        "FROM agent_task_steps WHERE task_id=? ORDER BY ordinal LIMIT 9",
+                    arrayOf(taskId)
+                ).use{c->
+                    while(c.moveToNext()){
+                        if(rows.size>=MAX_STEPS)return@synchronized JSONArray()
+                        val tool=c.getString(2)
+                        if(tool !in readOnlyRegistry)return@synchronized JSONArray()
+                        val content=JSONObject(NexaConversationDb.unsealNativeTaskArguments(c.getBlob(4)))
+                        if(!exactKeys(content,setOf("sourceStepId","input","dependsOn")) ||
+                            content.optJSONObject("input")?.length()!=0)
+                            return@synchronized JSONArray()
+                        val dependencies=content.optJSONArray("dependsOn")
+                            ?:return@synchronized JSONArray()
+                        if(dependencies.length()>MAX_STEPS)return@synchronized JSONArray()
+                        val ids=(0 until dependencies.length()).map{dependencies.optString(it)}
+                        if(ids.distinct().size!=ids.size)return@synchronized JSONArray()
+                        rows.add(Step(c.getString(0),c.getInt(1),tool,c.getString(3),ids))
+                    }
+                }
+                val allIds=rows.map{it.id}.toSet()
+                val verified=rows.filter{it.state=="verified"}.map{it.id}.toSet()
+                val result=JSONArray()
+                for((index,row) in rows.withIndex()){
+                    if(row.ordinal!=index || row.dependencies.any{it !in allIds || it==row.id})
+                        return@synchronized JSONArray()
+                    val missing=row.dependencies.count{it !in verified}
+                    result.put(JSONObject()
+                        .put("ordinal",row.ordinal)
+                        .put("toolId",row.tool)
+                        .put("status",row.state)
+                        .put("evidence","native_reading")
+                        .put("dependencies",row.dependencies.size)
+                        .put("missingDependencies",missing)
+                        .put("dependenciesSatisfied",missing==0&&status=="proposed"&&row.state=="planned")
+                        .put("executable",false))
+                }
+                result
+            }finally{helper.close()}
+        }}catch(_:Exception){JSONArray()}
+    }
+
     /** Owner review data only; plaintext tool inputs never enter logs. */
     fun readSafeStepSummary(context:Context,taskId:String):JSONArray {
         val result=JSONArray()
