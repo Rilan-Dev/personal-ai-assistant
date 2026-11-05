@@ -5,7 +5,6 @@ import android.app.role.RoleManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.BatteryManager
 import android.os.Build
 import android.os.PowerManager
 import android.net.Uri
@@ -71,7 +70,7 @@ internal object NexaOverlayCommands {
             "\nBattery background policy: $batteryPolicy"
     }
 
-    fun handle(context: Context, raw: String): String {
+    fun handle(context: Context, raw: String, origin: String = "overlay"): String {
         // Spoken message text is preserved exactly; never normalize/lowercase it.
         // The user must still select the recipient and press Send in WhatsApp.
         val textField=NexaVoiceTextIntent.parse(raw)
@@ -118,18 +117,19 @@ internal object NexaOverlayCommands {
         // It is a LOCAL, owner-requested status read; never an AI approval.
         if (NexaTaskStatusSummary.matches(text))
             return NexaTaskStatusSummary.localOwnerReport(context)
+        // One native, durable read-only coordinator for all direct owner entry
+        // points. Only exact recognized facts reach this path; model-selected
+        // screen/message commands cannot enter it.
+        if (NexaTaskCoordinator.classifyOwnerReadOnlyPlan(text)!=null)
+            return NexaTaskCoordinator.executeOwnerReadOnlyPlan(context,text,origin)
+        if (NexaTaskCoordinator.classifyOwnerFact(text)!=null)
+            return NexaTaskCoordinator.executeOwnerDeviceRead(context,text,origin)
         return when (text) {
             "help", "commands", "what can you do" ->
                 "Try: device status, battery, check github, check whatsapp, open github, " +
                 "open whatsapp, open brave, find my github app, launcher status, task status. Messages require review."
             "status", "permissions", "device status", "check device status", "privacy",
             "background status", "background voice status", "hey nexa status" -> status(context)
-            "battery", "battery level", "check battery", "check battery level" -> {
-                val bm = context.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
-                val percent = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) ?: -1
-                if (percent in 0..100) "Battery: $percent% (Android BatteryManager)"
-                else "Android battery level unavailable"
-            }
             "check github", "is github installed", "search github app" ->
                 if (installed(context, "com.github.android")) "GitHub is installed · launcher page unknown"
                 else "GitHub not installed or not visible"
