@@ -92,3 +92,10 @@ containers were modified.
 - MainApplication fences abandoned Voice cursors as uncertain on process restart before React Native starts. No automatic third-party action replay occurs.
 - NexaUnifiedTaskTimeline returns a single legacy_voice_checkpoint entry with verifiedSteps=0 even when the native audit projection exists.
 - This is task state persistence convergence, NOT complete migration of the separate Voice executor; screen/messaging final native coordinator remains open.
+
+## 2026-11-06 — Native denial fence before a legacy Voice plan step
+- RealtimeVoiceService now checks its current cursor against the canonical v3 Voice audit projection, checkpoint session, active ordinal and nonterminal state BEFORE each compound Voice step.
+- The check is strictly deny-only: it cannot issue an approval, mandate, Android gesture or message Send. Tool-specific foreground target/owner approval and pre-action irreversible claims remain mandatory.
+- Restart-quarantined or stale/mismatched tasks cannot pass this gate; process death does not authorize an automatic repeat of external actions.
+- Android instrumentation covers forged session, stale ordinal, cancellation and step progress.
+- This is source-level security convergence, NOT replacement of the legacy Voice step scheduler or a release-ready general tool executor.
