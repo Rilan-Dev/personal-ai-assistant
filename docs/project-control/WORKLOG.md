@@ -953,3 +953,9 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - The redaction leaves task identity, lifecycle event history, step ordinals and permanent no-replay action claims intact; no tool or provider is invoked.
 - Added an explicit redaction marker to metadata-only task timeline (no decryption needed to list), and a Tools button visible only for mirrored terminal Voice tasks.
 - Extended instrumentation source for redaction idempotency, removed private content, and preserved audit provenance. Running or pending Voice tasks cannot be erased through this endpoint.
+
+## 2026-11-06 — Guard compound Voice continuation with canonical state
+- Added a fail-closed Kotlin mayContinue predicate for matching task ID, owner Voice session, native audit policy and pending step ordinal.
+- Wired the guard into RealtimeVoiceService before each legacy multi-action step; changed, completed or aborted tasks stop without further action.
+- Kept all existing native approval, Accessibility window targeting, journal claim and owner-send requirements. No new automatic action capability.
+- Added instrumentation coverage of the continuation-denial cases.
