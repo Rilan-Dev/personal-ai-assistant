@@ -7,9 +7,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
-import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageApp,
-  forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
+import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageAppForDays,
+  messageAppPreferenceDetails,forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
   reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
+import type {MessageAppPreference} from './src/native/nexaMessaging';
 import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
@@ -636,6 +637,8 @@ export default function App() {
   const [messageChosen,setMessageChosen]=useState<InstalledMessageApp|null>(null);
   const [messageBusy,setMessageBusy]=useState(false);
   const [messageNotice,setMessageNotice]=useState('');
+  const [rememberDays,setRememberDays]=useState<30|90|365>(90);
+  const [messagePreference,setMessagePreference]=useState<MessageAppPreference|null>(null);
   const [messageRecipientConfirmed,setMessageRecipientConfirmed]=useState(false);
   const [textEntryRequest,setTextEntryRequest]=useState<ReviewedTextEntry|null>(null);
   const [textEntryBusy,setTextEntryBusy]=useState(false);
@@ -664,6 +667,7 @@ export default function App() {
           // A spoken user command enters the same explicit channel chooser
           // as a typed command. The transcript never grants send permission.
           setMessageRequest(spoken);
+          setMessagePreference(null);
           setMessageChosen(null);
           setMessageOptions([]);
           setSelectedContact(null);
@@ -677,6 +681,8 @@ export default function App() {
             const apps=await installedMessagingApps();
             const key=recipientMemoryKey(spoken.recipientHint);
             const remembered=key?await rememberedMessageApp(key):null;
+            const preference=key?await messageAppPreferenceDetails(key).catch(()=>null):null;
+            setMessagePreference(preference);
             if(!mounted)return;
             const decision=decideMessageApp(spoken,apps,remembered);
             setMessageOptions(apps);
@@ -784,13 +790,15 @@ export default function App() {
       if(remember) {
         const key=recipientMemoryKey(messageRequest.recipientHint);
         if(!key)throw Error('This contact alias cannot be saved safely. Use once instead.');
-        await rememberMessageApp(key,app.id);
+        await rememberMessageAppForDays(key,app.id,rememberDays);
+        setMessagePreference(await messageAppPreferenceDetails(key));
       }
       setMessageChosen(app);
       setSelectedContact(null);
       setMessageRecipientConfirmed(false);
       setWhatsAppDraft(messageRequest.text);
       setMessageNotice(app.label+' selected'+(remember?' and remembered on this phone':' for this request only')+
+        (remember?' for '+rememberDays+' days':'')+
         '. Confirm the correct recipient. Text remains local and unsent.');
     }catch(e){
       setMessageNotice(e instanceof Error?e.message:'Could not securely remember the app. No app was selected.');
@@ -803,6 +811,7 @@ export default function App() {
     setMessageBusy(true);
     try{
       await forgetMessageApp(key);
+      setMessagePreference(null);
       setMessageChosen(null);
       setMessageRecipientConfirmed(false);
       setMessageNotice('Saved app preference deleted for '+messageRequest.recipientHint+
@@ -1438,6 +1447,7 @@ export default function App() {
       if(requested) {
         setInput('');setEvents([]);append('user',request);
         setMessageRequest(requested);
+        setMessagePreference(null);
         setMessageOptions([]);
         setMessageChosen(null);
         setMessageRecipientConfirmed(false);
@@ -1452,6 +1462,8 @@ export default function App() {
             const apps=await installedMessagingApps();
             const key=recipientMemoryKey(requested.recipientHint);
             const remembered=key?await rememberedMessageApp(key):null;
+            const preference=key?await messageAppPreferenceDetails(key).catch(()=>null):null;
+            setMessagePreference(preference);
             const decision=decideMessageApp(requested,apps,remembered);
             setMessageOptions(apps);
             if(decision.kind==='selected' && decision.app) {
@@ -2072,6 +2084,17 @@ export default function App() {
             <Text style={styles.cardText} selectable>Exact draft: {messageRequest.text}</Text>
             <Text style={styles.settingHelp}>Nexa never guesses a recipient, sends this text or chooses an unfamiliar app. It remembers only an app you explicitly select for this alias.</Text>
             <Text style={styles.cardHeading}>Messaging app decision</Text>
+            {messagePreference&&<Text style={styles.settingHelp}>Saved channel: {messagePreference.appId} · {messagePreference.source==='owner_confirmed'?'You chose this app':'Earlier saved choice'} · {messagePreference.expiresAt>0?'Expires '+new Date(messagePreference.expiresAt).toLocaleDateString():'Legacy choice (no automatic expiry)'}. This does not verify a contact or authorize sending.</Text>}
+            <Text style={styles.settingHelp}>Remember an app for:</Text>
+            <View style={styles.buttonRow}>
+              {([30,90,365] as const).map(days=><Pressable key={days}
+                accessibilityRole="button" accessibilityState={{selected:rememberDays===days}}
+                accessibilityLabel={'Remember app for '+days+' days'}
+                disabled={messageBusy} onPress={()=>setRememberDays(days)}
+                style={rememberDays===days?styles.primaryInline:styles.outlineInline}>
+                <Text style={rememberDays===days?styles.primaryInlineText:styles.outlineInlineText}>{days} days</Text>
+              </Pressable>)}
+            </View>
             {messageBusy&&<ActivityIndicator/>}
             {!messageChosen&&<Text style={styles.cardHeading}>Choose a messaging app</Text>}
             {!messageChosen&&messageOptions.map(app=><View key={app.id} style={styles.actionCard}>
