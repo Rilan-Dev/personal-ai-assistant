@@ -195,15 +195,30 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             return try { synchronized(lock) {
                 val helper=NexaConversationDb(context)
                 try {
-                    helper.writableDatabase.compileStatement(
-                        "INSERT OR IGNORE INTO agent_action_claims(token_digest,action_kind,package_digest,claimed_at) VALUES(?,?,?,?)"
-                    ).use { statement ->
-                        statement.bindString(1,tokenDigest)
-                        statement.bindString(2,kind)
-                        statement.bindString(3,packageDigest)
-                        statement.bindLong(4,System.currentTimeMillis())
-                        statement.executeInsert() != -1L
-                    }
+                    // Preserve the existing unique no-replay tombstone and
+                    // create its audit-only task identity in ONE transaction.
+                    // Neither record authorizes execution: approval remains
+                    // entirely with the existing native UI action controller.
+                    val db=helper.writableDatabase
+                    db.beginTransaction()
+                    try {
+                        val now=System.currentTimeMillis()
+                        val inserted=db.compileStatement(
+                            "INSERT OR IGNORE INTO agent_action_claims(token_digest,action_kind," +
+                                "package_digest,claimed_at) VALUES(?,?,?,?)"
+                        ).use { statement ->
+                            statement.bindString(1,tokenDigest)
+                            statement.bindString(2,kind)
+                            statement.bindString(3,packageDigest)
+                            statement.bindLong(4,now)
+                            statement.executeInsert()
+                        }
+                        if(inserted==-1L)return@synchronized false
+                        check(NexaUiTaskAudit.createInTransaction(
+                            db,tokenDigest,kind,packageDigest,now))
+                        db.setTransactionSuccessful()
+                        true
+                    } finally {db.endTransaction()}
                 } finally {helper.close()}
             }} catch (_:Exception) {false}
         }
