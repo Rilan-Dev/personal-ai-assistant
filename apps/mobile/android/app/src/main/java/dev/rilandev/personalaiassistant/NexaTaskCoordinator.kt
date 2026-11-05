@@ -191,8 +191,10 @@ internal object NexaTaskCoordinator {
             val now = System.currentTimeMillis()
             val changed = db.compileStatement(
                 "UPDATE agent_tasks SET status='cancelled',plan_revision=plan_revision+1," +
-                    "updated_at=? WHERE task_id=? AND policy_version=? " +
-                    "AND origin IN ('chat','live-voice') AND status IN ('ready','running')"
+                    "updated_at=? WHERE task_id=? AND status IN ('ready','running') " +
+                    "AND ((policy_version=? AND origin IN ('chat','live-voice')) " +
+                    "OR (policy_version='owner-review-v1' AND origin='chat' " +
+                    "AND session_id LIKE 'owner-%'))"
             ).use {
                 it.bindLong(1, now)
                 it.bindString(2, taskId)
@@ -202,8 +204,8 @@ internal object NexaTaskCoordinator {
             check(changed == 1)
             db.execSQL(
                 "UPDATE agent_mandates SET revoked_at=? WHERE task_id=? " +
-                    "AND policy_version=? AND revoked_at IS NULL",
-                arrayOf(now, taskId, POLICY)
+                    "AND policy_version IN (?,?) AND revoked_at IS NULL",
+                arrayOf(now, taskId, POLICY, REVIEW_POLICY)
             )
             db.execSQL(
                 "UPDATE agent_task_steps SET status='cancelled' WHERE task_id=? " +
@@ -227,19 +229,20 @@ internal object NexaTaskCoordinator {
         if(staleAfterMs<60_000L)return 0
         return transaction(context) {db->
             val now=System.currentTimeMillis()
-            val candidates=mutableListOf<Pair<String,String>>()
+            val candidates=mutableListOf<Triple<String,String,String>>()
             db.rawQuery(
-                "SELECT t.task_id,s.step_id FROM agent_tasks t " +
+                "SELECT t.task_id,s.step_id,t.policy_version FROM agent_tasks t " +
                     "JOIN agent_task_steps s ON s.task_id=t.task_id " +
-                    "WHERE t.policy_version=? AND t.status='running' " +
+                    "WHERE t.policy_version IN (?,?) AND t.status='running' " +
                     "AND s.status='outcome_unknown' AND t.updated_at<?",
-                arrayOf(POLICY,(now-staleAfterMs).toString())
+                arrayOf(POLICY,REVIEW_POLICY,(now-staleAfterMs).toString())
             ).use{cursor->
                 while(cursor.moveToNext())
-                    candidates.add(cursor.getString(0) to cursor.getString(1))
+                    candidates.add(Triple(cursor.getString(0),cursor.getString(1),
+                        cursor.getString(2)))
             }
             var recovered=0
-            for((taskId,stepId) in candidates){
+            for((taskId,stepId,policy) in candidates){
                 val changed=db.compileStatement(
                     "UPDATE agent_tasks SET status='uncertain'," +
                         "plan_revision=plan_revision+1,updated_at=? " +
@@ -247,7 +250,7 @@ internal object NexaTaskCoordinator {
                 ).use{stmt->
                     stmt.bindLong(1,now)
                     stmt.bindString(2,taskId)
-                    stmt.bindString(3,POLICY)
+                    stmt.bindString(3,policy)
                     stmt.executeUpdateDelete()
                 }
                 if(changed!=1)continue
@@ -259,7 +262,13 @@ internal object NexaTaskCoordinator {
                 db.execSQL(
                     "UPDATE agent_mandates SET revoked_at=? WHERE task_id=? " +
                         "AND policy_version=? AND revoked_at IS NULL",
-                    arrayOf(now,taskId,POLICY)
+                    arrayOf(now,taskId,policy)
+                )
+                // Recovered tasks must not retain apparently runnable future steps.
+                db.execSQL(
+                    "UPDATE agent_task_steps SET status='cancelled' " +
+                        "WHERE task_id=? AND status IN ('planned','pending')",
+                    arrayOf(taskId)
                 )
                 event(db,taskId,stepId,"recovered_uncertain_no_replay",now)
                 recovered++
