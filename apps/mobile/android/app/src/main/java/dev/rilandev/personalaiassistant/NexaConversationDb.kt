@@ -525,6 +525,18 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** One owner-requested battery/storage plan with ordered native evidence. */
+    @ReactMethod fun runOwnerReadOnlyPlan(request:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before running a device plan")
+            return
+        }
+        Thread({
+            val answer=NexaTaskCoordinator.executeOwnerReadOnlyPlan(
+                reactContext,request,"chat")
+            promise.resolve(answer)
+        },"nexa-task-owner-plan").start()
+    }
     /** Consume a voice-origin request into the existing owner review UI.
      * It does not create, approve or execute a task.
      */
