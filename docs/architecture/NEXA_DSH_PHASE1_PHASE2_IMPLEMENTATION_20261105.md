@@ -106,3 +106,11 @@ containers were modified.
 - A newly replaced, expired or substituted draft cannot inherit a prior one-shot confirmation. These digests are never stored as raw text or sent to an LLM; text remains ephemeral, and Android action tombstones are still irreversible.
 - Owner-chosen app-channel retention is versioned in Android encrypted preferences, with separate source, expiry and explicit Forget. A preference is a routing hint, never a verified contact or Send approval.
 - Native action authorizations remain tool-local; integrating exact step mandates into the one true multi-step Kotlin execution coordinator is unfinished.
+
+## 2026-11-06 — Durable content-bound UI approval receipts
+- Existing UI action claim is still reserved before any Accessibility dispatch, and the one-shot token cannot be replayed.
+- For `message_fill` and `text_fill` the native UI journal now requires an exact, validated 64-hex digest of the reviewed channel/package/recipient-or-field/content. No missing or malformed binding may obtain a claim.
+- The digest is forwarded to `NexaConversationDb.reserveUiActionClaim` and written into the existing `agent_step_approvals.input_digest` at the SAME transaction as the permanent `agent_action_claims` tombstone and audit-only task. The state is `consumed`, not an authorization grant.
+- The owner has already reviewed the actual prepared draft in Nexa. A changed or substituted staged draft fails the fingerprint recheck before a claim or `ACTION_SET_TEXT`.
+- Other taps and scrolls remain covered by their preexisting one-shot target/window identity checks; their synthetic audit digest is not a substitute for a general coordinator step mandate.
+- No new database version, source license incorporation, automatic submit/send or background UI execution.
