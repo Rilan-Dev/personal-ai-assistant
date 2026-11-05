@@ -1,4 +1,11 @@
 
+## 2026-11-06 — Bound native text approvals implemented
+- Text/message field approvals now record the exact reviewed content binding and irreversible one-shot claim together, instead of relying only on a random confirmation token.
+- Remaining development: unify legacy Voice and Android screen/messaging tool dispatch under one parent Kotlin task/step authority; add recipient/window/step-specific mandate issuance, verified observation and interruption recovery across multi-tool workflows; complete full personal memory correction/privacy UI and release rollback/switching.
+- Safety status: no general unattended Accessibility executor, automatic Send, model-created approvals or main promotion. Source passes Node+TS, but Kotlin CI/device acceptance remains a separate release gate.
+---
+
+
 
 ## 2026-11-06 — Completed partial authorization/memory development
 Implemented: encrypted provenance-aware recipient app preference with owner-selected retention, display/forget in Tools, and exact per-request approval binding for reviewed message and generic text field preparation. The native request's exact recipient/label, package and text cannot be changed between prepare and confirm without cancelling the attempt.
