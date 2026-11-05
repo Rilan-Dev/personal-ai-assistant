@@ -301,6 +301,53 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             }} catch (_:Exception) {false}
         }
 
+        /**
+         * Privacy retention: wipe a cancelled manual proposal's encrypted goal
+         * without removing the immutable task/event identity or replay tombstones.
+         * A pending or already redacted proposal cannot be silently erased.
+         */
+        fun redactCancelledOwnerProposal(context:Context,taskId:String):Boolean {
+            if(!taskId.matches(Regex("task-[0-9a-f-]{36}")))return false
+            return try{synchronized(lock){
+                val helper=NexaConversationDb(context)
+                try{
+                    val db=helper.writableDatabase
+                    db.beginTransaction()
+                    try{
+                        val current=db.rawQuery(
+                            "SELECT goal_cipher FROM agent_tasks WHERE task_id=? " +
+                                "AND origin='chat' AND status='cancelled' " +
+                                "AND policy_version IN ('owner-review-v1','owner-preview-v1')",
+                            arrayOf(taskId)
+                        ).use{cursor->
+                            if(!cursor.moveToFirst())return@synchronized false
+                            decrypt(cursor.getBlob(0))
+                        }
+                        if(current=="[details cleared]")return@synchronized false
+                        val now=System.currentTimeMillis()
+                        val changed=db.compileStatement(
+                            "UPDATE agent_tasks SET goal_cipher=?,updated_at=? WHERE task_id=? " +
+                                "AND status='cancelled' AND origin='chat' " +
+                                "AND policy_version IN ('owner-review-v1','owner-preview-v1')"
+                        ).use{stmt->
+                            stmt.bindBlob(1,encrypt("[details cleared]"))
+                            stmt.bindLong(2,now)
+                            stmt.bindString(3,taskId)
+                            stmt.executeUpdateDelete()
+                        }
+                        if(changed!=1)return@synchronized false
+                        db.execSQL(
+                            "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) " +
+                                "VALUES(?,NULL,'owner_redacted',?)",
+                            arrayOf(taskId,now)
+                        )
+                        db.setTransactionSuccessful()
+                        true
+                    }finally{db.endTransaction()}
+                }finally{helper.close()}
+            }}catch(_:Exception){false}
+        }
+
         /** A foreground-only caller may obtain these locally decrypted owner
          * summaries. Never include them in model tool observations or telemetry.
          */
