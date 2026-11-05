@@ -63,6 +63,14 @@ class NexaChatListQaActivity:Activity() {
     }
     private fun showConversation() {
         val area=base()
+        // Keep the synthetic-window identity present after list -> chat
+        // navigation so accessibility-root selection never mistakes an old
+        // or unrelated app window for the conversation being exercised.
+        area.addView(TextView(this).apply {
+            text="WhatsApp - Synthetic QA only"
+            contentDescription="WhatsApp - Synthetic QA only"
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        })
         area.addView(TextView(this).apply{
             text="Nova Forever 🖤";contentDescription="Nova Forever 🖤"
             textSize=19f
