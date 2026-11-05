@@ -300,6 +300,140 @@ internal object NexaTaskCoordinator {
             rows
         }
 
+    private data class ReadPlan(
+        val taskId:String,val steps:List<String>,
+        val operations:List<String>,val scope:String
+    )
+    private fun stageReadPlan(context:Context,request:String,origin:String,
+                              operations:List<String>):ReadPlan? {
+        val taskId=id("task-")
+        val stepIds=operations.map{id("step-")}
+        val fingerprint=(listOf(taskId,POLICY)+
+            stepIds.zip(operations).map{(step,op)->step+":"+op}).joinToString(":")
+        val scope=digest(fingerprint)
+        if(!NexaConversationDb.saveProposedAgentTask(
+            context,taskId,id("owner-"),origin,POLICY,request))return null
+        val prepared=transaction(context){db->
+            val now=System.currentTimeMillis()
+            val updated=db.compileStatement(
+                "UPDATE agent_tasks SET status='ready',plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status='proposed' AND policy_version=?"
+            ).use {
+                it.bindLong(1,now);it.bindString(2,taskId);it.bindString(3,POLICY)
+                it.executeUpdateDelete()
+            }
+            check(updated==1)
+            operations.forEachIndexed{position,op->
+                db.execSQL(
+                    "INSERT INTO agent_task_steps(step_id,task_id,ordinal,tool_id,status,risk,"+
+                    "expected_evidence,arguments_cipher) "+
+                    "VALUES(?,?,?,?,'pending','low','native_reading',?)",
+                    arrayOf(stepIds[position],taskId,position,op,
+                        NexaConversationDb.sealNativeTaskArguments("{}"))
+                )
+            }
+            db.execSQL(
+                "INSERT INTO agent_mandates(mandate_id,task_id,owner_request_id,scope_digest,"+
+                    "policy_version,expires_at) VALUES(?,?,?,?,?,?)",
+                arrayOf(id("mandate-"),taskId,id("request-"),scope,POLICY,now+60_000L)
+            )
+            event(db,taskId,stepIds.first(),"plan_ready",now)
+            true
+        }
+        return if(prepared==true)ReadPlan(taskId,stepIds,operations,scope) else null
+    }
+    private fun mandateForPlan(db:SQLiteDatabase,plan:ReadPlan):Boolean {
+        db.rawQuery(
+            "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON t.task_id=m.task_id "+
+            "WHERE t.task_id=? AND t.policy_version=? AND m.policy_version=? "+
+            "AND t.origin IN ('chat','live-voice') AND m.scope_digest=? "+
+            "AND m.revoked_at IS NULL AND m.expires_at>? LIMIT 1",
+            arrayOf(plan.taskId,POLICY,POLICY,plan.scope,System.currentTimeMillis().toString())
+        ).use {return it.moveToFirst()}
+    }
+    private fun claimPlanStep(context:Context,plan:ReadPlan,position:Int):Boolean=
+        transaction(context){db->
+            check(mandateForPlan(db,plan))
+            db.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps "+
+                    "WHERE task_id=? AND ordinal<? AND status!='verified'",
+                arrayOf(plan.taskId,position.toString())
+            ).use{check(it.moveToFirst() && it.getInt(0)==0)}
+            val now=System.currentTimeMillis()
+            val task=db.compileStatement(
+                "UPDATE agent_tasks SET status='running',plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status IN ('ready','running')"
+            ).use{
+                it.bindLong(1,now);it.bindString(2,plan.taskId);it.executeUpdateDelete()
+            }
+            check(task==1)
+            val changed=db.compileStatement(
+                "UPDATE agent_task_steps SET status='outcome_unknown' "+
+                    "WHERE step_id=? AND task_id=? AND ordinal=? AND status='pending'"
+            ).use{
+                it.bindString(1,plan.steps[position]);it.bindString(2,plan.taskId)
+                it.bindLong(3,position.toLong());it.executeUpdateDelete()
+            }
+            check(changed==1)
+            event(db,plan.taskId,plan.steps[position],"claimed_before_read",now)
+            true
+        }==true
+    private fun completePlanStep(context:Context,plan:ReadPlan,position:Int,
+                                 evidence:String):Boolean=
+        transaction(context){db->
+            check(mandateForPlan(db,plan))
+            val now=System.currentTimeMillis()
+            val step=db.compileStatement(
+                "UPDATE agent_task_steps SET status='verified' "+
+                    "WHERE step_id=? AND task_id=? AND ordinal=? AND status='outcome_unknown'"
+            ).use{
+                it.bindString(1,plan.steps[position]);it.bindString(2,plan.taskId)
+                it.bindLong(3,position.toLong());it.executeUpdateDelete()
+            }
+            check(step==1)
+            val updated=db.compileStatement(
+                "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
+                    "updated_at=? WHERE task_id=? AND status='running'"
+            ).use{
+                it.bindString(1,if(position==plan.steps.lastIndex)"completed" else "running")
+                it.bindLong(2,now);it.bindString(3,plan.taskId);it.executeUpdateDelete()
+            }
+            check(updated==1)
+            db.execSQL(
+                "INSERT INTO agent_observations(observation_id,step_id,source_kind,"+
+                    "verdict,evidence_digest,observed_at) "+
+                    "VALUES(?,?,'android_framework','verified',?,?)",
+                arrayOf(id("observation-"),plan.steps[position],digest(evidence),now)
+            )
+            event(db,plan.taskId,plan.steps[position],"native_read_verified",now)
+            true
+        }==true
+
+    /** One durable task ID, ordered dependencies and no uncertain-outcome replay. */
+    fun executeOwnerReadOnlyPlan(context:Context,request:String,origin:String):String {
+        if(origin!="chat" && origin!="live-voice")
+            return "Unsupported task origin. No device action performed."
+        val operations=classifyOwnerReadOnlyPlan(request)
+            ?:return "Unsupported multi-step device request. No task started."
+        val plan=stageReadPlan(context,request,origin,operations)
+            ?:return "Could not securely store the task plan. No action performed."
+        val results=mutableListOf<String>()
+        for((position,operation) in operations.withIndex()){
+            if(!claimPlanStep(context,plan,position))
+                return "Task stopped at step "+(position+1)+": claim refused. No retry."
+            val command=if(operation=="get_battery_level")"battery" else "storage"
+            val observed=try{NexaPhoneVoiceTools.deviceFacts(context,command)}
+                catch(_:Exception){null}
+            if(observed.isNullOrBlank() || observed.contains("unavailable",true) ||
+               observed.contains("did not provide",true))
+                return "Task stopped at step "+(position+1)+": no verified reading. No retry."
+            if(!completePlanStep(context,plan,position,observed))
+                return "Task stopped: native step evidence could not be committed. No retry."
+            results.add(observed)
+        }
+        return results.joinToString(" ")
+    }
+
     /**
      * Called only by a trusted explicit user-intent path. Raw model tool
      * calls cannot invoke this. There is NO general tool dispatch mechanism.
