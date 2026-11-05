@@ -82,8 +82,15 @@ class DeviceControlModule(
         status.putString("platform", "android")
         status.putString("adapter", "intent-v1")
         status.putBoolean("cameraIntentSupported", Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).resolveActivity(context.packageManager) != null)
-        status.putBoolean("accessibilityEnabled", false)
-        status.putBoolean("voiceWakeWordSupported", false)
+        // Report the real connected Accessibility service, not a static flag.
+        // Installed model and microphone grant indicate wake capability, not
+        // that a recording session was started.
+        status.putBoolean("accessibilityEnabled",
+            ScreenAssistState.connected && ScreenAssistService.active!=null)
+        status.putBoolean("voiceWakeWordSupported",
+            NexaWakeWordModule.modelReady(context) &&
+                context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED)
         promise.resolve(status)
     }
 
