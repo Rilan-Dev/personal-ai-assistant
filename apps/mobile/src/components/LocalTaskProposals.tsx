@@ -183,8 +183,8 @@ export function LocalTaskProposals({prefill}:{prefill?:{
   return <View style={styles.container} accessibilityLabel="Private task proposals">
     <Text style={styles.heading}>Private task proposals</Text>
     <Text style={styles.help}>Explicitly save a future request on this phone.</Text>
-    <Text accessibilityLabel="Proposal safety: saving does not execute. Only owner-approved native device reads are allowed in development builds."
-      style={styles.help}>Encrypted at rest. Saving never executes a task; a separate owner Run action can perform development-only device readings.</Text>
+    <Text accessibilityLabel="Proposal safety: no AI agent, message or phone action runs from a proposal."
+      style={styles.help}>Encrypted at rest. Saving never executes a task. Running a reviewed device read requires a separate owner action and an enabled native safety gate.</Text>
     {!available?<Text style={styles.help}>Update the Android APK to use on-device task proposals.</Text>:<>
       {handoff&&<Text style={styles.help}>Source: {handoff.origin}. Editing this request creates a new manually written Chat task instead; it does not authorize any action.</Text>}
       <TextInput style={styles.input} placeholder="E.g. Follow up on the ELV quotation"
