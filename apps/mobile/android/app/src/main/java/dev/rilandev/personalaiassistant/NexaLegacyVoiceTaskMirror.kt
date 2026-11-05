@@ -141,4 +141,77 @@ internal object NexaLegacyVoiceTaskMirror {
             arrayOf(taskId,event,now)
         )
     }
+
+    /**
+     * Called once when the Android application process is created. No Voice
+     * executor from a previous process can still be running. Persist a
+     * permanent uncertain state BEFORE any new spoken work is admitted.
+     *
+     * Do not resume/replay an abandoned app launch, screen tap, message
+     * composition or other Voice action. Old pre-v3 checkpoints are fenced
+     * too; they remain in the original table for owner history.
+     */
+    fun recoverAbandonedAfterProcessRestart(context:android.content.Context):Int {
+        return try {
+            val helper=NexaConversationDb(context)
+            try {
+                val db=helper.writableDatabase
+                db.beginTransaction()
+                try {
+                    val abandoned=mutableListOf<String>()
+                    db.rawQuery(
+                        "SELECT task_id FROM voice_task_checkpoints WHERE status IN "+
+                            "('planned','awaiting_approval','executing','verifying','verified') "+
+                            "ORDER BY updated_at LIMIT 250",
+                        null
+                    ).use{c->
+                        while(c.moveToNext())abandoned.add(c.getString(0))
+                    }
+                    val now=System.currentTimeMillis()
+                    var recovered=0
+                    for(taskId in abandoned){
+                        val changed=db.compileStatement(
+                            "UPDATE voice_task_checkpoints SET status='uncertain',"+
+                                "updated_at=? WHERE task_id=? AND status IN "+
+                                "('planned','awaiting_approval','executing','verifying','verified')"
+                        ).use{stmt->
+                            stmt.bindLong(1,now)
+                            stmt.bindString(2,taskId)
+                            stmt.executeUpdateDelete()
+                        }
+                        if(changed!=1)continue
+                        val mirrored=db.compileStatement(
+                            "UPDATE agent_tasks SET status='uncertain',"+
+                                "plan_revision=plan_revision+1,updated_at=? "+
+                                "WHERE task_id=? AND policy_version=? "+
+                                "AND status NOT IN ('uncertain','failed','cancelled',"+
+                                "'checkpoint_completed')"
+                        ).use{stmt->
+                            stmt.bindLong(1,now)
+                            stmt.bindString(2,taskId)
+                            stmt.bindString(3,POLICY)
+                            stmt.executeUpdateDelete()
+                        }
+                        if(mirrored==1){
+                            db.execSQL(
+                                "UPDATE agent_task_steps SET status='uncertain' "+
+                                    "WHERE task_id=? AND status!='checkpoint_advanced'",
+                                arrayOf(taskId)
+                            )
+                            db.execSQL(
+                                "INSERT INTO agent_task_events(task_id,step_id,"+
+                                    "event_kind,created_at) "+
+                                    "VALUES(?,NULL,'voice_process_restart_no_replay',?)",
+                                arrayOf(taskId,now)
+                            )
+                        }
+                        recovered++
+                    }
+                    db.setTransactionSuccessful()
+                    recovered
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }catch(_:Exception){0}
+    }
+
 }
