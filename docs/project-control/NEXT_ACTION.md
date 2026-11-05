@@ -1,5 +1,12 @@
 
 
+## 2026-11-06 — Voice state storage convergence completed; executor migration still open
+New implementation: existing Voice compound checkpoints are mirrored atomically into audit-only native v3 tasks; they are never run by the shared coordinator. Context, task identity, step index, goal and topology changes fail closed. Abandoned Voice state becomes uncertain at process restart, without replay.
+Remaining SOURCE DEVELOPMENT: replace the independent Voice UI-action cursor scheduler with versioned native step/mandate handling, enforce precise recipient/app/field approvals across all UI tools, add observation-driven continuation (not Intent dispatch), integrate provenance-aware personal memory and retention, and finish release-switch/rollback and branch reconciliation.
+Keep consumer release approval gates and device safety boundaries in place. Native Android compile and instrumentation of this new source need matching SHA evidence; Node/TypeScript alone do not certify Kotlin.
+---
+
+
 ## 2026-11-05 — Native device-fact coordinator now shared by four origins
 Completed source: direct owner Chat/Voice/assistant-role/overlay battery and storage facts now go through NexaTaskCoordinator, with encrypted task, one-shot claim, Android observation, mandate and owner-visible origin. Unsaved handoffs have a native Discard operation.
 Remaining implementation: general-purpose safe app/screen/messaging multi-step executor; exact per-action consent and recipient binding; one coordinator for legacy Voice task cursor and model-directed Chat execution; controlled memory provenance and rollback/release integration.
