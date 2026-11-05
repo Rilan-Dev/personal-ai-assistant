@@ -69,4 +69,20 @@ class NexaTextInputAndroidTest {
             ScreenAssistState.connected=was
         }
     }
+
+    @Test fun reviewedTextEntryCannotSwapExactTextTargetOrAppAfterInspection() {
+        val approved=NexaTextInputPolicy.approvedDraftDigest(
+            "com.example.notes","Notes","Summary for meeting")
+        assertEquals(approved,NexaTextInputPolicy.approvedDraftDigest(
+            "com.example.notes","Notes","Summary for meeting"))
+        assertNotEquals(approved,NexaTextInputPolicy.approvedDraftDigest(
+            "com.example.notes","Notes","Different text"))
+        assertNotEquals(approved,NexaTextInputPolicy.approvedDraftDigest(
+            "com.example.notes","Search","Summary for meeting"))
+        assertNotEquals(approved,NexaTextInputPolicy.approvedDraftDigest(
+            "com.example.other","Notes","Summary for meeting"))
+        assertNotEquals(approved,NexaMessageInputPolicy.approvedDraftDigest(
+            "imo","com.example.notes","Notes","Summary for meeting"))
+    }
+
 }
