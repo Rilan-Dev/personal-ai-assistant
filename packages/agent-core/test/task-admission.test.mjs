@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizePlannerTaskDecision, createTaskAdmissionPlanner
+  normalizePlannerTaskDecision, normalizeMultiStepPlannerProposal, createTaskAdmissionPlanner
 } from "../src/task-admission.ts";
 import {TaskPlanRejected} from "../../agent-contracts/src/task-plan.ts";
 
@@ -109,4 +109,44 @@ test("abort before or after provider response has no proposal writes",async()=>{
   const r=await p.next("battery",[],controller.signal);
   assert.equal(r.type,"clarify");
   assert.equal(count,0);
+});
+
+test("multi-step provider plans bind deterministic dependencies with local authority",()=>{
+  const plan=normalizeMultiStepPlannerProposal({version:1,steps:[
+    {stepId:"step-0001",toolId:"device.battery_status",input:{},dependsOn:[]},
+    {stepId:"step-0002",toolId:"device.battery_status",input:{},
+      dependsOn:["step-0001"]}
+  ]},context());
+  assert.equal(plan.executable,false);
+  assert.equal(plan.taskId,"task-owner-123456789");
+  assert.equal(plan.ownerRequestId,"owner-request-123456789");
+  assert.equal(plan.steps.length,2);
+  assert.deepEqual(plan.steps[1].dependsOn,["step-0001"]);
+  assert.equal(plan.steps[1].risk,"low");
+  assert.throws(()=>{plan.steps[1].dependsOn.push("forged");},TypeError);
+});
+test("multi-step provider envelope refuses untrusted permissions and forged IDs",()=>{
+  const valid={version:1,steps:[
+    {stepId:"step-0001",toolId:"device.battery_status",input:{},dependsOn:[]}
+  ]};
+  for(const bad of [
+    {...valid,taskId:"task-forged-model"},
+    {...valid,approved:true},
+    {...valid,steps:[{...valid.steps[0],risk:"low"}]},
+    {...valid,steps:[{...valid.steps[0],toolId:"messaging.send"}]},
+    {...valid,steps:[{...valid.steps[0],dependsOn:["step-not-present"]}]},
+    {version:1,steps:[]}
+  ])assert.throws(()=>normalizeMultiStepPlannerProposal(bad,context()),TaskPlanRejected);
+});
+test("multi-step proposals refuse any cyclic or oversized dependency chain",()=>{
+  const cycle={version:1,steps:[
+    {stepId:"step-0001",toolId:"device.battery_status",input:{},dependsOn:["step-0002"]},
+    {stepId:"step-0002",toolId:"device.battery_status",input:{},dependsOn:["step-0001"]}
+  ]};
+  assert.throws(()=>normalizeMultiStepPlannerProposal(cycle,context()),TaskPlanRejected);
+  const long={version:1,steps:Array.from({length:9},(_,i)=>({
+    stepId:"step-"+String(i+1).padStart(4,"0"),
+    toolId:"device.battery_status",input:{},dependsOn:[]
+  }))};
+  assert.throws(()=>normalizeMultiStepPlannerProposal(long,context()),TaskPlanRejected);
 });
