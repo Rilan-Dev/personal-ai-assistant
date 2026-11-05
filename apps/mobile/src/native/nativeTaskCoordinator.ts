@@ -84,5 +84,5 @@ export async function revokeNativeTask(taskId:string):Promise<boolean>{
   if(!nativeId.test(taskId)||!nativeTaskCoordinatorAvailable()||
     typeof NativeModules.PAAConversationHistory?.revokeNativeTask!=='function')
     throw Error('Native task revocation unavailable');
-  return (NativeModules.PAAConversationHistory as TaskNativeBridge).revokeNativeTask(taskId)===true;
+  return (await (NativeModules.PAAConversationHistory as TaskNativeBridge).revokeNativeTask(taskId))===true;
 }
