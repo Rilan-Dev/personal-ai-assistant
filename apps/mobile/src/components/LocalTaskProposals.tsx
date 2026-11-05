@@ -2,11 +2,14 @@ import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
 import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal} from '../native/localTaskProposals';
 import type {LocalTaskProposal} from '../native/localTaskProposals';
+import {listNativeTaskTimeline,revokeNativeTask} from '../native/nativeTaskCoordinator';
+import type {NativeTaskSummary} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
 export function LocalTaskProposals(){
   const [goal,setGoal]=useState('');
   const [items,setItems]=useState<LocalTaskProposal[]>([]);
+  const [nativeTasks,setNativeTasks]=useState<NativeTaskSummary[]>([]);
   const [busy,setBusy]=useState(false);
   // A rapid double-tap must not persist two different task IDs before React rerenders.
   const busyRef=useRef(false);
@@ -16,8 +19,12 @@ export function LocalTaskProposals(){
   async function refresh(){
     if(!available||busyRef.current||loading)return;
     setLoading(true);
-    try{setItems(await listLocalTaskProposals());setNotice('');}
-    catch{setNotice('Could not securely read your local task proposals.');}
+    try{
+      setItems(await listLocalTaskProposals());
+      setNotice('');
+    }catch{setNotice('Could not securely read your local task proposals.');}
+    try{setNativeTasks(await listNativeTaskTimeline());}
+    catch{setNotice('Native task history could not be refreshed. Existing records remain.');}
     finally{setLoading(false);}
   }
   useEffect(()=>{if(available)void refresh();},[available]);
@@ -56,6 +63,21 @@ export function LocalTaskProposals(){
       setNotice('Cancellation could not be confirmed. Refresh before retrying.');
     }finally{busyRef.current=false;setBusy(false);}
   }
+  async function cancelNative(item:NativeTaskSummary){
+    if(busyRef.current||loading||!['ready','running'].includes(item.status))return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      if(!await revokeNativeTask(item.taskId))
+        throw Error('Native task already finished or changed');
+      setNativeTasks(previous=>previous.map(row=>row.taskId===item.taskId?
+        {...row,status:'cancelled',stepStatus:'cancelled'}:row));
+      setNotice('Native task mandate revoked. It cannot continue.');
+      try{setNativeTasks(await listNativeTaskTimeline());}
+      catch{setNotice('Revoked. Task history refresh unavailable; tap Refresh.');}
+    }catch{
+      setNotice('Revocation could not be confirmed. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   return <View style={styles.container} accessibilityLabel="Private task proposals">
     <Text style={styles.heading}>Private task proposals</Text>
     <Text style={styles.help}>Explicitly save a future request on this phone.</Text>
@@ -86,6 +108,19 @@ export function LocalTaskProposals(){
           accessibilityLabel={'Cancel task proposal: '+item.goal.slice(0,50)}
           disabled={busy} onPress={()=>void cancel(item)} style={styles.action}>
           <Text style={styles.buttonText}>Cancel proposal</Text>
+        </Pressable>}
+      </View>)}
+      <Text style={styles.heading}>Native task activity</Text>
+      <Text style={styles.help}>Locally verified battery/storage tasks. An unknown outcome is never automatically replayed.</Text>
+      {nativeTasks.length===0&&<Text style={styles.help}>No native task activity on this device.</Text>}
+      {nativeTasks.map(task=><View key={task.taskId} style={styles.item}>
+        <Text style={styles.goal}>{task.operation==='get_battery_level'?'Battery reading':'Storage reading'} · {task.origin==='chat'?'Chat':'Voice'}</Text>
+        <Text style={styles.help}>{task.status==='running'&&task.stepStatus==='outcome_unknown'?
+          'Outcome unresolved · no automatic retry':task.status} · evidence: {task.observation}</Text>
+        {(task.status==='ready'||task.status==='running')&&<Pressable accessibilityRole="button"
+          accessibilityLabel={'Cancel native task '+task.taskId.slice(-8)}
+          disabled={busy||loading} onPress={()=>void cancelNative(task)} style={styles.action}>
+          <Text style={styles.buttonText}>Revoke task</Text>
         </Pressable>}
       </View>)}
     </>}
