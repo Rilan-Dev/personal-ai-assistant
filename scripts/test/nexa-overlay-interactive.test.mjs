@@ -27,7 +27,8 @@ test('local commands use a closed allowlist and do not grant the AI arbitrary de
   assert.match(commands,/PackageManager\.PERMISSION_GRANTED/);
   assert.match(commands,/NexaTaskCoordinator\.executeOwnerDeviceRead/);
   assert.match(commands,/NexaTaskCoordinator\.executeOwnerReadOnlyPlan/);
-  assert.match(read(path+'NexaTaskNativeRead.kt'),/BatteryManager\.BATTERY_PROPERTY_CAPACITY/);
+  assert.match(read(path+'NexaTaskNativeRead.kt'),/NexaPhoneVoiceTools\.deviceFacts/);
+  assert.match(read(path+'NexaPhoneVoiceTools.kt'),/BatteryManager\.BATTERY_PROPERTY_CAPACITY/);
   assert.match(commands,/com\.github\.android/);
   assert.match(commands,/com\.whatsapp/);
   assert.match(commands,/LauncherNavigationState\.begin/);
