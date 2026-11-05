@@ -277,11 +277,11 @@ internal object NexaTaskCoordinator {
             try {
                 helper.readableDatabase.rawQuery(
                     "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at," +
-                        "s.tool_id,s.status," +
+                        "s.step_id,s.ordinal,s.tool_id,s.status," +
                         "(SELECT o.verdict FROM agent_observations o " +
                         "WHERE o.step_id=s.step_id ORDER BY o.observed_at DESC LIMIT 1) " +
                         "FROM agent_tasks t JOIN agent_task_steps s ON s.task_id=t.task_id " +
-                        "WHERE t.policy_version=? ORDER BY t.updated_at DESC LIMIT ?",
+                        "WHERE t.policy_version=? ORDER BY t.updated_at DESC,s.ordinal ASC LIMIT ?",
                     arrayOf(POLICY, limit.coerceIn(1,50).toString())
                 ).use { cursor ->
                     while(cursor.moveToNext()) {
@@ -291,9 +291,11 @@ internal object NexaTaskCoordinator {
                             .put("status",cursor.getString(2))
                             .put("revision",cursor.getInt(3))
                             .put("updatedAt",cursor.getLong(4))
-                            .put("operation",cursor.getString(5))
-                            .put("stepStatus",cursor.getString(6))
-                            .put("observation",if(cursor.isNull(7)) "none" else cursor.getString(7)))
+                            .put("stepId",cursor.getString(5))
+                            .put("ordinal",cursor.getInt(6))
+                            .put("operation",cursor.getString(7))
+                            .put("stepStatus",cursor.getString(8))
+                            .put("observation",if(cursor.isNull(9)) "none" else cursor.getString(9)))
                     }
                 }
             } finally { helper.close() }
