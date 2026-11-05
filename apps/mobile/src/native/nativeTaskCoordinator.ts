@@ -48,6 +48,8 @@ export async function runOwnerDeviceRead(request:string):Promise<string>{
 /** Only non-sensitive, owner-visible task metadata leaves the native coordinator. */
 export type NativeTaskSummary={
   taskId:string;
+  stepId:string;
+  ordinal:number;
   origin:'chat'|'live-voice';
   status:'ready'|'running'|'completed'|'cancelled'|'uncertain';
   revision:number;
@@ -57,10 +59,13 @@ export type NativeTaskSummary={
   observation:'none'|'verified';
 };
 const nativeId=/^task-[0-9a-f-]{36}$/;
+const nativeStepId=/^step-[0-9a-f-]{36}$/;
 const validSummary=(input:unknown):input is NativeTaskSummary=>{
   if(!input||typeof input!=='object'||Array.isArray(input))return false;
   const x=input as Record<string,unknown>;
   return typeof x.taskId==='string'&&nativeId.test(x.taskId)&&
+    typeof x.stepId==='string'&&nativeStepId.test(x.stepId)&&
+    Number.isSafeInteger(x.ordinal)&&Number(x.ordinal)>=0&&Number(x.ordinal)<4&&
     (x.origin==='chat'||x.origin==='live-voice')&&
     ['ready','running','completed','cancelled','uncertain'].includes(String(x.status))&&
     Number.isSafeInteger(x.revision)&&Number(x.revision)>0&&
