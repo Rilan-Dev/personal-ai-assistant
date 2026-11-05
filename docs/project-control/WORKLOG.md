@@ -947,3 +947,9 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Verification: 395/395 full Node tests, TypeScript, Expo web export and manual dispatcher tests 9/9. `npm ci` reported 10 advisories (1 low, 7 moderate, 2 high); no dependency upgrade applied.
 - Windows local Gradle stopped in React Native CMake because Ninja rejects a generated object filename over 260 characters. GitHub Android native compile/instrumentation and signed workflow build are pending. `gh` is not currently installed.
 - Maestro 11–13 previously passed individually. Flow 10 and the direct Chat action still need physical acceptance on the refreshed APK; no messages were sent and no Sarvam key was used.
+
+## 2026-11-06 — Terminal Voice task privacy controls
+- Added foreground-only owner action to redact terminal Voice task goals, step texts and last evidence in BOTH encrypted checkpoint and canonical task stores, transactionally.
+- The redaction leaves task identity, lifecycle event history, step ordinals and permanent no-replay action claims intact; no tool or provider is invoked.
+- Added an explicit redaction marker to metadata-only task timeline (no decryption needed to list), and a Tools button visible only for mirrored terminal Voice tasks.
+- Extended instrumentation source for redaction idempotency, removed private content, and preserved audit provenance. Running or pending Voice tasks cannot be erased through this endpoint.
