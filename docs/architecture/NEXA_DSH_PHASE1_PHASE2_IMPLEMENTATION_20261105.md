@@ -29,3 +29,10 @@ Date: 2026-11-05. Target: Development. GitHub is source of record.
 - NEXA_TASK_V2_ENABLED remains false.
 - No autonomous messaging, calls, payments, blanket Accessibility permission, OS permission bypass or production deployment.
 - GitHub Actions remain manual. Android APK has no Docker Compose service; running ACA containers must not be restarted for this change.
+## Follow-up native recovery and source fixes
+- Review-only task cancellation now marks any planned/pending/awaiting-approval steps cancelled in the same transaction as the owner cancellation event. A cancelled task cannot leave apparently runnable child steps.
+- NexaTaskCoordinator.recoverStaleInFlight reconciles native-fact tasks whose claim remained outcome_unknown beyond a two-minute safety window. It marks task and step uncertain, revokes the native mandate and records recovered_uncertain_no_replay, without reissuing the Android read.
+- The existing Tools task timeline recognizes uncertain outcomes and never treats them as verified or automatically repeatable.
+- NexaTaskCoordinatorRecoveryAndroidTest.kt verifies one-time recovery and permanent mandate revocation.
+- A prior Android CI attempt (#41992588796 on 101ff60c7e98) exposed an unrelated debug-only Kotlin property error in NexaChatListQaActivity.kt. The writable importantForAccessibility property is now used instead of assigning isImportantForAccessibility.
+- The new task execution feature remains disabled; full Chat and Voice unification and all consequential Android actions still require native policy and owner approval.
