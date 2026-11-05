@@ -3,7 +3,7 @@ import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-
 import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,clearFinishedOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
-import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
+import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline,redactTerminalLegacyVoiceTask} from '../native/nativeTaskCoordinator';
 import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
@@ -48,6 +48,24 @@ export function LocalTaskProposals({prefill}:{prefill?:{
     finally{setLoading(false);}
   }
   useEffect(()=>{if(available)void refresh();},[available]);
+  /** Owner-only privacy action; never changes task execution status. */
+  async function clearVoiceDetails(task:UnifiedTaskSummary){
+    if(busyRef.current||loading||task.source!=='legacy_voice_checkpoint'||
+       task.revision<1||task.detailsRedacted||
+       !['checkpoint_completed','failed','uncertain','cancelled'].includes(task.status))return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      const cleared=await redactTerminalLegacyVoiceTask(task.taskId);
+      if(!cleared)throw Error('Voice task could not be redacted');
+      setAllTasks(previous=>previous.map(item=>item.taskId===task.taskId
+        ? {...item,detailsRedacted:true}:item));
+      setNotice('Private Voice request, steps and last evidence cleared. The audit identity and no-replay records remain.');
+      try{setAllTasks(await listUnifiedTaskTimeline());}
+      catch{setNotice('Voice details cleared. Refresh to confirm the private history.');}
+    }catch{
+      setNotice('Voice privacy change could not be confirmed. Refresh before retrying.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   async function discardHandoff(){
     if(!handoff||busyRef.current||loading)return;
     busyRef.current=true;setBusy(true);
@@ -348,6 +366,16 @@ export function LocalTaskProposals({prefill}:{prefill?:{
           Android dispatch or visual-change evidence only. Not proof of external-app navigation, message delivery or task completion. Never automatically replayed.
         </Text>}
         {task.source==='legacy_voice_checkpoint'&&<Text style={styles.help}>Older voice task · completion not independently verified here</Text>}
+        {task.source==='legacy_voice_checkpoint'&&task.detailsRedacted&&
+          <Text style={styles.help}>Private Voice details cleared; audit identity retained.</Text>}
+        {task.source==='legacy_voice_checkpoint'&&task.revision>0&&
+          !task.detailsRedacted&&
+          ['checkpoint_completed','failed','uncertain','cancelled'].includes(task.status)&&
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={'Clear private Voice task details '+task.taskId.slice(-8)}
+            disabled={busy||loading} onPress={()=>void clearVoiceDetails(task)} style={styles.action}>
+            <Text style={styles.buttonText}>Clear private Voice details</Text>
+          </Pressable>}
       </View>)}
       <Text style={styles.heading}>Native task activity</Text>
       <Text style={styles.help}>Locally verified battery/storage tasks. An unknown outcome is never automatically replayed.</Text>
