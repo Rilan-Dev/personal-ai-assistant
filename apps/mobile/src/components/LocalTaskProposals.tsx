@@ -5,7 +5,7 @@ import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline,redactTerminalLegacyVoiceTask} from '../native/nativeTaskCoordinator';
 import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
-import {ownerDeviceFactKind,ownerReadOnlyPlanKinds} from '../native/nativeTaskCoordinator';
+import {ownerDeviceFactKind,ownerDeviceStatusIntent,ownerReadOnlyPlanKinds} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
 export function LocalTaskProposals({prefill}:{prefill?:{
@@ -149,7 +149,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
       item.status!=='proposed'||item.policyVersion!=='owner-review-v1'||
       detail?.taskId!==item.taskId||detail.steps.length!==0||
       !Number.isSafeInteger(item.revision)||item.revision!==detail.revision||
-      !(ownerDeviceFactKind(item.goal)||ownerReadOnlyPlanKinds(item.goal)))return;
+      !(ownerDeviceFactKind(item.goal)||ownerDeviceStatusIntent(item.goal)||ownerReadOnlyPlanKinds(item.goal)))return;
     busyRef.current=true;setBusy(true);setNotice('');
     try{
       const saved=await prepareOwnerGoalReadPlan(item.taskId,item.revision!);
@@ -348,9 +348,9 @@ export function LocalTaskProposals({prefill}:{prefill?:{
           {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
              item.policyVersion==='owner-review-v1'&&detail.steps.length===0&&
              detail.revision===item.revision&&
-             (ownerDeviceFactKind(item.goal)||ownerReadOnlyPlanKinds(item.goal))&&<Pressable
+             (ownerDeviceFactKind(item.goal)||ownerDeviceStatusIntent(item.goal)||ownerReadOnlyPlanKinds(item.goal))&&<Pressable
                accessibilityRole="button"
-               accessibilityLabel="Prepare saved native battery or storage request for review"
+               accessibilityLabel="Prepare saved native device-status, battery or storage request for review"
                disabled={busy||loading} onPress={()=>void prepareReviewed(item)}
                style={styles.action}>
                <Text style={styles.buttonText}>Prepare read-only task plan</Text>
