@@ -8,6 +8,12 @@ import java.util.UUID
 
 /** No arbitrary coordinates, clipboard access, IME key events or submit clicks. */
 internal object NexaTextInputPolicy {
+    /** Cross-channel stable signature over the exact owner-reviewed field
+     * insertion. A later transcript or draft replacement cannot inherit an
+     * earlier approval. Fingerprints are ephemeral and never persisted.
+     */
+    fun approvedDraftDigest(pkg:String,label:String,text:String):String =
+        NexaMessageInputPolicy.approvedDraftDigest("reviewed_text_field",pkg,label,text)
     private val forbidden = Regex(
         """\b(password|passcode|pin|otp|one[ -]?time|verification|security|secret|recovery|payment|card|cvv|cvc|iban|bank|account|recipient|email address|phone number|amount|transfer|purchase|checkout|submit|send)\b""",
         RegexOption.IGNORE_CASE)
@@ -69,7 +75,8 @@ internal object NexaTextInputState {
 /** One inspected empty field; explicit second owner approval; no submission. */
 internal object NexaTextInputActions {
     private data class Pending(val token:String,val packageName:String,val windowId:Int,
-        val clazz:String,val resource:String,val box:Rect,val target:String,val expiry:Long)
+        val clazz:String,val resource:String,val box:Rect,val target:String,
+        val expiry:Long,val reviewedDigest:String)
     private data class Found(val count:Int,val node:AccessibilityNodeInfo?)
     private val lock=Any()
     private var pending:Pending?=null
@@ -160,7 +167,8 @@ internal object NexaTextInputActions {
             val bounds=Rect().also{node.getBoundsInScreen(it)}
             synchronized(lock){pending=Pending(UUID.randomUUID().toString(),pkg,root.windowId,
                 node.className?.toString().orEmpty(),node.viewIdResourceName.orEmpty(),
-                bounds,draft.targetLabel,SystemClock.elapsedRealtime()+25_000L)}
+                bounds,draft.targetLabel,SystemClock.elapsedRealtime()+25_000L,
+                NexaTextInputPolicy.approvedDraftDigest(pkg,draft.targetLabel,draft.exactText))}
             return "One empty '${draft.targetLabel}' input is visible in $pkg. Approve one text insertion; no submit or send."
         }catch(_:Exception){cancel();return "Screen changed during inspection. Nothing typed."}
         finally{try{root.recycle()}catch(_:Exception){}}
@@ -174,7 +182,10 @@ internal object NexaTextInputActions {
             return "Approval expired or Screen Assist disconnected. No entry attempted."
         }
         val draft=NexaTextInputState.take()?:return "Text-entry request expired."
-        if(draft.targetLabel!=approval.target)return "Target changed. No text entered."
+        if(draft.targetLabel!=approval.target ||
+            NexaTextInputPolicy.approvedDraftDigest(
+                approval.packageName,draft.targetLabel,draft.exactText)!=approval.reviewedDigest)
+            return "Target or exact approved text changed. No text entered."
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?:return "The target application is no longer visible."
         try{
