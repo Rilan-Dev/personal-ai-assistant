@@ -22,6 +22,7 @@ type LocalTaskBridge={
   clearFinishedOwnerTaskDetails?(taskId:string):Promise<boolean>;
   consumePendingOwnerTaskReview?():Promise<string|null>;
   admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
+  prepareOwnerGoalReadPlan?(taskId:string,expectedRevision:number):Promise<boolean>;
   reviseOwnerTaskProposal(taskId:string,expectedRevision:number,goal:string):Promise<boolean>;
   ownerTaskReviewDetail(taskId:string):Promise<string>;
   reviewOwnerReadOnlyPlan?(taskId:string):Promise<string>;
@@ -211,6 +212,21 @@ export async function consumePendingOwnerTaskReview():Promise<PendingOwnerTaskRe
     typeof item.token!=='string'||!/^[0-9a-f-]{36}$/.test(item.token))
     throw Error('Untrusted owner review receipt');
   return value as PendingOwnerTaskReview;
+}
+
+/** A saved owner goal from any of the four native origins becomes a
+ * restricted read-only plan; native Android independently validates intent,
+ * owner, origin, revision and the encrypted stored goal transactionally.
+ */
+export async function prepareOwnerGoalReadPlan(
+  taskId:string,expectedRevision:number
+):Promise<boolean>{
+  if(!id.test(taskId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)
+    throw Error('Invalid owner task revision');
+  const api=bridge();
+  if(typeof api.prepareOwnerGoalReadPlan!=='function')
+    throw Error('Update Nexa to prepare a saved native task plan');
+  return (await api.prepareOwnerGoalReadPlan(taskId,expectedRevision))===true;
 }
 
 /** Native-only reviewed plan metadata; plaintext arguments never reach React Native. */
