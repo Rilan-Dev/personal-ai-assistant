@@ -855,6 +855,22 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** Owner-only privacy action for completed or uncertain task details.
+     * Preserves immutable execution evidence and permanent replay fences.
+     */
+    @ReactMethod fun clearFinishedOwnerTaskDetails(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before clearing task details")
+            return
+        }
+        try {
+            promise.resolve(NexaConversationDb.redactFinishedOwnerTask(
+                reactContext,taskId))
+        } catch (_:Exception) {
+            promise.reject("TASK_REDACT","Could not verify terminal task redaction")
+        }
+    }
+
     /** Native task status is private to the focused owner UI. */
     @ReactMethod fun recentNativeTaskTimeline(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
