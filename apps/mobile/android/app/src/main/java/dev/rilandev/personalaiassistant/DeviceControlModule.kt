@@ -151,6 +151,10 @@ class DeviceControlModule(
 
     @ReactMethod
     fun openSupportedApp(app: String, promise: Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve the app launch")
+            return
+        }
         val packageId = when (app) {
             "whatsapp" -> "com.whatsapp"
             "whatsapp-business" -> "com.whatsapp.w4b"
@@ -186,6 +190,10 @@ class DeviceControlModule(
      */
     @ReactMethod
     fun openChromeSearch(query: String, promise: Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve Chrome search")
+            return
+        }
         val clean=query.trim().lowercase(java.util.Locale.ROOT)
         if(clean.length !in 3..90 || clean!=query ||
             !clean.matches(Regex("[a-z0-9][a-z0-9 -]{1,89}")) ||
@@ -220,6 +228,10 @@ class DeviceControlModule(
 
     @ReactMethod
     fun openCamera(promise: Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve camera launch")
+            return
+        }
         val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         if (intent.resolveActivity(context.packageManager) == null) {
