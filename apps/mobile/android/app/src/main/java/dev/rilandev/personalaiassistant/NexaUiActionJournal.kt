@@ -14,7 +14,7 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 /**
- * Append-only, bounded, encrypted evidence of owner-approved native UI actions.
+ * Bounded, encrypted UI evidence; irreversible claims live in custom.db v3.
  *
  * A token must be claimed AND committed to disk before dispatch. No raw screen
  * text, UI labels, package IDs, coordinates, screenshots, or provider output
@@ -92,6 +92,11 @@ internal object NexaUiActionJournal {
                 for (i in 0 until entries.length()) {
                     if (entries.getJSONObject(i).optString("id") == id) return@synchronized false
                 }
+                // Commit a durable, unique SQLite tombstone BEFORE changing the
+                // bounded diagnostic ledger or touching the external app.
+                // If the diagnostic write fails, the claim is still consumed.
+                if(!NexaConversationDb.reserveUiActionClaim(ctx,id,kind,digest(packageName)))
+                    return@synchronized false
                 entries.put(JSONObject()
                     .put("id",id)
                     .put("kind",kind)

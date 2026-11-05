@@ -29,6 +29,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
   requestApproximateLocationSetup, setAutoStartVoiceOnInvocation} from './src/native/nexaSetup';
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
+import {LocalTaskProposals} from './src/components/LocalTaskProposals';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -121,7 +122,12 @@ export default function App() {
   const [androidExitEntries,setAndroidExitEntries]=useState<NexaProcessExit[]>([]);
   const [historyNotice,setHistoryNotice]=useState('');
   const refreshHistory=async()=>{
-    try {setHistoryEntries(await recentConversations(120));setTaskHistoryEntries(await recentVoiceTasks(40));setAndroidExitEntries(await recentAndroidProcessExits());setHistoryNotice('Local encrypted custom.db · recent chats, voice tasks and Android exits');}
+    try {
+      setHistoryEntries(await recentConversations(120));
+      setTaskHistoryEntries(await recentVoiceTasks(40));
+      setAndroidExitEntries(await recentAndroidProcessExits());
+      setHistoryNotice('Local encrypted custom.db · recent chats, task requests, voice tasks and Android exits');
+    }
     catch {setHistoryNotice('Could not read local conversation history on this device.');}
   };
   const copyHistory=async()=>{
@@ -1682,12 +1688,18 @@ export default function App() {
               : tab === 'voice' ? 'Speak, listen, stay in control' : tab === 'tools' ? 'Device actions and one-time grants' : tab === 'setup' ? 'Permissions you control' : 'Your privacy and preferences'}
           </Text>
         </View>
-        {tab === 'chat' ?
-          <Pressable accessibilityRole="button" accessibilityLabel="Start a new conversation"
+        <View style={styles.headerActions}>
+          {tab === 'chat' && <Pressable accessibilityRole="button" accessibilityLabel="Start a new conversation"
             disabled={running || Boolean(pendingApproval) || Boolean(recovered)}
             onPress={() => {chatLogSession.current='chat-'+Date.now();setMessages([]);setInput('');setEvents([]);}}
-            style={styles.headerAction}><Text style={styles.headerActionText}>＋</Text></Pressable>
-          : <View style={styles.headerStatus}><View style={[styles.statusDot, engine.live ? styles.statusDotOn : null]}/><Text style={styles.statusLabel}>{engine.live ? 'Android' : 'Demo'}</Text></View>}
+            style={styles.headerAction}><Text style={styles.headerActionText}>＋</Text></Pressable>}
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={tab==='settings'?'Back to chat':'Open settings'}
+            onPress={()=>navigate(tab==='settings'?'chat':'settings')}
+            style={styles.headerAction}>
+            <Text style={styles.headerActionText}>{tab==='settings'?'←':'⚙'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       {tab === 'setup' && <NexaSetupScreen
@@ -1946,6 +1958,14 @@ export default function App() {
       </ScrollView>}
 
       {tab === 'tools' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Open permission setup"
+          onPress={()=>navigate('setup')} style={styles.permissionShortcut}>
+          <View style={{flex:1,gap:4}}>
+            <Text style={styles.permissionShortcutTitle}>Android permissions</Text>
+            <Text style={styles.permissionShortcutCopy}>Review screen access, voice, app control and the floating bubble</Text>
+          </View>
+          <Text style={styles.permissionShortcutArrow}>→</Text>
+        </Pressable>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
         {(textEntryRequest || messageRequest) && <View style={styles.sectionCard}>
@@ -2015,6 +2035,7 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
+        {engine.live && <LocalTaskProposals/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
@@ -2382,6 +2403,7 @@ export default function App() {
             <Text style={styles.setupShortcutDetail}>Review real Android grants, assistant role, accessibility services and installed build.</Text>
           </View>
           <Pressable style={styles.setupShortcutButton} accessibilityRole="button"
+            accessibilityLabel="Open permission setup"
             onPress={()=>navigate('setup')}><Text style={styles.setupShortcutButtonText}>Open setup  →</Text></Pressable>
         </View>
         <View style={styles.sectionCard}>
@@ -2503,9 +2525,7 @@ export default function App() {
       <View style={styles.bottomNav}>
         {([{id:'chat',glyph:'✦',label:'Chat'},
            {id:'voice',glyph:'◉',label:'Voice'},
-           {id:'tools',glyph:'▦',label:'Tools'},
-           {id:'setup',glyph:'✓',label:'Setup'},
-           {id:'settings',glyph:'⚙',label:'Settings'}] as const).map(item=>
+           {id:'tools',glyph:'▦',label:'Tools'}] as const).map(item=>
           <Pressable key={item.id} accessibilityRole="tab"
             accessibilityState={{selected:tab===item.id}}
             accessibilityLabel={item.label+' tab'}
@@ -2527,7 +2547,8 @@ const styles = StyleSheet.create({
   brandText:{flex:1,minWidth:0},
   brandTitle:{fontFamily:'sans-serif',color:'#F7F8FC',fontSize:18,fontWeight:'700',letterSpacing:-.3},
   brandSubtitle:{fontFamily:'sans-serif',color:'#98A6C1',fontSize:12,marginTop:4},
-  headerAction:{width:42,height:42,borderRadius:15,borderWidth:1,borderColor:'#32405B',alignItems:'center',justifyContent:'center'},
+  headerActions:{flexDirection:'row',gap:8,alignItems:'center'},
+  headerAction:{width:44,height:44,borderRadius:14,borderWidth:1,borderColor:'#303849',alignItems:'center',justifyContent:'center'},
   headerActionText:{fontFamily:'sans-serif',fontSize:24,color:'#E2E8F0'},
   headerStatus:{flexDirection:'row',alignItems:'center',gap:6,backgroundColor:'#19243A',borderRadius:16,paddingHorizontal:10,paddingVertical:7},
   statusDot:{width:7,height:7,borderRadius:5,backgroundColor:'#64748B'},statusDotOn:{backgroundColor:'#34D399'},
@@ -2618,6 +2639,10 @@ const styles = StyleSheet.create({
   voiceStopButton:{backgroundColor:'#A43856'},
   voiceBigButtonText:{fontFamily:'sans-serif',color:'#FFF',fontWeight:'700',fontSize:15},
   voiceSecondary:{paddingTop:17},voiceSecondaryText:{fontFamily:'sans-serif',color:'#B8C6F4',fontSize:13,fontWeight:'600'},
+  permissionShortcut:{minHeight:72,backgroundColor:'#192234',borderColor:'#343F56',borderWidth:1,borderRadius:17,padding:15,flexDirection:'row',alignItems:'center',gap:10},
+  permissionShortcutTitle:{fontSize:15,fontWeight:'700',color:'#F1F4FE'},
+  permissionShortcutCopy:{fontSize:12,color:'#A8B6D1',lineHeight:19},
+  permissionShortcutArrow:{fontSize:24,color:'#C6D3F4'},
   setupShortcut:{borderRadius:19,backgroundColor:'#20254B',borderColor:'#4C5291',borderWidth:1,padding:17,gap:13},
   setupShortcutText:{gap:5},
   setupShortcutHeading:{color:'#F1F3FF',fontSize:17,fontWeight:'700'},

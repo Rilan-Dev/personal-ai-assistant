@@ -1,0 +1,40 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa encrypted owner task proposals are review-only and remain cancelled
+tags:
+  - nexa
+  - owner-review
+  - local-tasks
+  - cloud
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- tapOn: "Tools"
+- extendedWaitUntil:
+    visible: "Private task proposals"
+    timeout: 30000
+- assertVisible: "Proposal safety: no AI agent, message or phone action runs from a proposal."
+- tapOn: "Task to save for review"
+- inputText: "Review the ELV quotation and prepare a follow up"
+- hideKeyboard
+- tapOn: "Save for review"
+- extendedWaitUntil:
+    visible: "Review the ELV quotation and prepare a follow up"
+    timeout: 30000
+- assertVisible: "Awaiting your review · execution disabled"
+- takeScreenshot: nexa-local-task-proposal-recorded-no-execution
+- tapOn: "Cancel proposal"
+- extendedWaitUntil:
+    visible: "Canceled permanently"
+    timeout: 30000
+- assertNotVisible: "Awaiting your review · execution disabled"
+- takeScreenshot: nexa-local-task-proposal-cancelled
+- stopApp
+- launchApp
+- tapOn: "Tools"
+- extendedWaitUntil:
+    visible: "Canceled permanently"
+    timeout: 30000
+- assertNotVisible: "Awaiting your review · execution disabled"
+- takeScreenshot: nexa-local-task-cancelled-after-relaunch

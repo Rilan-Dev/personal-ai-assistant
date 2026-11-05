@@ -1,5 +1,5 @@
 appId: dev.rilandev.personalaiassistant
-name: Nexa fresh setup and five-tab navigation
+name: Nexa compact first-run setup and three-tab navigation
 tags:
   - nexa
   - smoke
@@ -18,8 +18,8 @@ tags:
 - assertVisible: "Tools & permissions"
 - tapOn: "Voice"
 - assertVisible: "Speak naturally"
-- tapOn: "Setup"
-- assertVisible: "Make your assistant yours."
-- tapOn: "Settings"
+- tapOn: "Open settings"
 - assertVisible: "Nexa · Settings"
-- takeScreenshot: nexa-five-tabs
+- tapOn: "Open permission setup"
+- assertVisible: "Make your assistant yours."
+- takeScreenshot: nexa-three-tabs-compact-setup

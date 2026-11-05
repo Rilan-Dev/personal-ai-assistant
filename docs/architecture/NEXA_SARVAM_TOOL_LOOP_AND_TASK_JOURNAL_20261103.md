@@ -50,7 +50,7 @@ Owner-reviewed search field focusing can now locate an exact visible accessible 
 4. Say "Swipe left" on the XOS home launcher. Observe actual page movement; test another app which does not allow horizontal scroll to verify safe refusal.
 5. In Voice settings, select each permission mode; verify that only safe navigation prompts are reduced, and screen reads, app lists and arbitrary text-label taps still require approval.
 6. Trigger a harmless foreground-app crash scenario in debug/test only if you have a safe development test method; use View recent history and Export Android crash/ANR diagnostics. Do not induce a real crash on a production phone.
-7. Export custom.db history; check schemaVersion=2 and tasks, androidProcessExits; ensure older conversation records are still present.
+7. Export custom.db history; check current schemaVersion=3 and tasks, androidProcessExits; ensure older conversation records are still present.
 8. For a denied/expired tool proposal, ensure no later model-generated action executes without a new request.
 
 ## Remaining pending work

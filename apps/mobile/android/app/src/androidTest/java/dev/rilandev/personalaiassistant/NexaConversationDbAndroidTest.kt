@@ -35,7 +35,7 @@ class NexaConversationDbAndroidTest {
             }
         } finally {db.close()}
         val exported=JSONObject(NexaConversationDb.export(context))
-        assertEquals(2,exported.getInt("schemaVersion"))
+        assertEquals(3,exported.getInt("schemaVersion"))
         assertTrue(exported.has("tasks"))
         assertTrue(exported.getJSONArray("entries").toString().contains(unique))
     }
@@ -60,6 +60,250 @@ class NexaConversationDbAndroidTest {
         assertFalse(NexaConversationDb.saveTask(ctx,id,session,
             "sent",2,goal,steps))
     }
+    @Test fun v3ClaimTombstonePersistsIndependentlyOfAudits() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val id=UUID.randomUUID().toString().replace("-","").repeat(2)
+        val packageDigest=UUID.randomUUID().toString().replace("-","").repeat(2)
+        assertTrue(NexaConversationDb.reserveUiActionClaim(ctx,id,"tap",packageDigest))
+        assertFalse("Existing durable claim must never be reused",
+            NexaConversationDb.reserveUiActionClaim(ctx,id,"tap",packageDigest))
+        val helper=NexaConversationDb(ctx)
+        try {
+            assertEquals(3,helper.readableDatabase.version)
+            helper.readableDatabase.rawQuery(
+                "SELECT token_digest,package_digest FROM agent_action_claims WHERE token_digest=?",
+                arrayOf(id)).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(id,cursor.getString(0))
+                assertEquals(packageDigest,cursor.getString(1))
+            }
+        } finally {helper.close()}
+        assertFalse(NexaConversationDb.reserveUiActionClaim(ctx,"bad","tap",packageDigest))
+    }
+
+    @Test fun isolatedV1AndV2DatabaseMigrateWithoutLosingRows() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        for(oldVersion in 1..2) {
+            val name="nexa-migration-test-"+UUID.randomUUID()+".db"
+            val old=ctx.openOrCreateDatabase(name,Context.MODE_PRIVATE,null)
+            try {
+                old.execSQL("""CREATE TABLE conversation_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL, channel TEXT NOT NULL,
+                    provider TEXT NOT NULL, role TEXT NOT NULL,
+                    body BLOB NOT NULL, created_at INTEGER NOT NULL
+                )""")
+                old.execSQL("""INSERT INTO conversation_entries(
+                    session_id,channel,provider,role,body,created_at
+                ) VALUES('legacy','chat','test','user',X'010203',1)""")
+                if(oldVersion==2) {
+                    old.execSQL("""CREATE TABLE voice_task_checkpoints (
+                        task_id TEXT PRIMARY KEY, session_id TEXT NOT NULL,
+                        status TEXT NOT NULL, step_index INTEGER NOT NULL,
+                        payload BLOB NOT NULL, updated_at INTEGER NOT NULL
+                    )""")
+                    old.execSQL("""INSERT INTO voice_task_checkpoints(
+                        task_id,session_id,status,step_index,payload,updated_at
+                    ) VALUES('task-legacy','legacy','planned',0,X'0A0B',1)""")
+                }
+                old.setVersion(oldVersion)
+            } finally {old.close()}
+            val upgraded=NexaConversationDb(ctx,name)
+            try {
+                val db=upgraded.writableDatabase
+                assertEquals(3,db.version)
+                db.rawQuery("SELECT COUNT(*) FROM conversation_entries WHERE session_id='legacy'",null).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(1,it.getInt(0))
+                }
+                db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='agent_action_claims'",null).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(1,it.getInt(0))
+                }
+                db.rawQuery("SELECT COUNT(*) FROM voice_task_checkpoints",null).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(if(oldVersion==2) 1 else 0,it.getInt(0))
+                }
+                for(table in listOf("agent_tasks","agent_task_steps","agent_task_events",
+                    "agent_mandates","agent_step_approvals","agent_observations")) {
+                    db.rawQuery("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?",
+                        arrayOf(table)).use { c ->
+                        assertTrue(c.moveToFirst())
+                        assertEquals("Missing v3 task table $table",1,c.getInt(0))
+                    }
+                }
+                db.rawQuery("PRAGMA foreign_keys",null).use { c ->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("Child task rows require real foreign keys",1,c.getInt(0))
+                }
+
+            } finally {
+                upgraded.close()
+                ctx.deleteDatabase(name)
+            }
+        }
+    }
+
+    @Test fun v3TaskStepsRejectOrphanForeignKeys() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val name="nexa-v3-task-fk-"+UUID.randomUUID()+".db"
+        val helper=NexaConversationDb(ctx,name)
+        try {
+            val db=helper.writableDatabase
+            assertEquals(3,db.version)
+            var refused=false
+            try {
+                db.execSQL("""INSERT INTO agent_task_steps(
+                    step_id,task_id,ordinal,tool_id,status,risk,expected_evidence,arguments_cipher
+                ) VALUES('step-orphan','nonexistent',0,'device.battery_status',
+                    'planned','low','native_reading',X'0102')""")
+            }catch(_:android.database.sqlite.SQLiteConstraintException) {
+                refused=true
+            }
+            assertTrue("Orphan native task step must be blocked",refused)
+            db.rawQuery("SELECT COUNT(*) FROM agent_task_steps",null).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals(0,c.getInt(0))
+            }
+        } finally {
+            helper.close()
+            ctx.deleteDatabase(name)
+        }
+    }
+
+    @Test fun v3ProposedTaskIsEncryptedAndNeverExecutable() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val task="task-"+UUID.randomUUID().toString()
+        val session="chat-"+UUID.randomUUID().toString()
+        val secretGoal="private task goal "+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,task,session,"chat","policy-v1",secretGoal))
+        assertFalse("Task ID reuse must not overwrite a proposal",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","policy-v1","another goal"))
+        assertFalse(NexaConversationDb.saveProposedAgentTask(
+            ctx,"bad",session,"chat","policy-v1",secretGoal))
+        assertFalse(NexaConversationDb.saveProposedAgentTask(
+            ctx,"task-"+UUID.randomUUID(),session,"provider","policy-v1",secretGoal))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT status,goal_cipher,plan_revision FROM agent_tasks WHERE task_id=?",
+                arrayOf(task)).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("proposed",c.getString(0))
+                val encrypted=c.getBlob(1)
+                assertFalse("No plaintext persisted",
+                    encrypted.contentEquals(secretGoal.toByteArray(Charsets.UTF_8)))
+                assertFalse(String(encrypted,Charsets.ISO_8859_1).contains(secretGoal))
+                assertEquals(1,c.getInt(2))
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",arrayOf(task)).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("Proposal must not self-schedule execution",0,c.getInt(0))
+            }
+        } finally {helper.close()}
+    }
+
+    @Test fun v3ProposalAndCancellationHaveAtomicOwnerEvents() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val task="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        val goal="private request "+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,task,session,"chat","owner-preview-v1",goal))
+        assertFalse("A second submit cannot replace or duplicate owner events",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","owner-preview-v1","replacement"))
+        val initial=NexaConversationDb.agentTaskHistory(ctx,40)
+        val record=(0 until initial.length()).map{initial.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==task}
+        assertNotNull("Owner task history must include new proposal",record)
+        assertEquals("proposed",record!!.getString("status"))
+        assertEquals(goal,record.getString("goal"))
+        assertEquals("owner-preview-v1",record.getString("policyVersion"))
+        val ownerExport=JSONObject(NexaConversationDb.export(ctx))
+        val proposals=ownerExport.getJSONArray("agentTasks")
+        assertTrue("Explicit owner export should include the saved encrypted-at-rest request",
+            (0 until proposals.length()).any {
+                proposals.getJSONObject(it).optString("taskId")==task
+            })
+        assertTrue("Owner may cancel an unexecuted proposal",
+            NexaConversationDb.cancelProposedAgentTask(ctx,task))
+        assertFalse("Cancellation is terminal and must not replay",
+            NexaConversationDb.cancelProposedAgentTask(ctx,task))
+        assertFalse("An old task ID may never be reused",
+            NexaConversationDb.saveProposedAgentTask(
+                ctx,task,session,"chat","owner-preview-v1",goal))
+        assertFalse("Unknown task cannot be cancelled",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,"task-"+UUID.randomUUID()))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT status,goal_cipher FROM agent_tasks WHERE task_id=?",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("cancelled",c.getString(0))
+                assertFalse(c.getBlob(1).contentEquals(goal.toByteArray(Charsets.UTF_8)))
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT event_kind FROM agent_task_events WHERE task_id=? ORDER BY id",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("proposed",c.getString(0))
+                assertTrue(c.moveToNext())
+                assertEquals("owner_cancelled",c.getString(0))
+                assertFalse("Reject duplicate transitions",c.moveToNext())
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",
+                arrayOf(task)).use{ c->
+                assertTrue(c.moveToFirst())
+                assertEquals("Only owner note, never native action",0,c.getInt(0))
+            }
+        } finally {helper.close()}
+    }
+
+    @Test fun ownerReviewOnlyDecryptsManualProposals() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val manualId="task-"+UUID.randomUUID()
+        val legacyId="task-"+UUID.randomUUID()
+        val voiceId="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,manualId,session,"chat","owner-review-v1","Manual task only"))
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,legacyId,session,"chat","owner-preview-v1","Older owner preview"))
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,voiceId,"voice-"+UUID.randomUUID(),"live-voice",
+            "voice-policy-v1","Private voice goal must not enter review list"))
+        val spoofedVoiceId="task-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,spoofedVoiceId,"voice-"+UUID.randomUUID(),"live-voice",
+            "owner-review-v1","Provider origin with misleading policy"))
+        assertFalse("Owner UI must not cancel non-chat tasks with similar policy",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,spoofedVoiceId,"owner-review-v1"))
+        assertTrue("Earlier manual preview requests remain cancellable",
+            NexaConversationDb.cancelProposedAgentTask(
+                ctx,legacyId,"owner-preview-v1"))
+        val visible=NexaConversationDb.agentTaskHistory(ctx,200,manualOnly=true)
+        val ids=(0 until visible.length()).map {visible.getJSONObject(it).getString("taskId")}
+        assertTrue(ids.contains(manualId))
+        assertTrue(ids.contains(legacyId))
+        assertFalse("Voice task data must never cross manual owner-review bridge",
+            ids.contains(voiceId))
+        assertFalse(ids.contains(spoofedVoiceId))
+        assertFalse(visible.toString().contains("Private voice goal must not enter review list"))
+        // Explicit owner export is a separate foreground-approved operation and
+        // may include all history; the UI preview only gets the selected scope.
+        val all=NexaConversationDb.agentTaskHistory(ctx,200)
+        val allIds=(0 until all.length()).map{all.getJSONObject(it).getString("taskId")}
+        assertTrue(allIds.contains(voiceId))
+    }
+
     @Test fun rejectsUnknownChannelsAndInvalidRoles() {
         val context=ApplicationProvider.getApplicationContext<Context>()
         val session="android-reject-"+UUID.randomUUID()
@@ -68,4 +312,39 @@ class NexaConversationDbAndroidTest {
         val current=NexaConversationDb.history(context,200).toString()
         assertFalse(current.contains(session))
     }
+    @Test fun localOwnerProposalLifecycleIsOneShotAndEventAudited() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val id="task-"+UUID.randomUUID()
+        val session="owner-"+UUID.randomUUID()
+        assertTrue(NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Review customer quotation"))
+        assertFalse("A different policy cannot cancel the owner task",
+            NexaConversationDb.cancelProposedAgentTask(ctx,id,"different-policy"))
+        assertTrue(NexaConversationDb.cancelProposedAgentTask(ctx,id,"owner-review-v1"))
+        assertFalse("Cancellation must not replay",NexaConversationDb.cancelProposedAgentTask(ctx,id))
+        assertFalse("Canceled ID cannot be recreated",NexaConversationDb.saveProposedAgentTask(
+            ctx,id,session,"chat","owner-review-v1","Replacement"))
+        val history=NexaConversationDb.agentTaskHistory(ctx,50)
+        val entry=(0 until history.length()).map{history.getJSONObject(it)}
+            .firstOrNull{it.optString("taskId")==id}
+        assertEquals("cancelled",entry?.optString("status"))
+        val helper=NexaConversationDb(ctx)
+        try {
+            helper.readableDatabase.rawQuery(
+                "SELECT event_kind FROM agent_task_events WHERE task_id=? ORDER BY id",
+                arrayOf(id)
+            ).use { cursor ->
+                val actual=mutableListOf<String>()
+                while(cursor.moveToNext())actual.add(cursor.getString(0))
+                assertEquals(listOf("proposed","owner_cancelled"),actual)
+            }
+            helper.readableDatabase.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",arrayOf(id)
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0,cursor.getInt(0))
+            }
+        } finally{helper.close()}
+    }
+
 }

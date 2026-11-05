@@ -1,19 +1,8 @@
 name: Android main promotion - test and signed APK
 
-# ONE release run when a completed feature set is promoted to main.
-# Development branch pushes never trigger GitHub Actions.
+# Explicit owner-started test and signed APK build only.
+# Syncing Development and main does not automatically release.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/**'
-      - 'services/**'
-      - 'scripts/**'
-      - 'package.json'
-      - 'package-lock.json'
-    # Maestro YAML and workflow/docs-only changes must not cancel a release build.
-    # Release-workflow revisions can be verified with manual workflow_dispatch.
   workflow_dispatch:
 concurrency:
   group: android-main-promotion-${{ github.ref }}
@@ -82,16 +71,9 @@ jobs:
           arch: x86_64
           profile: pixel_6
           emulator-options: -no-window -noaudio -no-boot-anim -gpu swiftshader_indirect -no-snapshot
-          script: |
-            set -euo pipefail
-            cd apps/mobile/android
-            ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
-            # A debug APK needs Metro and is not reliable visual evidence.
-            # Build the same signed, bundled release artifact that will be
-            # uploaded below, using the pinned version, SHA and signer.
-            ./gradlew :app:assembleRelease --no-daemon --stacktrace
-            cd ../../..
-            bash scripts/ci/capture-nexa-ui.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          # One persistent bash process runs native tests, assembles the signed
+          # release APK, then captures its real installed UI.
+          script: bash scripts/ci/run-nexa-emulator-acceptance.sh
       - name: Upload Android emulator screen evidence
         if: always()
         uses: actions/upload-artifact@v4

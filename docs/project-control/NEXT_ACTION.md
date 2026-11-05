@@ -1,3 +1,55 @@
+
+## 2026-11-05 — Next release gate: unified Nexa task lifecycle
+
+Completed source foundation: bounded non-executable DSH task plan contract, additive encrypted custom.db v3, permanent UI-action claim digests, owner-controlled proposed/cancelled event lifecycle, and one local task review screen in Tools. Manual review history and cancellation are restricted to chat-origin owner policy records.
+
+Still open: current-commit Android native test and signed APK; Maestro save/cancel/relaunch and messaging review flows on matching signed APK; single Kotlin-native task coordinator and step mandates; Chat/Voice/overlay ingress to that coordinator; real authorized provider E2E; physical Infinix Android Accessibility, wake, microphone and process-death validation; signing upgrade, rollback, Play policy and security-advisory closure. Keep execution features disabled and no automatic Send. Do not promote main or treat an earlier green CI run as current native acceptance.
+
+Detailed evidence: docs/qa/NEXA_DSH_OWNER_TASK_REVIEW_ACCEPTANCE_20261105.md.
+
+---
+# Current priority — DSH-inspired Nexa implementation
+
+**5 November 2026.** Source inventory and gates: docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md
+
+## Verified and implemented in source
+- Non-executable, owner-scoped bounded task plan validator; feature remains OFF.
+- Additive Android custom.db v3 schema and unique permanent UI-action claims; encrypted proposed-only tasks; native migration and replay tests.
+- Local source checks on e9ef608: 377/377 Node tests, TS and Expo export passed. Later native changes require exact-SHA native CI.
+
+## Outstanding work / NO-GO
+1. Review CI run #41923776222; conduct one exact-current-SHA emulator test for the later storage changes, fix any Kotlin or instrumentation failures.
+2. Implement one trusted native task coordinator, serialized step state, evidence, permissions, approvals, crash recovery and user-visible history before enabling task v2.
+3. Bridge Chat, Sarvam/OpenAI Voice, assistant role and overlay through the same owner task identity, with strict model/tool boundaries and no general-purpose autonomous Accessibility behavior.
+4. Preserve manual messaging Send, recipient confirmation, privacy and Android settings grant requirements. Add no unattended calls, payments or unsafe external UI control.
+5. Pass all native/emulator, physical phone, real-provider, signed in-place upgrade, rollback and Play-distribution acceptance. Do not promote main until verified.
+6. Review npm dependency audit's 2 high advisories without unsafe automatic Expo downgrade.
+7. VPS Nexa workspace is only for source tests, not a Docker Compose deployment. Leave running production stacks alone.
+
+---
+
+# Current priority — Nexa × DSH integration
+
+**Date:** 2026-11-05  
+**Source of record:** docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md
+
+## Completed this milestone
+- Baseline Development source audit and BridgeHead checkout synchronization; 365 baseline Node tests passed.
+- Version 1 non-executable owner-scoped task-plan binder and 12 negative/positive tests (377 source tests after addition).
+- Upstream DSH/LangGraph/Deep Agents provenance and Play Accessibility distribution constraints recorded. Task v2 remains disabled.
+
+## Still required before activation or production claims
+1. Confirm exact HEAD clean Node tests, TypeScript and Expo web export after the narrowing fix.
+2. Implement, instrument and safely migrate an additive encrypted custom.db v3 task store with durable action claims, preserving old session/Keystore history and at-most-once semantics.
+3. Route Chat and live Voice through one stable owner-minted task ID and one Kotlin final execution coordinator; reject any model-supplied approvals, side-effect retries or unexpected tool IDs.
+4. Reuse existing native Accessibility/text/messaging modules with fresh per-step scope, window, policy and explicit approval. Follow Google Play constraints: no unrestricted model-generated Accessibility autonomy.
+5. Test all scoped features and signed APK on the exact commit; physically verify OEM wake, microphone, overlay, native Accessibility/service grant, crash recovery and authorized providers; keep external message Send disabled without its own separate acceptance.
+6. Only after those safety gates pass, conduct signed canary/rollback and resolve PR #97/main promotion. Do not modify ACA containers or unrelated Docker stacks for this Android change.
+
+**Current status:** Phase 1 source foundation only; Phases 2–8 and physical production certification remain open. Do not treat a green Node suite as device UAT.
+
+---
+
 # Next authorized implementation actions
 
 ## 2026-11-01 — Conversational assistant gesture milestone

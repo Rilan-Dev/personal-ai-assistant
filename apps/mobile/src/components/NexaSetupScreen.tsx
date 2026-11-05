@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import type {NexaSetupStatus} from '../native/nexaSetup';
 import type {WakeStatus} from '../native/androidWakeWord';
@@ -72,97 +72,105 @@ export default function NexaSetupScreen(props: Props) {
       granted:Boolean(s?.overlayGranted), action:'Allow display over apps',
       onPress:onOverlaySettings, optional:true},
   ];
+  const [showOptional,setShowOptional] = useState(false);
+  const [showAdvanced,setShowAdvanced] = useState(false);
+  const [expandedStep,setExpandedStep] = useState<string|null>(null);
+  const essential = permissions.filter(step=>!step.optional);
+  const optional = permissions.filter(step=>step.optional);
+  const visibleSteps = showOptional ? permissions : essential;
   const readyCount = permissions.filter(item => item.granted).length;
   const revision = s?.sourceRevision && /^[0-9a-f]{7,40}$/i.test(s.sourceRevision)
     ? s.sourceRevision.slice(0,10) : 'local build';
 
   return (
+    <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <View style={styles.topLine}>
-          <View style={styles.brandMark}><Text style={styles.brandGlyph}>✦</Text></View>
-          <Text style={styles.topKicker}>NEXA AI  /  DEVICE SETUP</Text>
+          <Text style={styles.topKicker}>NEXA  /  PRIVATE ASSISTANT</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip setup for now"
+            onPress={onFinish} disabled={busy} style={styles.skip}>
+            <Text style={styles.skipText}>Skip for now</Text>
+          </Pressable>
         </View>
         <Text style={styles.title}>Make your assistant yours.</Text>
-        <Text style={styles.subtitle}>
-          Set up the features you want, directly through Android. No hidden permissions,
-          background listening or automatic messages.
-        </Text>
-        <View style={styles.progressPanel}>
-          <View style={styles.progressHead}>
-            <Text style={styles.progressText}>{s ? `${readyCount} of 8 features available` : 'Checking device permissions…'}</Text>
-            <Text style={styles.progressHint}>Optional setup</Text>
-          </View>
-          <View style={styles.track}><View style={[styles.progress,{width:`${readyCount / 8 * 100}%`}]} /></View>
+        <Text style={styles.subtitle}>Choose which Android features Nexa can use. All grants remain under your control.</Text>
+        <View style={styles.progressHead}>
+          <Text style={styles.progressText}>{s ? `${readyCount} of 8 ready` : 'Checking permissions…'}</Text>
+          <Text style={styles.progressHint}>Optional setup</Text>
         </View>
+        <View style={styles.track}><View style={[styles.progress,{width:`${readyCount / 8 * 100}%`}]} /></View>
       </View>
       <View style={styles.sectionIntro}>
-        <Text style={styles.sectionTitle}>Permissions & features</Text>
-        <Text style={styles.sectionDesc}>Each step shows the current Android state. Choose only what you need.</Text>
+        <Text style={styles.sectionTitle}>Get started</Text>
+        <Text style={styles.sectionDesc}>Enable only what you want. Android confirms each permission separately.</Text>
       </View>
-      {permissions.map(step => (
+      {visibleSteps.map(step => (
         <View key={step.key} style={styles.step}>
           <View style={styles.stepTop}>
-            <Text style={styles.number}>{step.index}</Text>
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>{step.title}</Text>
-              <Text style={styles.stepDescription}>{step.detail}</Text>
+              <Text style={[styles.status,step.granted&&styles.statusReady]}>
+                {s === null ? 'Checking…' : step.granted ? '✓ Ready' : step.optional ? 'Optional · Off' : 'Not configured'}
+              </Text>
             </View>
-          </View>
-          <View style={styles.stepBottom}>
-            <Text style={[styles.status,step.granted&&styles.statusReady]}>
-              {s === null ? 'Checking…' : step.granted ? '✓ Ready' : step.optional ? '○ Optional · off' : '○ Not configured'}
-            </Text>
             <Pressable accessibilityRole="button"
               accessibilityLabel={step.action + ' for ' + step.title}
               disabled={busy || s === null || step.granted}
               onPress={step.onPress}
-              style={[styles.action, (busy || step.granted || !s)&&styles.actionDisabled]}>
+              style={[styles.action,(busy || step.granted || !s)&&styles.actionDisabled]}>
               <Text style={styles.actionText}>{step.granted?'Enabled':step.action}</Text>
             </Pressable>
           </View>
-          {step.key==='screen' && s && <Text style={styles.helper}>
-            {s.screenAssistConnected
-              ? 'Nexa Screen Assist connected · native screen actions ready'
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={`Why ${step.title} is needed`}
+            accessibilityState={{expanded:expandedStep===step.key}}
+            onPress={()=>setExpandedStep(expandedStep===step.key?null:step.key)}
+            style={styles.detailToggle}>
+            <Text style={styles.detailToggleText}>{expandedStep===step.key?'Hide details  −':'Why is this needed?  +'}</Text>
+          </Pressable>
+          {(expandedStep===step.key || (step.key==='screen' && s?.screenAssist && !s?.screenAssistConnected)) &&
+            <Text style={styles.stepDescription}>{step.detail}</Text>}
+          {step.key==='screen' && s && (expandedStep==='screen'||(s.screenAssist&&!s.screenAssistConnected)) &&
+            <Text style={styles.helper}>{s.screenAssistConnected
+              ? 'Nexa Screen Assist connected.'
               : s.screenAssist
-                ? 'Nexa Screen Assist disconnected. Android says enabled, but the service has not connected. Toggle the service off and on in Android Accessibility, return and refresh.'
-                : 'Nexa Screen Assist disabled. Open Accessibility, explicitly enable Nexa Screen Assist, approve Android confirmation, return and refresh.'}
-          </Text>}
-          {step.key==='screen' && s && !s.screenAssistConnected && s.sdkLevel>=33 && <>
-            <Text style={styles.helper}>
-              On Android 13 or later, a sideloaded APK may show “Restricted setting”.
-              Only if you trust this APK: open Nexa App info, choose More options
-              (three dots) → Allow restricted settings, confirm in Android,
-              then return to Accessibility and enable Nexa Screen Assist.
-              Nexa cannot grant this permission automatically.
-            </Text>
-            <Pressable accessibilityRole="button" style={styles.secondary}
-              disabled={busy} onPress={onAppSettings}>
-              <Text style={styles.secondaryText}>Open Nexa app info (restricted settings)</Text>
-            </Pressable>
-          </>}
-          {step.key==='assistant' && !step.granted && <>
-            <Pressable accessibilityRole="button" style={styles.secondary}
-              disabled={busy} onPress={onAssistantSettings}>
-              <Text style={styles.secondaryText}>Open Android Default apps / Digital assistant settings</Text>
-            </Pressable>
-            {s && !s.assistantRoleAvailable && <Text style={styles.helper}>
-              This phone did not offer the assistant-role dialog. Select Nexa in Android Settings if listed, then return and refresh.
-            </Text>}
-          </>}
-          {step.key==='overlay' && s?.overlayGranted && <View style={styles.footerActions}>
-            <Pressable accessibilityRole="button" style={styles.secondary}
-              disabled={busy} onPress={onOverlayShow}>
-              <Text style={styles.secondaryText}>{s.overlayVisible?'Refresh floating bubble':'Show floating bubble'}</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" style={styles.secondary}
-              disabled={busy} onPress={onOverlayHide}>
-              <Text style={styles.secondaryText}>Hide bubble</Text>
-            </Pressable>
-          </View>}
+                ? 'Nexa Screen Assist disconnected. Android says it is enabled, but it is not connected. Toggle the service off and on in Android Accessibility, then return and refresh.'
+                : 'Open Android Accessibility, enable Nexa Screen Assist and confirm. Nexa cannot grant this permission automatically.'}</Text>}
+          {step.key==='screen' && expandedStep==='screen' && s && !s.screenAssistConnected && s.sdkLevel>=33 &&
+            <>
+              <Text style={styles.helper}>If Android marks a sideloaded APK as “Restricted setting”, only if you trust this APK: open Nexa App info → More options → Allow restricted settings, confirm, then enable Nexa Screen Assist in Accessibility. Nexa cannot grant this permission automatically.</Text>
+              <Pressable accessibilityRole="button" style={styles.secondary} disabled={busy}
+                onPress={onAppSettings}><Text style={styles.secondaryText}>Open Nexa app info</Text></Pressable>
+            </>}
+          {step.key==='assistant' && expandedStep==='assistant' && !step.granted &&
+            <Pressable accessibilityRole="button" style={styles.secondary} disabled={busy}
+              onPress={onAssistantSettings}><Text style={styles.secondaryText}>Open Android Default apps / Digital assistant settings</Text></Pressable>}
+          {step.key==='overlay' && s?.overlayGranted &&
+            <View style={styles.footerActions}>
+              <Pressable accessibilityRole="button" style={styles.secondary} disabled={busy} onPress={onOverlayShow}>
+                <Text style={styles.secondaryText}>{s.overlayVisible?'Refresh floating bubble':'Show floating bubble'}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" style={styles.secondary} disabled={busy} onPress={onOverlayHide}>
+                <Text style={styles.secondaryText}>Hide bubble</Text>
+              </Pressable>
+            </View>}
         </View>
       ))}
+      <Pressable accessibilityRole="button" accessibilityLabel="Show optional permissions and features"
+        accessibilityState={{expanded:showOptional}} onPress={()=>setShowOptional(v=>!v)}
+        style={styles.expandCard}>
+        <Text style={styles.expandTitle}>{showOptional?'Hide optional features':'Explore 6 optional features'}</Text>
+        <Text style={styles.expandSubtitle}>Screen access, installed apps, AI provider, flashlight, location and floating bubble  {showOptional?'−':'+'}</Text>
+      </Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Voice and wake activation advanced settings"
+        accessibilityState={{expanded:showAdvanced}} onPress={()=>setShowAdvanced(v=>!v)}
+        style={styles.expandCard}>
+        <Text style={styles.expandTitle}>Advanced voice & wake settings  {showAdvanced?'−':'+'}</Text>
+        <Text style={styles.expandSubtitle}>Live AI on invocation, offline wake detector and microphone disclosures</Text>
+      </Pressable>
+      {showAdvanced && <>
       <View style={styles.footerCard}>
         <Text style={styles.footerTitle}>Assistant gesture → AI conversation</Text>
         <Text style={styles.footerCopy}>
@@ -271,6 +279,7 @@ export default function NexaSetupScreen(props: Props) {
           to open Nexa. No message will be sent without review.
         </Text>
       </View>
+      </>}
       <View style={styles.footerCard}>
         <Text style={styles.footerTitle}>Manage & verify</Text>
         <Text style={styles.footerCopy}>Android may deny a permission without showing its prompt again. Use App settings if it was previously denied, and return here to re-check.</Text>
@@ -285,48 +294,53 @@ export default function NexaSetupScreen(props: Props) {
         <Text style={styles.build}>Installed version: {s?.versionName ?? 'Unknown'} · code {s?.versionCode ?? '—'} · {revision}</Text>
       </View>
       {notice !== '' && <Text style={styles.notice}>{notice}</Text>}
+    </ScrollView>
+    <View style={styles.stickyFooter}>
       <Pressable accessibilityRole="button" disabled={busy} onPress={onFinish}
         style={[styles.finish,busy && styles.actionDisabled]}>
         {busy ? <ActivityIndicator color="#fff"/> : <Text style={styles.finishText}>Continue to Nexa  →</Text>}
       </Pressable>
-      <Text style={styles.finePrint}>You can skip every optional permission. Reopen Setup anytime from Settings. Android permission controls remain yours.</Text>
-    </ScrollView>
+      <Text style={styles.finePrint}>You can change these permissions anytime in Settings.</Text>
+    </View>
+    </>
   );
 }
 
 const styles=StyleSheet.create({
-  scroll:{flex:1,backgroundColor:'#080E1E'},
-  content:{padding:18,paddingTop:16,paddingBottom:38,gap:13},
-  hero:{backgroundColor:'#151A36',borderWidth:1,borderColor:'#353D76',borderRadius:26,padding:22,overflow:'hidden',gap:12},
-  topLine:{flexDirection:'row',gap:10,alignItems:'center',marginBottom:2},
-  brandMark:{width:34,height:34,borderRadius:11,backgroundColor:'#6366F1',alignItems:'center',justifyContent:'center'},
-  brandGlyph:{fontSize:20,color:'#FFFFFF',fontWeight:'700'},
-  topKicker:{color:'#BFC8FF',fontSize:11,fontWeight:'700',letterSpacing:1.6},
-  title:{color:'#F7F9FF',fontSize:27,lineHeight:33,fontWeight:'800',letterSpacing:-.6},
-  subtitle:{color:'#B2BDD5',fontSize:14,lineHeight:22},
-  progressPanel:{backgroundColor:'#202647',padding:14,borderRadius:16,marginTop:4,gap:12},
-  progressHead:{flexDirection:'row',justifyContent:'space-between',gap:8},
+  scroll:{flex:1,backgroundColor:'#0D1017'},
+  content:{padding:16,paddingTop:14,paddingBottom:30,gap:12},
+  hero:{backgroundColor:'#171D2B',borderWidth:1,borderColor:'#303A50',borderRadius:22,padding:17,gap:9},
+  topLine:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:8},
+  topKicker:{color:'#B0BCEC',fontSize:10,fontWeight:'700',letterSpacing:1.2},
+  skip:{minHeight:44,minWidth:94,justifyContent:'center',alignItems:'flex-end'},
+  skipText:{fontSize:12,color:'#D0DBFF',fontWeight:'600'},
+  title:{color:'#F8FAFF',fontSize:22,lineHeight:28,fontWeight:'800',letterSpacing:-.4},
+  subtitle:{color:'#AEBBD1',fontSize:12,lineHeight:18},
+  progressHead:{flexDirection:'row',justifyContent:'space-between',gap:8,marginTop:5},
   progressText:{fontSize:12,fontWeight:'700',color:'#E6E9FF'},
   progressHint:{fontSize:11,color:'#A9B6D1'},
-  track:{height:6,backgroundColor:'#3D486A',borderRadius:5,overflow:'hidden'},
-  progress:{height:6,borderRadius:5,backgroundColor:'#8F8AFF'},
-  sectionIntro:{paddingTop:9,paddingBottom:3,gap:4},
-  sectionTitle:{fontSize:19,fontWeight:'700',color:'#EDF2FF'},
+  track:{height:5,backgroundColor:'#384154',borderRadius:5,overflow:'hidden'},
+  progress:{height:5,borderRadius:5,backgroundColor:'#9C9BFF'},
+  sectionIntro:{paddingVertical:5,gap:3},
+  sectionTitle:{fontSize:18,fontWeight:'700',color:'#EDF2FF'},
   sectionDesc:{fontSize:12,color:'#A4B1C9',lineHeight:18},
-  step:{backgroundColor:'#111B30',borderWidth:1,borderColor:'#2A3852',borderRadius:18,padding:15,gap:14},
-  stepTop:{flexDirection:'row',gap:12},
-  number:{color:'#8D9EF0',fontSize:14,fontWeight:'800',width:25},
-  stepContent:{flex:1,gap:5},
-  stepTitle:{fontSize:15,fontWeight:'700',color:'#F1F5FF'},
-  stepDescription:{fontSize:12,lineHeight:19,color:'#AAB7CE'},
-  stepBottom:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10,paddingLeft:37},
-  status:{fontSize:12,color:'#98A9C4',fontWeight:'600',flexShrink:1},
-  statusReady:{color:'#99D9B4'},
-  action:{paddingVertical:11,paddingHorizontal:13,minHeight:44,backgroundColor:'#5658C9',borderRadius:12,alignItems:'center',justifyContent:'center',maxWidth:'65%'},
-  actionDisabled:{opacity:.5},
-  actionText:{color:'#FFFFFF',fontWeight:'700',fontSize:12,textAlign:'center'},
-  helper:{fontSize:11,color:'#EABBC0',paddingLeft:37},
-  footerCard:{backgroundColor:'#121B2F',padding:17,borderRadius:18,borderWidth:1,borderColor:'#283955',gap:10},
+  step:{backgroundColor:'#151C2A',borderWidth:1,borderColor:'#2C364B',borderRadius:17,padding:13,gap:8},
+  stepTop:{flexDirection:'row',alignItems:'center',gap:12,justifyContent:'space-between'},
+  stepContent:{flex:1,gap:6},
+  stepTitle:{fontSize:14,fontWeight:'700',color:'#F1F5FF'},
+  stepDescription:{fontSize:12,lineHeight:19,color:'#B2BED4'},
+  status:{fontSize:11,color:'#9CAAC2',fontWeight:'600',flexShrink:1},
+  statusReady:{color:'#9ADCB8'},
+  action:{paddingVertical:9,paddingHorizontal:11,minHeight:44,backgroundColor:'#4C56B8',borderRadius:12,alignItems:'center',justifyContent:'center',maxWidth:'52%'},
+  actionDisabled:{opacity:.57},
+  actionText:{color:'#FFFFFF',fontWeight:'700',fontSize:11,textAlign:'center'},
+  detailToggle:{minHeight:36,justifyContent:'center'},
+  detailToggleText:{color:'#B7C4E5',fontWeight:'600',fontSize:11},
+  helper:{fontSize:12,lineHeight:19,color:'#EABBC0'},
+  expandCard:{backgroundColor:'#1C2536',borderColor:'#33415A',borderWidth:1,borderRadius:16,padding:14,gap:6,minHeight:69},
+  expandTitle:{color:'#E8ECFA',fontSize:14,fontWeight:'700'},
+  expandSubtitle:{color:'#A5B4CD',fontSize:12,lineHeight:18},
+  footerCard:{backgroundColor:'#121B2F',padding:16,borderRadius:18,borderWidth:1,borderColor:'#283955',gap:10},
   footerTitle:{fontWeight:'700',color:'#EFF3FF',fontSize:15},
   footerCopy:{color:'#A9B7CE',fontSize:12,lineHeight:19},
   footerActions:{flexDirection:'row',flexWrap:'wrap',gap:8},
@@ -334,7 +348,8 @@ const styles=StyleSheet.create({
   secondaryText:{fontWeight:'700',fontSize:12,color:'#CDD8F2'},
   build:{fontSize:11,color:'#8C9CB9',lineHeight:17},
   notice:{fontSize:12,lineHeight:19,color:'#D8E0FF',backgroundColor:'#262E52',borderRadius:12,padding:12},
-  finish:{minHeight:53,borderRadius:16,backgroundColor:'#6366F1',justifyContent:'center',alignItems:'center'},
+  stickyFooter:{backgroundColor:'#141A26',borderTopWidth:1,borderColor:'#30394B',paddingHorizontal:16,paddingVertical:10,gap:5},
+  finish:{minHeight:49,borderRadius:15,backgroundColor:'#6065D8',justifyContent:'center',alignItems:'center'},
   finishText:{color:'#fff',fontSize:15,fontWeight:'800'},
-  finePrint:{fontSize:11,color:'#96A7C1',lineHeight:18,textAlign:'center'}
+  finePrint:{fontSize:10,color:'#A8B4CE',textAlign:'center'}
 });

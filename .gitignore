@@ -1,7 +1,5 @@
 node_modules/
 **/node_modules/
-.env
-.env.*
 !.env.example
 *.keystore
 *.jks
@@ -24,3 +22,4 @@ android/local.properties
 device-acceptance-*.json
 __pycache__/
 *.pyc
+config.bat

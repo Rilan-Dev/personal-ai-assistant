@@ -8,7 +8,7 @@ const promotion="android-main-promotion.yml";
 const source=file=>readFileSync(dir+"/"+file,"utf8");
 const triggerHeader=file=>source(file).split(/^jobs:/m)[0];
 
-test("only one guarded main-branch promotion pipeline can launch on a push",()=>{
+test("all GitHub Actions remain explicit owner-triggered; branch synchronization never starts release",()=>{
   assert.ok(files.length>=6);
   assert.ok(files.includes(promotion));
   for(const file of files){
@@ -16,15 +16,8 @@ test("only one guarded main-branch promotion pipeline can launch on a push",()=>
     assert.match(yaml,/^on:\s*\n/m,file);
     assert.match(yaml,/^\s+workflow_dispatch:\s*$/m,file);
     assert.doesNotMatch(yaml,/^\s+(pull_request|schedule|workflow_run|repository_dispatch|create|delete):/m,file);
-    if (file===promotion) {
-      assert.match(yaml,/^\s+push:\s*$/m);
-      assert.match(yaml,/^\s+branches: \[main\]\s*$/m);
-      assert.match(yaml,/^\s+paths:\s*$/m);
-      assert.doesNotMatch(yaml,/^\s+branches: \[Development\]\s*$/m);
-    } else {
-      assert.doesNotMatch(yaml,/^\s+push:\s*$/m,file);
-      assert.doesNotMatch(yaml,/^\s+branches:/m,file);
-    }
+    assert.doesNotMatch(yaml,/^\s+push:\s*$/m,file);
+    assert.doesNotMatch(yaml,/^\s+branches:/m,file);
   }
 });
 
@@ -36,7 +29,10 @@ test("main release runs test, emulator and signed APK serially on one runner",()
   const upload=file.indexOf("Upload installable release-test APK");
   assert.ok(node>0&&emulator>node&&release>emulator&&upload>release);
   assert.match(file,/android-emulator-runner@v2/);
-  assert.match(file,/connectedDebugAndroidTest/);
+  assert.match(file,/bash scripts\/ci\/run-nexa-emulator-acceptance\.sh/);
+  const runner=readFileSync("scripts/ci/run-nexa-emulator-acceptance.sh","utf8");
+  assert.match(runner,/:app:connectedDebugAndroidTest/);
+  assert.match(runner,/:app:assembleRelease/);
   assert.match(file,/release-test-sha256\.txt/);
   assert.match(file,/release-test-source-sha\.txt/);
   assert.match(file,/cancel-in-progress: true/);
@@ -79,4 +75,12 @@ test("manual release APK contains source-commit provenance and signer verificati
   assert.match(yml,/bash scripts\/signing\/verify-release-apk\.sh/);
   assert.match(readFileSync("scripts/signing/verify-release-apk.sh","utf8"),/apksigner/);
   assert.match(yml,/if-no-files-found: error/);
+});
+
+test("manual native messaging QA checks out exact dispatched SHA, not old feature branch",()=>{
+  const yml=source("nexa-message-native-qa.yml");
+  assert.match(yml,/github\.event_name == 'workflow_dispatch' && github\.sha/);
+  assert.match(yml,/test "\$\(git rev-parse HEAD\)" = "\$GITHUB_SHA"/);
+  assert.match(yml,/github\.event_name == 'issue_comment'/);
+  assert.doesNotMatch(yml,/^\s+ref:\s+feature\/nexa-message-routing-input-20261104\s*$/m);
 });

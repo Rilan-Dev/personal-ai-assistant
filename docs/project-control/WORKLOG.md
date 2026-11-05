@@ -865,3 +865,29 @@
 - Screen voice router now reports `Screen Assist is disabled` immediately if Android Accessibility has not been user-enabled instead of presenting an approval that could never execute.
 - Added `NexaScreenVoiceRoutingAndroidTest` and `nexa-live-screen-voice-routing.test.mjs`, covering owner intent, denied unsafe clicks, four-way scroll, missing permission, crash containment and bounded text capture.
 - Final isolated source checks: 271/271 Node tests, typecheck, web export passed. Native Android CI still required; no physical phone logs were provided to prove the specific source of the reported battery crash.
+
+
+## 2026-11-05 — DSH source-admission foundation (Development)
+- Audited current source HEAD 865fa166a7292df3585482dea52160ce7e9644b2 with GitHub; synced VPS test checkout via BridgeHead git pull --ff-only. No direct server source edits.
+- Baseline npm test 365/365 passed on exact audited revision.
+- Added packages/agent-contracts/src/task-plan.ts: strict bounded, policy-scoped, immutable, non-executable TaskPlan proposal binding. New gate is disabled; no Android actions or prior user flows were changed.
+- Added packages/agent-core/test/task-plan.test.mjs with 12 cases. Initial focused 12/12 and full 377/377 pass; Expo web export passed. TypeScript narrowing initially failed and was corrected in commit ce12c334629c628be7fbb07075016d4e860c48bf; repeat exact-commit check before claiming certification.
+- Pinned DSH MIT, LangGraph and Deep Agents source review, documented the existing duplicated task lifecycles, Android Play Accessibility constraints and exact future migration/release requirements in docs/architecture/NEXA_DSH_SUPERAGENT_SOURCE_ADAPTATION_20261105.md.
+- Production Android acceptance and DSH task execution integration remain explicitly NOT ACCEPTED. VPS free disk ~7 GB; no unrelated Docker restart, no live redeploy, no main promotion.
+
+## 2026-11-05 — DSH-inspired native task storage and UI replay hardening
+- GitHub Development contains additive custom.db v3 database schema (v1/v2 upgrades), task/step/event/mandate/approval/observation relations and FK constraints. Existing encrypted conversations and voice checkpoints are retained.
+- New native task proposals are stored AES-GCM encrypted, rejected on duplicate ID and never executable from this API.
+- Old 40-entry encrypted UI-action journal now reserves permanent SHA-256 token tombstones in SQLite before actions; audit eviction cannot cause a duplicate UI claim.
+- Android tests added for isolated v1/v2→v3 migrations, all task table/FK checks, encrypted proposed tasks and denial of replay after >40 ledger events.
+- CI #41923323315 failed before Gradle on obsolete v2 source assertion; scripts/test/nexa-next-agentic-milestone.test.mjs fixed at e9ef608. Local 377/377 Node tests, TS, web export passed on e9ef608. CI #41923776222 was requested on e9ef608; check final native status. Later storage changes need new native test on exact SHA.
+- Read-only npm audit --omit=dev found 10 advisories (2 high, 7 moderate, 1 low), mostly Expo. Avoid automated major Expo downgrade without compatibility/security review.
+- All autonomy remains disabled, no live Android APK rollout, no main promotion, no other Docker services touched. Physical phone/providing real Android OS grants requires separate authenticated owner acceptance.
+
+## 2026-11-05 — DSH task review UI and privacy isolation
+
+Confirmed older signed Android workflow 41926075781 passed on 0724292f. Implemented encrypted local owner task proposals, atomic proposal/cancel event history, and a foreground-only manual review UI. Consolidated duplicate screens and bridges to one Tools panel without displacing urgent messaging approvals. Restricted native history queries and cancel operations to manual chat-origin policies, with safe read/cancel of older preview-only records. Added tests for encrypted goals, one-shot cancellation, spoofed policy refusal and native restart persistence. Added manual Maestro task-proposals suite. Source verification at a68dd26b5: Node 380/380, TypeScript and web export passed; later native updates require exact-SHA Android CI. No device-side production promotion, external Send or service restart was performed.
+
+## 2026-11-05 — Maestro proposal flow fix
+
+Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact-match assertion for proposal safety text embedded in a wrapped paragraph. Exposed the disclosure as a dedicated accessibility-labeled element and updated the flow assertion; added a source regression test. Focused test, TypeScript checks, and Expo web export pass. Full Android signed build and Maestro rerun still required for this revision.

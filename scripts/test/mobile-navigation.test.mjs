@@ -3,12 +3,19 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 const app=readFileSync('apps/mobile/App.tsx','utf8');
 
-test('mobile navigation has five real independent tab screens including permission setup',()=>{
+test('mobile navigation has three primary tabs and retains setup/settings via contextual navigation',()=>{
   assert.match(app,/useState<'chat'\|'voice'\|'tools'\|'setup'\|'settings'>\(engine\.live\?'setup':'chat'\)/);
   for(const id of ['chat','voice','tools','setup','settings']) {
     assert.match(app,new RegExp("tab === '"+id+"'"));
+  }
+  for(const id of ['chat','voice','tools']) {
     assert.match(app,new RegExp("id:'"+id+"'"));
   }
+  for(const id of ['setup','settings']) {
+    assert.doesNotMatch(app,new RegExp("id:'"+id+"'"));
+  }
+  assert.match(app,/accessibilityLabel=\{tab==='settings'\?'Back to chat':'Open settings'\}/);
+  assert.match(app,/accessibilityLabel="Open permission setup"/);
   assert.match(app,/accessibilityRole="tab"/);
   assert.match(app,/accessibilityState=\{\{selected:tab===item.id\}\}/);
   assert.match(app,/onPress=\{\(\)=>navigate\(item.id\)\}/);

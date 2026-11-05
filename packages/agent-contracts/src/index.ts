@@ -35,3 +35,9 @@ export { requestAllowsNativeTool } from "./intent-policy.ts";
 
 export {iconSemanticFromLabel, parseScreenIconSnapshot} from './screen-icons.ts';
 export type {ScreenIconSnapshot, ScreenIcon, IconSemantic, IconRect, IconEvidence} from './screen-icons.ts';
+// Experimental DSH-style planning contract: deliberately not executable.
+export { bindTaskPlan, TaskPlanRejected, NEXA_TASK_PLAN_VERSION,
+  NEXA_TASK_V2_ENABLED, NEXA_TASK_PLAN_MAX_STEPS } from "./task-plan.ts";
+export type { TaskOrigin, TaskEvidenceKind, TrustedTaskTool, TaskStepProposal,
+  TaskPlanProposal, TaskPlanAdmission, BoundTaskStep, BoundTaskPlan,
+  TaskPlanRejectCode } from "./task-plan.ts";

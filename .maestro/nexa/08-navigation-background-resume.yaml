@@ -16,7 +16,7 @@ tags:
 - assertVisible: "Speak naturally"
 - tapOn: "Tools"
 - assertVisible: "Tools & permissions"
-- tapOn: "Setup"
+- tapOn: "Open permission setup"
 - assertVisible: "Make your assistant yours."
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
