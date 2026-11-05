@@ -912,6 +912,23 @@ class RealtimeVoiceService : Service() {
             taskRequestEpoch++
             currentCompound?.let { closeCompound(it,"cancelled","New owner request") }
         }
+        if(!fromPlan && NexaTaskCoordinator.classifyOwnerReadOnlyPlan(rawTranscript)!=null) {
+            val session=voiceSessionId
+            val epoch=taskRequestEpoch
+            Thread({
+                val result=NexaTaskCoordinator.executeOwnerReadOnlyPlan(
+                    this@RealtimeVoiceService,rawTranscript,"live-voice")
+                main.post {
+                    if(active.get() && selectedProvider=="sarvam-api" &&
+                        session==voiceSessionId && epoch==taskRequestEpoch) {
+                        lastToolResult=result.take(320)
+                        message=lastToolResult
+                        sarvamApiTransport?.toolResult(result)
+                    }
+                }
+            },"nexa-sarvam-read-plan").start()
+            return
+        }
         val plan=if(fromPlan)null else NexaVoiceTaskPlan.parse(rawTranscript)
         if(plan!=null){
             val cursor=NexaVoiceTaskCursor(plan)
