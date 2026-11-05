@@ -24,6 +24,15 @@ internal object NexaTaskStore {
     /** The ONLY initial admitted registry is a native, no-side-effect read. */
     private val readOnlyRegistry=NexaTaskNativeRead.proposedReadTools
     private val ownerOrigins=setOf("chat","live-voice","assistant-role","overlay")
+    private fun exactDeviceStatusGoal(goal:String):Boolean {
+        if(goal.length !in 5..150 || goal.any{it.code<32})return false
+        val intent=goal.trim().lowercase(java.util.Locale.ROOT)
+            .removePrefix("hey nexa,").removePrefix("hey nexa ")
+            .trimEnd('.', '?', '!', ',').trim()
+        return intent in setOf(
+            "device status","check device status","phone status","check my phone status")
+    }
+
     private val rootKeys=setOf("version","taskId","ownerRequestId","origin",
         "policyVersion","expiresAtMs","steps","executable")
     private val stepKeys=setOf("stepId","toolId","input","dependsOn",
@@ -188,7 +197,9 @@ internal object NexaTaskStore {
 
                     val operations=NexaTaskCoordinator.classifyOwnerReadOnlyPlan(goal)
                         ?:listOfNotNull(NexaTaskCoordinator.classifyOwnerFact(goal))
-                    val tools=operations.map{
+                    val tools=if(operations.isEmpty() && exactDeviceStatusGoal(goal)) {
+                        listOf("device.status")
+                    } else operations.map{
                         when(it){
                             "get_battery_level"->"device.battery_status"
                             "get_storage_usage"->"device.storage_status"
