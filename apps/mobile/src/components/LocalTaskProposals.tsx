@@ -7,8 +7,11 @@ import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '.
 import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
-export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string}|null}){
+export function LocalTaskProposals({prefill}:{prefill?:{
+  nonce:number;goal:string;origin?:'chat'|'live-voice'|'assistant-role'|'overlay';handoffToken?:string;
+}|null}){
   const [goal,setGoal]=useState('');
+  const [handoff,setHandoff]=useState<{goal:string;token:string;origin:string}|null>(null);
   const [items,setItems]=useState<LocalTaskProposal[]>([]);
   const [nativeTasks,setNativeTasks]=useState<NativeTaskSummary[]>([]);
   const [allTasks,setAllTasks]=useState<UnifiedTaskSummary[]>([]);
@@ -26,6 +29,8 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     if(!prefill||prefill.nonce===lastReviewNonce.current)return;
     lastReviewNonce.current=prefill.nonce;
     setGoal(prefill.goal);
+    setHandoff(prefill.handoffToken&&prefill.origin?
+      {goal:prefill.goal,token:prefill.handoffToken,origin:prefill.origin}:null);
     setNotice('Review the task and tap Save for review. Nothing has started.');
   },[prefill]);
   async function refresh(){
@@ -48,8 +53,9 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     busyRef.current=true;setBusy(true);setNotice('');
     let savedId:string|null=null;
     try{
-      savedId=await saveLocalTaskProposal(goal);
-      setGoal('');
+      savedId=await saveLocalTaskProposal(goal,
+        handoff&&goal===handoff.goal?handoff.token:undefined);
+      setGoal('');setHandoff(null);
       // Keep the confirmed receipt even if a subsequent list read fails.
       setNotice('Saved privately for review. No assistant action or message was sent.');
       try{setItems(await listLocalTaskProposals());}
@@ -180,8 +186,12 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
     <Text accessibilityLabel="Proposal safety: no AI agent, message or phone action runs from a proposal."
       style={styles.help}>Encrypted at rest. No AI agent, message or phone action runs from a proposal.</Text>
     {!available?<Text style={styles.help}>Update the Android APK to use on-device task proposals.</Text>:<>
+      {handoff&&<Text style={styles.help}>Source: {handoff.origin}. Editing this request creates a new manually written Chat task instead; it does not authorize any action.</Text>}
       <TextInput style={styles.input} placeholder="E.g. Follow up on the ELV quotation"
-        placeholderTextColor="#9AA9C4" value={goal} onChangeText={setGoal}
+        placeholderTextColor="#9AA9C4" value={goal} onChangeText={value=>{
+          setGoal(value);
+          if(handoff&&value!==handoff.goal)setHandoff(null);
+        }}
         maxLength={500} editable={!busy} multiline
         accessibilityLabel="Task to save for review"/>
       <View style={styles.actions}>
