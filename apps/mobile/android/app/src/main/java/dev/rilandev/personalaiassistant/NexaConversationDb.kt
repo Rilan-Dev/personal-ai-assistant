@@ -549,6 +549,28 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.reject("TASK_NOT_SAVED","The encrypted task could not be saved")
         }
     }
+    /** Owner explicitly pressed Save on a task surfaced by Sarvam/OpenAI,
+     * Android assistant role, or overlay. Only Android can mint the source
+     * handoff token; the goal must exactly match the original spoken/typed
+     * request. No pending action/mandate is created.
+     */
+    @ReactMethod fun createOwnerTaskFromHandoff(
+        token:String,goal:String,promise:Promise
+    ) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to save this request")
+            return
+        }
+        try {
+            val id=NexaOwnerTaskReview.saveViewed(reactContext,token,goal)
+            if(id==null)promise.reject("HANDOFF_EXPIRED",
+                "Task handoff expired or was already saved. Review a new request.")
+            else promise.resolve(id)
+        }catch (_:Exception) {
+            promise.reject("TASK_NOT_SAVED","Could not store the encrypted task")
+        }
+    }
+
     /** Explicit foreground owner request, never a model-supplied tool call.
      * The native coordinator persists a claim and evidence before reporting success.
      */
@@ -634,7 +656,7 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.reject("NOT_FOREGROUND","Open Nexa to review the spoken task")
             return
         }
-        promise.resolve(NexaOwnerTaskReview.take())
+        promise.resolve(NexaOwnerTaskReview.takeEnvelope()?.toString())
     }
     /**
      * Correct an unexecuted owner proposal using optimistic revision locking.
