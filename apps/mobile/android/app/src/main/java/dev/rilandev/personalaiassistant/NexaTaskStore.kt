@@ -67,7 +67,7 @@ internal object NexaTaskStore {
                 tool !in readOnlyRegistry ||
                 item.optString("risk")!="low" ||
                 item.optString("expectedEvidence")!="native_reading" ||
-                item.opt("requiresApproval")!==false)return null
+                item.opt("requiresApproval")!=false)return null
             val input=item.optJSONObject("input")?:return null
             if(input.length()!=0)return null
             val depends=item.optJSONArray("dependsOn")?:return null
@@ -160,7 +160,7 @@ internal object NexaTaskStore {
         val helper=NexaConversationDb(context)
         try{
             helper.readableDatabase.rawQuery(
-                "SELECT ordinal,tool_id,status,expected_evidence FROM agent_task_steps WHERE task_id=? ORDER BY ordinal",
+                "SELECT s.ordinal,s.tool_id,s.status,s.expected_evidence FROM agent_task_steps s JOIN agent_tasks t ON s.task_id=t.task_id WHERE s.task_id=? AND t.origin=\'chat\' AND t.policy_version=\'owner-review-v1\' ORDER BY s.ordinal",
                 arrayOf(taskId)
             ).use{cursor->
                 while(cursor.moveToNext()){
