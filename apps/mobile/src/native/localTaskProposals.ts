@@ -16,6 +16,7 @@ type LocalTaskBridge={
   createOwnerTaskProposal(goal:string):Promise<string>;
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
+  clearCancelledOwnerTaskDetails?(taskId:string):Promise<boolean>;
   consumePendingOwnerTaskReview?():Promise<string|null>;
   admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
   reviseOwnerTaskProposal(taskId:string,expectedRevision:number,goal:string):Promise<boolean>;
@@ -209,4 +210,14 @@ export async function runOwnerReviewedReadOnlyPlan(taskId:string,revision:number
   if(typeof result!=='string'||!result||result.length>1200)
     throw Error('Unable to verify native reviewed plan outcome');
   return result;
+}
+
+
+/** Never delete the durable task ID, approvals, events or no-replay tombstones. */
+export async function clearCancelledOwnerTaskDetails(taskId:string):Promise<boolean>{
+  if(!id.test(taskId))throw Error('Invalid task identity');
+  const api=bridge();
+  if(typeof api.clearCancelledOwnerTaskDetails!=='function')
+    throw Error('Update Nexa to clear encrypted task details');
+  return (await api.clearCancelledOwnerTaskDetails(taskId))===true;
 }
