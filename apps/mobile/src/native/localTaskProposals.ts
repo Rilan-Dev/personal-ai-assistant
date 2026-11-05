@@ -8,7 +8,8 @@ export type LocalTaskProposal={
 };
 export type LocalTaskReviewDetail={
   taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain';revision:number;updatedAt:number;
-  steps:Array<{ordinal:number;toolId:string;status:string;evidence:string}>;
+  steps:Array<{ordinal:number;toolId:string;status:string;evidence:string;
+    dependencies?:number;missingDependencies?:number;dependenciesSatisfied?:boolean;executable?:false}>;
   events:Array<{kind:string;createdAt:number}>;
 };
 type LocalTaskBridge={
@@ -118,7 +119,11 @@ export async function readLocalTaskDetail(taskId:string):Promise<LocalTaskReview
     if(!Number.isSafeInteger(x.ordinal)||Number(x.ordinal)<0||Number(x.ordinal)>7||
        typeof x.toolId!=='string'||x.toolId.length>80||
        typeof x.status!=='string'||x.status.length>40||
-       typeof x.evidence!=='string'||x.evidence.length>40)
+       typeof x.evidence!=='string'||x.evidence.length>40||
+       (x.executable!==undefined&&x.executable!==false)||
+       (x.dependencies!==undefined&&(!Number.isSafeInteger(x.dependencies)||Number(x.dependencies)<0||Number(x.dependencies)>8))||
+       (x.missingDependencies!==undefined&&(!Number.isSafeInteger(x.missingDependencies)||Number(x.missingDependencies)<0||Number(x.missingDependencies)>8))||
+       (x.dependenciesSatisfied!==undefined&&typeof x.dependenciesSatisfied!=='boolean'))
       throw Error('Invalid task step metadata');
   }
   for(const event of d.events){
