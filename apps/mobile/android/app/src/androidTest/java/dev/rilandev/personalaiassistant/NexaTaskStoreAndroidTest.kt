@@ -136,6 +136,8 @@ class NexaTaskStoreAndroidTest {
         assertFalse(NexaTaskStore.admitOwnerReadOnlyPlan(context,plan(id).toString()))
         assertFalse(NexaConversationDb.cancelProposedAgentTask(
             context,id,"owner-review-v1"))
-        assertEquals(1,NexaTaskStore.readSafeStepSummary(context,id).length())
+        val summary=NexaTaskStore.readSafeStepSummary(context,id)
+        assertEquals(1,summary.length())
+        assertEquals("cancelled",summary.getJSONObject(0).getString("status"))
     }
 }
