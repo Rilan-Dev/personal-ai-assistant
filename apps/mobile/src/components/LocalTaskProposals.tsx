@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,clearFinishedOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
@@ -167,13 +167,16 @@ export function LocalTaskProposals({prefill}:{prefill?:{
   }
   /** Revocation is an atomic native task/mandate fence, never a UI-only flag. */
   /** Erase the encrypted description only; retain the event/replay history. */
-  async function clearCancelled(item:LocalTaskProposal){
-    if(busyRef.current||loading||item.status!=='cancelled'||
+  async function clearTerminal(item:LocalTaskProposal){
+    if(busyRef.current||loading||
+       !['cancelled','completed','uncertain','failed'].includes(item.status)||
        item.goal==='[details cleared]')return;
     busyRef.current=true;setBusy(true);setNotice('');
     try{
-      if(!await clearCancelledOwnerTaskDetails(item.taskId))
-        throw Error('Redaction was already applied or is unavailable');
+      const cleared=item.status==='cancelled'
+        ? await clearCancelledOwnerTaskDetails(item.taskId)
+        : await clearFinishedOwnerTaskDetails(item.taskId);
+      if(!cleared)throw Error('Redaction was already applied or unavailable');
       setItems(previous=>previous.map(x=>x.taskId===item.taskId
         ? {...x,goal:'[details cleared]'}:x));
       setDetail(null);
@@ -254,10 +257,10 @@ export function LocalTaskProposals({prefill}:{prefill?:{
           item.status==='cancelled'?'Canceled permanently':
           item.status==='uncertain'?'Outcome uncertain · never automatically retried':
           'Status: '+item.status}</Text>
-        {item.status==='cancelled'&&item.goal!=='[details cleared]'&&
+        {['cancelled','completed','uncertain','failed'].includes(item.status)&&item.goal!=='[details cleared]'&&
           <Pressable accessibilityRole="button"
             accessibilityLabel={'Clear encrypted details for cancelled task'}
-            disabled={busy||loading} onPress={()=>void clearCancelled(item)}
+            disabled={busy||loading} onPress={()=>void clearTerminal(item)}
             style={styles.action}>
             <Text style={styles.buttonText}>Clear saved details</Text>
           </Pressable>}
