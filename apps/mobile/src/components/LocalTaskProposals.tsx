@@ -250,7 +250,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
           <Text style={styles.buttonText}>View steps and history</Text>
         </Pressable>
         {detail?.taskId===item.taskId&&<View style={styles.item}>
-          <Text style={styles.help}>Revision {detail.revision} · {detail.status} · review-only</Text>
+          <Text style={styles.help}>Revision {detail.revision} · {detail.status} · {detail.status==='proposed'?'awaiting owner decision':detail.status==='completed'?'local native evidence recorded':'no automatic external action'}</Text>
           {detail.steps.length===0&&<Text style={styles.help}>No plan steps saved.</Text>}
           {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
              detail.steps.length>0&&detail.steps.every(step=>
