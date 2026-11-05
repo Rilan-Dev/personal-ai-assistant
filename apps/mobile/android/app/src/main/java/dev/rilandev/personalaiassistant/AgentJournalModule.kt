@@ -369,20 +369,82 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         require(value in setOf("whatsapp","whatsapp-business","sms","imo","botim"))
         return value
     }
-    @ReactMethod fun rememberMessageApp(recipientAlias: String, appId: String, p: Promise) {
-        try {
-            val key=name("private","message-app:"+messageAlias(recipientAlias))
-            val id=messageApp(appId)
-            synchronized(lock) { write(key,id) }
-            p.resolve(true)
-        } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_WRITE",e) }
+    private val allowedMessageApps=setOf("whatsapp","whatsapp-business","sms","imo","botim")
+    /** A remembered channel is a bounded, owner-confirmed HINT, never a
+     * matching contact identity or permission to send. Legacy preferences
+     * remain readable until their owner updates or forgets them.
+     */
+    private fun messageAppRecord(raw:String?):JSONObject?{
+        if(raw==null)return null
+        if(raw in allowedMessageApps)return JSONObject()
+            .put("version",1).put("appId",raw)
+            .put("source","legacy_owner_choice")
+            .put("savedAt",0L).put("expiresAt",0L)
+        return try {
+            val j=JSONObject(raw)
+            val id=j.optString("appId")
+            val saved=j.optLong("savedAt",-1L)
+            val end=j.optLong("expiresAt",-1L)
+            if(j.optInt("version")!=2 || id !in allowedMessageApps ||
+                j.optString("source")!="owner_confirmed" ||
+                saved<=0L || end<=saved || end-saved>365L*86_400_000L)
+                null else j
+        }catch(_:Exception){null}
     }
-    @ReactMethod fun rememberedMessageApp(recipientAlias: String, p: Promise) {
+    private fun saveMessageAppChoice(alias:String,app:String,days:Int):Boolean {
+        require(days in 1..365)
+        val key=name("private","message-app:"+messageAlias(alias))
+        val id=messageApp(app)
+        val now=System.currentTimeMillis()
+        val payload=JSONObject().put("version",2).put("appId",id)
+            .put("source","owner_confirmed")
+            .put("savedAt",now).put("expiresAt",now+days*86_400_000L)
+        return synchronized(lock){write(key,payload.toString());true}
+    }
+    @ReactMethod fun rememberMessageApp(recipientAlias:String,appId:String,p:Promise){
+        try {
+            p.resolve(saveMessageAppChoice(recipientAlias,appId,90))
+        }catch(e:Exception){rejectSafe(p,"MESSAGE_MEMORY_WRITE",e)}
+    }
+    /** Optional owner-selected retention. Does not change any pending draft,
+     * recipient, permission, or already prepared message.
+     */
+    @ReactMethod fun rememberMessageAppForDays(recipientAlias:String,
+                                               appId:String,days:Int,p:Promise){
+        try {
+            p.resolve(saveMessageAppChoice(recipientAlias,appId,days))
+        }catch(e:Exception){rejectSafe(p,"MESSAGE_MEMORY_WRITE",e)}
+    }
+    @ReactMethod fun rememberedMessageApp(recipientAlias:String,p:Promise){
         try {
             val key=name("private","message-app:"+messageAlias(recipientAlias))
-            val found=synchronized(lock){ read(key) }
-            p.resolve(found?.takeIf{ it in setOf("whatsapp","whatsapp-business","sms","imo","botim") })
-        } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_READ",e) }
+            val record=synchronized(lock){
+                val item=messageAppRecord(read(key))
+                if(item!=null && item.optLong("expiresAt")>0L &&
+                    item.optLong("expiresAt")<=System.currentTimeMillis()){
+                    check(prefs.edit().remove(key).commit())
+                    null
+                } else item
+            }
+            p.resolve(record?.optString("appId"))
+        }catch(e:Exception){rejectSafe(p,"MESSAGE_MEMORY_READ",e)}
+    }
+    /** Provenance and expiry without returning an alias, phone number,
+     * contact identifier, message body, or ciphertext.
+     */
+    @ReactMethod fun messageAppPreferenceDetails(recipientAlias:String,p:Promise){
+        try {
+            val key=name("private","message-app:"+messageAlias(recipientAlias))
+            val record=synchronized(lock){
+                val item=messageAppRecord(read(key))
+                if(item!=null && item.optLong("expiresAt")>0L &&
+                    item.optLong("expiresAt")<=System.currentTimeMillis()){
+                    check(prefs.edit().remove(key).commit())
+                    null
+                }else item
+            }
+            p.resolve(record?.toString())
+        }catch(e:Exception){rejectSafe(p,"MESSAGE_MEMORY_READ",e)}
     }
     @ReactMethod fun forgetMessageApp(recipientAlias: String, p: Promise) {
         try {
