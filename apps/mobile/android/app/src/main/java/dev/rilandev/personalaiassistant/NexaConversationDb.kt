@@ -664,6 +664,23 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /**
+     * Read-only index of native tasks and legacy Voice checkpoints.
+     * No legacy checkpoint may become authorization for a native action.
+     */
+    @ReactMethod fun recentUnifiedTaskTimeline(limit:Int,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to inspect your task timeline")
+            return
+        }
+        try {
+            promise.resolve(NexaUnifiedTaskTimeline.recent(
+                reactContext,limit.coerceIn(1,60)).toString())
+        }catch (_:Exception) {
+            promise.reject("TASK_INDEX","Unified task timeline unavailable")
+        }
+    }
+
     /** Native task status is private to the focused owner UI. */
     @ReactMethod fun recentNativeTaskTimeline(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
