@@ -586,6 +586,19 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** Explicit owner cancellation of an unpersisted cross-surface draft. */
+    @ReactMethod fun discardOwnerTaskHandoff(token:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to discard the task review")
+            return
+        }
+        try {
+            promise.resolve(NexaOwnerTaskReview.discardViewed(token))
+        }catch (_:Exception) {
+            promise.reject("HANDOFF_DISCARD","Could not discard task review")
+        }
+    }
+
     /** Explicit foreground owner request, never a model-supplied tool call.
      * The native coordinator persists a claim and evidence before reporting success.
      */
