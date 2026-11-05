@@ -15,6 +15,7 @@ export type LocalTaskReviewDetail={
 type LocalTaskBridge={
   createOwnerTaskProposal(goal:string):Promise<string>;
   createOwnerTaskFromHandoff?(token:string,goal:string):Promise<string>;
+  discardOwnerTaskHandoff?(token:string):Promise<boolean>;
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
   clearCancelledOwnerTaskDetails?(taskId:string):Promise<boolean>;
@@ -57,6 +58,16 @@ export async function saveLocalTaskProposal(goal:string,handoffToken?:string):Pr
   if(typeof taskId!=='string'||!id.test(taskId))throw Error('Local task receipt could not be verified');
   return taskId;
 }
+
+/** Deliberately discard an unsaved native-origin task draft. No side effect. */
+export async function discardPendingOwnerTaskHandoff(token:string):Promise<boolean>{
+  if(!/^[0-9a-f-]{36}$/.test(token))throw Error('Invalid task review token');
+  const api=bridge();
+  if(typeof api.discardOwnerTaskHandoff!=='function')
+    throw Error('Update Nexa to discard a pending task handoff');
+  return (await api.discardOwnerTaskHandoff(token))===true;
+}
+
 function decodeProposal(value:unknown):LocalTaskProposal{
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Malformed local task record');
   const item=value as Record<string,unknown>;
