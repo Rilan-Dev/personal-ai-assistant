@@ -20,7 +20,11 @@ export function ownerDeviceFactKind(value:unknown):'battery'|'storage'|null {
     .replace(/[.?!,]+$/,'').trim();
   return battery.has(normalized)?'battery':storage.has(normalized)?'storage':null;
 }
-type TaskNativeBridge={runOwnerDeviceRead(request:string):Promise<string>};
+type TaskNativeBridge={
+  runOwnerDeviceRead(request:string):Promise<string>;
+  recentNativeTaskTimeline(limit:number):Promise<string>;
+  revokeNativeTask(taskId:string):Promise<boolean>;
+};
 export const nativeTaskCoordinatorAvailable=()=>Platform.OS==='android' &&
   typeof NativeModules.PAAConversationHistory?.runOwnerDeviceRead==='function';
 
@@ -37,4 +41,48 @@ export async function runOwnerDeviceRead(request:string):Promise<string>{
   if(typeof output!=='string'||!output.trim()||output.length>600)
     throw Error('Android returned no verifiable task result');
   return output;
+}
+
+
+/** Only non-sensitive, owner-visible task metadata leaves the native coordinator. */
+export type NativeTaskSummary={
+  taskId:string;
+  origin:'chat'|'live-voice';
+  status:'ready'|'running'|'completed'|'cancelled';
+  revision:number;
+  updatedAt:number;
+  operation:'get_battery_level'|'get_storage_usage';
+  stepStatus:'pending'|'outcome_unknown'|'verified'|'cancelled';
+  observation:'none'|'verified';
+};
+const nativeId=/^task-[0-9a-f-]{36}$/;
+const validSummary=(input:unknown):input is NativeTaskSummary=>{
+  if(!input||typeof input!=='object'||Array.isArray(input))return false;
+  const x=input as Record<string,unknown>;
+  return typeof x.taskId==='string'&&nativeId.test(x.taskId)&&
+    (x.origin==='chat'||x.origin==='live-voice')&&
+    ['ready','running','completed','cancelled'].includes(String(x.status))&&
+    Number.isSafeInteger(x.revision)&&Number(x.revision)>0&&
+    Number.isSafeInteger(x.updatedAt)&&Number(x.updatedAt)>0&&
+    ['get_battery_level','get_storage_usage'].includes(String(x.operation))&&
+    ['pending','outcome_unknown','verified','cancelled'].includes(String(x.stepStatus))&&
+    ['none','verified'].includes(String(x.observation));
+};
+export async function listNativeTaskTimeline():Promise<NativeTaskSummary[]>{
+  if(!nativeTaskCoordinatorAvailable()||
+      typeof NativeModules.PAAConversationHistory?.recentNativeTaskTimeline!=='function')
+    return [];
+  const response=await (NativeModules.PAAConversationHistory as TaskNativeBridge).recentNativeTaskTimeline(25);
+  if(typeof response!=='string'||response.length>40000)
+    throw Error('Invalid native task history');
+  const rows:unknown=JSON.parse(response);
+  if(!Array.isArray(rows)||rows.length>25||rows.some(x=>!validSummary(x)))
+    throw Error('Native task history did not match its schema');
+  return rows;
+}
+export async function revokeNativeTask(taskId:string):Promise<boolean>{
+  if(!nativeId.test(taskId)||!nativeTaskCoordinatorAvailable()||
+    typeof NativeModules.PAAConversationHistory?.revokeNativeTask!=='function')
+    throw Error('Native task revocation unavailable');
+  return (NativeModules.PAAConversationHistory as TaskNativeBridge).revokeNativeTask(taskId)===true;
 }
