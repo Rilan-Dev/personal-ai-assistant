@@ -30,6 +30,7 @@ import {nexaSetupAvailable, readNexaSetupStatus, acknowledgeNexaSetup, openNexaA
 import type {NexaSetupStatus} from './src/native/nexaSetup';
 import NexaSetupScreen from './src/components/NexaSetupScreen';
 import {LocalTaskProposals} from './src/components/LocalTaskProposals';
+import {ownerDeviceFactKind,nativeTaskCoordinatorAvailable,runOwnerDeviceRead} from './src/native/nativeTaskCoordinator';
 import {NexaReveal, NexaVoiceOrb} from './src/components/NexaMotion';
 import type {VoiceVisualState} from './src/components/NexaMotion';
 import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
@@ -1364,6 +1365,23 @@ export default function App() {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    // Explicit owner device-fact questions use the ONE Kotlin task authority.
+    // No model call, Accessibility action or external message can enter here.
+    if(!restore && engine.live && ownerDeviceFactKind(request)){
+      setInput('');setEvents([]);append('user',request);
+      if(!nativeTaskCoordinatorAvailable()){
+        append('assistant','Update Nexa to enable secure on-device task execution. No action was performed.');
+        return;
+      }
+      setRunning(true);
+      try{
+        const answer=await runOwnerDeviceRead(request);
+        append('assistant',answer);
+      }catch{
+        append('assistant','Android could not confirm this task result. Review task status before retrying.');
+      }finally{setRunning(false);}
+      return;
+    }
     // Explicit owner text routes only to a local message review UI.
     // The contact hint cannot resolve an address book or send a message.
     if (!restore && engine.live && whatsAppDraftAvailable()) {
