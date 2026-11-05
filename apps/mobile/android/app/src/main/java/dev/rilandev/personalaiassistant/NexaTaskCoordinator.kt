@@ -208,9 +208,60 @@ internal object NexaTaskCoordinator {
         } == true
     }
 
+    /**
+     * Crash recovery: never interpret an unfinished read as success. A stale
+     * pre-claimed step is permanently uncertain and its mandate is revoked.
+     * No Android read is retried and no external action is dispatched.
+     */
+    fun recoverStaleInFlight(context:Context,staleAfterMs:Long=120_000L):Int {
+        if(staleAfterMs<60_000L)return 0
+        return transaction(context) {db->
+            val now=System.currentTimeMillis()
+            val candidates=mutableListOf<Pair<String,String>>()
+            db.rawQuery(
+                "SELECT t.task_id,s.step_id FROM agent_tasks t " +
+                    "JOIN agent_task_steps s ON s.task_id=t.task_id " +
+                    "WHERE t.policy_version=? AND t.status='running' " +
+                    "AND s.status='outcome_unknown' AND t.updated_at<?",
+                arrayOf(POLICY,(now-staleAfterMs).toString())
+            ).use{cursor->
+                while(cursor.moveToNext())
+                    candidates.add(cursor.getString(0) to cursor.getString(1))
+            }
+            var recovered=0
+            for((taskId,stepId) in candidates){
+                val changed=db.compileStatement(
+                    "UPDATE agent_tasks SET status='uncertain'," +
+                        "plan_revision=plan_revision+1,updated_at=? " +
+                        "WHERE task_id=? AND status='running' AND policy_version=?"
+                ).use{stmt->
+                    stmt.bindLong(1,now)
+                    stmt.bindString(2,taskId)
+                    stmt.bindString(3,POLICY)
+                    stmt.executeUpdateDelete()
+                }
+                if(changed!=1)continue
+                db.execSQL(
+                    "UPDATE agent_task_steps SET status='uncertain' " +
+                        "WHERE task_id=? AND status='outcome_unknown'",
+                    arrayOf(taskId)
+                )
+                db.execSQL(
+                    "UPDATE agent_mandates SET revoked_at=? WHERE task_id=? " +
+                        "AND policy_version=? AND revoked_at IS NULL",
+                    arrayOf(now,taskId,POLICY)
+                )
+                event(db,taskId,stepId,"recovered_uncertain_no_replay",now)
+                recovered++
+            }
+            recovered
+        } ?: 0
+    }
+
     /** Metadata-only timeline; never return arguments, raw screen data or keys. */
     fun recentOwnerTimeline(context: Context, limit: Int): org.json.JSONArray =
         synchronized(lock) {
+            recoverStaleInFlight(context)
             val rows = org.json.JSONArray()
             val helper = NexaConversationDb(context)
             try {
