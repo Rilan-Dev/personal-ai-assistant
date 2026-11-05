@@ -499,10 +499,12 @@ internal object NexaTaskCoordinator {
     private val reviewId=Regex("task-[0-9a-f-]{36}")
     private val reviewTools=NexaTaskNativeRead.proposedReadTools
     private data class ReviewedStep(val stepId:String,val ordinal:Int,
-                                    val tool:String,val deps:List<String>,val seal:String)
+                                    val tool:String,val deps:List<String>,val seal:String,
+                                    val status:String)
     private data class ReviewedPlan(val taskId:String,val scope:String,
                                     val steps:List<ReviewedStep>)
-    private fun reviewedSteps(db:SQLiteDatabase,taskId:String):List<ReviewedStep>? {
+    private fun reviewedSteps(db:SQLiteDatabase,taskId:String,
+                              allowedStates:Set<String> = setOf("planned")):List<ReviewedStep>? {
         val result=mutableListOf<ReviewedStep>()
         db.rawQuery(
             "SELECT step_id,ordinal,tool_id,status,risk,expected_evidence,arguments_cipher " +
@@ -515,7 +517,7 @@ internal object NexaTaskCoordinator {
                 val tool=cursor.getString(2)
                 if(ordinal!=result.size||result.size>=8||
                     !stepId.matches(Regex("step-[0-9a-f-]{36}"))||
-                    tool !in reviewTools||cursor.getString(3)!="planned"||
+                    tool !in reviewTools||cursor.getString(3) !in allowedStates||
                     cursor.getString(4)!="low"||
                     cursor.getString(5)!="native_reading")return null
                 val cipher=cursor.getBlob(6)
@@ -533,7 +535,7 @@ internal object NexaTaskCoordinator {
                     deps.add(dep)
                 }
                 val seal=digest(cipher.joinToString(""){"%02x".format(it.toInt() and 255)})
-                result.add(ReviewedStep(stepId,ordinal,tool,deps,seal))
+                result.add(ReviewedStep(stepId,ordinal,tool,deps,seal,cursor.getString(3)))
             }
         }
         return result.takeIf{it.isNotEmpty()}
@@ -672,28 +674,112 @@ internal object NexaTaskCoordinator {
             true
         }==true
 
-    /** A model-selected action cannot call this directly. This method is
-     * reached only after the trusted owner explicitly chooses Run in the UI.
+    /** Owner-controlled continuation ONLY after a clean verified prefix.
+     * No pending plan is dispatched by this method. A separate owner Run press
+     * renews the existing, unrevoked scoped mandate using optimistic revision.
+     * Unknown/claimed outcomes are NEVER eligible for continuation.
      */
+    private fun renewReviewed(context:Context,taskId:String,revision:Int):ReviewedPlan?=
+        transaction(context){db->
+            val owned=db.rawQuery(
+                "SELECT 1 FROM agent_tasks WHERE task_id=? AND origin='chat' "+
+                    "AND session_id LIKE 'owner-%' AND policy_version=? "+
+                    "AND status IN ('ready','running') AND plan_revision=?",
+                arrayOf(taskId,REVIEW_POLICY,revision.toString())
+            ).use{it.moveToFirst()}
+            check(owned)
+            val steps=reviewedSteps(db,taskId,setOf("verified","pending"))
+                ?:error("Invalid saved plan")
+            var pendingSeen=false
+            for(step in steps){
+                if(step.status=="pending")pendingSeen=true
+                else {
+                    // A verified step after an unexecuted step would violate
+                    // the native ordered dependency/scheduling boundary.
+                    check(!pendingSeen)
+                    val evidence=db.rawQuery(
+                        "SELECT 1 FROM agent_observations WHERE step_id=? "+
+                            "AND verdict='verified' LIMIT 1",
+                        arrayOf(step.stepId)
+                    ).use{it.moveToFirst()}
+                    check(evidence)
+                }
+            }
+            check(pendingSeen)
+            val scope=scopeForReviewed(taskId,steps)
+            val now=System.currentTimeMillis()
+            val mandate=db.rawQuery(
+                "SELECT 1 FROM agent_mandates WHERE task_id=? "+
+                    "AND owner_request_id=? AND policy_version=? "+
+                    "AND scope_digest=? AND revoked_at IS NULL AND expires_at>? LIMIT 1",
+                arrayOf(taskId,taskId,REVIEW_POLICY,scope,now.toString())
+            ).use{it.moveToFirst()}
+            check(mandate)
+            val updated=db.compileStatement(
+                "UPDATE agent_tasks SET plan_revision=plan_revision+1,updated_at=? "+
+                    "WHERE task_id=? AND plan_revision=? AND "+
+                    "policy_version=? AND status IN ('ready','running')"
+            ).use{stmt->
+                stmt.bindLong(1,now);stmt.bindString(2,taskId)
+                stmt.bindLong(3,revision.toLong());stmt.bindString(4,REVIEW_POLICY)
+                stmt.executeUpdateDelete()
+            }
+            check(updated==1)
+            val renewed=db.compileStatement(
+                "UPDATE agent_mandates SET expires_at=? WHERE task_id=? "+
+                    "AND owner_request_id=? AND policy_version=? AND scope_digest=? "+
+                    "AND revoked_at IS NULL AND expires_at>?"
+            ).use{stmt->
+                stmt.bindLong(1,now+120_000L);stmt.bindString(2,taskId)
+                stmt.bindString(3,taskId);stmt.bindString(4,REVIEW_POLICY)
+                stmt.bindString(5,scope);stmt.bindLong(6,now)
+                stmt.executeUpdateDelete()
+            }
+            check(renewed==1)
+            event(db,taskId,steps.first{it.status=="pending"}.stepId,
+                "owner_read_plan_continued",now)
+            ReviewedPlan(taskId,scope,steps)
+        }
+
+    private fun executePendingReviewed(context:Context,plan:ReviewedPlan):String{
+        val results=mutableListOf<String>()
+        for(step in plan.steps){
+            // The previous step has already been independently recorded and
+            // cannot be retried or claimed a second time.
+            if(step.status=="verified")continue
+            if(!claimReviewed(context,plan,step))
+                return "Task blocked at step "+(step.ordinal+1)+". No automatic retry."
+            val reading=NexaTaskNativeRead.observe(context,step.tool)
+                ?:return "Task outcome unresolved. No automatic retry."
+            if(!verifyReviewed(context,plan,step,reading))
+                return "Could not commit task evidence. No automatic retry."
+            results.add(reading)
+        }
+        return results.joinToString(" ").ifBlank{"No unexecuted steps remained."}
+    }
+
+    /** Explicit owner authorization on a new, non-executable proposal. */
     fun executeReviewedReadOnlyPlan(context:Context,taskId:String,revision:Int):String{
         if(!BuildConfig.NEXA_REVIEWED_READ_PLAN_ENABLED)
             return "Reviewed task execution is disabled. No action performed."
         if(!reviewId.matches(taskId)||revision<1)
             return "Invalid reviewed task. No action performed."
         val plan=activateReviewed(context,taskId,revision)
-            ?:return "Task was changed or review authorization failed. No action performed."
-        val results=mutableListOf<String>()
-        for(step in plan.steps){
-            if(!claimReviewed(context,plan,step))
-                return "Task blocked at step "+(step.ordinal+1)+". No automatic retry."
-            val reading=NexaTaskNativeRead.observe(context,step.tool)
-            if(reading==null)
-                return "Task outcome unresolved. No automatic retry."
-            if(!verifyReviewed(context,plan,step,reading))
-                return "Could not commit task evidence. No automatic retry."
-            results.add(reading)
-        }
-        return results.joinToString(" ")
+            ?:return "Task changed or review authorization failed. No action performed."
+        return executePendingReviewed(context,plan)
+    }
+
+    /** The owner explicitly requests remaining reads. Unknown actions never
+     * restart, even if the owner presses Continue after a process interruption.
+     */
+    fun resumeReviewedReadOnlyPlan(context:Context,taskId:String,revision:Int):String{
+        if(!BuildConfig.NEXA_REVIEWED_READ_PLAN_ENABLED)
+            return "Reviewed task continuation is disabled. Nothing executed."
+        if(!reviewId.matches(taskId)||revision<1)
+            return "Invalid task identity. Nothing executed."
+        val plan=renewReviewed(context,taskId,revision)
+            ?:return "Continuation denied: task changed, mandate expired, revoked, or outcome uncertain. No retry."
+        return executePendingReviewed(context,plan)
     }
 
     /**
