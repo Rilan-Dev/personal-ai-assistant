@@ -24,6 +24,7 @@ type TaskNativeBridge={
   runOwnerDeviceRead(request:string):Promise<string>;
   runOwnerReadOnlyPlan(request:string):Promise<string>;
   recentNativeTaskTimeline(limit:number):Promise<string>;
+  recentUnifiedTaskTimeline(limit:number):Promise<string>;
   revokeNativeTask(taskId:string):Promise<boolean>;
 };
 export const nativeTaskCoordinatorAvailable=()=>Platform.OS==='android' &&
@@ -114,4 +115,44 @@ export async function runOwnerReadOnlyPlan(request:string):Promise<string>{
   if(typeof result!=='string'||result.length<1||result.length>1000)
     throw Error('Native task plan returned no verified outcome');
   return result;
+}
+
+
+/** Canonical plus legacy task metadata. Legacy Voice entries are NOT evidence
+ * of delivery, approval, or a task with resumable native execution authority.
+ */
+export type UnifiedTaskSummary={
+  taskId:string;
+  source:'native'|'legacy_voice_checkpoint';
+  origin:'chat'|'live-voice'|'assistant-role'|'overlay';
+  status:string;
+  revision:number;
+  updatedAt:number;
+  stepCount:number;
+  verifiedSteps:number;
+};
+export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
+  const native=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
+  if(Platform.OS!=='android'||typeof native?.recentUnifiedTaskTimeline!=='function')
+    return [];
+  const raw=await native.recentUnifiedTaskTimeline(40);
+  if(typeof raw!=='string'||raw.length>50_000)
+    throw Error('Task summary response is too large');
+  const parsed:unknown=JSON.parse(raw);
+  if(!Array.isArray(parsed)||parsed.length>40)throw Error('Invalid task index');
+  const valid=(x:unknown):x is UnifiedTaskSummary=>{
+    if(!x||typeof x!=='object'||Array.isArray(x))return false;
+    const t=x as Record<string,unknown>;
+    return typeof t.taskId==='string'&&/^task-[A-Za-z0-9_-]{8,96}$/.test(t.taskId)&&
+      (t.source==='native'||t.source==='legacy_voice_checkpoint')&&
+      ['chat','live-voice','assistant-role','overlay'].includes(String(t.origin))&&
+      typeof t.status==='string'&&/^[a-z_]{1,40}$/.test(t.status)&&
+      Number.isSafeInteger(t.revision)&&Number(t.revision)>=0&&
+      Number.isSafeInteger(t.updatedAt)&&Number(t.updatedAt)>0&&
+      Number.isSafeInteger(t.stepCount)&&Number(t.stepCount)>=0&&
+      Number(t.stepCount)<=8&&Number.isSafeInteger(t.verifiedSteps)&&
+      Number(t.verifiedSteps)>=0&&Number(t.verifiedSteps)<=Number(t.stepCount);
+  };
+  if(parsed.some(x=>!valid(x)))throw Error('Unrecognized task index entry');
+  return parsed;
 }
