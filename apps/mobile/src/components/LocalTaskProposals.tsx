@@ -124,6 +124,23 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
       setNotice('Task activation was not confirmed. Refresh before another action.');
     }finally{busyRef.current=false;setBusy(false);}
   }
+  /** Revocation is an atomic native task/mandate fence, never a UI-only flag. */
+  async function revokeReviewed(item:LocalTaskProposal){
+    if(busyRef.current||loading||!['ready','running'].includes(item.status)||
+       item.policyVersion!=='owner-review-v1')return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      if(!await revokeNativeTask(item.taskId))
+        throw Error('Task status changed before revocation');
+      setItems(previous=>previous.map(task=>task.taskId===item.taskId
+        ? {...task,status:'cancelled'}:task));
+      setDetail(null);setNotice('The task mandate was revoked; no further steps may run.');
+      try{setItems(await listLocalTaskProposals());}
+      catch{setNotice('Revocation was saved. Refresh the task list when available.');}
+    }catch{
+      setNotice('Could not confirm task revocation. Refresh before acting again.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   async function cancelNative(item:NativeTaskSummary){
     if(busyRef.current||loading||!['ready','running'].includes(item.status))return;
     busyRef.current=true;setBusy(true);setNotice('');
@@ -168,6 +185,13 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
           item.status==='cancelled'?'Canceled permanently':
           item.status==='uncertain'?'Outcome uncertain · never automatically retried':
           'Status: '+item.status}</Text>
+        {['ready','running'].includes(item.status)&&item.policyVersion==='owner-review-v1'&&
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={'Revoke active task: '+item.goal.slice(0,50)}
+            disabled={busy||loading} onPress={()=>void revokeReviewed(item)}
+            style={styles.action}>
+            <Text style={styles.buttonText}>Revoke task</Text>
+          </Pressable>}
         {item.status==='proposed'&&<Pressable accessibilityRole="button"
           accessibilityLabel={'Cancel task proposal: '+item.goal.slice(0,50)}
           disabled={busy} onPress={()=>void cancel(item)} style={styles.action}>
