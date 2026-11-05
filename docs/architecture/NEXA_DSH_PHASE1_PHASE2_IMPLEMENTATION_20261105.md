@@ -99,3 +99,10 @@ containers were modified.
 - Restart-quarantined or stale/mismatched tasks cannot pass this gate; process death does not authorize an automatic repeat of external actions.
 - Android instrumentation covers forged session, stale ordinal, cancellation and step progress.
 - This is source-level security convergence, NOT replacement of the legacy Voice step scheduler or a release-ready general tool executor.
+
+## 2026-11-06 — Exact approved text bindings
+- NexaMessageInputPolicy.approvedDraftDigest computes an in-memory SHA-256 fingerprint of length-delimited channel, Android package, recipient hint and exact body. NexaMessageInputActions stores this with the reviewed field/window snapshot and verifies it after consuming the single-use staged draft.
+- NexaTextInputPolicy.approvedDraftDigest reuses the same structured binding with a distinct domain label for arbitrary owner-specified safe text fields, additionally binding exact field label, Android package and text.
+- A newly replaced, expired or substituted draft cannot inherit a prior one-shot confirmation. These digests are never stored as raw text or sent to an LLM; text remains ephemeral, and Android action tombstones are still irreversible.
+- Owner-chosen app-channel retention is versioned in Android encrypted preferences, with separate source, expiry and explicit Forget. A preference is a routing hint, never a verified contact or Send approval.
+- Native action authorizations remain tool-local; integrating exact step mandates into the one true multi-step Kotlin execution coordinator is unfinished.
