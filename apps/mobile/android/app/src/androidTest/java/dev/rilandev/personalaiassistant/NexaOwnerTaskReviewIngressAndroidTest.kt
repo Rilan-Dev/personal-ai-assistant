@@ -88,4 +88,30 @@ class NexaOwnerTaskReviewIngressAndroidTest {
         assertFalse(NexaOwnerTaskReview.queue("Review\nprivate","chat",1_000L))
         assertNull(NexaOwnerTaskReview.takeEnvelope(1_100L))
     }
+
+    @Test fun voiceTaskCanBeCorrectedCancelledAndRedactedWithOwnerControls(){
+        val goal="Review supplier documents with owner"
+        assertTrue(NexaOwnerTaskReview.queue(goal,"live-voice",1_000L))
+        val receipt=NexaOwnerTaskReview.takeEnvelope(1_100L)!!
+        val id=NexaOwnerTaskReview.saveViewed(context,
+            receipt.getString("token"),goal,1_200L)!!
+        val history=NexaConversationDb.agentTaskHistory(context,50,manualOnly=true)
+        val saved=(0 until history.length()).map{history.getJSONObject(it)}
+            .firstOrNull{it.getString("taskId")==id}
+        assertNotNull(saved)
+        assertEquals("live-voice",saved!!.getString("origin"))
+        assertTrue(NexaTaskLifecycle.reviseOwnerProposal(context,id,1,
+            "Corrected owner request for supplier review"))
+        assertTrue(NexaConversationDb.cancelProposedAgentTask(
+            context,id,"owner-review-v1"))
+        assertTrue(NexaConversationDb.redactCancelledOwnerProposal(context,id))
+        val after=NexaConversationDb.agentTaskHistory(context,50,manualOnly=true)
+        val redacted=(0 until after.length()).map{after.getJSONObject(it)}
+            .first{it.getString("taskId")==id}
+        assertEquals("[details cleared]",redacted.getString("goal"))
+        assertEquals("cancelled",redacted.getString("status"))
+        assertFalse(NexaTaskLifecycle.reviseOwnerProposal(context,id,2,
+            "Do not resurrect a cancelled task"))
+    }
+
 }
