@@ -1549,7 +1549,7 @@ export default function App() {
             const fact=ownerDeviceFactKind(request);
             const statusRequest=new Set(['device status','check device status',
               'phone status','check my phone status']).has(
-              request.trim().toLowerCase().replace(/^hey nexa(?:,|\\s)+/,'')
+              request.trim().toLowerCase().replace(/^hey nexa(?:,|\s)+/,'')
                 .replace(/[.?!,]+$/,'').trim());
             const exactMatch=decision.type==='tool' && (
               decision.call.toolId==='device.battery_status'&&fact==='battery' ||
