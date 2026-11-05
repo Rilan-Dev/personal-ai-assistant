@@ -51,7 +51,7 @@ export type NativeTaskSummary={
   taskId:string;
   stepId:string;
   ordinal:number;
-  origin:'chat'|'live-voice';
+  origin:'chat'|'live-voice'|'assistant-role'|'overlay';
   status:'ready'|'running'|'completed'|'cancelled'|'uncertain';
   revision:number;
   updatedAt:number;
@@ -67,7 +67,7 @@ const validSummary=(input:unknown):input is NativeTaskSummary=>{
   return typeof x.taskId==='string'&&nativeId.test(x.taskId)&&
     typeof x.stepId==='string'&&nativeStepId.test(x.stepId)&&
     Number.isSafeInteger(x.ordinal)&&Number(x.ordinal)>=0&&Number(x.ordinal)<4&&
-    (x.origin==='chat'||x.origin==='live-voice')&&
+    ['chat','live-voice','assistant-role','overlay'].includes(String(x.origin))&&
     ['ready','running','completed','cancelled','uncertain'].includes(String(x.status))&&
     Number.isSafeInteger(x.revision)&&Number(x.revision)>0&&
     Number.isSafeInteger(x.updatedAt)&&Number(x.updatedAt)>0&&
