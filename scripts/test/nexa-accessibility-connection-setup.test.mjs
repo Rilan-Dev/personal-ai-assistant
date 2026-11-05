@@ -23,7 +23,8 @@ test("user-facing Setup requires connected service before claiming native screen
   assert.match(component,/Toggle the service off and on/);
 });
 test("Maestro must observe bound Screen Assist before it asks Nexa to open notification bar",()=>{
-  assert.match(flow,/Nexa Screen Assist connected\.\*native screen actions ready/);
+  assert.ok(flow.includes('element: "Nexa Screen Assist connected\\\\."'),
+    "The flow must wait for the real connected-service status shown by Setup");
   assert.ok(flow.indexOf("Nexa Screen Assist connected") < flow.indexOf("open notification bar"));
   assert.match(flow,/Confirm requested action/);
   assert.match(flow,/No notifications\|Notification settings\|Internet\|Clear all/);
