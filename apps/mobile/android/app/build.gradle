@@ -96,6 +96,12 @@ android {
         versionCode((System.getenv("PAA_BUILD_VERSION_CODE") ?: "1").toInteger())
         versionName("0.3." + (System.getenv("PAA_BUILD_VERSION_CODE") ?: "0"))
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Keep generated CMake object paths below Windows MAX_PATH for React Native codegen.
+        externalNativeBuild {
+            cmake {
+                arguments '-DCMAKE_OBJECT_PATH_MAX=260'
+            }
+        }
 
         // Planned task execution remains disabled in all normal APKs.
         buildConfigField "boolean", "NEXA_REVIEWED_READ_PLAN_ENABLED", "false"
@@ -146,6 +152,13 @@ android {
             useLegacyPackaging enableLegacyPackaging.toBoolean()
         }
     }
+    externalNativeBuild {
+        cmake {
+            // Keep CMake/Ninja build output on a short Windows path.
+            buildStagingDirectory 'D:/paa-cxx'
+        }
+    }
+
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
     }
