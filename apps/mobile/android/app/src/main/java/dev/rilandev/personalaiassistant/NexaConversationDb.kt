@@ -518,6 +518,16 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         }
     }
 
+    /** Consume a voice-origin request into the existing owner review UI.
+     * It does not create, approve or execute a task.
+     */
+    @ReactMethod fun consumePendingOwnerTaskReview(promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to review the spoken task")
+            return
+        }
+        promise.resolve(NexaOwnerTaskReview.take())
+    }
     /** Decrypted only to an owner-visible foreground app; never a model tool. */
     @ReactMethod fun recentOwnerTaskProposals(limit:Int,promise:Promise) {
         if(reactContext.currentActivity?.hasWindowFocus()!=true) {
