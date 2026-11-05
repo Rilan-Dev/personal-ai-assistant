@@ -75,3 +75,12 @@ containers were modified.
 - Edited review text is saved as a new manual Chat-origin request instead of misattributing it to Voice or overlay.
 - Private history, corrections, cancellation and goal-redaction now accept owner-saved native-origin tasks.
 - Android instrumentation test sources cover replay, expiry, source provenance and non-execution. Execution flags remain OFF.
+
+## 2026-11-05 — Shared native fact execution across owner entry points
+- Refactored NexaOverlayCommands to delegate explicitly recognized battery, storage and two-step battery/storage requests to NexaTaskCoordinator.
+- Native Kotlin now executes and persists these same low-risk Android observations for Chat, live Voice, assistant-role and overlay origins, rather than letting the overlay read BatteryManager outside the task ledger.
+- The underlying operation, encrypted request, mandate, pre-action claim, and native observation remain owned by NexaTaskCoordinator and NexaTaskNativeRead.
+- Native role/overlay task origins are included in revocation, mandate validity, and task timeline schemas. Model-generated app/screen/message actions do not enter this path.
+- The Tools owner review now offers explicit Discard of pending unsaved cross-origin task handoff, invalidating the one-use token without creating a task.
+- Added Android instrumentation tests for same-origin durable reads, two-step facts, absence of message execution, and discarding unsaved reviews.
+- Higher-risk Accessibility and messaging workflows are still NOT part of a general native task scheduler; do not infer completion of Phases 3-6.
