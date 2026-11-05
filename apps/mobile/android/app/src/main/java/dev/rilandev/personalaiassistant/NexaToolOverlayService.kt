@@ -317,6 +317,19 @@ class NexaToolOverlayService : Service() {
     }
 
     private fun sendLocal(raw: String) {
+        // The overlay can only propose an owner-visible task draft; it cannot
+        // create executable work or substitute for the Save review action.
+        val task=NexaOwnerTaskReview.parse(raw.trim())
+        if(task!=null){
+            if(NexaOwnerTaskReview.offerInForeground(this,task)){
+                note="Task opened in Nexa for review. Nothing executed or sent."
+                collapse()
+            }else{
+                note="Review the previous task, or open Nexa manually. Nothing executed."
+                render()
+            }
+            return
+        }
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
         // A newer owner request invalidates an older unconfirmed proposal.
