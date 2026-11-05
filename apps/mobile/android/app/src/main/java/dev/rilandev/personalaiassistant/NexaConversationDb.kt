@@ -676,6 +676,25 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
         },"nexa-reviewed-task-execution").start()
     }
 
+    /** A separate owner tap resumes only pending, read-only steps after a
+     * verified prefix. It never retries a claimed or uncertain Android action.
+     */
+    @ReactMethod fun continueReviewedOwnerReadOnlyPlan(taskId:String,expectedRevision:Int,
+                                                      promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa before continuing a task")
+            return
+        }
+        Thread({
+            try {
+                promise.resolve(NexaTaskCoordinator.resumeReviewedReadOnlyPlan(
+                    reactContext,taskId,expectedRevision))
+            }catch (_:Exception) {
+                promise.reject("TASK_CONTINUATION","Cannot verify native task continuation")
+            }
+        },"nexa-reviewed-task-continuation").start()
+    }
+
     /** Consume a voice-origin request into the existing owner review UI.
      * It does not create, approve or execute a task.
      */
