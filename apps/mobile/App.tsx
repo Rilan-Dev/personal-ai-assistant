@@ -1542,7 +1542,9 @@ export default function App() {
         : engine.live ? androidIntentPlanner : demoPlanner;
       const admittedPlanner=createTaskAdmissionPlanner(
         createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion),{
-          enabled:NEXA_TASK_V2_ENABLED,
+          // Debug-only proposal admission requires an actual native Android
+          // coordinator; demo/web must retain their existing planner behavior.
+          enabled:NEXA_TASK_V2_ENABLED && engine.live && nativeTaskCoordinatorAvailable(),
           // When enabled, only a direct, owner-selected native read can be
           // admitted. This preflight precedes saving a native task ID.
           context:async decision=>{
