@@ -121,4 +121,46 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
             }
         }finally{helper.close()}
     }
+
+    @Test fun interruptedVoiceCursorIsQuarantinedOnRestartWithoutReplay() {
+        val id="task-"+UUID.randomUUID()
+        val session="voice-"+UUID.randomUUID()
+        val goal="open GitHub and read my screen"
+        val steps=listOf("open GitHub","read my screen")
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "planned",0,goal,steps))
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "executing",0,goal,steps))
+        assertTrue(NexaLegacyVoiceTaskMirror.recoverAbandonedAfterProcessRestart(ctx)>=1)
+        val helper=NexaConversationDb(ctx)
+        try{
+            val db=helper.readableDatabase
+            db.rawQuery("SELECT status FROM voice_task_checkpoints WHERE task_id=?",
+                arrayOf(id)).use{c->
+                assertTrue(c.moveToFirst())
+                assertEquals("uncertain",c.getString(0))
+            }
+            db.rawQuery("SELECT status FROM agent_tasks WHERE task_id=?",
+                arrayOf(id)).use{c->
+                assertTrue(c.moveToFirst())
+                assertEquals("uncertain",c.getString(0))
+            }
+            db.rawQuery(
+                "SELECT COUNT(*) FROM agent_task_events "+
+                    "WHERE task_id=? AND event_kind='voice_process_restart_no_replay'",
+                arrayOf(id)
+            ).use{c->
+                assertTrue(c.moveToFirst())
+                assertEquals(1,c.getInt(0))
+            }
+            db.rawQuery("SELECT COUNT(*) FROM agent_mandates WHERE task_id=?",
+                arrayOf(id)).use{c->
+                assertTrue(c.moveToFirst())
+                assertEquals(0,c.getInt(0))
+            }
+        }finally{helper.close()}
+        assertFalse(NexaConversationDb.saveTask(ctx,id,session,
+            "completed",2,goal,steps,"Stale callback from prior process"))
+    }
+
 }
