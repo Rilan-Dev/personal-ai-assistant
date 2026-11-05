@@ -1,5 +1,11 @@
 
 
+## 2026-11-06 — Voice privacy and process-recovery source milestone
+Canonical audit-only mirroring, process-restart quarantine, and terminal Voice detail redaction are implemented in Development. Existing Android native UI and Voice executor permissions remain unchanged.
+Unfinished implementation: consolidate the legacy Voice action executor into Kotlin coordinator step/mandate authority, bind screen/recipient/message fields to exact per-step approvals, add observation-grounded continuation, owner-facing preference provenance/retention, and release switching/rollback. Android native compilation and physical-phone acceptance are still required before any production assertion.
+---
+
+
 ## 2026-11-06 — Voice state storage convergence completed; executor migration still open
 New implementation: existing Voice compound checkpoints are mirrored atomically into audit-only native v3 tasks; they are never run by the shared coordinator. Context, task identity, step index, goal and topology changes fail closed. Abandoned Voice state becomes uncertain at process restart, without replay.
 Remaining SOURCE DEVELOPMENT: replace the independent Voice UI-action cursor scheduler with versioned native step/mandate handling, enforce precise recipient/app/field approvals across all UI tools, add observation-driven continuation (not Intent dispatch), integrate provenance-aware personal memory and retention, and finish release-switch/rollback and branch reconciliation.
