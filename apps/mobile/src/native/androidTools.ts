@@ -116,8 +116,8 @@ export function createAndroidTools(): Tool[] {
       id: "device.open_camera",
       description: "Open camera via system Android Intent; does not capture an image",
       capabilities: ["apps.launch"],
-      risk: "low",
-      hasExternalSideEffect: false,
+      risk: "medium",
+      hasExternalSideEffect: true,
       validateInput: emptyInput,
       execute: async () => ({ status: "success", data: await getBridge().openCamera() })
     },
@@ -125,8 +125,8 @@ export function createAndroidTools(): Tool[] {
       id: "device.open_app",
       description: "Launch an allowlisted installed Android application",
       capabilities: ["apps.launch"],
-      risk: "low",
-      hasExternalSideEffect: false,
+      risk: "medium",
+      hasExternalSideEffect: true,
       validateInput: appInput,
       execute: async ({app}) => ({ status: "success", data: await getBridge().openSupportedApp(String(app)) })
     }
