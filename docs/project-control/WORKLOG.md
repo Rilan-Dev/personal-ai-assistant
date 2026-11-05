@@ -968,3 +968,10 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Unmatched or replaced drafts fail closed before ACTION_SET_TEXT or the durable action claim. Existing Accessibility, screen-window, empty-field and recipient checks are preserved.
 - Added Android instrumentation negative cases for different recipient/app/message and field/text payload replacement.
 - No automatic Send, call, payment, arbitrary screen executor, main release promotion, or production Docker mutation.
+
+## 2026-11-06 — Content-scoped durable Android UI action claims
+- Extended the existing one-transaction permanent action claim and UI audit receipt to carry the exact reviewed-input SHA-256 digest for message and generic text entry.
+- Both controllers now provide their ephemeral reviewed fingerprint at the irreversible claim boundary; unbound text-entry calls are rejected. A consumed `agent_step_approvals` audit row retains the binding without storing raw text or granting additional Android permissions.
+- Added synthetic Android instrumentation checks for missing/malformed binding rejection, consumed approval identity, target digest, no replay, and no Send.
+- All native on-device UI target, empty field and owner approval checks continue to run before the claim, and no content is sent to a model.
+- Node 395/395 and TypeScript PASS at 79e77304c433; Android native instrumentation pending exact-commit results.
