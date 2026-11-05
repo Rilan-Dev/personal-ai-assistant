@@ -125,7 +125,10 @@ internal object NexaUiActionJournal {
                         break
                     }
                 }
-                found && store(ctx,entries)
+                val persisted=found && store(ctx,entries)
+                // Record a separate audit-only task transition. A successful
+                // Android dispatch remains unverified and non-replayable.
+                persisted && NexaUiTaskAudit.recordOutcome(ctx,id,outcome)
             } catch (_: Exception) { false }
         }
 
@@ -151,7 +154,8 @@ internal object NexaUiActionJournal {
                         break
                     }
                 }
-                found && store(ctx,entries)
+                val persisted=found && store(ctx,entries)
+                persisted && NexaUiTaskAudit.recordOutcome(ctx,id,observation)
             } catch (_: Exception) { false }
         }
 
