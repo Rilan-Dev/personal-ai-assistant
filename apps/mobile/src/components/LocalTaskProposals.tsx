@@ -1,10 +1,11 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,clearFinishedOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,prepareOwnerGoalReadPlan,runOwnerReviewedReadOnlyPlan,continueOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,clearFinishedOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline,redactTerminalLegacyVoiceTask} from '../native/nativeTaskCoordinator';
 import type {NativeTaskSummary,UnifiedTaskSummary} from '../native/nativeTaskCoordinator';
+import {ownerDeviceFactKind,ownerReadOnlyPlanKinds} from '../native/nativeTaskCoordinator';
 
 /** Owner-driven review-only storage. It never uses the agent executor. */
 export function LocalTaskProposals({prefill}:{prefill?:{
@@ -138,6 +139,26 @@ export function LocalTaskProposals({prefill}:{prefill?:{
       catch {setNotice('Correction saved. History refresh unavailable; tap Refresh before further edits.');}
     }catch{
       setNotice('Correction was not confirmed. Refresh before editing again; do not overwrite another revision.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
+  /** Save trusted native read steps for a previously saved owner request.
+   * No device capability, mandate or action is granted by preparation.
+   */
+  async function prepareReviewed(item:LocalTaskProposal){
+    if(!NEXA_TASK_V2_ENABLED||busyRef.current||loading||
+      item.status!=='proposed'||item.policyVersion!=='owner-review-v1'||
+      detail?.taskId!==item.taskId||detail.steps.length!==0||
+      !Number.isSafeInteger(item.revision)||item.revision!==detail.revision||
+      !(ownerDeviceFactKind(item.goal)||ownerReadOnlyPlanKinds(item.goal)))return;
+    busyRef.current=true;setBusy(true);setNotice('');
+    try{
+      const saved=await prepareOwnerGoalReadPlan(item.taskId,item.revision!);
+      if(!saved)throw Error('Owner native read plan could not be staged');
+      setDetail(await readLocalTaskDetail(item.taskId));
+      setNotice('Read-only plan prepared from your saved request. Review its steps and explicitly press Run. Nothing executed.');
+    }catch{
+      setDetail(null);
+      setNotice('Plan preparation could not be confirmed. Refresh this task before trying again.');
     }finally{busyRef.current=false;setBusy(false);}
   }
   /** This button cannot execute without an explicit review and matching revision. */
@@ -324,6 +345,16 @@ export function LocalTaskProposals({prefill}:{prefill?:{
         {detail?.taskId===item.taskId&&<View style={styles.item}>
           <Text style={styles.help}>Revision {detail.revision} · {detail.status} · {detail.status==='proposed'?'awaiting owner decision':detail.status==='completed'?'local native evidence recorded':'no automatic external action'}</Text>
           {detail.steps.length===0&&<Text style={styles.help}>No plan steps saved.</Text>}
+          {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
+             item.policyVersion==='owner-review-v1'&&detail.steps.length===0&&
+             detail.revision===item.revision&&
+             (ownerDeviceFactKind(item.goal)||ownerReadOnlyPlanKinds(item.goal))&&<Pressable
+               accessibilityRole="button"
+               accessibilityLabel="Prepare saved native battery or storage request for review"
+               disabled={busy||loading} onPress={()=>void prepareReviewed(item)}
+               style={styles.action}>
+               <Text style={styles.buttonText}>Prepare read-only task plan</Text>
+             </Pressable>}
           {NEXA_TASK_V2_ENABLED&&item.status==='proposed'&&
              detail.steps.length>0&&detail.steps.every(step=>
                ['device.status','device.battery_status','device.storage_status'].includes(step.toolId)&&
