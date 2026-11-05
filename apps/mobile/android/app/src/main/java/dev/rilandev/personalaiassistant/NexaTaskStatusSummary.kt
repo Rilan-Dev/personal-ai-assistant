@@ -40,7 +40,9 @@ internal object NexaTaskStatusSummary {
                 val verified=task.optInt("verifiedSteps",0)
                 val id=task.optString("taskId").takeLast(8)
                 if(status.isBlank() || id.length!=8)continue
-                val evidence=if(source=="native") {
+                val evidence=if(source=="ui_action_audit") {
+                    " · approved UI-action audit; business outcome not verified"
+                }else if(source=="native") {
                     if(steps>0)" · verified native steps ${verified.coerceAtMost(steps)}/$steps"
                     else " · review only"
                 }else " · legacy checkpoint; not action verification"
