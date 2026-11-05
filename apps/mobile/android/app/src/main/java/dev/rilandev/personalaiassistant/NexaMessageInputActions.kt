@@ -8,6 +8,18 @@ import java.util.UUID
 
 /** Pure, conservative predicates; no field contents are recorded or sent to AI. */
 internal object NexaMessageInputPolicy {
+    /** Exact reviewed request binding. Never stored or sent to a model.
+     * Each field is length-delimited so two structured requests cannot
+     * collide by moving values across field boundaries.
+     */
+    fun approvedDraftDigest(appId:String,pkg:String,recipient:String,message:String):String {
+        val data=listOf(appId,pkg,recipient,message).joinToString("") {
+            it.length.toString()+":"+it
+        }
+        return java.security.MessageDigest.getInstance("SHA-256")
+            .digest(data.toByteArray(Charsets.UTF_8))
+            .joinToString(""){"%02x".format(it.toInt() and 0xff)}
+    }
     fun recipientMatches(expected:String, visibleLabel:String):Boolean {
         val a=expected.lowercase(java.util.Locale.ROOT)
             .replace(Regex("[^\\p{L}\\p{N}]"),"")
@@ -51,7 +63,8 @@ internal object NexaMessageInputPolicy {
  */
 internal object NexaMessageInputActions {
     private data class Prepared(val token:String,val packageName:String,val windowId:Int,
-        val fieldClass:String,val fieldId:String,val bounds:Rect,val expiresAt:Long)
+        val fieldClass:String,val fieldId:String,val bounds:Rect,val expiresAt:Long,
+        val reviewedDigest:String)
     private data class Inspection(val matches:Int,val candidate:AccessibilityNodeInfo?,
         val recipientVisible:Boolean)
     private val lock=Any()
@@ -126,7 +139,9 @@ internal object NexaMessageInputActions {
                 prepared=Prepared(UUID.randomUUID().toString(),draft.packageName,
                     root.windowId,node.className?.toString().orEmpty(),
                     node.viewIdResourceName.orEmpty(),rect,
-                    SystemClock.elapsedRealtime()+25_000L)
+                    SystemClock.elapsedRealtime()+25_000L,
+                    NexaMessageInputPolicy.approvedDraftDigest(draft.appId,
+                        draft.packageName,draft.recipientHint,draft.message))
             }
             return "One empty input box is visible in ${draft.appId} for ${draft.recipientHint}. Confirm once to fill the prepared text. Nothing has been sent."
         } catch(_:Exception) {
@@ -145,8 +160,10 @@ internal object NexaMessageInputActions {
         }
         val draft=NexaMessageDraftState.take() ?:
             return "Message draft expired. No text was entered."
-        if(draft.packageName!=approval.packageName)
-            return "The chosen app changed. No text was entered."
+        if(draft.packageName!=approval.packageName ||
+            NexaMessageInputPolicy.approvedDraftDigest(draft.appId,draft.packageName,
+                draft.recipientHint,draft.message)!=approval.reviewedDigest)
+            return "The approved recipient, channel or exact message changed. No text was entered."
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?: return "Messaging conversation is no longer visible. No action dispatched."
         try {
