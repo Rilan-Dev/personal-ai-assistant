@@ -54,10 +54,16 @@ internal object NexaUnifiedTaskTimeline {
                     val current=c.getString(2)
                     if(!id.matches(taskId)||origin !in origins||
                         !status.matches(current))continue
-                    val source=if(c.getString(5)==NexaUiTaskAudit.POLICY)
-                        "ui_action_audit" else "native"
+                    val source=when(c.getString(5)){
+                        NexaUiTaskAudit.POLICY -> "ui_action_audit"
+                        NexaLegacyVoiceTaskMirror.POLICY -> "legacy_voice_checkpoint"
+                        else -> "native"
+                    }
+                    // Neither a Voice cursor nor a UI dispatch is evidence
+                    // that an external app completed the requested outcome.
+                    val verified=if(source=="native")c.getInt(7) else 0
                     all.add(Summary(taskId,source,origin,current,
-                        c.getInt(3),c.getLong(4),c.getInt(6),c.getInt(7)))
+                        c.getInt(3),c.getLong(4),c.getInt(6),verified))
                 }
             }
             db.rawQuery(
