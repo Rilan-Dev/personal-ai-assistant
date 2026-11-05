@@ -16,6 +16,8 @@ type MessagingBridge = {
 };
 type MemoryBridge = {
   rememberMessageApp(recipient:string,appId:string):Promise<boolean>;
+  rememberMessageAppForDays?(recipient:string,appId:string,days:number):Promise<boolean>;
+  messageAppPreferenceDetails?(recipient:string):Promise<string|null>;
   rememberedMessageApp(recipient:string):Promise<string|null>;
   forgetMessageApp(recipient:string):Promise<boolean>;
 };
@@ -66,6 +68,45 @@ export const rememberMessageApp=async(alias:string,id:MessageAppId)=>{
   if(!safeApp(id)||!await memory().rememberMessageApp(alias,id))
     throw Error('Unable to securely remember the messaging app');
 };
+export type MessageAppPreference={
+  version:1|2;appId:MessageAppId;
+  source:'legacy_owner_choice'|'owner_confirmed';
+  savedAt:number;expiresAt:number;
+};
+/** Shows only the local user's selected messaging channel and its retention.
+ * This is never recipient identity verification or permission to Send.
+ */
+export async function messageAppPreferenceDetails(alias:string):Promise<MessageAppPreference|null>{
+  const api=memory();
+  if(typeof api.messageAppPreferenceDetails!=='function')
+    throw Error('Update Nexa to inspect private messaging preference retention');
+  const raw=await api.messageAppPreferenceDetails(alias);
+  if(raw===null)return null;
+  if(typeof raw!=='string'||raw.length>300)throw Error('Invalid preference metadata');
+  const parsed:unknown=JSON.parse(raw);
+  if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))
+    throw Error('Invalid preference metadata');
+  const item=parsed as Record<string,unknown>;
+  if(!safeApp(item.appId)||
+    !Number.isSafeInteger(item.savedAt)||!Number.isSafeInteger(item.expiresAt))
+    throw Error('Invalid preference fields');
+  const saved=item.savedAt as number,expires=item.expiresAt as number;
+  if(item.version===1&&item.source==='legacy_owner_choice'&&
+    saved===0&&expires===0)return item as MessageAppPreference;
+  if(item.version===2&&item.source==='owner_confirmed'&&
+    saved>0&&expires>saved&&expires-saved<=365*86_400_000&&
+    expires>Date.now())return item as MessageAppPreference;
+  throw Error('Preference is expired or invalid');
+}
+export async function rememberMessageAppForDays(alias:string,id:MessageAppId,
+  days:30|90|365):Promise<void>{
+  if(!safeApp(id)||![30,90,365].includes(days))
+    throw Error('Unsupported private memory retention');
+  const api=memory();
+  if(typeof api.rememberMessageAppForDays!=='function'||
+    !await api.rememberMessageAppForDays(alias,id,days))
+    throw Error('Nexa could not save the owner-selected app and retention');
+}
 export const forgetMessageApp=async(alias:string)=>{
   if(!await memory().forgetMessageApp(alias))throw Error('Unable to delete saved preference');
 };
