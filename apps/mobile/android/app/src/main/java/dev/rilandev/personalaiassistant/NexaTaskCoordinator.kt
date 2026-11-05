@@ -19,7 +19,7 @@ internal object NexaTaskCoordinator {
     private val lock = Any()
     private val battery = setOf(
         "battery", "battery status", "battery level", "battery percentage",
-        "check battery", "check my battery", "what is my battery",
+        "check battery", "check battery level", "check my battery", "what is my battery",
         "what is my battery percentage", "how much battery do i have",
         "how much battery is left", "what's my battery percentage"
     )
@@ -123,7 +123,7 @@ internal object NexaTaskCoordinator {
             "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON t.task_id=m.task_id " +
                 "JOIN agent_task_steps s ON s.task_id=t.task_id " +
                 "WHERE t.task_id=? AND s.step_id=? AND s.tool_id=? " +
-                "AND t.origin IN ('chat','live-voice') AND t.policy_version=? " +
+                "AND t.origin IN ('chat','live-voice','assistant-role','overlay') AND t.policy_version=? " +
                 "AND m.policy_version=? AND m.scope_digest=? AND m.revoked_at IS NULL " +
                 "AND m.expires_at>? LIMIT 1",
             arrayOf(c.taskId, c.stepId, c.operation, POLICY, POLICY, c.scope,
@@ -192,7 +192,7 @@ internal object NexaTaskCoordinator {
             val changed = db.compileStatement(
                 "UPDATE agent_tasks SET status='cancelled',plan_revision=plan_revision+1," +
                     "updated_at=? WHERE task_id=? AND status IN ('ready','running') " +
-                    "AND ((policy_version=? AND origin IN ('chat','live-voice')) " +
+                    "AND ((policy_version=? AND origin IN ('chat','live-voice','assistant-role','overlay')) " +
                     "OR (policy_version='owner-review-v1' AND origin='chat' " +
                     "AND session_id LIKE 'owner-%'))"
             ).use {
@@ -406,7 +406,7 @@ internal object NexaTaskCoordinator {
         db.rawQuery(
             "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON t.task_id=m.task_id "+
             "WHERE t.task_id=? AND t.policy_version=? AND m.policy_version=? "+
-            "AND t.origin IN ('chat','live-voice') AND m.scope_digest=? "+
+            "AND t.origin IN ('chat','live-voice','assistant-role','overlay') AND m.scope_digest=? "+
             "AND m.revoked_at IS NULL AND m.expires_at>? LIMIT 1",
             arrayOf(plan.taskId,POLICY,POLICY,plan.scope,System.currentTimeMillis().toString())
         ).use {return it.moveToFirst()}
@@ -471,7 +471,7 @@ internal object NexaTaskCoordinator {
 
     /** One durable task ID, ordered dependencies and no uncertain-outcome replay. */
     fun executeOwnerReadOnlyPlan(context:Context,request:String,origin:String):String {
-        if(origin!="chat" && origin!="live-voice")
+        if(origin !in setOf("chat","live-voice","assistant-role","overlay"))
             return "Unsupported task origin. No device action performed."
         val operations=classifyOwnerReadOnlyPlan(request)
             ?:return "Unsupported multi-step device request. No task started."
@@ -701,7 +701,7 @@ internal object NexaTaskCoordinator {
      * calls cannot invoke this. There is NO general tool dispatch mechanism.
      */
     fun executeOwnerDeviceRead(context: Context, request: String, origin: String): String {
-        if (origin != "chat" && origin != "live-voice")
+        if (origin !in setOf("chat","live-voice","assistant-role","overlay"))
             return "Unsupported request origin; no device action performed."
         val operation = classifyOwnerFact(request)
             ?: return "Not a supported device-information request; no task started."
