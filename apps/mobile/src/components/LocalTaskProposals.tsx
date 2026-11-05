@@ -1,6 +1,6 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {ActivityIndicator,Pressable,Text,TextInput,View,StyleSheet} from 'react-native';
-import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails} from '../native/localTaskProposals';
+import {localTaskProposalsAvailable,saveLocalTaskProposal,listLocalTaskProposals,cancelLocalTaskProposal,reviseLocalTaskProposal,readLocalTaskDetail,inspectOwnerReadOnlyPlan,runOwnerReviewedReadOnlyPlan,clearCancelledOwnerTaskDetails,discardPendingOwnerTaskHandoff} from '../native/localTaskProposals';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type {LocalTaskProposal,LocalTaskReviewDetail} from '../native/localTaskProposals';
 import {listNativeTaskTimeline,revokeNativeTask,listUnifiedTaskTimeline} from '../native/nativeTaskCoordinator';
@@ -48,6 +48,18 @@ export function LocalTaskProposals({prefill}:{prefill?:{
     finally{setLoading(false);}
   }
   useEffect(()=>{if(available)void refresh();},[available]);
+  async function discardHandoff(){
+    if(!handoff||busyRef.current||loading)return;
+    busyRef.current=true;setBusy(true);
+    try{
+      if(!await discardPendingOwnerTaskHandoff(handoff.token))
+        throw Error('Handoff already expired or consumed');
+      setHandoff(null);setGoal('');
+      setNotice('Unsaved task review discarded. No task, message or device action was created.');
+    }catch{
+      setNotice('Could not confirm discard. Edit the task to create a manual Chat request or refresh.');
+    }finally{busyRef.current=false;setBusy(false);}
+  }
   async function save(){
     if(busyRef.current||!available||loading)return;
     busyRef.current=true;setBusy(true);setNotice('');
@@ -187,6 +199,11 @@ export function LocalTaskProposals({prefill}:{prefill?:{
       style={styles.help}>Encrypted at rest. Saving never executes a task. Running a reviewed device read requires a separate owner action and an enabled native safety gate.</Text>
     {!available?<Text style={styles.help}>Update the Android APK to use on-device task proposals.</Text>:<>
       {handoff&&<Text style={styles.help}>Source: {handoff.origin}. Editing this request creates a new manually written Chat task instead; it does not authorize any action.</Text>}
+      {handoff&&<Pressable accessibilityRole="button"
+        accessibilityLabel="Discard unsaved spoken or overlay task review"
+        disabled={busy||loading} onPress={()=>void discardHandoff()} style={styles.action}>
+        <Text style={styles.buttonText}>Discard unsaved review</Text>
+      </Pressable>}
       <TextInput style={styles.input} placeholder="E.g. Follow up on the ELV quotation"
         placeholderTextColor="#9AA9C4" value={goal} onChangeText={value=>{
           setGoal(value);
