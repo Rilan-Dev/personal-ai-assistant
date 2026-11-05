@@ -10,6 +10,7 @@ type LocalTaskBridge={
   createOwnerTaskProposal(goal:string):Promise<string>;
   recentOwnerTaskProposals(limit:number):Promise<string>;
   cancelOwnerTaskProposal(taskId:string):Promise<boolean>;
+  admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
 };
 const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,99}$/;
 const ownerReviewPolicy=(value:unknown)=>value==='owner-review-v1'||value==='owner-preview-v1';
@@ -60,4 +61,18 @@ export async function listLocalTaskProposals():Promise<LocalTaskProposal[]>{
 export async function cancelLocalTaskProposal(idToCancel:string):Promise<boolean>{
   if(!id.test(idToCancel))throw Error('Invalid local task identity');
   return await bridge().cancelOwnerTaskProposal(idToCancel)===true;
+}
+
+
+/** Only stores trusted, low-risk, non-executable plans; Android independently
+ * validates the task identity, policy, tool registry and every step.
+ */
+export async function admitLocalReadOnlyTaskPlan(plan:unknown):Promise<boolean>{
+  const serialized=JSON.stringify(plan);
+  if(serialized.length<32||serialized.length>12_000)
+    throw Error('Task plan size invalid');
+  const api=bridge();
+  if(typeof api.admitOwnerReadOnlyPlan!=='function')
+    throw Error('Native task coordinator storage unavailable');
+  return await api.admitOwnerReadOnlyPlan(serialized)===true;
 }
