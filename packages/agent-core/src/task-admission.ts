@@ -75,6 +75,37 @@ export function normalizePlannerTaskDecision(
   });
 }
 
+/**
+ * Normalize a bounded sequence from ANY planner without adopting the
+ * provider's task identity, approval, evidence, risk rating or authorization.
+ * The only accepted provider envelope is {version,steps}; all identities and
+ * policy fields come from Android-trusted context. No execution is possible.
+ */
+export function normalizeMultiStepPlannerProposal(
+  proposal:unknown,ctx:TrustedPlannerTaskContext
+):BoundTaskPlan {
+  if(!proposal||typeof proposal!=="object"||Array.isArray(proposal))
+    throw new TaskPlanRejected("malformed");
+  const source=proposal as Record<string,unknown>;
+  const fields=Object.keys(source);
+  if(fields.length!==2||!Object.hasOwn(source,"version")||
+     !Object.hasOwn(source,"steps")||source.version!==NEXA_TASK_PLAN_VERSION)
+    throw new TaskPlanRejected("malformed");
+  return bindTaskPlan({
+    version:NEXA_TASK_PLAN_VERSION,
+    taskId:ctx.taskId,
+    ownerRequestId:ctx.ownerRequestId,
+    policyVersion:ctx.policyVersion,
+    createdAtMs:ctx.nowMs,
+    expiresAtMs:ctx.nowMs+NEXA_TASK_PLAN_MAX_LIFETIME_MS,
+    steps:source.steps
+  },{
+    ownerRequestId:ctx.ownerRequestId,origin:ctx.origin,
+    policyVersion:ctx.policyVersion,nowMs:ctx.nowMs,
+    tools:registeredTools(ctx.tools),allowMediumRisk:ctx.allowMediumRisk===true
+  });
+}
+
 export type TaskAdmissionPlannerOptions=Readonly<{
   /** Caller must keep this false until the native coordinator is ready. */
   enabled: boolean;
