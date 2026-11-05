@@ -184,14 +184,14 @@ export function LocalTaskProposals({prefill}:{prefill?:{
   /** Explicit owner continuation; no retry after a claimed/uncertain outcome. */
   async function continueReviewed(item:LocalTaskProposal){
     if(!NEXA_TASK_V2_ENABLED||busyRef.current||loading||
-      !['ready','running'].includes(item.status)||
+      !['ready','running','paused'].includes(item.status)||
       item.policyVersion!=='owner-review-v1'||detail?.taskId!==item.taskId||
       !Number.isSafeInteger(item.revision)||item.revision!==detail.revision)return;
     busyRef.current=true;setBusy(true);setNotice('');
     try{
       const fresh=await readLocalTaskDetail(item.taskId);
       if(fresh.revision!==item.revision||
-        !['ready','running'].includes(fresh.status)||
+        !['ready','running','paused'].includes(fresh.status)||
         !fresh.steps.some(step=>step.status==='pending')||
         fresh.steps.some(step=>!['pending','verified'].includes(step.status)))
         throw Error('Stale or unsafe task continuation');
@@ -227,7 +227,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
     }finally{busyRef.current=false;setBusy(false);}
   }
   async function revokeReviewed(item:LocalTaskProposal){
-    if(busyRef.current||loading||!['ready','running'].includes(item.status)||
+    if(busyRef.current||loading||!['ready','running','paused'].includes(item.status)||
        item.policyVersion!=='owner-review-v1')return;
     busyRef.current=true;setBusy(true);setNotice('');
     try{
@@ -295,6 +295,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
         <Text style={styles.help}>{item.status==='proposed'?'Awaiting owner review · no action started':
           item.status==='cancelled'?'Canceled permanently':
           item.status==='uncertain'?'Outcome uncertain · never automatically retried':
+           item.status==='paused'?'Paused after mandate expiry · owner continuation required':
           'Status: '+item.status}</Text>
         {['cancelled','completed','uncertain','failed'].includes(item.status)&&item.goal!=='[details cleared]'&&
           <Pressable accessibilityRole="button"
@@ -303,7 +304,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
             style={styles.action}>
             <Text style={styles.buttonText}>Clear saved details</Text>
           </Pressable>}
-        {['ready','running'].includes(item.status)&&item.policyVersion==='owner-review-v1'&&
+        {['ready','running','paused'].includes(item.status)&&item.policyVersion==='owner-review-v1'&&
           <Pressable accessibilityRole="button"
             accessibilityLabel={'Revoke active task: '+item.goal.slice(0,50)}
             disabled={busy||loading} onPress={()=>void revokeReviewed(item)}
@@ -366,7 +367,7 @@ export function LocalTaskProposals({prefill}:{prefill?:{
                style={styles.action}>
                <Text style={styles.buttonText}>Run reviewed read-only plan</Text>
              </Pressable>}
-          {NEXA_TASK_V2_ENABLED&&['ready','running'].includes(item.status)&&
+          {NEXA_TASK_V2_ENABLED&&['ready','running','paused'].includes(item.status)&&
              item.policyVersion==='owner-review-v1'&&detail.revision===item.revision&&
              detail.steps.some(step=>step.status==='pending')&&
              detail.steps.every(step=>['pending','verified'].includes(step.status)&&
