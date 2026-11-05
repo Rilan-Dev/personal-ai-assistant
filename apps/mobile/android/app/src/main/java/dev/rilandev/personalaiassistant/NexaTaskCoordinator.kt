@@ -676,14 +676,15 @@ internal object NexaTaskCoordinator {
      */
     private fun renewReviewed(context:Context,taskId:String,revision:Int):ReviewedPlan?=
         transaction(context){db->
-            val origin=db.rawQuery(
-                "SELECT origin FROM agent_tasks WHERE task_id=? "+
+            val owner=db.rawQuery(
+                "SELECT origin,status FROM agent_tasks WHERE task_id=? "+
                     "AND origin IN ('chat','live-voice','assistant-role','overlay') "+
                     "AND session_id LIKE 'owner-%' AND policy_version=? "+
-                    "AND status IN ('ready','running') AND plan_revision=?",
+                    "AND status IN ('ready','running','paused') AND plan_revision=?",
                 arrayOf(taskId,REVIEW_POLICY,revision.toString())
-            ).use{if(it.moveToFirst())it.getString(0) else null}
+            ).use{if(it.moveToFirst())it.getString(0) to it.getString(1) else null}
                 ?:error("Owner task cannot continue")
+            val origin=owner.first
             val steps=reviewedSteps(db,taskId,setOf("verified","pending"))
                 ?:error("Invalid saved plan")
             var pendingSeen=false
@@ -707,14 +708,15 @@ internal object NexaTaskCoordinator {
             val mandate=db.rawQuery(
                 "SELECT 1 FROM agent_mandates WHERE task_id=? "+
                     "AND owner_request_id=? AND policy_version=? "+
-                    "AND scope_digest=? AND revoked_at IS NULL AND expires_at>? LIMIT 1",
-                arrayOf(taskId,taskId,REVIEW_POLICY,scope,now.toString())
+                    "AND scope_digest=? AND revoked_at IS NULL LIMIT 1",
+                arrayOf(taskId,taskId,REVIEW_POLICY,scope)
             ).use{it.moveToFirst()}
             check(mandate)
             val updated=db.compileStatement(
-                "UPDATE agent_tasks SET plan_revision=plan_revision+1,updated_at=? "+
+                "UPDATE agent_tasks SET status='ready',"+
+                    "plan_revision=plan_revision+1,updated_at=? "+
                     "WHERE task_id=? AND plan_revision=? AND "+
-                    "policy_version=? AND status IN ('ready','running')"
+                    "policy_version=? AND status IN ('ready','running','paused')"
             ).use{stmt->
                 stmt.bindLong(1,now);stmt.bindString(2,taskId)
                 stmt.bindLong(3,revision.toLong());stmt.bindString(4,REVIEW_POLICY)
@@ -724,16 +726,17 @@ internal object NexaTaskCoordinator {
             val renewed=db.compileStatement(
                 "UPDATE agent_mandates SET expires_at=? WHERE task_id=? "+
                     "AND owner_request_id=? AND policy_version=? AND scope_digest=? "+
-                    "AND revoked_at IS NULL AND expires_at>?"
+                    "AND revoked_at IS NULL"
             ).use{stmt->
                 stmt.bindLong(1,now+120_000L);stmt.bindString(2,taskId)
                 stmt.bindString(3,taskId);stmt.bindString(4,REVIEW_POLICY)
-                stmt.bindString(5,scope);stmt.bindLong(6,now)
+                stmt.bindString(5,scope)
                 stmt.executeUpdateDelete()
             }
             check(renewed==1)
             event(db,taskId,steps.first{it.status=="pending"}.stepId,
-                "owner_read_plan_continued",now)
+                if(owner.second=="paused")"owner_read_plan_reauthorized"
+                else "owner_read_plan_continued",now)
             ReviewedPlan(taskId,origin,scope,steps)
         }
 
