@@ -227,7 +227,7 @@ internal object NexaTaskStore {
         val helper=NexaConversationDb(context)
         try{
             helper.readableDatabase.rawQuery(
-                "SELECT s.ordinal,s.tool_id,s.status,s.expected_evidence FROM agent_task_steps s JOIN agent_tasks t ON s.task_id=t.task_id WHERE s.task_id=? AND t.origin=\'chat\' AND t.policy_version=\'owner-review-v1\' ORDER BY s.ordinal",
+                "SELECT s.ordinal,s.tool_id,s.status,s.expected_evidence FROM agent_task_steps s JOIN agent_tasks t ON s.task_id=t.task_id WHERE s.task_id=? AND t.origin=\'chat\' AND t.session_id LIKE \'owner-%\' AND t.policy_version=\'owner-review-v1\' ORDER BY s.ordinal",
                 arrayOf(taskId)
             ).use{cursor->
                 while(cursor.moveToNext()){
