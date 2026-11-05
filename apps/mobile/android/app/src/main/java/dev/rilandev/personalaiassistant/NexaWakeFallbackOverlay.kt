@@ -360,6 +360,14 @@ internal class NexaWakeFallbackOverlay(
                             finish("Done · Hey Nexa ready")
                             return@post
                         }
+                        val ownerTask=NexaOwnerTaskReview.parse(phrase)
+                        if(ownerTask!=null){
+                            if(NexaOwnerTaskReview.offerInForeground(service,ownerTask)){
+                                showStatus("Task ready for your review in Nexa. No action executed.")
+                                handler.postDelayed({finish("Returning to Hey Nexa")},900L)
+                            }else speak("A task is pending review, or Android blocked opening Nexa.")
+                            return@post
+                        }
                         turn++
                         val answer = try { NexaOverlayCommands.handle(service, phrase) }
                         catch (_: Exception) { "Unable to execute this command." }
