@@ -33,6 +33,23 @@ internal object NexaTaskStore {
             "device status","check device status","phone status","check my phone status")
     }
 
+    private fun trustedToolsForOwnerGoal(goal:String):List<String>? {
+        val operations=NexaTaskCoordinator.classifyOwnerReadOnlyPlan(goal)
+            ?:listOfNotNull(NexaTaskCoordinator.classifyOwnerFact(goal))
+        val tools=if(operations.isEmpty() && exactDeviceStatusGoal(goal))
+            listOf("device.status")
+        else operations.map{
+            when(it){
+                "get_battery_level"->"device.battery_status"
+                "get_storage_usage"->"device.storage_status"
+                else->return null
+            }
+        }
+        return tools.takeIf{
+            it.isNotEmpty() && it.size<=MAX_STEPS && it.all{tool->tool in readOnlyRegistry}
+        }
+    }
+
     private val rootKeys=setOf("version","taskId","ownerRequestId","origin",
         "policyVersion","expiresAtMs","steps","executable")
     private val stepKeys=setOf("stepId","toolId","input","dependsOn",
@@ -41,7 +58,8 @@ internal object NexaTaskStore {
     private data class ReadStep(val sourceId:String,val tool:String,
                                 val dependencies:List<String>)
     private data class AdmittedPlan(val taskId:String,val origin:String,
-                                    val policy:String,val steps:List<ReadStep>)
+                                    val policy:String,val expiresAtMs:Long,
+                                    val steps:List<ReadStep>)
 
     private fun exactKeys(value:JSONObject,allowed:Set<String>):Boolean {
         if(value.length()!=allowed.size)return false
@@ -91,7 +109,7 @@ internal object NexaTaskStore {
             }
             steps.add(ReadStep(sid,tool,deps))
         }
-        return AdmittedPlan(taskId,plan.optString("origin"),POLICY,steps)
+        return AdmittedPlan(taskId,plan.optString("origin"),POLICY,expires,steps)
     }
 
     /**
@@ -119,16 +137,29 @@ internal object NexaTaskStore {
                 }
                 db.beginTransaction()
                 try {
-                    val correctOwner=db.rawQuery(
-                        "SELECT origin,status,policy_version,session_id FROM agent_tasks WHERE task_id=?",
+                    val goal=db.rawQuery(
+                        "SELECT origin,status,policy_version,session_id,goal_cipher "+
+                            "FROM agent_tasks WHERE task_id=?",
                         arrayOf(plan.taskId)
                     ).use{row->
-                        row.moveToFirst() && row.getString(0)==plan.origin &&
-                            row.getString(1)=="proposed" &&
-                            row.getString(2)==plan.policy &&
-                            row.getString(3).startsWith("owner-")
+                        if(!row.moveToFirst() ||
+                            row.getString(0)!=plan.origin ||
+                            row.getString(1)!="proposed" ||
+                            row.getString(2)!=plan.policy ||
+                            !row.getString(3).startsWith("owner-"))
+                            return@synchronized false
+                        NexaConversationDb.openNativeTaskArguments(row.getBlob(4))
                     }
-                    if(!correctOwner)return@synchronized false
+                    // A planner may NOT attach unrelated tool calls to a saved
+                    // owner task, even if every individual tool is low-risk.
+                    val expected=trustedToolsForOwnerGoal(goal)
+                        ?:return@synchronized false
+                    if(expected != plan.steps.map{it.tool} ||
+                        plan.expiresAtMs<=System.currentTimeMillis() ||
+                        plan.steps.withIndex().any{(index,step)->
+                            step.dependencies != if(index==0)emptyList<String>()
+                                else listOf(plan.steps[index-1].sourceId)
+                        })return@synchronized false
                     val hasSteps=db.rawQuery(
                         "SELECT 1 FROM agent_task_steps WHERE task_id=? LIMIT 1",
                         arrayOf(plan.taskId)).use{it.moveToFirst()}
@@ -195,20 +226,8 @@ internal object NexaTaskStore {
                         arrayOf(taskId)
                     ).use{it.moveToFirst()})return@synchronized false
 
-                    val operations=NexaTaskCoordinator.classifyOwnerReadOnlyPlan(goal)
-                        ?:listOfNotNull(NexaTaskCoordinator.classifyOwnerFact(goal))
-                    val tools=if(operations.isEmpty() && exactDeviceStatusGoal(goal)) {
-                        listOf("device.status")
-                    } else operations.map{
-                        when(it){
-                            "get_battery_level"->"device.battery_status"
-                            "get_storage_usage"->"device.storage_status"
-                            else->return@synchronized false
-                        }
-                    }
-                    if(tools.isEmpty()||tools.size>MAX_STEPS ||
-                        tools.any{it !in readOnlyRegistry})
-                        return@synchronized false
+                    val tools=trustedToolsForOwnerGoal(goal)
+                        ?:return@synchronized false
                     val steps=tools.map{"step-"+UUID.randomUUID().toString()}
                     val now=System.currentTimeMillis()
                     for((ordinal,tool) in tools.withIndex()){
