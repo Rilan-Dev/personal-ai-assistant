@@ -174,6 +174,71 @@ internal object NexaTaskCoordinator {
             true
         } == true
 
+    /** A revocation cannot be undone and invalidates in-flight completion. */
+    fun revokeOwnerTask(context: Context, taskId: String): Boolean {
+        if (!taskId.matches(Regex("task-[0-9a-f-]{36}"))) return false
+        return transaction(context) { db ->
+            val now = System.currentTimeMillis()
+            val changed = db.compileStatement(
+                "UPDATE agent_tasks SET status='cancelled',plan_revision=plan_revision+1," +
+                    "updated_at=? WHERE task_id=? AND policy_version=? " +
+                    "AND origin IN ('chat','live-voice') AND status IN ('ready','running')"
+            ).use {
+                it.bindLong(1, now)
+                it.bindString(2, taskId)
+                it.bindString(3, POLICY)
+                it.executeUpdateDelete()
+            }
+            check(changed == 1)
+            db.execSQL(
+                "UPDATE agent_mandates SET revoked_at=? WHERE task_id=? " +
+                    "AND policy_version=? AND revoked_at IS NULL",
+                arrayOf(now, taskId, POLICY)
+            )
+            db.execSQL(
+                "UPDATE agent_task_steps SET status='cancelled' WHERE task_id=? " +
+                    "AND status IN ('pending','outcome_unknown')",
+                arrayOf(taskId)
+            )
+            db.execSQL(
+                "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) " +
+                    "VALUES(?,NULL,'owner_revoked',?)", arrayOf(taskId, now)
+            )
+            true
+        } == true
+    }
+
+    /** Metadata-only timeline; never return arguments, raw screen data or keys. */
+    fun recentOwnerTimeline(context: Context, limit: Int): org.json.JSONArray =
+        synchronized(lock) {
+            val rows = org.json.JSONArray()
+            val helper = NexaConversationDb(context)
+            try {
+                helper.readableDatabase.rawQuery(
+                    "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at," +
+                        "s.tool_id,s.status," +
+                        "(SELECT o.verdict FROM agent_observations o " +
+                        "WHERE o.step_id=s.step_id ORDER BY o.observed_at DESC LIMIT 1) " +
+                        "FROM agent_tasks t JOIN agent_task_steps s ON s.task_id=t.task_id " +
+                        "WHERE t.policy_version=? ORDER BY t.updated_at DESC LIMIT ?",
+                    arrayOf(POLICY, limit.coerceIn(1,50).toString())
+                ).use { cursor ->
+                    while(cursor.moveToNext()) {
+                        rows.put(org.json.JSONObject()
+                            .put("taskId",cursor.getString(0))
+                            .put("origin",cursor.getString(1))
+                            .put("status",cursor.getString(2))
+                            .put("revision",cursor.getInt(3))
+                            .put("updatedAt",cursor.getLong(4))
+                            .put("operation",cursor.getString(5))
+                            .put("stepStatus",cursor.getString(6))
+                            .put("observation",if(cursor.isNull(7)) "none" else cursor.getString(7)))
+                    }
+                }
+            } finally { helper.close() }
+            rows
+        }
+
     /**
      * Called only by a trusted explicit user-intent path. Raw model tool
      * calls cannot invoke this. There is NO general tool dispatch mechanism.
