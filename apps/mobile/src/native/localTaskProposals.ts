@@ -3,11 +3,11 @@ import {NativeModules,Platform} from 'react-native';
 /** Manual, non-executable owner task — never a provider or model instruction. */
 export type LocalTaskProposal={
   taskId:string;sessionId:string;origin:'chat'|'live-voice'|'assistant-role'|'overlay';
-  status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain'|'failed';policyVersion:string;goal:string;
+  status:'proposed'|'cancelled'|'ready'|'running'|'paused'|'completed'|'uncertain'|'failed';policyVersion:string;goal:string;
   createdAt:number;updatedAt:number;revision?:number;
 };
 export type LocalTaskReviewDetail={
-  taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain'|'failed';revision:number;updatedAt:number;
+  taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'paused'|'completed'|'uncertain'|'failed';revision:number;updatedAt:number;
   steps:Array<{ordinal:number;toolId:string;status:string;evidence:string;
     dependencies?:number;missingDependencies?:number;dependenciesSatisfied?:boolean;executable?:false}>;
   events:Array<{kind:string;createdAt:number}>;
@@ -79,7 +79,7 @@ function decodeProposal(value:unknown):LocalTaskProposal{
     !item.sessionId.startsWith('owner-')||
     !['chat','live-voice','assistant-role','overlay'].includes(String(item.origin))||
     !ownerReviewPolicy(item.policyVersion)||
-    !['proposed','cancelled','ready','running','completed','uncertain','failed'].includes(String(item.status))||
+    !['proposed','cancelled','ready','running','paused','completed','uncertain','failed'].includes(String(item.status))||
     typeof item.goal!=='string'||item.goal.length>500||
     !Number.isSafeInteger(item.createdAt)||!Number.isSafeInteger(item.updatedAt)||
     (item.revision!==undefined&&(!Number.isSafeInteger(item.revision)||Number(item.revision)<1)))
@@ -135,7 +135,7 @@ export async function readLocalTaskDetail(taskId:string):Promise<LocalTaskReview
   if(!value||typeof value!=='object'||Array.isArray(value))
     throw Error('Invalid task detail record');
   const d=value as Record<string,unknown>;
-  if(d.taskId!==taskId||!['proposed','cancelled','ready','running','completed','uncertain','failed'].includes(String(d.status))||
+  if(d.taskId!==taskId||!['proposed','cancelled','ready','running','paused','completed','uncertain','failed'].includes(String(d.status))||
      !Number.isSafeInteger(d.revision)||Number(d.revision)<1||
      !Number.isSafeInteger(d.updatedAt)||!Array.isArray(d.steps)||
      d.steps.length>8||!Array.isArray(d.events)||d.events.length>40)
