@@ -214,4 +214,80 @@ internal object NexaLegacyVoiceTaskMirror {
         }catch(_:Exception){0}
     }
 
+
+    /** Explicit foreground owner privacy action for a TERMINAL Voice task.
+     * Clear original request, step content and last evidence atomically in
+     * both stores, retaining task IDs, step identities, action tombstones and
+     * redacted lifecycle evidence needed for audit and no-replay.
+     */
+    fun redactTerminal(context:android.content.Context,taskId:String):Boolean {
+        if(!Regex("task-[A-Za-z0-9_-]{8,96}").matches(taskId))return false
+        return try {
+            val helper=NexaConversationDb(context)
+            try {
+                val db=helper.writableDatabase
+                val replacementGoal=NexaConversationDb.sealNativeTaskArguments(
+                    "[details cleared]")
+                db.beginTransaction()
+                try {
+                    val detail=db.rawQuery(
+                        "SELECT t.status,t.goal_cipher," +
+                            "(SELECT COUNT(*) FROM agent_task_steps s WHERE s.task_id=t.task_id)," +
+                            "v.session_id FROM agent_tasks t " +
+                            "JOIN voice_task_checkpoints v ON v.task_id=t.task_id " +
+                            "WHERE t.task_id=? AND t.policy_version=? AND " +
+                            "t.origin='live-voice' AND t.session_id=v.session_id "+
+                            "AND v.status IN ('completed','failed','uncertain','cancelled') "+
+                            "AND t.status IN ('checkpoint_completed','failed','uncertain','cancelled')",
+                        arrayOf(taskId,POLICY)
+                    ).use{c->
+                        if(c.moveToFirst())Triple(c.getString(0),c.getBlob(1),c.getInt(2))
+                        else null
+                    }?:return false
+                    val prior=NexaConversationDb.openNativeTaskArguments(detail.second)
+                    if(prior=="[details cleared]" || detail.third !in 1..8)
+                        return false
+                    val text=org.json.JSONArray()
+                    repeat(detail.third){text.put("[details cleared]")}
+                    val payload=org.json.JSONObject()
+                        .put("request","[details cleared]")
+                        .put("steps",text).put("evidence","")
+                    val encryptedPayload=NexaConversationDb.sealNativeTaskArguments(
+                        payload.toString())
+                    val now=System.currentTimeMillis()
+                    val voice=db.compileStatement(
+                        "UPDATE voice_task_checkpoints SET payload=?,updated_at=? "+
+                            "WHERE task_id=? AND status IN "+
+                            "('completed','failed','uncertain','cancelled')"
+                    ).use{stmt->
+                        stmt.bindBlob(1,encryptedPayload)
+                        stmt.bindLong(2,now)
+                        stmt.bindString(3,taskId)
+                        stmt.executeUpdateDelete()
+                    }
+                    check(voice==1)
+                    val canonical=db.compileStatement(
+                        "UPDATE agent_tasks SET goal_cipher=?,updated_at=? "+
+                            "WHERE task_id=? AND policy_version=? AND "+
+                            "status IN ('checkpoint_completed','failed','uncertain','cancelled')"
+                    ).use{stmt->
+                        stmt.bindBlob(1,replacementGoal)
+                        stmt.bindLong(2,now)
+                        stmt.bindString(3,taskId)
+                        stmt.bindString(4,POLICY)
+                        stmt.executeUpdateDelete()
+                    }
+                    check(canonical==1)
+                    db.execSQL(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
+                            "VALUES(?,NULL,'owner_redacted_legacy_voice',?)",
+                        arrayOf(taskId,now)
+                    )
+                    db.setTransactionSuccessful()
+                    true
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }catch(_:Exception){false}
+    }
+
 }
