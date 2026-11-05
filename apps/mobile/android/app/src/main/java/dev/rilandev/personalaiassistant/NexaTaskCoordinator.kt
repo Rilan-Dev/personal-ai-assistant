@@ -274,51 +274,43 @@ internal object NexaTaskCoordinator {
                 event(db,taskId,stepId,"recovered_uncertain_no_replay",now)
                 recovered++
             }
-            // A reviewed plan can also stop between safe read steps, when
-            // no step remains in outcome_unknown. Its expired mandate must
-            // never leave a ready or running task apparently resumable.
-            val expired=mutableListOf<Pair<String,String>>()
+            // On an expired REVIEWED plan with no outstanding claim, stop the
+            // executor immediately, but keep the verified prefix and pending
+            // steps. A fresh owner Continue action can reauthorize that SAME
+            // sealed plan. A claimed/unknown outcome was handled above and is
+            // NEVER eligible for recovery or replay.
+            val expired=mutableListOf<String>()
             db.rawQuery(
-                "SELECT t.task_id,t.status FROM agent_tasks t "+
+                "SELECT t.task_id FROM agent_tasks t "+
                     "JOIN agent_mandates m ON m.task_id=t.task_id "+
                     "WHERE t.policy_version=? AND t.status IN ('ready','running') "+
-                    "AND m.revoked_at IS NULL AND m.expires_at<=? LIMIT 100",
+                    "AND m.revoked_at IS NULL AND m.expires_at<=? "+
+                    "AND NOT EXISTS (SELECT 1 FROM agent_task_steps s "+
+                        "WHERE s.task_id=t.task_id AND s.status='outcome_unknown') "+
+                    "LIMIT 100",
                 arrayOf(REVIEW_POLICY,now.toString())
             ).use{cursor->
-                while(cursor.moveToNext())
-                    expired.add(cursor.getString(0) to cursor.getString(1))
+                while(cursor.moveToNext())expired.add(cursor.getString(0))
             }
-            for((taskId,oldStatus) in expired){
-                val newStatus=if(oldStatus=="running")"uncertain" else "cancelled"
+            for(taskId in expired){
                 val updated=db.compileStatement(
-                    "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
-                        "updated_at=? WHERE task_id=? AND policy_version=? AND status=?"
+                    "UPDATE agent_tasks SET status='paused',"+
+                        "plan_revision=plan_revision+1,updated_at=? "+
+                        "WHERE task_id=? AND policy_version=? "+
+                        "AND status IN ('ready','running')"
                 ).use{stmt->
-                    stmt.bindString(1,newStatus)
-                    stmt.bindLong(2,now)
-                    stmt.bindString(3,taskId)
-                    stmt.bindString(4,REVIEW_POLICY)
-                    stmt.bindString(5,oldStatus)
+                    stmt.bindLong(1,now)
+                    stmt.bindString(2,taskId)
+                    stmt.bindString(3,REVIEW_POLICY)
                     stmt.executeUpdateDelete()
                 }
                 if(updated!=1)continue
-                db.execSQL(
-                    "UPDATE agent_mandates SET revoked_at=? WHERE task_id=? "+
-                        "AND policy_version=? AND revoked_at IS NULL",
-                    arrayOf(now,taskId,REVIEW_POLICY)
-                )
-                db.execSQL(
-                    "UPDATE agent_task_steps SET status='uncertain' "+
-                        "WHERE task_id=? AND status='outcome_unknown'",arrayOf(taskId)
-                )
-                db.execSQL(
-                    "UPDATE agent_task_steps SET status='cancelled' "+
-                        "WHERE task_id=? AND status IN ('planned','pending')",
-                    arrayOf(taskId)
-                )
+                // Do not renew an expired mandate during recovery.
+                // Even if a model requests execution, paused is rejected by
+                // reviewedMandate until an owner reauthorizes it explicitly.
                 db.execSQL(
                     "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
-                        "VALUES(?,NULL,'mandate_expired_no_replay',?)",
+                        "VALUES(?,NULL,'mandate_expired_paused',?)",
                     arrayOf(taskId,now)
                 )
                 recovered++
