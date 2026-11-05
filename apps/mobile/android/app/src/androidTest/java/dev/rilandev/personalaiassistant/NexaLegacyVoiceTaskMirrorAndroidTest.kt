@@ -163,4 +163,52 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
             "completed",2,goal,steps,"Stale callback from prior process"))
     }
 
+
+    @Test fun terminalVoicePrivacyRedactionKeepsAuditIdentityAndReplayFence(){
+        val id="task-"+UUID.randomUUID()
+        val session="voice-"+UUID.randomUUID()
+        val goal="open confidential client app and inspect one private screen"
+        val steps=listOf("open confidential app","read private screen")
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,"planned",0,goal,steps))
+        assertTrue(NexaConversationDb.saveTask(ctx,id,session,
+            "completed",2,goal,steps,"Private screen inspected"))
+        assertTrue(NexaLegacyVoiceTaskMirror.redactTerminal(ctx,id))
+        assertFalse("Redaction must be one-shot",
+            NexaLegacyVoiceTaskMirror.redactTerminal(ctx,id))
+        val history=NexaConversationDb.taskHistory(ctx,200)
+        val voice=(0 until history.length()).map{history.getJSONObject(it)}
+            .first{it.getString("taskId")==id}
+        assertEquals("[details cleared]",voice.getString("goal"))
+        assertEquals("",voice.getString("lastEvidence"))
+        assertEquals("[details cleared]",voice.getJSONArray("steps").getString(0))
+        assertEquals("[details cleared]",voice.getJSONArray("steps").getString(1))
+        assertFalse(history.toString().contains(goal))
+        val helper=NexaConversationDb(ctx)
+        try {
+            val db=helper.readableDatabase
+            db.rawQuery("SELECT goal_cipher,status FROM agent_tasks WHERE task_id=?",
+                arrayOf(id)).use { c ->
+                assertTrue(c.moveToFirst())
+                assertEquals("[details cleared]",
+                    NexaConversationDb.openNativeTaskArguments(c.getBlob(0)))
+                assertEquals("checkpoint_completed",c.getString(1))
+            }
+            db.rawQuery("SELECT COUNT(*) FROM agent_task_events WHERE task_id=? "+
+                "AND event_kind='owner_redacted_legacy_voice'",
+                arrayOf(id)).use{c->
+                assertTrue(c.moveToFirst());assertEquals(1,c.getInt(0))
+            }
+            db.rawQuery("SELECT COUNT(*) FROM agent_mandates WHERE task_id=?",
+                arrayOf(id)).use{c->
+                assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0))
+            }
+        }finally{helper.close()}
+        val index=NexaUnifiedTaskTimeline.recent(ctx,60)
+        val row=(0 until index.length()).map{index.getJSONObject(it)}
+            .first{it.getString("taskId")==id}
+        assertTrue(row.getBoolean("detailsRedacted"))
+        assertEquals("legacy_voice_checkpoint",row.getString("source"))
+        assertEquals(0,row.getInt("verifiedSteps"))
+    }
+
 }
