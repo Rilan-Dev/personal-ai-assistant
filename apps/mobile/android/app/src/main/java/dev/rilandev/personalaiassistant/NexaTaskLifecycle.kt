@@ -118,24 +118,9 @@ internal object NexaTaskLifecycle {
                         .put("revision",cursor.getInt(1))
                         .put("updatedAt",cursor.getLong(2))
                 }
-                val steps=JSONArray()
-                db.rawQuery(
-                    "SELECT ordinal,tool_id,status,expected_evidence FROM agent_task_steps " +
-                        "WHERE task_id=? ORDER BY ordinal LIMIT 8",
-                    arrayOf(id)
-                ).use { cursor->
-                    while(cursor.moveToNext()) {
-                        // Do not expose unknown or sensitive native tools through
-                        // the manual preview bridge.
-                        val tool=cursor.getString(1)
-                        steps.put(JSONObject()
-                            .put("ordinal",cursor.getInt(0))
-                            .put("toolId",if(tool=="device.status"||
-                                    tool=="device.battery_status")tool else "restricted")
-                            .put("status",cursor.getString(2))
-                            .put("evidence",cursor.getString(3)))
-                    }
-                }
+                // Dependency edges are decrypted and evaluated only inside
+                // Kotlin; the UI receives bounded metadata and no raw input.
+                val steps=NexaTaskStore.reviewDependencies(context,id)
                 val events=JSONArray()
                 db.rawQuery(
                     "SELECT event_kind,created_at FROM agent_task_events " +
