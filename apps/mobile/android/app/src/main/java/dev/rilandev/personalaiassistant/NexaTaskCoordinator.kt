@@ -501,8 +501,8 @@ internal object NexaTaskCoordinator {
     private data class ReviewedStep(val stepId:String,val ordinal:Int,
                                     val tool:String,val deps:List<String>,val seal:String,
                                     val status:String)
-    private data class ReviewedPlan(val taskId:String,val scope:String,
-                                    val steps:List<ReviewedStep>)
+    private data class ReviewedPlan(val taskId:String,val origin:String,
+                                     val scope:String,val steps:List<ReviewedStep>)
     private fun reviewedSteps(db:SQLiteDatabase,taskId:String,
                               allowedStates:Set<String> = setOf("planned")):List<ReviewedStep>? {
         val result=mutableListOf<ReviewedStep>()
@@ -540,8 +540,9 @@ internal object NexaTaskCoordinator {
         }
         return result.takeIf{it.isNotEmpty()}
     }
-    private fun scopeForReviewed(taskId:String,steps:List<ReviewedStep>):String{
-        val fingerprint=(listOf(taskId,REVIEW_POLICY)+steps.map {
+    private fun scopeForReviewed(taskId:String,origin:String,
+                                 steps:List<ReviewedStep>):String{
+        val fingerprint=(listOf(taskId,origin,REVIEW_POLICY)+steps.map {
             it.stepId+":"+it.ordinal+":"+it.tool+":"+it.seal+
                 ":"+it.deps.joinToString(",")
         }).joinToString("|")
@@ -549,15 +550,16 @@ internal object NexaTaskCoordinator {
     }
     private fun activateReviewed(context:Context,taskId:String,revision:Int):ReviewedPlan?=
         transaction(context){db->
-            val owner=db.rawQuery(
-                "SELECT 1 FROM agent_tasks WHERE task_id=? AND origin='chat' "+
+            val origin=db.rawQuery(
+                "SELECT origin FROM agent_tasks WHERE task_id=? "+
+                    "AND origin IN ('chat','live-voice','assistant-role','overlay') "+
                     "AND session_id LIKE 'owner-%' AND policy_version=? "+
                     "AND status='proposed' AND plan_revision=?",
                 arrayOf(taskId,REVIEW_POLICY,revision.toString())
-            ).use{it.moveToFirst()}
-            check(owner)
+            ).use{if(it.moveToFirst())it.getString(0) else null}
+                ?:error("Owner task cannot activate")
             val steps=reviewedSteps(db,taskId)?:error("Invalid read-only plan")
-            val scope=scopeForReviewed(taskId,steps)
+            val scope=scopeForReviewed(taskId,origin,steps)
             val now=System.currentTimeMillis()
             val changed=db.compileStatement(
                 "UPDATE agent_tasks SET status='ready',plan_revision=plan_revision+1,"+
@@ -579,16 +581,16 @@ internal object NexaTaskCoordinator {
                 arrayOf(id("mandate-"),taskId,taskId,scope,REVIEW_POLICY,now+120_000L)
             )
             event(db,taskId,steps.first().stepId,"owner_read_plan_activated",now)
-            ReviewedPlan(taskId,scope,steps)
+            ReviewedPlan(taskId,origin,scope,steps)
         }
     private fun reviewedMandate(db:SQLiteDatabase,plan:ReviewedPlan):Boolean=
         db.rawQuery(
             "SELECT 1 FROM agent_mandates m JOIN agent_tasks t ON m.task_id=t.task_id "+
-            "WHERE t.task_id=? AND t.origin='chat' AND t.session_id LIKE 'owner-%' "+
+            "WHERE t.task_id=? AND t.origin=? AND t.session_id LIKE 'owner-%' "+
             "AND t.policy_version=? AND t.status IN ('ready','running') "+
             "AND m.policy_version=? AND m.owner_request_id=t.task_id "+
             "AND m.scope_digest=? AND m.revoked_at IS NULL AND m.expires_at>?",
-            arrayOf(plan.taskId,REVIEW_POLICY,REVIEW_POLICY,plan.scope,
+            arrayOf(plan.taskId,plan.origin,REVIEW_POLICY,REVIEW_POLICY,plan.scope,
                 System.currentTimeMillis().toString())
         ).use{it.moveToFirst()}
 
@@ -681,13 +683,14 @@ internal object NexaTaskCoordinator {
      */
     private fun renewReviewed(context:Context,taskId:String,revision:Int):ReviewedPlan?=
         transaction(context){db->
-            val owned=db.rawQuery(
-                "SELECT 1 FROM agent_tasks WHERE task_id=? AND origin='chat' "+
+            val origin=db.rawQuery(
+                "SELECT origin FROM agent_tasks WHERE task_id=? "+
+                    "AND origin IN ('chat','live-voice','assistant-role','overlay') "+
                     "AND session_id LIKE 'owner-%' AND policy_version=? "+
                     "AND status IN ('ready','running') AND plan_revision=?",
                 arrayOf(taskId,REVIEW_POLICY,revision.toString())
-            ).use{it.moveToFirst()}
-            check(owned)
+            ).use{if(it.moveToFirst())it.getString(0) else null}
+                ?:error("Owner task cannot continue")
             val steps=reviewedSteps(db,taskId,setOf("verified","pending"))
                 ?:error("Invalid saved plan")
             var pendingSeen=false
@@ -706,7 +709,7 @@ internal object NexaTaskCoordinator {
                 }
             }
             check(pendingSeen)
-            val scope=scopeForReviewed(taskId,steps)
+            val scope=scopeForReviewed(taskId,origin,steps)
             val now=System.currentTimeMillis()
             val mandate=db.rawQuery(
                 "SELECT 1 FROM agent_mandates WHERE task_id=? "+
@@ -738,7 +741,7 @@ internal object NexaTaskCoordinator {
             check(renewed==1)
             event(db,taskId,steps.first{it.status=="pending"}.stepId,
                 "owner_read_plan_continued",now)
-            ReviewedPlan(taskId,scope,steps)
+            ReviewedPlan(taskId,origin,scope,steps)
         }
 
     private fun executePendingReviewed(context:Context,plan:ReviewedPlan):String{
