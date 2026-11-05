@@ -80,12 +80,12 @@ internal object NexaLiveToolPolicy {
         return when(name) {
             "get_device_status","get_battery_level","get_storage_usage" ->
                 if(args.length()!=0)Decision.Immediate("Rejected: unexpected arguments")
-                else Decision.Immediate(NexaPhoneVoiceTools.deviceFacts(context,
+                else Decision.Immediate(NexaTaskNativeRead.observe(context,
                     when(name) {
-                        "get_device_status"->"device status"
-                        "get_storage_usage"->"storage"
-                        else->"battery"
-                    }) ?: "Android device status unavailable.")
+                        "get_device_status"->"device.status"
+                        "get_storage_usage"->"device.storage_status"
+                        else->"device.battery_status"
+                    }) ?: "Android device status unavailable. No verified reading.")
             "request_chrome_search" -> {
                 val query=single("query").orEmpty()
                 if(NexaBrowserTaskActions.safeQuery(query)==null)
