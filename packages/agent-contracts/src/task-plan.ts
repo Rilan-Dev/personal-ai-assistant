@@ -6,12 +6,14 @@
  * evidence and approval requirements; the proposal can supply none of them.
  *
  * No action is dispatched by this module. Until a separately reviewed native
- * coordinator exists, NEXA_TASK_V2_ENABLED remains false.
+ * production release is accepted, task admission runs only in RN debug builds.
  */
 import type {RiskLevel, ToolInput} from './index.ts';
 
 export const NEXA_TASK_PLAN_VERSION = 1 as const;
-export const NEXA_TASK_V2_ENABLED = false as const;
+/** Debug-only proposal creation; Android enforces a separate release-false gate. */
+export const NEXA_TASK_V2_ENABLED: boolean =
+  (globalThis as {__DEV__?:boolean}).__DEV__ === true;
 export const NEXA_TASK_PLAN_MAX_STEPS = 8 as const;
 export const NEXA_TASK_PLAN_MAX_LIFETIME_MS = 5 * 60_000;
 

@@ -121,6 +121,9 @@ android {
     }
     buildTypes {
         debug {
+            // Development-only: reviewed, low-risk native reads require an
+            // explicit owner Run press. Production release stays disabled.
+            buildConfigField "boolean", "NEXA_REVIEWED_READ_PLAN_ENABLED", "true"
             signingConfig signingConfigs.debug
         }
         release {

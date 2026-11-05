@@ -1546,10 +1546,18 @@ export default function App() {
           // When enabled, only a direct, owner-selected native read can be
           // admitted. This preflight precedes saving a native task ID.
           context:async decision=>{
-            if(decision.type!=='tool' ||
-              !['device.status','device.battery_status','device.storage_status'].includes(decision.call.toolId) ||
+            const fact=ownerDeviceFactKind(request);
+            const statusRequest=new Set(['device status','check device status',
+              'phone status','check my phone status']).has(
+              request.trim().toLowerCase().replace(/^hey nexa(?:,|\\s)+/,'')
+                .replace(/[.?!,]+$/,'').trim());
+            const exactMatch=decision.type==='tool' && (
+              decision.call.toolId==='device.battery_status'&&fact==='battery' ||
+              decision.call.toolId==='device.storage_status'&&fact==='storage' ||
+              decision.call.toolId==='device.status'&&statusRequest);
+            if(!exactMatch||decision.type!=='tool' ||
               Object.keys(decision.call.input).length!==0)
-              throw Error('Only owner-requested, read-only native tools can be admitted');
+              throw Error('Only explicitly requested native facts can be admitted');
             const taskId=await saveLocalTaskProposal(request);
             return {taskId,ownerRequestId:taskId,origin:'chat',
               policyVersion:'owner-review-v1',tools:engine.registry.describe(),
