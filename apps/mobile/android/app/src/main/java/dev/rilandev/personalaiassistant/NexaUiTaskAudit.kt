@@ -77,11 +77,56 @@ internal object NexaUiTaskAudit {
             stmt.bindBlob(4,args)
             check(stmt.executeInsert()!=-1L)
         }
+        // The existing UI controller's owner confirmation was already
+        // consumed at the permanent, one-shot claim boundary. Record the
+        // EXACT claimed kind + opaque token + target-package digest as a
+        // per-step AUDIT receipt. It cannot itself grant execution.
+        db.compileStatement(
+            "INSERT INTO agent_step_approvals(approval_id,step_id,target_digest,"+
+                "input_digest,state,expires_at,consumed_at) "+
+                "VALUES(?,?,?,?,'consumed',?,?)"
+        ).use{stmt->
+            stmt.bindString(1,id("approval-",tokenDigest))
+            stmt.bindString(2,stepId)
+            stmt.bindString(3,packageDigest)
+            stmt.bindString(4,digest("ui-action-v1:"+actionKind+":"+tokenDigest))
+            stmt.bindLong(5,now+300_000L)
+            stmt.bindLong(6,now)
+            check(stmt.executeInsert()!=-1L)
+        }
         db.execSQL(
             "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                 "VALUES(?,?,'ui_action_claimed',?)",arrayOf(taskId,stepId,now)
         )
         return true
+    }
+
+    /**
+     * The outcome is only valid for the exact already-consumed UI claim.
+     * A fabricated audit task without the per-step receipt, a swapped
+     * package, or an altered action kind can never receive verified progress.
+     */
+    private fun receiptBound(db:SQLiteDatabase,taskId:String,stepId:String,
+                             tokenDigest:String):Boolean {
+        return db.rawQuery(
+            "SELECT s.arguments_cipher,a.target_digest,a.input_digest,"+
+                "a.state,a.consumed_at FROM agent_task_steps s "+
+                "JOIN agent_step_approvals a ON a.step_id=s.step_id "+
+                "WHERE s.task_id=? AND s.step_id=? "+
+                "AND s.status='outcome_unknown' LIMIT 2",
+            arrayOf(taskId,stepId)
+        ).use{row->
+            if(!row.moveToFirst())return@use false
+            val args=JSONObject(NexaConversationDb
+                .openNativeTaskArguments(row.getBlob(0)))
+            val kind=args.optString("kind")
+            val pkg=args.optString("packageDigest")
+            val valid=args.length()==2 && kind in allowed &&
+                sha.matches(pkg) && row.getString(1)==pkg &&
+                row.getString(2)==digest("ui-action-v1:"+kind+":"+tokenDigest) &&
+                row.getString(3)=="consumed" && row.getLong(4)>0L
+            valid && !row.moveToNext()
+        }
     }
 
     /** Audit an Android dispatch result or a separate Accessibility observation.
@@ -118,6 +163,8 @@ internal object NexaUiTaskAudit {
                 db.beginTransaction()
                 try {
                     val now=System.currentTimeMillis()
+                    if(!receiptBound(db,taskId,stepId,tokenDigest))
+                        return@synchronized false
                     val changed=db.compileStatement(
                         "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
                             "updated_at=? WHERE task_id=? AND policy_version=? "+
