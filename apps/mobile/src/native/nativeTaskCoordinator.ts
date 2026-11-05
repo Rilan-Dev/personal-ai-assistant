@@ -37,6 +37,7 @@ type TaskNativeBridge={
   runOwnerReadOnlyPlan(request:string):Promise<string>;
   recentNativeTaskTimeline(limit:number):Promise<string>;
   recentUnifiedTaskTimeline(limit:number):Promise<string>;
+  redactTerminalLegacyVoiceTask?(taskId:string):Promise<boolean>;
   revokeNativeTask(taskId:string):Promise<boolean>;
 };
 export const nativeTaskCoordinatorAvailable=()=>Platform.OS==='android' &&
@@ -129,6 +130,18 @@ export async function runOwnerReadOnlyPlan(request:string):Promise<string>{
   return result;
 }
 
+
+/** Redact private text from a terminal Voice cursor in BOTH encrypted stores,
+ * while retaining the permanent no-replay evidence and anonymous status.
+ * Never changes a running task or authorizes an Android tool.
+ */
+export async function redactTerminalLegacyVoiceTask(taskId:string):Promise<boolean>{
+  if(!nativeId.test(taskId))throw Error('Invalid Voice task identity');
+  const api=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
+  if(Platform.OS!=='android'||typeof api?.redactTerminalLegacyVoiceTask!=='function')
+    throw Error('Native Voice privacy controls are unavailable');
+  return (await api.redactTerminalLegacyVoiceTask(taskId))===true;
+}
 
 /** Canonical plus legacy task metadata. Legacy Voice entries are NOT evidence
  * of delivery, approval, or a task with resumable native execution authority.
