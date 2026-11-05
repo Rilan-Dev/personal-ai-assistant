@@ -5,6 +5,7 @@
 set -euo pipefail
 
 readonly REPO="Rilan-Dev/personal-ai-assistant"
+target_ref="Development"
 usage() {
   echo "Usage: scripts/ci/manual-actions.sh <android-debug.yml|android-emulator.yml|android-release-test.yml|android-main-promotion.yml|core-tests.yml|agent-provider-acceptance.yml> [--dry-run] [--retry-failed]" >&2
   exit 2
@@ -16,6 +17,11 @@ case "$workflow" in
   android-debug.yml|android-emulator.yml|android-release-test.yml|android-main-promotion.yml|core-tests.yml|agent-provider-acceptance.yml) ;;
   *) usage ;;
 esac
+# The three Android acceptance workflows run against the Development branch.
+# The gated release promotion remains explicitly scoped to main.
+if [[ "$workflow" == "android-main-promotion.yml" ]]; then
+  target_ref="main"
+fi
 dry_run=false
 retry_failed=false
 for arg in "$@"; do
@@ -35,9 +41,9 @@ if ! gh auth status >/dev/null 2>&1; then
   exit 2
 fi
 
-sha="$(gh api "repos/$REPO/commits/main" --jq '.sha')"
+sha="$(gh api "repos/$REPO/commits/$target_ref" --jq '.sha')"
 if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-  echo "BLOCKED: Unable to verify the exact current main commit. No workflow dispatched." >&2
+  echo "BLOCKED: Unable to verify the exact current $target_ref commit. No workflow dispatched." >&2
   exit 2
 fi
 
@@ -91,10 +97,10 @@ if [[ "$workflow" == android-release-test.yml ]]; then
 fi
 
 if [[ "$dry_run" == true ]]; then
-  echo "DRY RUN: would manually dispatch $workflow for $REPO main commit $sha"
+  echo "DRY RUN: would manually dispatch $workflow for $REPO $target_ref commit $sha"
   exit 0
 fi
 
-echo "Manually dispatching $workflow for $REPO main commit $sha"
-gh workflow run "$workflow" --repo "$REPO" --ref main
+echo "Manually dispatching $workflow for $REPO $target_ref commit $sha"
+gh workflow run "$workflow" --repo "$REPO" --ref "$target_ref"
 echo "Dispatch submitted. GitHub Actions will report the actual result; no build success is implied."

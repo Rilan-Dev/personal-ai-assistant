@@ -17,6 +17,7 @@ build/
 android/.gradle/
 android/local.properties
 **/.gradle/
+**/.kotlin/
 **/build/
 **/Pods/
 

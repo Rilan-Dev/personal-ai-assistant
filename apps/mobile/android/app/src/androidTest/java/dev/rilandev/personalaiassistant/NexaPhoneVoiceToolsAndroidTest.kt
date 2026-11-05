@@ -56,4 +56,9 @@ class NexaPhoneVoiceToolsAndroidTest {
         assertTrue(NexaSarvamReadTools.execute(app,"dispatch_gesture","{}","Please tap the screen").startsWith("Rejected"))
         assertTrue(NexaSarvamReadTools.execute(app,"get_storage_usage","{\"path\":\"/secret\"}","How much storage?").startsWith("Rejected"))
     }
+
+    @Test fun notificationShadeActionFailsClosedWithoutBoundScreenAssist() {
+        val result=NexaBrowserTaskActions.notificationsApproved(app,null)
+        assertEquals("Screen Assist is disabled. Notification shade was not opened.",result)
+    }
 }

@@ -65,22 +65,24 @@ function harness(scenario,args){
   return {result,calls};
 }
 
-test("dispatcher requires explicit allowed workflow argument",()=>{
+test("dispatcher requires explicit allowed workflow argument and stays on Development",()=>{
   const source=readFileSync(script,"utf8");
-  assert.match(source,/gh workflow run "\$workflow" --repo "\$REPO" --ref main/);
+  assert.match(source,/target_ref="Development"/);
+  assert.match(source,/gh workflow run "\$workflow" --repo "\$REPO" --ref "\$target_ref"/);
+  assert.match(source,/workflow" == "android-main-promotion\.yml"[\s\S]*target_ref="main"/);
   assert.doesNotMatch(source,/git push|curl.*token/);
   const {result,calls}=harness("clean",["arbitrary.yml"]);
   assert.equal(result.status,2);
   assert.doesNotMatch(calls,/workflow run/);
 });
 
-test("manual debug dispatch targets current main SHA and requested workflow",()=>{
+test("manual debug dispatch targets current Development SHA and requested workflow",()=>{
   const {result,calls}=harness("clean",["android-debug.yml"]);
   assert.equal(result.status,0,result.stderr);
   assert.match(result.stdout,/MOCK_DISPATCH_SUCCESS/);
-  assert.match(calls,/api repos\/Rilan-Dev\/personal-ai-assistant\/commits\/main/);
+  assert.match(calls,/api repos\/Rilan-Dev\/personal-ai-assistant\/commits\/Development/);
   assert.match(calls,new RegExp("--commit "+sha));
-  assert.match(calls,/workflow run android-debug.yml --repo Rilan-Dev\/personal-ai-assistant --ref main/);
+  assert.match(calls,/workflow run android-debug.yml --repo Rilan-Dev\/personal-ai-assistant --ref Development/);
 });
 
 test("dry run never dispatches a job",()=>{
@@ -108,7 +110,7 @@ test("failed same-SHA jobs require explicit retry",()=>{
   assert.match(retry.calls,/workflow run android-debug.yml/);
 });
 
-test("release is refused until debug and emulator passed on same main SHA",()=>{
+test("release is refused until debug and emulator passed on same Development SHA",()=>{
   const failure=harness("emulator_ready",["android-release-test.yml"]);
   assert.equal(failure.result.status,3);
   assert.match(failure.result.stderr,/emulator acceptance/);
@@ -139,7 +141,8 @@ test("auth failure never dispatches anything",()=>{
 test("one gated main promotion pipeline can be manually dispatched without individual workflow prerequisites",()=>{
   const okay=harness("clean",["android-main-promotion.yml"]);
   assert.equal(okay.result.status,0,okay.result.stderr);
-  assert.match(okay.calls,/workflow run android-main-promotion.yml/);
+  assert.match(okay.calls,/api repos\/Rilan-Dev\/personal-ai-assistant\/commits\/main/);
+  assert.match(okay.calls,/workflow run android-main-promotion.yml --repo Rilan-Dev\/personal-ai-assistant --ref main/);
   const dry=harness("clean",["android-main-promotion.yml","--dry-run"]);
   assert.equal(dry.result.status,0,dry.result.stderr);
   assert.doesNotMatch(dry.calls,/workflow run/);

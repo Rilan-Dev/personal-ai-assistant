@@ -45,8 +45,8 @@ internal object NexaBrowserTaskActions {
      * service deliberately excludes System UI and private notification content.
      * Accepted global action is NOT evidence that notifications were read.
      */
-    fun notificationsApproved(context:Context):String {
-        val service=ScreenAssistService.active
+    fun notificationsApproved(context:Context, boundService:ScreenAssistService?=ScreenAssistService.active):String {
+        val service=boundService
             ?: return "Screen Assist is disabled. Notification shade was not opened."
         val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if(keyguard?.isKeyguardLocked==true)

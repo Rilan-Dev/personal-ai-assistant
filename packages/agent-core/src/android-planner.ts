@@ -15,6 +15,14 @@ export const androidIntentPlanner: Planner = {
         return { type: "clarify", question: "Android could not perform the requested action. No further actions were taken." };
       }
       const result = last.outcome.data as Record<string, unknown>;
+      if (last.call.toolId === "device.open_notification_shade") {
+        if (result?.notificationShadeAccepted === true) {
+          return { type: "done", response:
+            "Android accepted the request to open the notification shade. I did not read notification contents." };
+        }
+        return { type: "clarify", question:
+          "Android did not confirm the notification shade request. No notification contents were read." };
+      }
       if (result?.intentDispatched === true) {
         return {
           type: "done",
@@ -55,7 +63,7 @@ export const androidIntentPlanner: Planner = {
     if (call) return { type: "tool", call };
     return {
       type: "clarify",
-      question: "Native controls currently support: Open Chrome and search a public query, Open camera, Open WhatsApp, Open WhatsApp Business, Check device status, Check battery level, Turn flashlight on/off, and Test approval. Multi-step actions and messaging are not enabled yet."
+      question: "Native controls currently support: Open Chrome and search a public query, open the notification shade, open camera or WhatsApp, check device status or battery, turn flashlight on/off, and test approval. Each device action requires its own approval. Multi-step actions and messaging are not enabled yet."
     };
   }
 };

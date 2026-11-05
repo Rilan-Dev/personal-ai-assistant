@@ -225,3 +225,10 @@ not migration of legacy Voice execution ownership. General screen/messaging
 steps and shared native scheduling remain separately gated. No new
 dependency, database schema version, cloud provider privilege or Android
 permission was added.
+
+## 2026-11-06 — Chat notification shade action
+- Re-read current LangGraph.js source at commit `abda1bf1a74d60be563e27a293d0c9cd4e8a3215`, MIT license: `libs/langgraph-core/src/graph/state.ts`, `StateGraph` builder and `.compile()` API. The backend graph API is unchanged; this narrow phone action uses the existing `AgentHarness`, not a new graph or agent loop.
+- Re-read current Deep Agents JS source at commit `e80b3af2c842515cf3af2bb59a1f2be8a46d266c`, MIT license: `libs/deepagents/src/permissions/enforce.ts`, including `decidePathAccess`. Its filesystem permission rules do not authorize Android Accessibility operations and are not adopted.
+- Existing stable API reused: local `AgentHarness.run()` returns `awaiting_approval` for tools with `hasExternalSideEffect: true`; Android's existing one-use journal and owner approval remain authoritative.
+- New behavior stays in the existing exact-intent allowlist, React Native native-tool registry, and Kotlin `AccessibilityService.performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)` adapter. No framework code is copied, no new dependency is added, and no alternative harness is proposed because this request is a single typed Android action.
+- Capability boundary: empty arguments, exact single owner intent, bound Screen Assist, foreground Nexa, one-time approval, and no read of SystemUI notification text. The result says Android accepted the request; actual shade visibility is verified by the device UI flow.

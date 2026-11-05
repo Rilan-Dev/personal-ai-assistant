@@ -55,7 +55,8 @@ export function parseChromeSearchIntent(request: string): string | null {
 
 export type NativeOwnerIntent = {
   toolId: "device.status" | "device.battery_status" | "device.set_flashlight" |
-    "device.open_camera" | "device.open_app" | "device.browser_search";
+    "device.open_camera" | "device.open_app" | "device.browser_search" |
+    "device.open_notification_shade";
   input: Record<string, unknown>;
 };
 
@@ -64,6 +65,13 @@ export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | nul
   if(chromeQuery) return {toolId:"device.browser_search",input:{query:chromeQuery}};
   const text = normalizeNativeRequest(request);
   if (text === null) return null;
+  if (new Set([
+    "open notification bar", "open the notification bar", "open notifications",
+    "open the notifications", "show notifications", "show my notifications",
+    "open notification shade", "open the notification shade",
+    "pull down notifications", "show notification bar"
+  ]).has(text))
+    return {toolId:"device.open_notification_shade",input:{}};
   const desired = parseFlashlightIntent(text);
   if (desired !== null) return {toolId:"device.set_flashlight",input:{enabled:desired}};
   if (/^(?:check|show|what is|what's) (?:my |the )?(?:agent |device )?status$/.test(text))

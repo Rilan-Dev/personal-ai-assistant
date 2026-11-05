@@ -233,6 +233,27 @@ class DeviceControlModule(
         }
     }
 
+    /** One owner-approved system navigation action; no notification text is read. */
+    @ReactMethod
+    fun openNotificationShade(promise: Promise) {
+        if (context.currentActivity?.hasWindowFocus() != true) {
+            promise.reject("NOT_FOREGROUND", "Open Nexa and approve the notification shade action")
+            return
+        }
+        if (!ScreenAssistState.connected || ScreenAssistService.active == null) {
+            promise.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
+            return
+        }
+        val result = NexaBrowserTaskActions.notificationsApproved(context)
+        if (!result.startsWith("Android accepted")) {
+            promise.reject("NOTIFICATION_SHADE_FAILED", result)
+            return
+        }
+        val value = Arguments.createMap()
+        value.putBoolean("notificationShadeAccepted", true)
+        promise.resolve(value)
+    }
+
     @ReactMethod
     fun openCamera(promise: Promise) {
         if(context.currentActivity?.hasWindowFocus()!=true){

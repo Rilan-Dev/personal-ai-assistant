@@ -927,8 +927,7 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 ## 2026-11-06 — physical QA and release build continuation
 - Physical Infinix X6831 (Android 13/API 33) was connected; Screen Assist and Launcher Navigation were both enabled and bound. Approved one four-flow Maestro test batch; no actual messages are to be sent.
 - A local debug build fails in Windows Ninja native C++ codegen due to long generated safe-area-context object paths. The D: project fixes stale OneDrive autolinking when its generated cache is refreshed, but still hits the Windows path limit.
-- Current task commit `d129b55` contains Maestro/test/app changes and is being rebased onto newly advanced `origin/Development`; `NEXT_ACTION.md` changes remain uncommitted to preserve its earlier notes.
-
+- The task changes were carried forward onto the newly advanced `origin/Development`; the phone remains attached.
 ## 2026-11-06 — Durable Voice checkpoint projection into the canonical Android task ledger
 - Added NexaLegacyVoiceTaskMirror as a non-executable audit adapter for existing NexaVoiceTaskCursor checkpoints. The original encrypted voice_task_checkpoints write and a matching agent_tasks/agent_task_steps audit projection now commit in ONE custom.db v3 transaction.
 - Added immutable plan/goal and session checks, monotonic step index, terminal state fences, and rejection of cross-policy task-ID reuse. A bad update rolls back both stores.
@@ -937,3 +936,14 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - On Android application process start, abandoned nonterminal Voice checkpoint rows are marked uncertain in both stores; the old cursor cannot be revived or automatically replayed.
 - Added Android instrumentation cases for atomic persistence, no mandate, collisions, monotonic updates, terminal non-reopen, and restart quarantine.
 - No new database schema version, network dependency, API key, broad Android tool permissions, automated send or production Docker deployment.
+
+## 2026-11-06 — Chat notification shade intent gap
+
+- Root cause: the existing overlay/voice notification action already required owner approval and called Android Accessibility, but the React Native Chat deterministic intent gate, direct-provider allowlist and native tool registry did not expose it. Chat therefore returned the generic unsupported-command response.
+- Added RED/GREEN tests for exact owner wording, direct/deterministic planning, rejecting read/compound/negated requests, and proof that AgentHarness awaits one-time approval before execution.
+- Added `device.open_notification_shade` to the exact owner intent and planner allowlists. The Android tool has empty arguments, medium risk and an external side effect, so it uses the existing journal/owner approval. Kotlin checks foreground Nexa and a bound Screen Assist, then reuses the existing notification shade global action. It reports acceptance only and never reads notification contents.
+- Added Android instrumentation for the fail-closed no-service result and recorded current LangGraph.js / Deep Agents.js source commits and MIT licenses in `docs/architecture/HARNESS_UPSTREAM_RESEARCH.md`.
+- Corrected the manual Actions dispatcher to target `Development` for debug, emulator and release-test jobs while preserving `main` for the explicit main promotion workflow. Regression tests verify both refs.
+- Verification: 395/395 full Node tests, TypeScript, Expo web export and manual dispatcher tests 9/9. `npm ci` reported 10 advisories (1 low, 7 moderate, 2 high); no dependency upgrade applied.
+- Windows local Gradle stopped in React Native CMake because Ninja rejects a generated object filename over 260 characters. GitHub Android native compile/instrumentation and signed workflow build are pending. `gh` is not currently installed.
+- Maestro 11–13 previously passed individually. Flow 10 and the direct Chat action still need physical acceptance on the refreshed APK; no messages were sent and no Sarvam key was used.

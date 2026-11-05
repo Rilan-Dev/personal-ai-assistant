@@ -22,6 +22,7 @@ interface DeviceControlBridge {
   openSupportedApp(app: string): Promise<LaunchOutcome>;
   openCamera(): Promise<LaunchOutcome>;
   openChromeSearch(query: string): Promise<LaunchOutcome>;
+  openNotificationShade(): Promise<{notificationShadeAccepted: boolean}>;
 }
 
 export const nativeDeviceAvailable = (): boolean =>
@@ -110,6 +111,18 @@ export function createAndroidTools(): Tool[] {
       execute: async ({query}) => ({
         status: "success",
         data: await getBridge().openChromeSearch(String(query))
+      })
+    },
+    {
+      id: "device.open_notification_shade",
+      description: "Open Android notification shade after one-time owner approval. Never read notification contents.",
+      capabilities: [],
+      risk: "medium",
+      hasExternalSideEffect: true,
+      validateInput: emptyInput,
+      execute: async () => ({
+        status: "success",
+        data: await getBridge().openNotificationShade()
       })
     },
     {

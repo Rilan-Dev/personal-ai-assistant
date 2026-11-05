@@ -13,6 +13,10 @@ tags:
     permissions:
       all: deny
 - assertVisible: "Make your assistant yours."
+- scrollUntilVisible:
+    element: "Show optional permissions and features"
+    direction: DOWN
+    timeout: 25000
 - tapOn: "Show optional permissions and features"
 # Reuse the independently proven overlay-permission flow before Accessibility.
 - runFlow:
@@ -39,30 +43,25 @@ tags:
 - launchApp:
     stopApp: false
 - scrollUntilVisible:
+    element: ".*(Explore 6 optional features|Hide optional features).*"
+    direction: DOWN
+    timeout: 25000
+- runFlow:
+    when:
+      visible: "Explore 6 optional features"
+    commands:
+      - tapOn: "Show optional permissions and features"
+- scrollUntilVisible:
     element: "One-time screen assistance"
     direction: UP
     timeout: 25000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
-- runFlow:
-    when:
-      visible: "Accessibility"
-    commands:
-      - runFlow:
-          when:
-            visible: "Downloaded apps"
-          commands:
-            - tapOn: "Downloaded apps"
-      - runFlow:
-          when:
-            visible: "Installed apps"
-          commands:
-            - tapOn: "Installed apps"
-      - scrollUntilVisible:
-          element: "Nexa Screen Assist"
-          direction: DOWN
-          timeout: 30000
-      - tapOn: "Nexa Screen Assist"
+- scrollUntilVisible:
+    element: "Nexa Screen Assist"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Nexa Screen Assist"
 - extendedWaitUntil:
     visible: "Use Nexa Screen Assist"
     timeout: 25000

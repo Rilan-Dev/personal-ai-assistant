@@ -601,3 +601,10 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 4. Test Sarvam model function-calling for read-only battery/storage from paraphrases; verify model receives validated tool result and continues conversation. Agent app opening still uses local owner transcript gate.
 5. Do not claim screen OCR, icon recognition, arbitrary swipe/tap/type, phone calls or full autonomous harness are implemented. Follow the phased design doc, explicit permission and Play Accessibility policy constraints.
 6. Capture redacted AndroidRuntime stack trace if OEM phone crashes or native callback fails. No credential, screen content or raw audio in logs.
+## 2026-11-06 — Chat notification shade action
+
+- Chat now has a narrow `device.open_notification_shade` intent route. It must pass exact owner-intent validation, one-time AgentHarness approval, foreground Nexa and an actively bound Screen Assist service. The action never reads notification text.
+- Source checks before the workflow-dispatcher adjustment: Node 395/395, TypeScript and Expo web export passed. Manual dispatcher regression tests now pass 9/9 and route Android debug/emulator/release-test to `Development`; main promotion remains on `main`.
+- Next: run `android-debug.yml`, `android-emulator.yml`, then `android-release-test.yml` on the exact Development SHA; inspect results, install the signed artifact, and rerun the physical-device action and flows 10–13. Keep actual SystemUI shade visibility and service binding assertions strict.
+- Local Windows Gradle is blocked by Ninja's 260-character React Native C++ codegen object path. GitHub CLI is not installed; use the connected GitHub Actions write path if available, otherwise install/connect GitHub CLI locally before dispatch. No main promotion or public release.
+- Physical chat action and refreshed signed APK are pending. Earlier flows 11–13 passed individually; flow 10 remains unverified because Maestro UiAutomation suppresses Screen Assist during instrumentation. Do not mark it green based on a successful global-action return alone.

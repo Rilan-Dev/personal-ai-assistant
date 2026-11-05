@@ -21,7 +21,8 @@ export type DirectProviderSettings = {
 };
 export const DIRECT_TOOL_IDS = Object.freeze([
   "device.status", "device.battery_status", "device.set_flashlight",
-  "device.open_camera", "device.open_app", "device.browser_search"
+  "device.open_camera", "device.open_app", "device.browser_search",
+  "device.open_notification_shade"
 ]);
 
 export function validateProviderSettings(value: unknown): DirectProviderSettings {
@@ -50,6 +51,7 @@ const INSTRUCTIONS = [
   '- device.browser_search {"query":"what is ai"} (open Chrome Google search results, after approval; never claim results reviewed)',
   '- device.open_app {"app":"whatsapp"} OR {"app":"whatsapp-business"} (launch ONLY, no messages)',
   '- device.set_flashlight {"enabled":true} OR {"enabled":false} (one-time approval + CAMERA grant)',
+  '- device.open_notification_shade {} (one-time approval; never read notification contents)',
   "NEVER claim that you can send messages, read contacts, listen in the background, or control other apps.",
   "NEVER invent tool observations or claim an action succeeded before the phone confirms it.",
   "A multi-step, ambiguous or unsupported phone-control request must be a clarify answer, never a partial tool action.",
