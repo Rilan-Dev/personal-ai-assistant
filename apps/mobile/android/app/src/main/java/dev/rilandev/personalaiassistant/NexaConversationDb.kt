@@ -587,6 +587,40 @@ class NexaConversationModule(private val reactContext:ReactApplicationContext):
             promise.resolve(answer)
         },"nexa-task-owner-plan").start()
     }
+    /**
+     * View metadata only for an owner-minted plan; never expose encrypted
+     * argument bytes, model input, approvals or a provider send capability.
+     */
+    @ReactMethod fun reviewOwnerReadOnlyPlan(taskId:String,promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to inspect the task plan")
+            return
+        }
+        try {
+            promise.resolve(NexaTaskStore.readSafeStepSummary(reactContext,taskId).toString())
+        } catch (_:Exception) {
+            promise.reject("PLAN_READ","Cannot safely load the task plan")
+        }
+    }
+    /** The owner must explicitly press Run after inspecting the step list.
+     * Native execution is separately disabled at compile time by default.
+     */
+    @ReactMethod fun runReviewedOwnerReadOnlyPlan(taskId:String,expectedRevision:Int,
+                                                 promise:Promise) {
+        if(reactContext.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to authorize the task plan")
+            return
+        }
+        Thread({
+            try {
+                promise.resolve(NexaTaskCoordinator.executeReviewedReadOnlyPlan(
+                    reactContext,taskId,expectedRevision))
+            }catch (_:Exception) {
+                promise.reject("TASK_EXECUTION","Cannot verify native task execution")
+            }
+        },"nexa-reviewed-task-execution").start()
+    }
+
     /** Consume a voice-origin request into the existing owner review UI.
      * It does not create, approve or execute a task.
      */
