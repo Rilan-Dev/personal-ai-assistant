@@ -22,7 +22,7 @@ internal object NexaTaskLifecycle {
 
     private fun manualOwner(db:SQLiteDatabase,id:String):Boolean =
         db.rawQuery(
-            "SELECT session_id FROM agent_tasks WHERE task_id=? AND origin='chat' " +
+            "SELECT session_id FROM agent_tasks WHERE task_id=? AND origin IN ('chat','live-voice','assistant-role','overlay') " +
                 "AND policy_version IN (?,?)",
             arrayOf(id,POLICY,PREVIEW)
         ).use { cursor ->
@@ -67,7 +67,7 @@ internal object NexaTaskLifecycle {
                     val changed=db.compileStatement(
                         "UPDATE agent_tasks SET goal_cipher=?,plan_revision=plan_revision+1," +
                             "updated_at=? WHERE task_id=? AND plan_revision=? " +
-                            "AND status='proposed' AND origin='chat' " +
+                            "AND status='proposed' AND origin IN ('chat','live-voice','assistant-role','overlay') " +
                             "AND policy_version IN (?,?)"
                     ).use { stmt->
                         stmt.bindBlob(1,sealed)
@@ -109,7 +109,7 @@ internal object NexaTaskLifecycle {
                 if(!manualOwner(db,id))return@synchronized null
                 val result=db.rawQuery(
                     "SELECT status,plan_revision,updated_at FROM agent_tasks " +
-                        "WHERE task_id=? AND origin='chat' AND policy_version IN (?,?)",
+                        "WHERE task_id=? AND origin IN ('chat','live-voice','assistant-role','overlay') AND policy_version IN (?,?)",
                     arrayOf(id,POLICY,PREVIEW)
                 ).use { cursor->
                     if(!cursor.moveToFirst())return@synchronized null
