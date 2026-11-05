@@ -24,3 +24,4 @@ android/local.properties
 device-acceptance-*.json
 __pycache__/
 *.pyc
+work

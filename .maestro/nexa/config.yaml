@@ -1,0 +1,18 @@
+flows:
+  - '*.yaml'
+executionOrder:
+  continueOnFailure: true
+  flowsOrder:
+    - 01-fresh-setup-and-navigation
+    - 02-hey-nexa-wake-setup
+    - 03-overlay-permission-entry
+    - 04-voice-without-provider
+    - 05-overlay-bubble-end-to-end
+    - 06-hey-nexa-model-runtime
+    - 07-screen-assist-settings-entry
+    - 08-navigation-background-resume
+    - 09-agent-chrome-ai-search
+    - 10-read-only-native-device-tools
+    - 11-reviewed-tool-approval-lifecycle
+    - 12-aca-mail-owner-connection-gate
+    - 14-local-task-proposals

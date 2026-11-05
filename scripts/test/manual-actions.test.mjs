@@ -54,7 +54,9 @@ function harness(scenario,args){
   writeFileSync(bin,mock);
   chmodSync(bin,0o755);
   const result=spawnSync(bash,[script,...args],{
-    encoding:"utf8",timeout:15000,
+    // Git Bash startup is much slower on Windows than native POSIX bash, and
+    // each preflight intentionally makes several isolated gh mock calls.
+    encoding:"utf8",timeout:60000,
     env:{...process.env,MOCK_SCENARIO:scenario,MOCK_SHA:sha,MOCK_LOG:log,
       PATH:root+delimiter+process.env.PATH}
   });

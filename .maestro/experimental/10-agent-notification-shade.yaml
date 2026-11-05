@@ -15,23 +15,25 @@ tags:
 - assertVisible: "Make your assistant yours."
 - tapOn: "Show optional permissions and features"
 # Reuse the independently proven overlay-permission flow before Accessibility.
-- scrollUntilVisible:
-    element: "Floating quick tools"
-    direction: DOWN
-    timeout: 25000
-- tapOn:
-    text: "Allow display over apps.*"
-- extendedWaitUntil:
-    visible: "Display over other apps"
-    timeout: 25000
-- scrollUntilVisible:
-    element: "Nexa AI"
-    direction: DOWN
-    timeout: 25000
-- tapOn: "Nexa AI"
-- tapOn: "Allow display over other apps"
-- back
-- back
+- runFlow:
+    when:
+      visible: "Allow display over apps.*"
+    commands:
+      - scrollUntilVisible:
+          element:
+            text: "Allow display over apps.*"
+          direction: DOWN
+          timeout: 25000
+      - tapOn:
+          text: "Allow display over apps.*"
+      - scrollUntilVisible:
+          element: "Nexa AI"
+          direction: DOWN
+          timeout: 25000
+      - tapOn: "Nexa AI"
+      - tapOn: "Allow display over apps"
+      - back
+      - back
 - launchApp:
     stopApp: false
 - launchApp:
@@ -42,29 +44,40 @@ tags:
     timeout: 25000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
+- runFlow:
+    when:
+      visible: "Accessibility"
+    commands:
+      - runFlow:
+          when:
+            visible: "Downloaded apps"
+          commands:
+            - tapOn: "Downloaded apps"
+      - runFlow:
+          when:
+            visible: "Installed apps"
+          commands:
+            - tapOn: "Installed apps"
+      - scrollUntilVisible:
+          element: "Nexa Screen Assist"
+          direction: DOWN
+          timeout: 30000
+      - tapOn: "Nexa Screen Assist"
 - extendedWaitUntil:
-    visible: "Accessibility"
+    visible: "Use Nexa Screen Assist"
     timeout: 25000
-- runFlow:
-    when:
-      visible: "Downloaded apps"
-    commands:
-      - tapOn: "Downloaded apps"
-- runFlow:
-    when:
-      visible: "Installed apps"
-    commands:
-      - tapOn: "Installed apps"
-- scrollUntilVisible:
-    element: "Nexa Screen Assist"
-    direction: DOWN
-    timeout: 30000
-- tapOn: "Nexa Screen Assist"
 - runFlow:
     when:
       visible: "Use Nexa Screen Assist"
     commands:
       - tapOn: "Use Nexa Screen Assist"
+# The service may already be enabled from an earlier run. Android asks for a
+# second confirmation before disabling it; keep the owner's existing grant.
+- runFlow:
+    when:
+      visible: "Turn off Nexa Screen Assist\\?"
+    commands:
+      - tapOn: "Keep on"
 # On Pixel 6 Android 13, do not toggle a second alias after "Use Nexa Screen Assist".
 - runFlow:
     when:
@@ -129,6 +142,11 @@ tags:
             visible: "Use Nexa Screen Assist"
           commands:
             - tapOn: "Use Nexa Screen Assist"
+      - runFlow:
+          when:
+            visible: "Turn off Nexa Screen Assist\\?"
+          commands:
+            - tapOn: "Keep on"
       # Do not toggle a second Accessibility switch alias on retry.
       - runFlow:
           when:
@@ -145,9 +163,15 @@ tags:
 # UI state before the strict acceptance assertion below fails. Maestro may
 # suppress unrelated AccessibilityServices: this remains NO-GO, not a pass.
 - scrollUntilVisible:
-    element: "One-time screen assistance"
+    element: "Why One-time screen assistance is needed"
     direction: UP
     timeout: 25000
+- tapOn: "Why One-time screen assistance is needed"
+- scrollUntilVisible:
+    element: ".*Refresh status"
+    direction: DOWN
+    timeout: 25000
+- tapOn: ".*Refresh status"
 - runFlow:
     when:
       visible:
@@ -161,13 +185,12 @@ tags:
     commands:
       - takeScreenshot: nexa-screen-assist-permission-not-enabled
 - scrollUntilVisible:
-    element:
-      text: "Nexa Screen Assist connected.*native screen actions ready"
-    direction: DOWN
+    element: "Nexa Screen Assist connected\\."
+    direction: UP
     timeout: 25000
 - extendedWaitUntil:
     visible:
-      text: "Nexa Screen Assist connected.*native screen actions ready"
+      text: "Nexa Screen Assist connected\\."
     timeout: 25000
 - takeScreenshot: nexa-native-screen-assist-connected
 # Return using the real launcher, not a private service API.

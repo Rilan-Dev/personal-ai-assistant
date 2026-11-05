@@ -10,6 +10,11 @@ tags:
     clearState: true
     permissions:
       all: deny
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 # A training-only tool: no native device action, no message and no provider call.

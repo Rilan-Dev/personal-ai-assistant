@@ -9,6 +9,16 @@ tags:
     clearState: true
     permissions:
       all: deny
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
 - tapOn: "Voice"
 - assertVisible: "Speak naturally"
 - assertVisible: "Live speech-to-speech"
@@ -30,5 +40,8 @@ tags:
     text: ".*No live model selected.*"
 - takeScreenshot: nexa-voice-unconfigured
 - tapOn: "Open settings"
-- tapOn: "Open permission setup"
-- assertVisible: "Make your assistant yours."
+- assertVisible: "Nexa · Settings"
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"

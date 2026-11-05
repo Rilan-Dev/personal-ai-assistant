@@ -9,7 +9,14 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - assertVisible: "Microphone & notifications"
 - takeScreenshot: nexa-fresh-setup
 - tapOn: "Chat"
@@ -20,6 +27,8 @@ tags:
 - assertVisible: "Speak naturally"
 - tapOn: "Open settings"
 - assertVisible: "Nexa · Settings"
-- tapOn: "Open permission setup"
-- assertVisible: "Make your assistant yours."
-- takeScreenshot: nexa-three-tabs-compact-setup
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- takeScreenshot: nexa-navigation-three-tabs

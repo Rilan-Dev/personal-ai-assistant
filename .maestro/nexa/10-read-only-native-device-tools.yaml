@@ -10,7 +10,14 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 # This uses Nexa's actual Android BatteryManager bridge, not a mocked value.

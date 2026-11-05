@@ -9,39 +9,52 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Show optional permissions and features"
 - scrollUntilVisible:
     element: "Floating quick tools"
     direction: DOWN
     timeout: 25000
-- tapOn:
-    text: "Allow display over apps.*"
-# Android 11+ deliberately opens the list of apps, not the direct toggle.
-# Only the Android Settings UI grants this permission after explicit user action.
-- extendedWaitUntil:
-    visible:
-      text: "Display over other apps"
-    timeout: 25000
-- takeScreenshot: nexa-overlay-android-app-list
-- scrollUntilVisible:
-    element:
-      text: "Nexa AI"
-    direction: DOWN
-    timeout: 30000
-- tapOn: "Nexa AI"
-- extendedWaitUntil:
-    visible:
-      text: "Allow display over other apps"
-    timeout: 25000
-- takeScreenshot: nexa-overlay-permission-before
-- tapOn:
-    text: "Allow display over other apps"
-- takeScreenshot: nexa-overlay-permission-granted
-- back
-- back
-- launchApp:
-    stopApp: false
+- runFlow:
+    when:
+      notVisible: "Enabled"
+      visible: "Allow display over apps.*"
+    commands:
+      - tapOn:
+          text: "Allow display over apps.*"
+      # Android 11+ opens the app list; the owner must grant the permission in Settings.
+      - scrollUntilVisible:
+          element:
+            text: "Nexa AI"
+          direction: DOWN
+          timeout: 30000
+      - assertVisible: "Nexa AI"
+      - takeScreenshot: nexa-overlay-android-app-list
+      - tapOn: "Nexa AI"
+      - extendedWaitUntil:
+          visible:
+            text: "Allow display over other apps"
+          timeout: 25000
+      - takeScreenshot: nexa-overlay-permission-before
+      - tapOn:
+          text: "Allow display over other apps"
+      - takeScreenshot: nexa-overlay-permission-granted
+      - back
+      - back
+      - launchApp:
+          stopApp: false
+      - runFlow:
+          when:
+            visible: "Don.t allow"
+          commands:
+            - tapOn: "Don.t allow"
 - scrollUntilVisible:
     element:
       text: "Show floating bubble"

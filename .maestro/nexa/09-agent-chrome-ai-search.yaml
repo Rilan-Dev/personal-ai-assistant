@@ -12,13 +12,34 @@ tags:
     link: https://www.google.com
     autoVerify: true
     browser: true
+- runFlow:
+    when:
+      visible: "Stay signed out"
+    commands:
+      - tapOn: "Stay signed out"
+- runFlow:
+    when:
+      visible: "No thanks"
+    commands:
+      - tapOn: "No thanks"
 - launchApp:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Tools"
 - assertVisible: "Tools & permissions"
+- scrollUntilVisible:
+    element: "App launching"
+    direction: DOWN
+    timeout: 25000
 - tapOn: "App launching"
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"

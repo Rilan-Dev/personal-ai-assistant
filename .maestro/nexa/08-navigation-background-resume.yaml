@@ -9,7 +9,14 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Voice"
@@ -17,12 +24,19 @@ tags:
 - tapOn: "Tools"
 - assertVisible: "Tools & permissions"
 - tapOn: "Open permission setup"
-- assertVisible: "Make your assistant yours."
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - pressKey: home
 - launchApp:
     stopApp: false
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
 - assertVisible: "How can I help today?"
 - tapOn: "Voice"
 - assertVisible: "Live speech-to-speech"

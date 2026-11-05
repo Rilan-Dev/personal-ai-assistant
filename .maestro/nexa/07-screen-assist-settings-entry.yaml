@@ -9,7 +9,14 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - tapOn: "Show optional permissions and features"
 - scrollUntilVisible:
     element: "One-time screen assistance"

@@ -11,8 +11,15 @@ tags:
     clearState: true
     permissions:
       all: deny
-- assertVisible: "Make your assistant yours."
-- tapOn: "Settings"
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
+- tapOn: "Open settings"
 - assertVisible: "Preferences"
 - scrollUntilVisible:
     element: "AI Comms Agent · Email"

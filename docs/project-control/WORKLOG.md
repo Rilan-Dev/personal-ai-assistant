@@ -923,3 +923,8 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Added explicit owner Discard for unpersisted origin-bound task review tokens; no task or message is created by discard.
 - Added Android instrumentation test source for cross-origin native fact runs and secure discard; production Android behavior still needs exact-SHA native evidence.
 - Kept external message Send and unrestricted screen automation disabled; no server Docker restart or main release promotion.
+
+## 2026-11-06 — physical QA and release build continuation
+- Physical Infinix X6831 (Android 13/API 33) was connected; Screen Assist and Launcher Navigation were both enabled and bound. Approved one four-flow Maestro test batch; no actual messages are to be sent.
+- A local debug build fails in Windows Ninja native C++ codegen due to long generated safe-area-context object paths. The D: project fixes stale OneDrive autolinking when its generated cache is refreshed, but still hits the Windows path limit.
+- Current task commit `d129b55` contains Maestro/test/app changes and is being rebased onto newly advanced `origin/Development`; `NEXT_ACTION.md` changes remain uncommitted to preserve its earlier notes.

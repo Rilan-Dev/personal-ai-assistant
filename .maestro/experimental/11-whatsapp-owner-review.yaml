@@ -21,6 +21,7 @@ tags:
 # Route to the private Tools review first. The contact-preview area is
 # intentionally below device controls; Maestro does not auto-scroll for
 # extendedWaitUntil. Do not pass merely because the Tools tab appeared.
+- tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 30000

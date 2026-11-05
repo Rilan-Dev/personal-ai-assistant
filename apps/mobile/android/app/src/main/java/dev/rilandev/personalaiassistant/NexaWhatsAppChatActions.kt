@@ -6,7 +6,8 @@ import java.util.UUID
 
 /** One owner-reviewed chat-list navigation step; no message data or send. */
 internal object NexaWhatsAppChatActions {
-    private data class Row(val target:AccessibilityNodeInfo,val evidence:Int)
+    private data class Row(val target:AccessibilityNodeInfo,val evidence:Int,
+        val bounds:Rect)
     internal data class Scan(val candidates:Int,val bestEvidence:Int,
         val target:AccessibilityNodeInfo?,val alreadyOpen:Boolean)
 
@@ -15,6 +16,17 @@ internal object NexaWhatsAppChatActions {
         val labels=listOf(node.text?.toString().orEmpty(),
             node.contentDescription?.toString().orEmpty())
         return labels.maxOfOrNull{NexaWhatsAppChatMatch.evidence(recipient,it)} ?:0
+    }
+    /** Android can expose one chat row through both a clickable row and a
+     * clickable accessibility wrapper with slightly different bounds. Merge
+     * those overlapping targets, while keeping adjacent rows independent. */
+    private fun sameRow(a:Rect,b:Rect):Boolean {
+        val overlap=Rect(a)
+        if(!overlap.intersect(b))return false
+        val minWidth=minOf(a.width(),b.width())
+        val minHeight=minOf(a.height(),b.height())
+        return minWidth>0 && minHeight>0 &&
+            overlap.width()*5>=minWidth*4 && overlap.height()*2>=minHeight
     }
     private fun messageComposerPresent(root:AccessibilityNodeInfo):Boolean {
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>();queue.add(root)
@@ -41,7 +53,7 @@ internal object NexaWhatsAppChatActions {
         val window=Rect().also{root.getBoundsInScreen(it)}
         if(window.isEmpty || recipient.length !in 3..55)
             return Scan(0,0,null,false)
-        val rows=linkedMapOf<String,Row>()
+        val rows=mutableListOf<Row>()
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>();queue.add(root)
         var examined=0
         var headerName=false
@@ -61,17 +73,23 @@ internal object NexaWhatsAppChatActions {
                     val rect=Rect().also{candidate.getBoundsInScreen(it)}
                     if(!rect.isEmpty && rect.width()>25 && rect.height()>20 &&
                         window.contains(rect)) {
-                        val id=listOf(rect.left,rect.top,rect.right,rect.bottom).joinToString(":")
-                        val previous=rows[id]
-                        if(previous==null || score>previous.evidence)
-                            rows[id]=Row(candidate,score)
+                        val previousIndex=rows.indexOfFirst{sameRow(it.bounds,rect)}
+                        if(previousIndex<0)rows.add(Row(candidate,score,Rect(rect)))
+                        else {
+                            val previous=rows[previousIndex]
+                            val preferred=if(rect.width().toLong()*rect.height() <
+                                previous.bounds.width().toLong()*previous.bounds.height())
+                                Row(candidate,maxOf(score,previous.evidence),Rect(rect))
+                            else Row(previous.target,maxOf(score,previous.evidence),previous.bounds)
+                            rows[previousIndex]=preferred
+                        }
                     }
                 }
             }
             for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
         }
         val open=headerName && messageComposerPresent(root)
-        val eligible=rows.values.filter{it.evidence>=85}
+        val eligible=rows.filter{it.evidence>=85}
         return Scan(eligible.size,eligible.maxOfOrNull{it.evidence}?:0,
             eligible.singleOrNull()?.target,open)
     }

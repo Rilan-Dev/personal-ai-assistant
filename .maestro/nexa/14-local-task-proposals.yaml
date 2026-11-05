@@ -10,6 +10,11 @@ tags:
     clearState: true
     permissions:
       all: deny
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
 - tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Private task proposals"

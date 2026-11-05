@@ -9,7 +9,14 @@ tags:
     clearState: true
     permissions:
       all: allow
-- assertVisible: "Make your assistant yours."
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
 - scrollUntilVisible:
     element:
       text: "Voice and wake activation advanced settings"
@@ -30,6 +37,11 @@ tags:
     visible: ".*Listening for Hey Nexa.*"
     timeout: 30000
 - takeScreenshot: nexa-wake-listening-foreground
+- scrollUntilVisible:
+    element:
+      text: "Disable Hey Nexa.*"
+    direction: DOWN
+    timeout: 25000
 - tapOn:
     text: "Disable Hey Nexa.*"
 - extendedWaitUntil:
