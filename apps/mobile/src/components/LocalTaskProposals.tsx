@@ -215,7 +215,9 @@ export function LocalTaskProposals({prefill}:{prefill?:{nonce:number;goal:string
                <Text style={styles.buttonText}>Run reviewed read-only plan</Text>
              </Pressable>}
           {detail.steps.map((step,index)=><Text key={step.ordinal+':'+index}
-            style={styles.help}>Step {step.ordinal+1}: {step.toolId} · {step.status}</Text>)}
+            style={styles.help}>Step {step.ordinal+1}: {step.toolId} · {step.status}{typeof step.missingDependencies==='number'&&step.missingDependencies>0
+              ? ` · waiting on ${step.missingDependencies} dependency${step.missingDependencies===1?'':'ies'}`
+              : step.dependenciesSatisfied ? ' · dependencies satisfied (execution disabled)' : ''}</Text>)}
           {detail.events.map((event,index)=><Text key={event.kind+':'+index}
             style={styles.help}>{new Date(event.createdAt).toLocaleString()} · {event.kind}</Text>)}
         </View>}
