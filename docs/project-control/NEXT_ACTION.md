@@ -1,3 +1,10 @@
+
+
+## 2026-11-05 — Shared task ingress implemented in source
+The same owner review now accepts Chat, Voice (Sarvam/OpenAI), assistant-role and overlay input. Trusted source is retained at explicit Save in encrypted custom.db. No model action is authorized.
+Still unfinished DEVELOPMENT: migrate legacy Voice cursor and Chat tools to one native coordinator; general step mandates, approval binding, cancellation and recovery; observed third-party screen navigation and messaging composition; provenance-aware memory; feature flag and rollback integration.
+Do not enable execution gates or promote main until source and native acceptance. No auto-send or permission bypass.
+---
 ## 2026-11-05 — New development priorities (release testing separate)
 
 Completed source additions: native owner task correction with encrypted CAS
