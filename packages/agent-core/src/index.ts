@@ -36,3 +36,7 @@ export type {IconReviewOffer,IconReviewResult,IconReviewSummary} from './icon-re
 
 export {parseReviewedTextEntry} from './text-entry-intent.ts';
 export type {ReviewedTextEntry} from './text-entry-intent.ts';
+
+// Shared admission boundary for Android/local, BYOK and LangGraph decisions.
+export {normalizePlannerTaskDecision,createTaskAdmissionPlanner} from "./task-admission.ts";
+export type {TrustedPlannerTaskContext,TaskAdmissionPlannerOptions} from "./task-admission.ts";
