@@ -3,11 +3,11 @@ import {NativeModules,Platform} from 'react-native';
 /** Manual, non-executable owner task — never a provider or model instruction. */
 export type LocalTaskProposal={
   taskId:string;sessionId:string;origin:'chat'|'live-voice'|'assistant-role'|'overlay';
-  status:'proposed'|'cancelled';policyVersion:string;goal:string;
+  status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain';policyVersion:string;goal:string;
   createdAt:number;updatedAt:number;revision?:number;
 };
 export type LocalTaskReviewDetail={
-  taskId:string;status:'proposed'|'cancelled';revision:number;updatedAt:number;
+  taskId:string;status:'proposed'|'cancelled'|'ready'|'running'|'completed'|'uncertain';revision:number;updatedAt:number;
   steps:Array<{ordinal:number;toolId:string;status:string;evidence:string}>;
   events:Array<{kind:string;createdAt:number}>;
 };
@@ -19,6 +19,8 @@ type LocalTaskBridge={
   admitOwnerReadOnlyPlan(planJson:string):Promise<boolean>;
   reviseOwnerTaskProposal(taskId:string,expectedRevision:number,goal:string):Promise<boolean>;
   ownerTaskReviewDetail(taskId:string):Promise<string>;
+  reviewOwnerReadOnlyPlan?(taskId:string):Promise<string>;
+  runReviewedOwnerReadOnlyPlan?(taskId:string,revision:number):Promise<string>;
 };
 const id=/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,99}$/;
 const ownerReviewPolicy=(value:unknown)=>value==='owner-review-v1'||value==='owner-preview-v1';
@@ -49,7 +51,7 @@ function decodeProposal(value:unknown):LocalTaskProposal{
   if(typeof item.taskId!=='string'||!id.test(item.taskId)||
     typeof item.sessionId!=='string'||!id.test(item.sessionId)||
     item.origin!=='chat'||!ownerReviewPolicy(item.policyVersion)||
-    !['proposed','cancelled'].includes(String(item.status))||
+    !['proposed','cancelled','ready','running','completed','uncertain'].includes(String(item.status))||
     typeof item.goal!=='string'||item.goal.length>500||
     !Number.isSafeInteger(item.createdAt)||!Number.isSafeInteger(item.updatedAt)||
     (item.revision!==undefined&&(!Number.isSafeInteger(item.revision)||Number(item.revision)<1)))
@@ -105,7 +107,7 @@ export async function readLocalTaskDetail(taskId:string):Promise<LocalTaskReview
   if(!value||typeof value!=='object'||Array.isArray(value))
     throw Error('Invalid task detail record');
   const d=value as Record<string,unknown>;
-  if(d.taskId!==taskId||!['proposed','cancelled'].includes(String(d.status))||
+  if(d.taskId!==taskId||!['proposed','cancelled','ready','running','completed','uncertain'].includes(String(d.status))||
      !Number.isSafeInteger(d.revision)||Number(d.revision)<1||
      !Number.isSafeInteger(d.updatedAt)||!Array.isArray(d.steps)||
      d.steps.length>8||!Array.isArray(d.events)||d.events.length>40)
@@ -163,4 +165,43 @@ export async function consumePendingOwnerTaskReview():Promise<string|null>{
      Array.from(value).some(char=>char.charCodeAt(0)<32))
     throw Error('Invalid spoken task review draft');
   return value;
+}
+
+
+/** Native-only reviewed plan metadata; plaintext arguments never reach React Native. */
+export type OwnerReadOnlyStep={
+  ordinal:number;
+  toolId:'device.status'|'device.battery_status';
+  status:'planned'|'pending'|'outcome_unknown'|'verified'|'uncertain'|'cancelled';
+  evidence:'native_reading';
+};
+export async function inspectOwnerReadOnlyPlan(taskId:string):Promise<OwnerReadOnlyStep[]>{
+  if(!id.test(taskId))throw Error('Invalid task identity');
+  const api=bridge();
+  if(typeof api.reviewOwnerReadOnlyPlan!=='function')
+    throw Error('Native plan review unavailable');
+  const raw=await api.reviewOwnerReadOnlyPlan(taskId);
+  if(typeof raw!=='string'||raw.length>8000)throw Error('Invalid plan review response');
+  const value:unknown=JSON.parse(raw);
+  if(!Array.isArray(value)||value.length>8)throw Error('Invalid step list');
+  const steps=value as OwnerReadOnlyStep[];
+  for(let index=0;index<steps.length;index++){
+    const step=steps[index];
+    if(!step||typeof step!=='object'||step.ordinal!==index||
+      !['device.status','device.battery_status'].includes(String(step.toolId))||
+      !['planned','pending','outcome_unknown','verified','uncertain','cancelled'].includes(String(step.status))||
+      step.evidence!=='native_reading')throw Error('Unrecognized native step');
+  }
+  return steps;
+}
+export async function runOwnerReviewedReadOnlyPlan(taskId:string,revision:number):Promise<string>{
+  if(!id.test(taskId)||!Number.isSafeInteger(revision)||revision<1)
+    throw Error('Invalid task revision');
+  const api=bridge();
+  if(typeof api.runReviewedOwnerReadOnlyPlan!=='function')
+    throw Error('Native reviewed plan executor unavailable');
+  const result=await api.runReviewedOwnerReadOnlyPlan(taskId,revision);
+  if(typeof result!=='string'||!result||result.length>1200)
+    throw Error('Unable to verify native reviewed plan outcome');
+  return result;
 }
