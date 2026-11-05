@@ -173,7 +173,10 @@ internal object NexaTaskStore {
                 ).use{c->
                     if(c.moveToFirst())c.getString(0) else ""
                 }
-                if(status !in setOf("proposed","cancelled"))return@synchronized JSONArray()
+                // Keep verified step metadata visible after completion, cancellation or
+                // recovery. Only metadata is decrypted; input bodies are never returned.
+                if(status !in setOf("proposed","cancelled","ready","running",
+                        "completed","uncertain"))return@synchronized JSONArray()
                 data class Step(val id:String,val ordinal:Int,val tool:String,
                                 val state:String,val dependencies:List<String>)
                 val rows=mutableListOf<Step>()
