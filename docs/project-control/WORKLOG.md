@@ -887,3 +887,7 @@
 ## 2026-11-05 — DSH task review UI and privacy isolation
 
 Confirmed older signed Android workflow 41926075781 passed on 0724292f. Implemented encrypted local owner task proposals, atomic proposal/cancel event history, and a foreground-only manual review UI. Consolidated duplicate screens and bridges to one Tools panel without displacing urgent messaging approvals. Restricted native history queries and cancel operations to manual chat-origin policies, with safe read/cancel of older preview-only records. Added tests for encrypted goals, one-shot cancellation, spoofed policy refusal and native restart persistence. Added manual Maestro task-proposals suite. Source verification at a68dd26b5: Node 380/380, TypeScript and web export passed; later native updates require exact-SHA Android CI. No device-side production promotion, external Send or service restart was performed.
+
+## 2026-11-05 — Maestro proposal flow fix
+
+Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact-match assertion for proposal safety text embedded in a wrapped paragraph. Exposed the disclosure as a dedicated accessibility-labeled element and updated the flow assertion; added a source regression test. Focused test, TypeScript checks, and Expo web export pass. Full Android signed build and Maestro rerun still required for this revision.

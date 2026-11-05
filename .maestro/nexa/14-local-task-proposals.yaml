@@ -14,7 +14,7 @@ tags:
 - extendedWaitUntil:
     visible: "Private task proposals"
     timeout: 30000
-- assertVisible: "no AI agent, message or phone action runs from a proposal."
+- assertVisible: "Proposal safety: no AI agent, message or phone action runs from a proposal."
 - tapOn: "Task to save for review"
 - inputText: "Review the ELV quotation and prepare a follow up"
 - hideKeyboard

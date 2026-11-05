@@ -58,7 +58,9 @@ export function LocalTaskProposals(){
   }
   return <View style={styles.container} accessibilityLabel="Private task proposals">
     <Text style={styles.heading}>Private task proposals</Text>
-    <Text style={styles.help}>Explicitly save a future request on this phone. Encrypted at rest; no AI agent, message or phone action runs from a proposal.</Text>
+    <Text style={styles.help}>Explicitly save a future request on this phone.</Text>
+    <Text accessibilityLabel="Proposal safety: no AI agent, message or phone action runs from a proposal."
+      style={styles.help}>Encrypted at rest. No AI agent, message or phone action runs from a proposal.</Text>
     {!available?<Text style={styles.help}>Update the Android APK to use on-device task proposals.</Text>:<>
       <TextInput style={styles.input} placeholder="E.g. Follow up on the ELV quotation"
         placeholderTextColor="#9AA9C4" value={goal} onChangeText={setGoal}
