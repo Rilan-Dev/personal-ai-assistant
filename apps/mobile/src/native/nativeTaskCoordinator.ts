@@ -148,7 +148,7 @@ export async function redactTerminalLegacyVoiceTask(taskId:string):Promise<boole
  */
 export type UnifiedTaskSummary={
   taskId:string;
-  source:'native'|'ui_action_audit'|'legacy_voice_checkpoint';
+  source:'native'|'ui_action_audit'|'chat_action_audit'|'legacy_voice_checkpoint';
   origin:'chat'|'live-voice'|'assistant-role'|'overlay';
   status:string;
   revision:number;
@@ -170,7 +170,7 @@ export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
     if(!x||typeof x!=='object'||Array.isArray(x))return false;
     const t=x as Record<string,unknown>;
     return typeof t.taskId==='string'&&/^task-[A-Za-z0-9_-]{8,96}$/.test(t.taskId)&&
-      (t.source==='native'||t.source==='ui_action_audit'||t.source==='legacy_voice_checkpoint')&&
+      (t.source==='native'||t.source==='ui_action_audit'||t.source==='chat_action_audit'||t.source==='legacy_voice_checkpoint')&&
       ['chat','live-voice','assistant-role','overlay'].includes(String(t.origin))&&
       typeof t.status==='string'&&/^[a-z_]{1,40}$/.test(t.status)&&
       Number.isSafeInteger(t.revision)&&Number(t.revision)>=0&&
