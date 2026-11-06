@@ -158,4 +158,56 @@ class NexaUiActionJournalAndroidTest {
         assertTrue(NexaUiActionJournal.finish(ctx,token,"android_rejected"))
     }
 
+
+    @Test fun chatAndVoiceAppLaunchesRetainOriginAndNeverClaimVerifiedCompletion(){
+        val pkg="com.example.ownerapproved"
+        for(origin in listOf("chat","live-voice")){
+            val token="approved-"+java.util.UUID.randomUUID()
+            assertTrue(NexaUiActionJournal.claim(ctx,token,"app_launch",pkg,
+                origin=origin))
+            assertFalse("An already-claimed launch cannot be replayed",
+                NexaUiActionJournal.claim(ctx,token,"app_launch",pkg,origin=origin))
+            assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+            val tokenDigest=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(token.toByteArray(Charsets.UTF_8))
+                .joinToString(""){"%02x".format(it.toInt() and 0xff)}
+            val taskId="task-"+java.util.UUID.nameUUIDFromBytes(
+                ("task-:"+tokenDigest).toByteArray(Charsets.UTF_8)).toString()
+            val helper=NexaConversationDb(ctx)
+            try{
+                helper.readableDatabase.rawQuery(
+                    "SELECT t.origin,t.status,t.policy_version,s.tool_id,s.status "+
+                        "FROM agent_tasks t JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                        "WHERE t.task_id=?",arrayOf(taskId)
+                ).use{c->
+                    assertTrue(c.moveToFirst())
+                    assertEquals(origin,c.getString(0))
+                    assertEquals("running",c.getString(1))
+                    assertEquals(NexaUiTaskAudit.POLICY,c.getString(2))
+                    assertEquals("ui.app_launch",c.getString(3))
+                    assertEquals("outcome_unknown",c.getString(4))
+                }
+                helper.readableDatabase.rawQuery(
+                    "SELECT COUNT(*) FROM agent_mandates WHERE task_id=?",
+                    arrayOf(taskId)
+                ).use{c->
+                    assertTrue(c.moveToFirst())
+                    assertEquals("Intent acceptance never grants a general mandate",
+                        0,c.getInt(0))
+                }
+            }finally{helper.close()}
+        }
+    }
+
+    @Test fun forgedOriginOrUnboundMessageCannotClaimAnyAction(){
+        val pkg="com.example.ownerapproved"
+        val token="approval-"+java.util.UUID.randomUUID()
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"app_launch",pkg,
+            origin="external-model"))
+        assertFalse(NexaUiActionJournal.claim(ctx,token,"message_fill",pkg,
+            origin="chat"))
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"app_launch",pkg,
+            origin="chat"))
+    }
+
 }
