@@ -210,4 +210,39 @@ class NexaUiActionJournalAndroidTest {
             origin="chat"))
     }
 
+
+    @Test fun voiceScreenGesturesRecordVoiceOriginWithoutGrantingTaskMandate() {
+        for(kind in listOf("tap","scroll_down")){
+            val token="voice-reviewed-"+java.util.UUID.randomUUID()
+            val pkg="com.example.externalapp"
+            assertTrue(NexaUiActionJournal.claim(ctx,token,kind,pkg,
+                origin="live-voice"))
+            assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+            val sha=java.security.MessageDigest.getInstance("SHA-256")
+                .digest(token.toByteArray(Charsets.UTF_8))
+                .joinToString(""){"%02x".format(it.toInt() and 255)}
+            val taskId="task-"+java.util.UUID.nameUUIDFromBytes(
+                ("task-:"+sha).toByteArray(Charsets.UTF_8)).toString()
+            val helper=NexaConversationDb(ctx)
+            try {
+                helper.readableDatabase.rawQuery(
+                    "SELECT t.origin,s.tool_id,t.status "+
+                        "FROM agent_tasks t JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                        "WHERE t.task_id=?",arrayOf(taskId)
+                ).use{row->
+                    assertTrue(row.moveToFirst())
+                    assertEquals("live-voice",row.getString(0))
+                    assertEquals("ui."+kind,row.getString(1))
+                    assertEquals("running",row.getString(2))
+                }
+                helper.readableDatabase.rawQuery(
+                    "SELECT COUNT(*) FROM agent_mandates WHERE task_id=?",
+                    arrayOf(taskId)).use{row->
+                    assertTrue(row.moveToFirst())
+                    assertEquals(0,row.getInt(0))
+                }
+            } finally{helper.close()}
+        }
+    }
+
 }
