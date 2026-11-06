@@ -10,13 +10,5 @@
         <activity android:name=".NexaVoiceTestHostActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
-        <activity android:name=".NexaChatListQaActivity"
-            android:exported="true"
-            android:process=":nexa_qa"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
-        <activity android:name=".NexaInputQaActivity"
-            android:exported="true"
-            android:process=":nexa_qa"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>

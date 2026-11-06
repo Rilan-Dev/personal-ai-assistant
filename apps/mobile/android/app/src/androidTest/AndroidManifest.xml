@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Synthetic external-app windows belong to the instrumentation APK,
+             not Nexa's React Native package. This keeps UI fixtures independent
+             of application startup on both local and hosted emulators. -->
+        <activity
+            android:name="dev.rilandev.personalaiassistant.NexaChatListQaActivity"
+            android:exported="true"
+            android:process=":nexa_qa"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity
+            android:name="dev.rilandev.personalaiassistant.NexaInputQaActivity"
+            android:exported="true"
+            android:process=":nexa_qa"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+    </application>
+</manifest>

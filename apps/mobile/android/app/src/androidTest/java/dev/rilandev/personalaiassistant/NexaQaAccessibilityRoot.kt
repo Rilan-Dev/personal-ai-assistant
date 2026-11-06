@@ -41,7 +41,7 @@ internal object NexaQaAccessibilityRoot {
     fun ownWindow(marker:String):AccessibilityNodeInfo {
         val instrument=InstrumentationRegistry.getInstrumentation()
         val automation=instrument.uiAutomation
-        val app=instrument.targetContext.packageName
+        val fixturePackage=instrument.context.packageName
         try {
             val info=automation.serviceInfo
             info.flags=info.flags or
@@ -59,13 +59,13 @@ internal object NexaQaAccessibilityRoot {
             if(active!=null) {
                 val pkg=active.packageName?.toString().orEmpty()
                 observedPackage=pkg
-                if(pkg==app && matchesFixture(active,marker))return active
+                if(pkg==fixturePackage && matchesFixture(active,marker))return active
             }
             if(it%4==0) {
                 val windows=try{automation.windows}catch(_:Exception){emptyList()}
                 for(window in windows) {
                     val root=try{window.root}catch(_:Exception){null}?:continue
-                    if(root.packageName?.toString()==app &&
+                    if(root.packageName?.toString()==fixturePackage &&
                         matchesFixture(root,marker))return root
                 }
             }
@@ -78,7 +78,7 @@ internal object NexaQaAccessibilityRoot {
     }
 
     fun launchFixture(activity:Class<*>,duplicate:Boolean?=null):String {
-        val packageName=InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        val packageName=InstrumentationRegistry.getInstrumentation().context.packageName
         val component="$packageName/${activity.name}"
         val extra=duplicate?.let { " --ez duplicate $it" }.orEmpty()
         val runId=UUID.randomUUID().toString().replace("-","")

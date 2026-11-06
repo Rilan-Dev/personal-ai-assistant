@@ -1,9 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.app.Application
-import android.os.Build
 import android.content.res.Configuration
-import java.io.File
 
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -18,15 +16,6 @@ import expo.modules.ExpoReactHostFactory
 
 class MainApplication : Application(), ReactApplication {
 
-  private val isQaFixtureProcess: Boolean by lazy(LazyThreadSafetyMode.NONE) {
-    val processName=if(Build.VERSION.SDK_INT>=Build.VERSION_CODES.P) {
-      Application.getProcessName()
-    } else {
-      File("/proc/self/cmdline").readText().substringBefore('\u0000')
-    }
-    processName=="$packageName:nexa_qa"
-  }
-
   override val reactHost: ReactHost by lazy {
     ExpoReactHostFactory.getDefaultReactHost(
       context = applicationContext,
@@ -40,10 +29,6 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onCreate() {
     super.onCreate()
-    // Debug-only synthetic Accessibility fixtures run in a private process.
-    // They must not initialize React Native, recover user voice state, or
-    // perform production application startup work.
-    if(isQaFixtureProcess)return
     // Android may have killed a previous Voice process between owner-approved
     // steps. Fence old cursor checkpoints before starting any new agent UI.
     // This never resumes a claimed third-party UI action.
@@ -59,7 +44,6 @@ class MainApplication : Application(), ReactApplication {
 
   override fun onConfigurationChanged(newConfig: Configuration) {
     super.onConfigurationChanged(newConfig)
-    if(!isQaFixtureProcess)
-      ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
+    ApplicationLifecycleDispatcher.onConfigurationChanged(this, newConfig)
   }
 }
