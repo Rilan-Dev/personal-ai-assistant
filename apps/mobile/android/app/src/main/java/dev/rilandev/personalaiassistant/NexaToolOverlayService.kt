@@ -919,6 +919,21 @@ class NexaToolOverlayService : Service() {
                         addView(text("Microphone indicator and Stop notification are Android privacy protections.",11f,true))
                     }
                 }
+                addView(row(
+                    button(if(NexaNativeActionSafety.isPaused(this@NexaToolOverlayService))
+                        "Device actions paused" else "Pause device actions") {
+                        val ok=NexaNativeActionSafety.setPaused(this@NexaToolOverlayService,true)
+                        if(ok){
+                            NexaScreenActions.reset()
+                            NexaScreenScroll.cancel()
+                            NexaMessageInputActions.cancel()
+                            NexaTextInputActions.cancel()
+                            note="Nexa device actions paused. Resume in full Nexa Settings."
+                        }else note="Could not persist the owner pause. Review in Nexa Settings."
+                        render()
+                    },
+                    button("Action safety settings") { openTab("settings") }
+                ))
                 addView(text("Actions need approval  ·  Screen access requires permission",11f,true))
                 addView(text(note,11f,true))
                 if (section == "tools") {
