@@ -25,7 +25,8 @@ internal object NexaUiTaskAudit {
     private val allowed=setOf("tap","scroll_up","scroll_down","scroll_left",
         "scroll_right","message_fill","text_fill","app_launch")
     private val observed=setOf("observed_change","scroll_event_observed",
-        "window_change_observed","structural_change_observed")
+        "window_change_observed","structural_change_observed",
+        "destination_package_observed")
     private val uncertain=setOf("unknown","no_observable_change",
         "context_changed_unverified","unverified")
     private val denied=setOf("android_rejected")
@@ -195,7 +196,7 @@ internal object NexaUiTaskAudit {
      * package, or an altered action kind can never receive verified progress.
      */
     private fun receiptBound(db:SQLiteDatabase,taskId:String,stepId:String,
-                             tokenDigest:String):Boolean {
+                             tokenDigest:String,requireAppLaunch:Boolean=false):Boolean {
         return db.rawQuery(
             "SELECT s.arguments_cipher,a.target_digest,a.input_digest,"+
                 "a.state,a.consumed_at FROM agent_task_steps s "+
@@ -214,6 +215,7 @@ internal object NexaUiTaskAudit {
             val expectedInput=if(textAction)reviewed
                 else digest("ui-action-v1:"+kind+":"+tokenDigest)
             val valid=args.length()==(if(textAction)3 else 2) && kind in allowed &&
+                (!requireAppLaunch || kind=="app_launch") &&
                 sha.matches(pkg) && row.getString(1)==pkg &&
                 (!textAction || sha.matches(reviewed)) &&
                 row.getString(2)==expectedInput &&
@@ -244,6 +246,7 @@ internal object NexaUiTaskAudit {
             else->"outcome_unknown"
         }
         val event=when(outcome){
+            "destination_package_observed"->"app_destination_observed"
             in observed->"ui_change_observed"
             in denied->"ui_dispatch_rejected"
             in uncertain->"ui_outcome_uncertain"
@@ -256,7 +259,8 @@ internal object NexaUiTaskAudit {
                 db.beginTransaction()
                 try {
                     val now=System.currentTimeMillis()
-                    if(!receiptBound(db,taskId,stepId,tokenDigest))
+                    if(!receiptBound(db,taskId,stepId,tokenDigest,
+                            outcome=="destination_package_observed"))
                         return@synchronized false
                     val changed=db.compileStatement(
                         "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
@@ -281,13 +285,16 @@ internal object NexaUiTaskAudit {
                     }
                     check(step==1)
                     if(outcome in observed){
-                        // A screen changed; do not infer which task the screen
-                        // change fulfilled. No raw visual evidence is persisted.
+                        // An exact destination package was visible, or a generic
+                        // UI change was seen. Neither proves the requested
+                        // navigation or any downstream business outcome.
+                        val verdict=if(outcome=="destination_package_observed")
+                            "destination_package_observed" else "ui_change_observed"
                         db.execSQL(
                             "INSERT INTO agent_observations(observation_id,step_id,"+
                                 "source_kind,verdict,evidence_digest,observed_at) "+
-                                "VALUES(?,?,'android_accessibility','ui_change_observed',?,?)",
-                            arrayOf(id("observation-",tokenDigest),stepId,
+                                "VALUES(?,?,'android_accessibility',?,?,?)",
+                            arrayOf(id("observation-",tokenDigest),stepId,verdict,
                                 digest(tokenDigest+":"+outcome),now)
                         )
                     }

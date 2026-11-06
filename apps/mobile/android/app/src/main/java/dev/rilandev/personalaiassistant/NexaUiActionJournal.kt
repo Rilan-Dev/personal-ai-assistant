@@ -147,7 +147,8 @@ internal object NexaUiActionJournal {
         synchronized(lock) {
             if (observation !in setOf("observed_change","no_observable_change",
                     "scroll_event_observed","window_change_observed",
-                    "structural_change_observed","context_changed_unverified","unverified"))
+                    "structural_change_observed","context_changed_unverified",
+                    "destination_package_observed","unverified"))
                 return@synchronized false
             try {
                 val id=digest(approvalToken)
@@ -155,7 +156,10 @@ internal object NexaUiActionJournal {
                 var found=false
                 for (i in 0 until entries.length()) {
                     val item=entries.getJSONObject(i)
-                    if(item.optString("id")==id && item.optString("status")=="android_accepted") {
+                    if(item.optString("id")==id &&
+                        item.optString("status")=="android_accepted" &&
+                        (observation!="destination_package_observed" ||
+                            item.optString("kind")=="app_launch")) {
                         item.put("status",observation)
                         found=true
                         break

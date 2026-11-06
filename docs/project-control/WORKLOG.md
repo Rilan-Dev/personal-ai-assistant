@@ -1017,3 +1017,8 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Added owner-pause Android instrumentation source and Node source assertions. Kotlin runtime/physical phone and rollback gates still require exact-commit acceptance.
 - Recovery/limitations: OS actions already dispatched cannot be undone; the stop prevents new work but does not prove completion or implement the missing generalized task scheduler.
 - Runbook: `docs/architecture/NEXA_OWNER_ACTION_PAUSE_RUNBOOK_20261106.md`.
+
+## 2026-11-06 — One-shot post-launch Android package evidence
+- Added a package-only, delayed native Accessibility observation after an already approved app-launch Intent. It upgrades a claimed audit receipt only once and only for an exact visible destination package; no raw screen content is kept.
+- Added Android instrumentation regressions for matching/changed/unavailable packages, one-time receipts, persistent audit events, and non-launch isolation. Full Kotlin compilation, emulator observation and physical-phone approval remain independent verification gates.
+- No sending, generic execution, production services, or build triggers were enabled.

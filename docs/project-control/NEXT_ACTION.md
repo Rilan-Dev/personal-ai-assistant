@@ -662,3 +662,8 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - The ordered native gates for `1469be4` built successfully but emulator instrumentation found five failures. The reviewed-text digest receipt and owner-read-plan test fixtures are fixed locally; all three Android gates must now be rerun sequentially against the new Development SHA.
 - A local Maestro CLI is available from a temporary install. After the signed release-test artifact is built, install it on physical Infinix X6831 and run the four experimental flows in order. Keep real notification-panel visibility and bound-service assertions strict; no messages are to be sent.
 - Local Windows Gradle remains limited by Ninja's 260-character C++ codegen path. Do not promote to `main` or call the release-test APK a public release.
+
+## 2026-11-06 — Post-launch observation implementation gate
+- Source milestone: exact package-only observed app destination; separate from mere Intent acceptance and never proof of task success.
+- Verify **this exact Development SHA** with focused Android instrumentation and release-test UI acceptance on emulator and Infinix phone; test cold launches, denied Accessibility, changed foreground app, pause, and no unintended messaging.
+- General observed multi-step coordinator, exact recipient/composer and message-send review, cross-interface recovery, and signing/rollback certification remain OPEN. Do not mark these complete from a single evidence milestone.

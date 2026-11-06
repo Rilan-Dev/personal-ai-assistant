@@ -32,3 +32,9 @@ Implemented in `Development`:
 - These UI action receipts remain audit-only. The existing RN Chat and visible Voice owner confirmations still authorize the request, with Screen Assist, native package/window and one-shot controls unchanged. No second AI planner or action executor was introduced.
 
 Still pending: convert multi-step UI actions into one parent Kotlin task ID with per-step versioned mandates, post-launch observed package verification, safe replay-free continuation, exact recipient/chat observation, and owner-controlled final Send. Generic arbitrary Accessibility autonomy and production execution remain disabled.
+
+## 2026-11-06 — Package-only post-launch observation (development)
+- A previously approved Chat, Voice or overlay app launch still obtains a permanent one-shot `app_launch` claim before Android dispatch. After Android accepts the Intent, the native main thread inspects one Accessibility root after 1.2 seconds when Screen Assist is connected.
+- Only an **exact visible destination package** can produce `destination_package_observed`; other windows yield `context_changed_unverified`, and inaccessible windows yield `unverified`. The result is bound to an already-accepted, exact-kind audit receipt; duplicate or non-launch upgrades are rejected.
+- No screenshots, package names, visible labels, UI text, or recipients enter the persisted evidence. An observed destination **does not** mean navigation completed, a chat was opened, or a message was sent. There is no polling, retry, or new action authority.
+- Device acceptance remains required, especially slow cold launches, Android overlays, Accessibility revocation, launch while locked, interruptions and third-party UI behavior. The unified general multi-step executor and reviewed final Send remain separate backlog items.

@@ -820,8 +820,13 @@ internal object NexaTaskCoordinator {
             origin=origin))return "denied"
         return try {
             context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            if(NexaUiActionJournal.finish(context,token,"android_accepted"))
-                "accepted" else "uncertain"
+            if(NexaUiActionJournal.finish(context,token,"android_accepted")) {
+                // A successful Intent is only an OS dispatch receipt. Obtain
+                // a separate, one-shot package observation if Accessibility
+                // remains available; never wait, retry or infer task success.
+                NexaAppLaunchObservation.observeAfter(context,token,packageName)
+                "accepted"
+            } else "uncertain"
         }catch (_:android.content.ActivityNotFoundException){
             NexaUiActionJournal.finish(context,token,"android_rejected")
             "denied"

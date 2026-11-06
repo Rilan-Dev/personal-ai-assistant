@@ -243,3 +243,7 @@ permission was added.
 - Process-start reconciliation marks abandoned Voice checkpoints uncertain; it does not infer external app success or automatically replay a gesture.
 - Terminal voice audit goal/steps/evidence are eligible for explicit foreground owner privacy redaction. Both encrypted representations are cleared in one SQLite transaction, while identity and event/claim evidence remain for non-replay and incident history.
 - A minimal metadata flag indicates redaction in Tools without exposing private Voice text.
+
+## 2026-11-06 — Android-only observed app destination, no harness substitution
+- Re-inspected LangGraph.js `langchain-ai/langgraphjs@585b78bbc8249014c6d092ff0e38699679b33034`, `libs/langgraph-core/src/graph/state.ts` (StateGraph execution/checkpoint imports; MIT), and Deep Agents JS `langchain-ai/deepagentsjs@2160d187f5d5c330ed83e575ad0f406e98bdada3`, `libs/deepagents/src/agent.ts` (agent/middleware composition; MIT).
+- Neither upstream runtime can prove an Android Intent's destination package is visible. We adopt no new packages and copy no upstream code; the existing Kotlin `NexaUiActionJournal` and Android Accessibility service remain the evidence and permission boundaries. Retained rollback: remove the delayed observation call while keeping permanent claimed launch receipts. Tests cover exact-package classification, wrong-kind rejection and no replay.
