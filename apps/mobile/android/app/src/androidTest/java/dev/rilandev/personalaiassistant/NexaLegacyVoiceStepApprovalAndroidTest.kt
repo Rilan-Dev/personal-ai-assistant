@@ -80,17 +80,26 @@ class NexaLegacyVoiceStepApprovalAndroidTest {
         // A real gesture is NEVER dispatched here. Only the durable claim is
         // reserved, exactly as the UI executor does before external activity.
         val token=UUID.randomUUID().toString()
-        val wrong=NexaVoiceActionScope.during(true,task,session,0,"open"){
+        val wrong=NexaVoiceActionScope.during(true,task,session,0,"open",
+            "com.google.android.calendar"){
             NexaUiActionJournal.claim(context,token,"tap",
                 "com.google.android.calendar",origin="live-voice")
         }
         assertFalse(wrong)
-        val valid=NexaVoiceActionScope.during(true,task,session,0,"open"){
+        val valid=NexaVoiceActionScope.during(true,task,session,0,"open",
+            "com.google.android.calendar"){
             NexaUiActionJournal.claim(context,token,"app_launch",
                 "com.google.android.calendar",origin="live-voice")
         }
         assertTrue(valid)
-        val duplicate=NexaVoiceActionScope.during(true,task,session,0,"open"){
+        val wrongPackage=NexaVoiceActionScope.during(
+            true,task,session,0,"open","com.google.android.calendar"){
+            NexaUiActionJournal.claim(context,UUID.randomUUID().toString(),
+                "app_launch","com.whatsapp",origin="live-voice")
+        }
+        assertFalse(wrongPackage)
+        val duplicate=NexaVoiceActionScope.during(true,task,session,0,"open",
+            "com.google.android.calendar"){
             NexaUiActionJournal.claim(context,UUID.randomUUID().toString(),
                 "app_launch","com.google.android.calendar",origin="live-voice")
         }
