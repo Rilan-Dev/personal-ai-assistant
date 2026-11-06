@@ -26,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          submodules: true
           # Manual dispatch tests the exact selected source commit.
           # Owner comments retain controlled, explicit branch targets.
           ref: ${{ github.event_name == 'workflow_dispatch' && github.sha || github.event.comment.body == '/nexa-real-device native-qa' && 'fix/nexa-real-device-voice-chat-grounding-20261105' || github.event.comment.body == '/nexa-autonomy native-qa' && 'fix/nexa-autonomous-tool-qa-20261105' || 'feature/nexa-message-routing-input-20261104' }}

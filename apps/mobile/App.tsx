@@ -1631,7 +1631,7 @@ export default function App() {
         resume: Boolean(restore),
         grantedCapabilities: new Set(capabilities),
         signal: controller.signal,
-        maxSteps: parseOwnerMultiToolRequest(request)?.length ?? 6,
+        maxSteps: (parseOwnerMultiToolRequest(request)?.length ?? 5) + 1,
         onEvent: event => setEvents(prev => [...prev, event])
       });
       setRecovered(null);

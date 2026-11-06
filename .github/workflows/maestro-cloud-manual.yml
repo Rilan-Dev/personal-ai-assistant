@@ -86,6 +86,7 @@ jobs:
       # The Development checkout is allowed only for this one exact owner command.
       - uses: actions/checkout@v4
         with:
+          submodules: true
           ref: ${{ github.event_name == 'issue_comment' && github.event.comment.body == '/nexa-maestro run whatsapp-review Development android-33' && 'Development' || github.ref_name }}
           fetch-depth: 0
       - name: Locate latest successful signed Nexa APK

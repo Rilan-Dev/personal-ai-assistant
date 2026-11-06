@@ -98,10 +98,22 @@ internal object NexaAgentActionAudit {
                         // uncertain, rejected, or yet to be reconciled.
                         val unsafe=db.rawQuery(
                             "SELECT 1 FROM agent_task_steps WHERE task_id=? "+
-                                "AND status<>'dispatch_settled' LIMIT 1",
+                                "AND status NOT IN ('dispatch_settled','ui_observed') LIMIT 1",
                             arrayOf(taskId)
                         ).use{it.moveToFirst()}
                         if(unsafe)return@synchronized false
+                        // A settled native UI dispatch is not enough to move
+                        // to the next step. Its exact native observation must
+                        // have been committed before another claim is possible.
+                        val unverifiedUi=db.rawQuery(
+                            "SELECT 1 FROM agent_task_events e WHERE e.task_id=? "+
+                                "AND e.event_kind='chat_native_ui_reserved' "+
+                                "AND NOT EXISTS (SELECT 1 FROM agent_task_events o "+
+                                "WHERE o.task_id=e.task_id AND o.step_id=e.step_id "+
+                                "AND o.event_kind='chat_native_ui_observed') LIMIT 1",
+                            arrayOf(taskId)
+                        ).use{it.moveToFirst()}
+                        if(unverifiedUi)return@synchronized false
                         check(db.compileStatement(
                             "UPDATE agent_tasks SET status='running',"+
                                 "plan_revision=plan_revision+1,updated_at=? "+
@@ -226,7 +238,16 @@ internal object NexaAgentActionAudit {
                     if(!approvalBound)return@synchronized false
                     val now=System.currentTimeMillis()
                     val taskState=if(uncertain)"uncertain" else "settled_unverified"
-                    val stepState=if(uncertain)"uncertain" else "dispatch_settled"
+                    val uiObserved=if(uncertain)false else db.rawQuery(
+                        "SELECT 1 FROM agent_task_events WHERE task_id=? "+
+                            "AND step_id=? AND event_kind='chat_native_ui_observed' LIMIT 1",
+                        arrayOf(taskId,stepId)
+                    ).use{it.moveToFirst()}
+                    val stepState=when{
+                        uncertain->"uncertain"
+                        uiObserved->"ui_observed"
+                        else->"dispatch_settled"
+                    }
                     check(db.compileStatement(
                         "UPDATE agent_task_steps SET status=? WHERE step_id=? "+
                             "AND task_id=? AND status='outcome_unknown'"
@@ -251,7 +272,8 @@ internal object NexaAgentActionAudit {
                         "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                             "VALUES(?,?,?,?)",
                         arrayOf(taskId,stepId,if(uncertain)
-                            "chat_action_uncertain_no_replay" else
+                            "chat_action_uncertain_no_replay" else if(uiObserved)
+                            "chat_native_ui_observed_settled" else
                             "chat_dispatch_settled_unverified",now)
                     )
                     db.setTransactionSuccessful()
@@ -347,6 +369,90 @@ internal object NexaAgentActionAudit {
                         "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                             "VALUES(?,?,'chat_native_ui_reserved',?)",
                         arrayOf(taskId,stepId,now)
+                    )
+                    db.setTransactionSuccessful()
+                    true
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }}catch(_:Exception){false}
+    }
+
+    /**
+     * Append narrow, native-produced evidence to the already reserved
+     * owner-approved Chat step. A model result cannot call this method.
+     * This records only UI change, not correctness of a conversation or send.
+     *
+     * tap/scroll require the exact private native gesture token; a fabricated
+     * JS "success" result is insufficient. Text requires that the native
+     * field controller has already verified exact text in the empty field.
+     */
+    fun recordReviewedUiEvidence(context:Context,session:String,call:String,
+                                  fingerprint:String,toolId:String,
+                                  evidence:String,gestureToken:String?=null):Boolean {
+        if(!valid(session,call,fingerprint) ||
+            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text"))
+            return false
+        val expectedKind=when(toolId){
+            "screen.tap_label"->"tap"
+            "screen.scroll"->{
+                val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                    catch(_:Exception){null} ?:return false
+                "scroll_"+args.optString("direction")
+            }
+            else->"text_fill"
+        }
+        if(toolId=="screen.fill_text"){
+            if(evidence!="exact_text_visible" || gestureToken!=null)return false
+        }else{
+            if(evidence!="observed_change" ||
+                gestureToken.isNullOrBlank() ||
+                NexaUiActionJournal.outcomeFor(context,gestureToken,expectedKind) !in
+                    setOf("observed_change","structural_change_observed",
+                        "window_change_observed","scroll_event_observed"))
+                return false
+        }
+        return try{synchronized(lock){
+            val taskId=opaqueId("task-",sessionKey(session))
+            val stepId=opaqueId("step-",callKey(session,call))
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.writableDatabase
+                db.beginTransaction()
+                try{
+                    val found=db.rawQuery(
+                        "SELECT s.arguments_cipher FROM agent_tasks t "+
+                            "JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                            "WHERE t.task_id=? AND t.policy_version=? "+
+                            "AND t.origin='chat' AND t.status='running' "+
+                            "AND s.step_id=? AND s.status='outcome_unknown' LIMIT 2",
+                        arrayOf(taskId,POLICY,stepId)
+                    ).use{row->
+                        if(!row.moveToFirst())false
+                        else{
+                            val args=JSONObject(NexaConversationDb
+                                .openNativeTaskArguments(row.getBlob(0)))
+                            args.optString("fingerprintDigest")==sha(fingerprint) &&
+                                !row.moveToNext()
+                        }
+                    }
+                    if(!found)return@synchronized false
+                    val previous=db.rawQuery(
+                        "SELECT event_kind FROM agent_task_events "+
+                            "WHERE task_id=? AND step_id=? "+
+                            "AND event_kind IN ('chat_native_ui_reserved',"+
+                            "'chat_native_ui_observed')",
+                        arrayOf(taskId,stepId)
+                    ).use{row->
+                        val kinds=mutableSetOf<String>()
+                        while(row.moveToNext())kinds.add(row.getString(0))
+                        kinds
+                    }
+                    if("chat_native_ui_reserved" !in previous ||
+                        "chat_native_ui_observed" in previous)return@synchronized false
+                    db.execSQL(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
+                            "VALUES(?,?,'chat_native_ui_observed',?)",
+                        arrayOf(taskId,stepId,System.currentTimeMillis())
                     )
                     db.setTransactionSuccessful()
                     true
