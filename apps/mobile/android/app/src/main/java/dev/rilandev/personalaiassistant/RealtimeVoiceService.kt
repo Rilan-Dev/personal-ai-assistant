@@ -202,6 +202,7 @@ class RealtimeVoiceService : Service() {
                             pending.screenBinding?.structureDigest.orEmpty())
                         else true
                     val outcome = try {
+                        NexaVoiceSessionGuard.during(operationSession) {
                         NexaVoiceActionScope.during(
                             task!=null && checkpointOk && !staleTask &&
                                 active.get() && operationSession==voiceSessionId &&
@@ -253,7 +254,7 @@ class RealtimeVoiceService : Service() {
                     pending.installedApp != null ->
                         NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
                     else -> NexaOverlayCommands.handle(this,pending.command)
-                } }
+                } } }
                 } catch (failure:Exception) {
                     "Android refused the approved screen action ("+
                         failure.javaClass.simpleName+"). No automatic retry."
@@ -348,6 +349,10 @@ class RealtimeVoiceService : Service() {
         // second microphone capture. The wake service remains owner-armed,
         // but may not record concurrently with the live session.
         NexaWakeWordService.pauseForLiveVoice()
+        if(!NexaNativeActionSafety.armVoiceSession(voiceSessionId)){
+            stopWithStatus("error","Cannot arm protected Voice session")
+            return START_NOT_STICKY
+        }
         active.set(true)
         status="connecting"
         message="Connecting to "+(if(selectedProvider=="sarvam-api")"Sarvam API realtime voice" else if(selectedProvider=="sarvam")"Sarvam Voice Agents" else "OpenAI")
@@ -1488,6 +1493,11 @@ class RealtimeVoiceService : Service() {
     }
 
     private fun stopWithStatus(state: String,reason: String) {
+        // Revoke every approved native Voice worker in the same serialized
+        // fence used by gestures, BEFORE disposing audio or checkpoints.
+        // A worker paused between approval and Android dispatch cannot
+        // execute even if another live session starts immediately afterward.
+        NexaNativeActionSafety.endVoiceSession(voiceSessionId)
         // Commit the terminal state at the same boundary as microphone sends.
         // No raw frame can be queued after Stop is applied.
         synchronized(micSendLock) {
@@ -1552,6 +1562,7 @@ class RealtimeVoiceService : Service() {
         stopSelf()
     }
     override fun onDestroy() {
+        NexaNativeActionSafety.endVoiceSession(voiceSessionId)
         if (active.get()) stopWithStatus("stopped","Android ended voice session")
         super.onDestroy()
     }
