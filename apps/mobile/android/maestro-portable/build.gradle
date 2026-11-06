@@ -1,0 +1,50 @@
+// Directly compile a strict allowlist of original Maestro Kotlin sources.
+// The Copy task materializes byte-for-byte inputs only under ignored build/.
+// Never include the entire Maestro JVM client (ADB, GraalJS, iOS, Selenium).
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+}
+
+def upstreamSources = rootProject.file('../../../third_party/maestro-upstream/maestro-client/src/main/java')
+def portablePaths = [
+    'maestro/Point.kt',
+    'maestro/Bounds.kt',
+    'maestro/TreeNode.kt',
+    'maestro/SwipeDirection.kt',
+    'maestro/ScrollDirection.kt'
+]
+
+def syncPortable = tasks.register('syncMaestroPortableSources', Copy) {
+    from(upstreamSources) { include portablePaths }
+    into(layout.buildDirectory.dir('generated/maestro-portable'))
+    doFirst {
+        portablePaths.each { source ->
+            if (!new File(upstreamSources, source).isFile()) {
+                throw new GradleException("Maestro submodule missing the required file: " + source + ". Run git submodule update --init")
+            }
+        }
+    }
+}
+
+android {
+    namespace 'dev.rilandev.maestroportable'
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig { minSdk rootProject.ext.minSdkVersion }
+    sourceSets {
+        main { java.srcDir('build/generated/maestro-portable') }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+tasks.configureEach { task ->
+    if (task.name == 'compileDebugKotlin' || task.name == 'compileReleaseKotlin') {
+        task.dependsOn(syncPortable)
+    }
+}
+
+dependencies { testImplementation 'junit:junit:4.13.2' }

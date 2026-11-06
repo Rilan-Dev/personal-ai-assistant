@@ -185,6 +185,8 @@ android {
 }
 
 dependencies {
+    // Pinned Maestro Kotlin models; no desktop driver.
+    implementation project(':maestro-portable')
     // Offline speech decoder: Apache-2.0; model downloaded only on explicit opt-in.
     implementation("com.alphacephei:vosk-android:0.3.47")
     // The version of react-native is set by the React Native Gradle Plugin
