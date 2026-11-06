@@ -457,6 +457,51 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         } catch (e: Exception) { rejectSafe(p,"MESSAGE_MEMORY_CLEAR",e) }
     }
 
+    /**
+     * Owner-only, atomic clear of all remembered recipient->channel HINTS.
+     * Legacy aliases are opaque SHA-256 preference names, so enumerate only
+     * decryptable records with this module's exact messaging-choice schema.
+     * Never delete provider keys, credentials, task checkpoints or chats.
+     * No decrypted value or alias leaves the device in this operation.
+     */
+    @ReactMethod fun forgetAllMessageAppPreferences(p:Promise) {
+        val activity=reactApplicationContext.currentActivity
+        val guard=reactApplicationContext.getSystemService(Context.KEYGUARD_SERVICE)
+            as? android.app.KeyguardManager
+        if(activity?.hasWindowFocus()!=true || guard?.isKeyguardLocked==true) {
+            p.reject("MEMORY_NOT_FOREGROUND",
+                "Open and unlock Nexa to clear saved message channel preferences")
+            return
+        }
+        try{
+            val removed=synchronized(lock){
+                val all=prefs.all
+                require(all.size<=8000) { "Too many preferences for safe bulk erase" }
+                val keys=mutableListOf<String>()
+                for((key,value) in all){
+                    if(value !is String || value.length !in 20..1100)continue
+                    val raw=try{read(key)}catch(_:Exception){null}
+                    val item=messageAppRecord(raw)
+                    if(item!=null) {
+                        // Never use a loose "contains WhatsApp" match: only
+                        // records that parse as exact known app-choice metadata.
+                        val version=item.optInt("version")
+                        if(version==1&&item.optString("source")=="legacy_owner_choice" ||
+                            version==2&&item.optString("source")=="owner_confirmed")
+                            keys.add(key)
+                    }
+                }
+                if(keys.isNotEmpty()){
+                    val edit=prefs.edit()
+                    keys.forEach{edit.remove(it)}
+                    check(edit.commit()){ "Atomic message memory erase failed" }
+                }
+                keys.size
+            }
+            p.resolve(removed)
+        }catch(e:Exception){rejectSafe(p,"MESSAGE_MEMORY_CLEAR_ALL",e)}
+    }
+
     @ReactMethod fun newSessionId(p: Promise) { p.resolve(UUID.randomUUID().toString()) }
 
     @ReactMethod fun loadSession(s: String, p: Promise) {
