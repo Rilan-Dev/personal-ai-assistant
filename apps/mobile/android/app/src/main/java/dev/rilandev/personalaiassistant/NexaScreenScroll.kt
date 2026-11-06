@@ -12,7 +12,7 @@ internal object NexaScreenScroll {
     private data class Target(
         val token: String, val pkg: String, val windowId: Int,
         val classname: String, val resourceId: String, val bounds: IconBox,
-        val direction: String, val expiry: Long
+        val direction: String, val expiry: Long, val pauseGeneration:Long
     )
     private val lock=Any()
     private var pending: Target? = null
@@ -51,6 +51,8 @@ internal object NexaScreenScroll {
     fun prepare(service: ScreenAssistService, direction: String): String {
         cancel()
         if(direction !in setOf("up","down","left","right")) return "Unsupported scroll direction."
+        val generation=NexaNativeActionSafety.approvalFence(service)
+            ?:return "Owner paused device actions. No scroll review started."
         val root=safeRoot(service) ?: return "No permitted app window to scroll."
         try{
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -83,7 +85,7 @@ internal object NexaScreenScroll {
                 val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
                     root.windowId,"__home_launcher_swipe__","",
                     IconBox(full.left,full.top,full.right,full.bottom),direction,
-                    SystemClock.elapsedRealtime()+10_000L)
+                    SystemClock.elapsedRealtime()+10_000L,generation)
                 synchronized(lock){pending=target}
                 return "Confirm one $direction swipe on your Android home screen."
             }
@@ -94,7 +96,7 @@ internal object NexaScreenScroll {
                 root.windowId,candidate.className?.toString().orEmpty(),
                 candidate.viewIdResourceName.orEmpty(),
                 IconBox(box.left,box.top,box.right,box.bottom),direction,
-                SystemClock.elapsedRealtime()+10_000L)
+                SystemClock.elapsedRealtime()+10_000L,generation)
             synchronized(lock){ pending=tgt }
             return "Confirm scroll ${direction} in ${tgt.pkg} within 10 seconds."
         } catch (_: Exception) {
@@ -119,6 +121,8 @@ internal object NexaScreenScroll {
         } ?: return "Scroll confirmation expired; no action requested."
         if(SystemClock.elapsedRealtime()>=approved.expiry)
             return "Scroll confirmation expired; no action requested."
+        if(!NexaNativeActionSafety.approvalFenceCurrent(service,approved.pauseGeneration))
+            return "Owner paused actions since review. Start a new scroll review."
         val root=safeRoot(service) ?: return "No permitted window available."
         try{
             if(root.packageName?.toString()!=approved.pkg || root.windowId!=approved.windowId)
@@ -126,7 +130,7 @@ internal object NexaScreenScroll {
             if(approved.classname=="__home_launcher_swipe__") {
                 if(!NexaLauncherSwipe.isHome(service,root))
                     return "Launcher changed; no swipe allowed."
-                return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token)
+                return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token,approved.pauseGeneration)
             }
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
@@ -157,7 +161,14 @@ internal object NexaScreenScroll {
             val action=scrollAction(approved.direction)
             val before=NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
-            return if(target.performAction(action)) {
+            val performed=NexaNativeActionSafety.dispatchWithFence(
+                service,approved.pauseGeneration) { target.performAction(action) }
+            if(performed==null) {
+                NexaUiActionVerifier.cancel(approved.token)
+                NexaUiActionJournal.finish(service,approved.token,"android_rejected")
+                return "Owner paused actions before scroll dispatch. No gesture performed."
+            }
+            return if(performed) {
                 NexaUiActionVerifier.observeAfter(service,approved.token,before)
                 if (!NexaUiActionJournal.finish(service,approved.token,"android_accepted"))
                     "Android accepted scroll; journal outcome uncertain. No automatic retry."
