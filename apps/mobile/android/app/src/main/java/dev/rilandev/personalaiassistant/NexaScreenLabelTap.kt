@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
+import dev.rilandev.maestroportable.MaestroQuery
 import java.util.UUID
 
 /** Grounded, one-shot semantic tap: never trusts arbitrary X/Y from an LLM. */
@@ -82,7 +83,31 @@ internal object NexaScreenLabelTap {
             }
             if(targets.isEmpty())return "No enabled clickable control named $label was found on this screen."
             if(targets.size!=1)return "Multiple controls named $label are visible. No tap performed."
-            val found=targets.values.single()
+            val candidates=targets.values.toList()
+            // The historical search-field exception permits focus only.
+            // Maestro's generic selector intentionally rejects editable nodes.
+            val found=if(candidates.any { it.isEditable }) {
+                if(candidates.size!=1 || !label.equals("search",ignoreCase=true))
+                    return "Multiple or unsafe editable controls. No tap performed."
+                candidates.single()
+            } else {
+                val grounded=candidates.map { candidate ->
+                    val box=Rect().also { candidate.getBoundsInScreen(it) }
+                    NexaMaestroTapCandidate(
+                        label, candidate.viewIdResourceName.orEmpty(), box,
+                        candidate.isVisibleToUser, candidate.isEditable,
+                        candidate.isPassword, candidate.isClickable, candidate.isEnabled
+                    )
+                }
+                val index=NexaMaestroTargetSelection.choose(
+                    pkg,root.windowId,pkg,root.windowId,rootRect,
+                    MaestroQuery(text=label),grounded
+                ) ?:return if(candidates.size>1)
+                    "Multiple controls named $label are visible. No tap performed."
+                else "The verified Maestro selector rejected $label. No tap performed."
+                candidates[index]
+            }
+            val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap",pkg,origin=origin))
@@ -92,7 +117,22 @@ internal object NexaScreenLabelTap {
             // Clicking a verified search input transfers focus only. Never
             // use ACTION_SET_TEXT or read/edit the field's current contents.
             val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
-                found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                // A permitted window can change between approval and dispatch.
+                // Revalidate current package, window and candidate geometry
+                // before consuming the one-shot click. Never retry uncertainty.
+                val liveRoot=service.externalWindowRoot()
+                    ?:return@dispatchWithFence false
+                try {
+                    val currentBounds=Rect().also { found.getBoundsInScreen(it) }
+                    if(!NexaMaestroTargetSelection.sameWindow(
+                            pkg,root.windowId,
+                            liveRoot.packageName?.toString().orEmpty(),liveRoot.windowId
+                        ) || !found.isVisibleToUser || !found.isEnabled ||
+                        currentBounds!=reviewedBounds) false
+                    else found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                } finally {
+                    try {liveRoot.recycle()} catch (_:Exception) {}
+                }
             }
             if(clicked==null){
                 NexaUiActionVerifier.cancel(token)
