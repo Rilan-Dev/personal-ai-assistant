@@ -113,10 +113,10 @@ export async function rememberMessageAppForDays(alias:string,id:MessageAppId,
  * Other personal data, provider keys and conversation history are untouched.
  */
 export async function forgetAllRememberedMessageApps():Promise<number>{
-  const method=memory().forgetAllMessageAppPreferences;
-  if(typeof method!=='function')
+  const native=memory();
+  if(typeof native.forgetAllMessageAppPreferences!=='function')
     throw Error('Update Nexa to clear all recipient channel memories');
-  const count=await method();
+  const count=await native.forgetAllMessageAppPreferences();
   if(!Number.isSafeInteger(count)||count<0||count>8000)
     throw Error('Unable to verify private memory deletion');
   return count;
