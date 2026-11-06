@@ -27,6 +27,9 @@ class NexaLegacyVoiceStepApprovalAndroidTest {
         assertFalse(NexaLegacyVoiceStepApproval.consume(
             context,task,session,0,"open another app",
             "open","com.google.android.calendar"))
+        assertFalse(NexaLegacyVoiceStepApproval.consume(
+            context,task,session,0,steps[0],"open",
+            "com.google.android.calendar",false,"not-a-screen-digest"))
         assertTrue(NexaLegacyVoiceStepApproval.consume(
             context,task,session,0,steps[0],"open",
             "com.google.android.calendar"))
