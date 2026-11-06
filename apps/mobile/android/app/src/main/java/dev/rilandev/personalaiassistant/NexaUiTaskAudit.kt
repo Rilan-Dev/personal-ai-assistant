@@ -291,10 +291,22 @@ internal object NexaUiTaskAudit {
                                 digest(tokenDigest+":"+outcome),now)
                         )
                     }
-                    db.execSQL(
-                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
-                            "VALUES(?,?,?,?)",arrayOf(taskId,stepId,event,now)
-                    )
+                    // Persist only the bounded evidence CLASS for later
+                    // exact-step verification. No raw Accessibility content,
+                    // recipient, coordinates or screen labels are retained.
+                    val evidence=NexaConversationDb.sealNativeTaskArguments(
+                        JSONObject().put("androidObservation",outcome).toString())
+                    db.compileStatement(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,"+
+                            "detail_cipher,created_at) VALUES(?,?,?,?,?)"
+                    ).use{stmt->
+                        stmt.bindString(1,taskId)
+                        stmt.bindString(2,stepId)
+                        stmt.bindString(3,event)
+                        stmt.bindBlob(4,evidence)
+                        stmt.bindLong(5,now)
+                        check(stmt.executeInsert()!=-1L)
+                    }
                     db.setTransactionSuccessful()
                     true
                 }finally{db.endTransaction()}
