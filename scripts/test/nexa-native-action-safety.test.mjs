@@ -13,6 +13,8 @@ test('owner-only native emergency stop is persistent, reversible and never a mod
   assert.match(policy,/owner_paused_device_actions/);
   assert.match(policy,/getBoolean\(KEY,false\)/);
   assert.match(policy,/fun permitsNewAction/);
+  assert.match(policy,/owner_pause_generation/);
+  assert.match(policy,/fun pauseGeneration/);
   assert.match(bridge,/fun setNativeDeviceActionsPaused\(paused:Boolean,promise:Promise\)/);
   assert.match(bridge,/currentActivity\?\.hasWindowFocus\(\)!=true/);
   assert.match(bridge,/keyguard\?\.isKeyguardLocked==true/);
@@ -29,7 +31,7 @@ test('pausing blocks permanent UI claims and legacy Voice owner approvals',()=>{
   assert.match(src('NexaLegacyVoiceStepApproval.kt'),
     /!NexaNativeActionSafety\.permitsNewAction\(context\)/);
   assert.match(src('RealtimeVoiceService.kt'),
-    /!NexaNativeActionSafety\.permitsNewAction\(this\)/);
+    /pending\.safetyGeneration==NexaNativeActionSafety\.pauseGeneration\(this\)/);
   assert.match(src('NexaBrowserTaskActions.kt'),
     /NexaNativeActionSafety\.permitsNewAction\(context\)/);
   assert.match(src('NexaOverlayCommands.kt'),
@@ -40,4 +42,6 @@ test('pausing blocks permanent UI claims and legacy Voice owner approvals',()=>{
     /NexaTextInputActions\.cancel\(\)/);
   assert.match(src('FlashlightControlModule.kt'),
     /enabled && !NexaNativeActionSafety\.permitsNewAction\(context\)/);
+  assert.match(src('NexaToolOverlayService.kt'),/Pause device actions/);
+  assert.match(src('NexaToolOverlayModule.kt'),/setOf\("chat","voice","tools","settings"\)/);
 });
