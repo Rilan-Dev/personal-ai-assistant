@@ -114,6 +114,8 @@ internal object NexaWhatsAppChatActions {
             return "Invalid chat-recipient hint. No action taken."
         if(!ScreenAssistState.connected || ScreenAssistService.active!==service)
             return "Screen Assist not connected. No chat navigation attempted."
+        val generation=NexaNativeActionSafety.approvalFence(service)
+            ?:return "Owner paused device actions. No chat row tapped."
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?:return "WhatsApp chat list is not accessible."
         try {
@@ -136,7 +138,15 @@ internal object NexaWhatsAppChatActions {
             if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp",origin=origin))
                 return "The encrypted action journal refused the chat tap. Nothing opened."
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
-            return if(target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            if(clicked==null){
+                NexaUiActionVerifier.cancel(token)
+                NexaUiActionJournal.finish(service,token,"android_rejected")
+                return "Owner paused actions before opening chat. Nothing tapped."
+            }
+            return if(clicked) {
                 NexaUiActionVerifier.observeAfter(service,token,before)
                 NexaUiActionJournal.finish(service,token,"android_accepted")
                 "Android accepted a uniquely grounded WhatsApp chat-row tap. Conversation header not yet verified."
