@@ -207,11 +207,14 @@ class RealtimeVoiceService : Service() {
                     pending.command.startsWith("open_whatsapp_chat:") ->
                         ScreenAssistService.active?.let { service ->
                             NexaWhatsAppChatActions.openApproved(service,
-                                pending.command.removePrefix("open_whatsapp_chat:"))
+                                pending.command.removePrefix("open_whatsapp_chat:"),
+                                origin="live-voice")
                         } ?: "Screen Assist is disabled. No chat opened."
                     pending.command.startsWith("tap_visible_label:") ->
                         ScreenAssistService.active?.let { service ->
-                            NexaScreenLabelTap.approved(service,pending.command.removePrefix("tap_visible_label:"))
+                            NexaScreenLabelTap.approved(service,
+                                pending.command.removePrefix("tap_visible_label:"),
+                                origin="live-voice")
                         } ?: "Screen Assist is disabled. No tap executed."
                     pending.command == "read_visible_screen_text" ->
                         NexaScreenVoiceOverview.readVisibleTextApproved()
