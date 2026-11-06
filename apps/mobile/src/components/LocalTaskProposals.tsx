@@ -397,6 +397,11 @@ export function LocalTaskProposals({prefill}:{prefill?:{
         {task.source==='ui_action_audit'&&<Text style={styles.help}>
           Android dispatch or visual-change evidence only. Not proof of external-app navigation, message delivery or task completion. Never automatically replayed.
         </Text>}
+        {task.source==='ui_action_audit'&&task.parentTaskId&&
+          task.parentOrdinal!==undefined&&<Text style={styles.help}>
+            Linked Voice task {task.parentTaskId.slice(-8)} · step {task.parentOrdinal+1}.
+            A parent link records the claimed action, not successful navigation or delivery.
+          </Text>}
         {task.source==='chat_action_audit'&&<Text style={styles.help}>
           Encrypted Chat action claim and journal settlement only. No independently verified device or business result. An uncertain claim is never replayed.
         </Text>}
