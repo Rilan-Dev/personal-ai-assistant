@@ -78,7 +78,11 @@ internal object NexaWhatsAppChatActions {
             val score=labelMatch(node,recipient)
             if(score>0){
                 val title=Rect().also{node.getBoundsInScreen(it)}
-                if(NexaMessageInputPolicy.isHeaderLabel(title,window))headerName=true
+                if(NexaMessageInputPolicy.isHeaderLabel(title,window) &&
+                    listOf(node.text?.toString().orEmpty(),
+                           node.contentDescription?.toString().orEmpty())
+                        .any { NexaMessageInputPolicy.recipientMatches(recipient,it) })
+                    headerName=true
                 var candidate:AccessibilityNodeInfo?=node
                 var ancestors=0
                 while(candidate!=null && !candidate.isClickable && ancestors++<5)
@@ -109,7 +113,7 @@ internal object NexaWhatsAppChatActions {
             eligible.singleOrNull()?.target,open)
     }
     fun openApproved(service:ScreenAssistService,recipient:String,
-                     origin:String="overlay"):String {
+                     origin:String="overlay",claimedToken:(String)->Unit={}):String {
         if(NexaWhatsAppChatIntent.followupRecipient("open chat with "+recipient)==null)
             return "Invalid chat-recipient hint. No action taken."
         if(!ScreenAssistState.connected || ScreenAssistService.active!==service)
@@ -137,6 +141,7 @@ internal object NexaWhatsAppChatActions {
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp",origin=origin))
                 return "The encrypted action journal refused the chat tap. Nothing opened."
+            claimedToken(token)
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
             val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
                 target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
