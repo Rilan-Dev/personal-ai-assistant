@@ -39,6 +39,73 @@ internal object NexaUiTaskAudit {
         .digest(raw.toByteArray(StandardCharsets.UTF_8))
         .joinToString(""){"%02x".format(it.toInt() and 255)}
 
+    /**
+     * A UI-action child is linked to the exact ALREADY APPROVED compound
+     * Voice step in the same transaction as its permanent no-replay token.
+     * Neither this link nor the Voice receipt grants any Android action.
+     *
+     * A mismatched origin, command kind, task status, step, approval, or a
+     * second claimed child fails closed, rolling back the child claim.
+     */
+    private fun linkVoiceParentInTransaction(db:SQLiteDatabase,
+                                             childTaskId:String,
+                                             childStepId:String,
+                                             actionKind:String,
+                                             packageDigest:String,
+                                             now:Long):Boolean{
+        val scope=NexaVoiceActionScope.active() ?:return true
+        if(NexaVoiceActionScope.expectedUiKind(scope.command)!=actionKind)
+            return false
+        val stepId=db.rawQuery(
+            "SELECT s.step_id FROM agent_tasks t "+
+                "JOIN voice_task_checkpoints v ON v.task_id=t.task_id "+
+                "JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                    "AND s.ordinal=v.step_index "+
+                "JOIN agent_step_approvals a ON a.step_id=s.step_id "+
+                "WHERE t.task_id=? AND t.session_id=? "+
+                "AND t.origin='live-voice' AND t.policy_version=? "+
+                "AND t.status='executing' AND v.session_id=? "+
+                "AND v.status='executing' AND v.step_index=? "+
+                "AND s.status='checkpoint_pending' "+
+                "AND a.state='consumed' AND a.consumed_at IS NOT NULL "+
+                "AND a.expires_at>? LIMIT 2",
+            arrayOf(scope.taskId,scope.sessionId,
+                NexaLegacyVoiceTaskMirror.POLICY,
+                scope.sessionId,scope.ordinal.toString(),now.toString())
+        ).use{row->
+            if(!row.moveToFirst())return@use null
+            val id=row.getString(0)
+            if(row.moveToNext())null else id
+        } ?:return false
+        val anotherChild=db.rawQuery(
+            "SELECT 1 FROM agent_task_events "+
+                "WHERE task_id=? AND step_id=? "+
+                "AND event_kind='voice_ui_child_claimed' LIMIT 1",
+            arrayOf(scope.taskId,stepId)
+        ).use{it.moveToFirst()}
+        if(anotherChild)return false
+        // Only opaque IDs and a package digest; no recipient, screen text,
+        // message content or user contact identity is copied to this event.
+        val details=NexaConversationDb.sealNativeTaskArguments(
+            JSONObject().put("childTaskId",childTaskId)
+                .put("childStepId",childStepId)
+                .put("actionKind",actionKind)
+                .put("packageDigest",packageDigest)
+                .put("ordinal",scope.ordinal).toString())
+        db.compileStatement(
+            "INSERT INTO agent_task_events(task_id,step_id,event_kind,"+
+                "detail_cipher,created_at) VALUES(?,?,?, ?,?)"
+        ).use{stmt->
+            stmt.bindString(1,scope.taskId)
+            stmt.bindString(2,stepId)
+            stmt.bindString(3,"voice_ui_child_claimed")
+            stmt.bindBlob(4,details)
+            stmt.bindLong(5,now)
+            check(stmt.executeInsert()!=-1L)
+        }
+        return true
+    }
+
     /** Must be called only inside the caller's outer SQLite transaction. */
     fun createInTransaction(db:SQLiteDatabase,tokenDigest:String,
                             actionKind:String,packageDigest:String,now:Long,
@@ -52,6 +119,8 @@ internal object NexaUiTaskAudit {
                 reviewedInputDigest!=null))return false
         val taskId=id("task-",tokenDigest)
         val stepId=id("step-",tokenDigest)
+        val parent=NexaVoiceActionScope.active()
+        if(parent!=null && origin!="live-voice")return false
         // The exact package and user-visible labels never enter this task.
         // The preexisting UI action tombstone separately binds their digests.
         val goal=NexaConversationDb.sealNativeTaskArguments(
@@ -106,6 +175,11 @@ internal object NexaUiTaskAudit {
             stmt.bindLong(6,now)
             check(stmt.executeInsert()!=-1L)
         }
+        // Link the claimed UI effect to its approved native Voice step.
+        // Failure aborts the surrounding SQLite transaction, including the
+        // permanent token, so Android will not dispatch a detached child.
+        if(!linkVoiceParentInTransaction(db,taskId,stepId,actionKind,
+                packageDigest,now))return false
         db.execSQL(
             "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                 "VALUES(?,?,'ui_action_claimed',?)",arrayOf(taskId,stepId,now)
