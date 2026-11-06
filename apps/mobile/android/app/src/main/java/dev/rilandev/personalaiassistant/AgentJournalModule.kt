@@ -165,8 +165,11 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
         check(prefs.edit().putString(k, encrypt(v)).commit()) { "Durable commit failed" }
     }
     private fun action(s: String, c: String) = name("action", s, c)
-    private fun record(status: String, fp: String) =
-        JSONObject().put("status", status).put("fingerprint", fp).toString()
+    private fun record(status: String, fp: String, pauseGeneration:Long?=null):String {
+        val row=JSONObject().put("status",status).put("fingerprint",fp)
+        if(pauseGeneration!=null)row.put("pauseGeneration",pauseGeneration)
+        return row.toString()
+    }
     private fun existing(k: String): JSONObject? = read(k)?.let { JSONObject(it) }
 
     /**
@@ -488,9 +491,12 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             synchronized(lock) {
                 val k = action(s,c)
                 val old = existing(k)
-                if (old == null) {
-                    write(k, record("pending", fp)); p.resolve(true)
+                val generation=NexaNativeActionSafety.approvalFence(reactApplicationContext)
+                if(generation==null)p.resolve(false)
+                else if (old == null) {
+                    write(k, record("pending", fp,generation)); p.resolve(true)
                 } else p.resolve(old.optString("fingerprint") == fp &&
+                    old.optLong("pauseGeneration",-1L)==generation &&
                     old.optString("status") in listOf("pending", "approved"))
             }
         } catch (e: Exception) { rejectSafe(p, "APPROVAL_PREPARE", e) }
@@ -500,9 +506,11 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             synchronized(lock) {
                 val k = action(s,c)
                 val old = existing(k)
-                if (old?.optString("status") == "pending" &&
+                val generation=NexaNativeActionSafety.approvalFence(reactApplicationContext)
+                if (generation!=null && old?.optString("status") == "pending" &&
+                    old.optLong("pauseGeneration",-1L)==generation &&
                     old.optString("fingerprint") == fp) {
-                    write(k, record("approved", fp)); p.resolve(true)
+                    write(k, record("approved", fp,generation)); p.resolve(true)
                 } else p.resolve(false)
             }
         } catch (e: Exception) { rejectSafe(p, "APPROVAL", e) }
@@ -514,8 +522,10 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             synchronized(lock) {
                 val k = action(s,c)
                 val old = existing(k)
+                val generation=NexaNativeActionSafety.approvalFence(reactApplicationContext)
                 val permitted = if (requiresApproval)
-                    old?.optString("status") == "approved" &&
+                    generation!=null && old?.optString("status") == "approved" &&
+                        old.optLong("pauseGeneration",-1L)==generation &&
                         old.optString("fingerprint") == fp
                     else old == null
                 if (!permitted) p.resolve(false)
@@ -528,7 +538,8 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     // Existing secure journal still owns final action approval.
                     // If this write fails the earlier SQLite claim remains a
                     // terminal no-replay tombstone, never a reusable grant.
-                    write(k, record("claimed", fp)); p.resolve(true)
+                    write(k, record("claimed", fp,
+                        if(requiresApproval)generation else null)); p.resolve(true)
                 }
             }
         } catch (e: Exception) { rejectSafe(p, "CLAIM", e) }
@@ -546,7 +557,8 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                     reactApplicationContext,s,c,
                     old.getString("fingerprint"),uncertain))
                 write(k, record(if (uncertain) "uncertain" else "settled",
-                    old.getString("fingerprint")))
+                    old.getString("fingerprint"),
+                    old.optLong("pauseGeneration",-1L).takeIf{it>=0L}))
             }
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "RECONCILE", e) }
