@@ -91,6 +91,7 @@ internal object NexaUiActionJournal {
                 (kind !in setOf("message_fill","text_fill") && reviewedInputDigest!=null)) {
                 return@synchronized false
             }
+            if (!NexaNativeActionSafety.permitsNewAction(ctx)) return@synchronized false
             try {
                 val id = digest(approvalToken)
                 val entries = read(ctx)
