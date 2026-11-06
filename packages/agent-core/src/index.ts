@@ -40,3 +40,5 @@ export type {ReviewedTextEntry} from './text-entry-intent.ts';
 // Shared admission boundary for Android/local, BYOK and LangGraph decisions.
 export {normalizePlannerTaskDecision,normalizeMultiStepPlannerProposal,createTaskAdmissionPlanner} from "./task-admission.ts";
 export type {TrustedPlannerTaskContext,TaskAdmissionPlannerOptions} from "./task-admission.ts";
+
+export {parseOwnerMultiToolRequest,evidenceForOwnerStep,createOwnerSequentialPlanner} from './owner-sequence.ts';
