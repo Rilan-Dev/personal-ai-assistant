@@ -141,6 +141,24 @@ internal object NexaAgentActionAudit {
                         stmt.bindBlob(5,args)
                         stmt.executeInsert()!=-1L
                     })
+                    if(requiresApproval) {
+                        // The OLD encrypted AgentJournal already checked an
+                        // exact owner approval for this same fingerprint.
+                        // Mirror its consumption, never issue a new approval.
+                        check(db.compileStatement(
+                            "INSERT INTO agent_step_approvals(approval_id,step_id,"+
+                                "target_digest,input_digest,state,expires_at,consumed_at) "+
+                                "VALUES(?,?,?,?,'consumed',?,?)"
+                        ).use{stmt->
+                            stmt.bindString(1,opaqueId("approval-",actionKey))
+                            stmt.bindString(2,stepId)
+                            stmt.bindString(3,sha("nexa-chat-target-v1:"+fingerprint))
+                            stmt.bindString(4,sha("nexa-chat-owner-approval-v1:"+fingerprint))
+                            stmt.bindLong(5,now+300_000L)
+                            stmt.bindLong(6,now)
+                            stmt.executeInsert()!=-1L
+                        })
+                    }
                     db.execSQL(
                         "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                             "VALUES(?,?,'chat_action_preclaimed',?)",
@@ -181,6 +199,27 @@ internal object NexaAgentActionAudit {
                             data.optString("fingerprintDigest")==sha(fingerprint)
                     }
                     if(!bound)return@synchronized false
+                    // A previously approved tool must still have the exact
+                    // consumed approval proof, with no substituted fingerprint.
+                    val approvalBound=db.rawQuery(
+                        "SELECT s.arguments_cipher,a.input_digest,a.state "+
+                            "FROM agent_task_steps s LEFT JOIN agent_step_approvals a "+
+                            "ON a.step_id=s.step_id WHERE s.step_id=? "+
+                            "AND s.task_id=? LIMIT 2",
+                        arrayOf(stepId,taskId)
+                    ).use{row->
+                        if(!row.moveToFirst())return@synchronized false
+                        val args=JSONObject(NexaConversationDb
+                            .openNativeTaskArguments(row.getBlob(0)))
+                        val required=args.optBoolean("approvalRequired",false)
+                        val matches=if(required)
+                            row.getString(2)=="consumed" &&
+                                row.getString(1)==sha(
+                                    "nexa-chat-owner-approval-v1:"+fingerprint)
+                        else row.isNull(1)
+                        matches && !row.moveToNext()
+                    }
+                    if(!approvalBound)return@synchronized false
                     val now=System.currentTimeMillis()
                     val taskState=if(uncertain)"uncertain" else "settled_unverified"
                     val stepState=if(uncertain)"uncertain" else "dispatch_settled"
