@@ -1,4 +1,13 @@
 
+## 2026-11-06 — Owner device-action pause/rollback source implemented
+Implemented on `Development`: a local persistent Pause/Resume control in Settings; a one-way Pause button in floating Tools; monotonic generation invalidation of stale Voice approvals; native blocking of new third-party actions across journaled taps, scroll, text, launches, OS navigation, and flashlight ON. The UI and native cancellation paths preserve existing one-shot approval and no-replay protections.
+
+Still required development: general parent task/step Kotlin scheduling for Chat/Voice/overlay, true observed multi-step Android state transitions, recipient/chat/message identity verification and per-action mandates across every tool, complete owner memory correction controls, release flag/rollback policy integration. Source checks and manually triggered native builds are separate from these feature implementation gaps; do not represent the entire development backlog as complete.
+
+Owner runbook: `docs/architecture/NEXA_OWNER_ACTION_PAUSE_RUNBOOK_20261106.md`.
+---
+
+
 ## 2026-11-06 — New implementation milestone and remaining engineering
 Implemented in Development: limited safe non-sensitive screen-control observations with a durable Kotlin read claim, and shared Android launch dispatch with exact installed-app revalidation, one-shot no-replay audit and Chat/Voice origin attribution. Chat launch remains human-approved by the existing harness; Voice launch by the visible owner card.
 The remaining substantive development is the **general step executor** under one parent task ID: unify observed UI action receipt linkage, recipient/window/field-specific native mandates, general observation-driven multi-step continuation, safe failure and cancellation, voice session continuity, and production kill-switch/rollback. No automatic Send or permission bypass.
