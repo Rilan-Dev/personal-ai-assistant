@@ -1001,3 +1001,10 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Exact-SHA emulator run `42119945280` exposed five instrumentation failures on Development `1469be4`: three read-plan fixtures used owner goals that native policy correctly rejects, and two text-action outcome checks compared the reviewed-input digest to the generic gesture digest.
 - Fixed the audit receipt to retain the reviewed text digest encrypted with the action arguments and validate that exact digest on outcome. The audit stores no raw field contents. Updated plan fixtures to use owner-authored battery/storage requests and verify that correction invalidates the prior draft.
 - Current-source JS checks on `1469be4`: 395/395 tests, TypeScript, and web export passed. The new native fixes still require the sequential Android debug, emulator, and signed release-test gates on a fresh exact Development SHA.
+
+## 2026-11-06 — Shared Kotlin app-launch dispatch and redacted screen observation
+- Added fresh read-only Accessibility control metadata through `NexaTaskCoordinator`, shared with existing device facts. Chat can request `device.visible_controls` with owner approval; no text-field values, screenshots, coordinates, screen gestures or external submissions.
+- Added owner-trusted `app_launch` to the existing permanent Android claim, consumed per-step audit receipt and original Chat / Voice provenance. Kotlin revalidates installed app label and package immediately before Intent dispatch.
+- Routed both Chat and Voice approved app launches through the same native dispatch gate. Intent acceptance is explicitly unverified; unknown outcomes cannot be retried automatically.
+- Added synthetic Android policy/claim tests and retained the existing Keystore-backed custom.db v3 schema. No new privilege, server database, Docker deployment, production send or `main` promotion.
+- Node 396/396 and TypeScript passed after the safe screen-read implementation. Final Android compilation must be checked for the exact current SHA.
