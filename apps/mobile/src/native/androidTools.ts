@@ -12,7 +12,7 @@ type NativeStatus = {
 };
 type LaunchOutcome = {
   intentDispatched: boolean;
-  verification: "not_observed";
+  verification: "not_observed" | "destination_package_observed";
   action?: string;
   packageId?: string;
 };
@@ -27,6 +27,16 @@ interface DeviceControlBridge {
   openCamera(): Promise<LaunchOutcome>;
   openChromeSearch(query: string): Promise<LaunchOutcome>;
   openNotificationShade(): Promise<{notificationShadeAccepted: boolean}>;
+  observeLaunchedAppPackage(expectedPackage:string): Promise<boolean>;
+  performReviewedScreenTap(label:string):Promise<{
+    actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
+  }>;
+  performReviewedScreenScroll(direction:string):Promise<{
+    actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
+  }>;
+  performReviewedScreenText(label:string,text:string):Promise<{
+    submitted:false;verification:"exact_text_visible"
+  }>;
 }
 
 export const nativeDeviceAvailable = (): boolean =>
@@ -66,6 +76,16 @@ export async function updateNativeActionsPaused(paused:boolean):Promise<boolean>
   if(actual!==paused)throw Error("Owner action safety preference was not persisted");
   return actual;
 }
+const safeControlLabel=(value:unknown):value is string=>
+  typeof value==="string"&&value.length>=2&&value.length<=45&&
+  value.trim()===value&&/^[\p{L}\p{N}][\p{L}\p{N} _.-]*$/u.test(value)&&
+  !/\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\b/i.test(value);
+const reviewedFieldLabel=(value:unknown):value is string=>
+  safeControlLabel(value)&&!/\b(recipient|account|email address|phone number|amount|address|checkout|password|security|payment)\b/i.test(value);
+const reviewedText=(value:unknown):value is string=>
+  typeof value==="string"&&value.length>=1&&value.length<=500&&
+  value.trim().length>0&&!/[\x00-\x08\x0b-\x1f]/.test(value);
+
 /** A Kotlin bridge is the only permitted path to native device operations. */
 export function createAndroidTools(): Tool[] {
   return [
@@ -176,7 +196,57 @@ export function createAndroidTools(): Tool[] {
       risk: "medium",
       hasExternalSideEffect: true,
       validateInput: appInput,
-      execute: async ({app}) => ({ status: "success", data: await getBridge().openSupportedApp(String(app)) })
+      execute: async ({app}) => {
+        const result=await getBridge().openSupportedApp(String(app));
+        // The OS Intent is not verified navigation. Give Accessibility a
+        // bounded chance to report the real destination, never retry launch.
+        if(result.intentDispatched===true&&
+            typeof result.packageId==="string"&&
+            typeof getBridge().observeLaunchedAppPackage==="function"){
+          await new Promise<void>(resolve=>setTimeout(resolve,1500));
+          const visible=await getBridge().observeLaunchedAppPackage(result.packageId)
+            .catch(()=>false);
+          return {status:"success",data:{...result,
+            verification:visible?"destination_package_observed":"not_observed"}};
+        }
+        return {status:"success",data:result};
+      }
+    },
+    {
+      id: "screen.tap_label",
+      description: "Owner-approved exact named safe control on the currently observed external app; refuses ambiguous/unsafe targets.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===1&&safeControlLabel(input.label),
+      execute:async({label})=>({
+        status:"success",
+        data:await getBridge().performReviewedScreenTap(String(label))
+      })
+    },
+    {
+      id:"screen.scroll",
+      description:"One approved directional semantic scroll on a uniquely observed external Android window.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===1&&
+        ["up","down","left","right"].includes(String(input.direction)),
+      execute:async({direction})=>({
+        status:"success",
+        data:await getBridge().performReviewedScreenScroll(String(direction))
+      })
+    },
+    {
+      id:"screen.fill_text",
+      description:"Insert owner-reviewed exact text into one safe empty named field; never Send, Submit or overwrite.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===2&&
+        reviewedFieldLabel(input.targetLabel)&&reviewedText(input.exactText),
+      execute:async({targetLabel,exactText})=>({
+        status:"success",
+        data:await getBridge().performReviewedScreenText(
+          String(targetLabel),String(exactText))
+      })
     }
   ];
 }
