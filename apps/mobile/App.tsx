@@ -64,6 +64,7 @@ import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakS
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
 import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
 import {saveLocalTaskProposal,admitLocalReadOnlyTaskPlan} from './src/native/localTaskProposals';
+import {createOwnerSequentialPlanner,parseOwnerMultiToolRequest} from '@paa/agent-core';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
@@ -1594,7 +1595,8 @@ export default function App() {
           })
         : engine.live ? androidIntentPlanner : demoPlanner;
       const admittedPlanner=createTaskAdmissionPlanner(
-        createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion),{
+        createOwnerSequentialPlanner(
+          createScreenAwarePlanner(planner,screenGrant,resolveScreenQuestion)),{
           // Debug-only proposal admission requires an actual native Android
           // coordinator; demo/web must retain their existing planner behavior.
           enabled:NEXA_TASK_V2_ENABLED && engine.live && nativeTaskCoordinatorAvailable() &&
@@ -1629,7 +1631,7 @@ export default function App() {
         resume: Boolean(restore),
         grantedCapabilities: new Set(capabilities),
         signal: controller.signal,
-        maxSteps: 6,
+        maxSteps: parseOwnerMultiToolRequest(request)?.length ?? 6,
         onEvent: event => setEvents(prev => [...prev, event])
       });
       setRecovered(null);
@@ -2180,13 +2182,37 @@ export default function App() {
         {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
-          <Text style={styles.cardText}>Each permission is independent. Flashlight actions also require Android camera permission and one-time approval.</Text>
+          <Text style={styles.cardText}>Each permission is independent. For a bounded multi-tool request use: “Check battery then check storage” or “Open Calendar then tap Search”. Only fully verified steps continue; reapprove each side effect. Flashlight additionally needs Android camera permission.</Text>
           <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
             onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
             <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
               <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
             <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
           </Pressable>
+          {engine.live&&<>
+            <Pressable accessibilityRole="switch"
+              accessibilityState={{checked:capabilities.includes('device.interact')}}
+              onPress={()=>toggle('device.interact')} style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={styles.settingTitle}>Reviewed multi-step screen actions</Text>
+                <Text style={styles.settingHelp}>Tap safe named controls, scroll and fill one empty named field. Each step needs its own approval and observed result. Send, Submit and payments are blocked.</Text>
+              </View>
+              <View style={[styles.toggleTrack,capabilities.includes('device.interact')&&styles.toggleOn]}>
+                <View style={[styles.toggleThumb,capabilities.includes('device.interact')&&styles.toggleThumbOn]}/>
+              </View>
+            </Pressable>
+            <Pressable accessibilityRole="switch"
+              accessibilityState={{checked:capabilities.includes('device.observe')}}
+              onPress={()=>toggle('device.observe')} style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={styles.settingTitle}>Read safe visible-control metadata</Text>
+                <Text style={styles.settingHelp}>Requires enabled Screen Assist and separate one-time task approval.</Text>
+              </View>
+              <View style={[styles.toggleTrack,capabilities.includes('device.observe')&&styles.toggleOn]}>
+                <View style={[styles.toggleThumb,capabilities.includes('device.observe')&&styles.toggleThumbOn]}/>
+              </View>
+            </Pressable>
+          </>}
           {engine.live&&nativeFlashlightAvailable()&&<>
             <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('hardware.flashlight')}}
               onPress={()=>toggle('hardware.flashlight')} style={styles.settingRow}>
