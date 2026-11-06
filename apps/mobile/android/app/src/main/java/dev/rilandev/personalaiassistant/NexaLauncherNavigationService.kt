@@ -166,6 +166,10 @@ class NexaLauncherNavigationService : AccessibilityService() {
         return false
     }
     private fun swipe() {
+        if(!NexaNativeActionSafety.permitsNewAction(this)){
+            LauncherNavigationState.stop("owner_paused")
+            return
+        }
         val index = LauncherNavigationState.beginSwipe()
         if (index < 0) return
         val metrics = resources.displayMetrics
@@ -216,6 +220,10 @@ class NexaLauncherModule(private val context: ReactApplicationContext) :
     @ReactMethod fun findGitHubIcon(p: Promise) {
         if (context.currentActivity?.hasWindowFocus() != true) {
             p.reject("NOT_FOREGROUND", "Start launcher navigation from the visible Nexa app")
+            return
+        }
+        if (!NexaNativeActionSafety.permitsNewAction(context)) {
+            p.reject("ACTIONS_PAUSED","Resume Nexa actions before starting launcher navigation")
             return
         }
         if (context.packageManager.getLaunchIntentForPackage("com.github.android") == null) {
