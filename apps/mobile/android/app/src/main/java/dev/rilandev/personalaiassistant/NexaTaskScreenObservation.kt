@@ -71,6 +71,7 @@ internal object NexaTaskScreenObservation {
             ?:return null
         try {
             val pkg=root.packageName?.toString().orEmpty()
+            if(!root.isVisibleToUser)return null
             if(pkg==context.packageName || pkg=="android" ||
                 pkg=="com.android.systemui" ||
                 !pkg.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))
