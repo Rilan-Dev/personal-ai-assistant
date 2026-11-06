@@ -87,6 +87,7 @@ class RealtimeVoiceService : Service() {
     ) {
         // An automatic low-risk approval is not a fresh human button tap.
         @Volatile var approvedBySavedPolicy:Boolean=false
+        @Volatile var safetyGeneration:Long=-1L
         // The exact third-party app/window visible at review time.
         @Volatile var screenBinding:NexaVoiceScreenBinding.Bound?=null
     }
@@ -178,7 +179,9 @@ class RealtimeVoiceService : Service() {
                     // again. The actual tool's own permission/window checks
                     // remain mandatory and cannot be bypassed by this receipt.
                     val staleTask=task!=null && currentCompound!==task
-                    val nativeActionsEnabled=NexaNativeActionSafety.permitsNewAction(this)
+                    val nativeActionsEnabled=NexaNativeActionSafety.permitsNewAction(this) &&
+                        pending.safetyGeneration>=0L &&
+                        pending.safetyGeneration==NexaNativeActionSafety.pauseGeneration(this)
                     val actionPackage=pending.screenBinding?.packageName ?:
                         pending.installedApp?.packageName ?:
                         if(pending.command.startsWith("chrome_search:"))"com.android.chrome"
@@ -207,8 +210,8 @@ class RealtimeVoiceService : Service() {
                             task?.taskId.orEmpty(),operationSession,task?.stepIndex ?: -1,
                             pending.command,actionPackage
                         ) { when {
-                    !NexaNativeActionSafety.permitsNewAction(this) ->
-                        "Nexa device actions are paused by the owner. No action performed."
+                    !nativeActionsEnabled ->
+                        "Nexa device actions were paused since this review. Request fresh approval."
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
                     staleTask || !active.get() || operationSession != voiceSessionId ->
                         "Session or task changed; no action performed."
@@ -925,6 +928,8 @@ class RealtimeVoiceService : Service() {
     }
 
     private fun offerOwnerTool(tool:PendingAppTool) {
+        // Any owner Pause revokes this pending review even after Resume.
+        tool.safetyGeneration=NexaNativeActionSafety.pauseGeneration(this)
         if(NexaVoiceScreenBinding.requires(tool.command))
             tool.screenBinding=NexaVoiceScreenBinding.capture(this)
         expirePendingTool(tool)
