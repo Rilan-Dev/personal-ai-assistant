@@ -29,6 +29,12 @@ internal object NexaTaskCoordinator {
         "how much storage is free", "how much storage is left",
         "what is my storage", "what is my phone storage"
     )
+    private val screenControls = setOf(
+        "visible screen controls", "inspect visible controls",
+        "show visible controls", "show screen controls",
+        "what controls are on my screen", "what buttons are on my screen",
+        "inspect my screen controls", "check screen controls"
+    )
     internal fun classifyOwnerFact(raw: String): String? {
         if (raw.length !in 3..150 || raw.any { it.code < 32 }) return null
         val normalized = raw.trim().lowercase(Locale.ROOT)
@@ -37,6 +43,7 @@ internal object NexaTaskCoordinator {
         return when (normalized) {
             in battery -> "get_battery_level"
             in storage -> "get_storage_usage"
+            in screenControls -> "get_visible_controls"
             else -> null
         }
     }
@@ -52,6 +59,9 @@ internal object NexaTaskCoordinator {
     }
     private data class Claim(val taskId: String, val stepId: String,
                              val operation: String, val scope: String)
+    private fun observationSource(tool:String):String =
+        if(tool in setOf("get_visible_controls","device.visible_controls"))
+            "android_accessibility" else "android_framework"
     private fun id(prefix: String) = prefix + UUID.randomUUID().toString()
     private fun digest(input: String): String = MessageDigest.getInstance("SHA-256")
         .digest(input.toByteArray(Charsets.UTF_8))
@@ -177,8 +187,9 @@ internal object NexaTaskCoordinator {
             check(task == 1)
             db.execSQL(
                 "INSERT INTO agent_observations(observation_id,step_id,source_kind,verdict," +
-                    "evidence_digest,observed_at) VALUES(?,?,'android_framework','verified',?,?)",
-                arrayOf(id("observation-"), c.stepId, digest(reading), now)
+                    "evidence_digest,observed_at) VALUES(?,?,?,'verified',?,?)",
+                arrayOf(id("observation-"), c.stepId,
+                    observationSource(c.operation),digest(reading),now)
             )
             event(db, c.taskId, c.stepId, "native_read_verified", now)
             true
@@ -455,8 +466,9 @@ internal object NexaTaskCoordinator {
             db.execSQL(
                 "INSERT INTO agent_observations(observation_id,step_id,source_kind,"+
                     "verdict,evidence_digest,observed_at) "+
-                    "VALUES(?,?,'android_framework','verified',?,?)",
-                arrayOf(id("observation-"),plan.steps[position],digest(evidence),now)
+                    "VALUES(?,?,?,'verified',?,?)",
+                arrayOf(id("observation-"),plan.steps[position],
+                    observationSource(plan.operations[position]),digest(evidence),now)
             )
             event(db,plan.taskId,plan.steps[position],"native_read_verified",now)
             true
@@ -662,8 +674,9 @@ internal object NexaTaskCoordinator {
             db.execSQL(
                 "INSERT INTO agent_observations(observation_id,step_id,source_kind,"+
                     "verdict,evidence_digest,observed_at) "+
-                    "VALUES(?,?,'android_framework','verified',?,?)",
-                arrayOf(id("observation-"),step.stepId,digest(reading),now)
+                    "VALUES(?,?,?,'verified',?,?)",
+                arrayOf(id("observation-"),step.stepId,
+                    observationSource(step.tool),digest(reading),now)
             )
             event(db,plan.taskId,step.stepId,"native_read_verified",now)
             true
