@@ -20,6 +20,25 @@ internal object NexaNativeActionSafety {
     private const val KEY="owner_paused_device_actions"
     private const val GENERATION="owner_pause_generation"
     private val lock=Any()
+    /** Live session identity is in RAM only. Android process death cancels it.
+     * Owner Stop serializes against the same lock as native dispatch.
+     */
+    private var liveVoiceSession:String?=null
+
+    fun armVoiceSession(session:String):Boolean = synchronized(lock) {
+        if(!session.matches(Regex("voice-[0-9a-f-]{36}")))false
+        else{
+            liveVoiceSession=session
+            true
+        }
+    }
+    fun endVoiceSession(session:String) = synchronized(lock) {
+        if(liveVoiceSession==session)liveVoiceSession=null
+    }
+    private fun activeVoiceScope():Boolean{
+        val scope=NexaVoiceSessionGuard.current() ?:return true
+        return scope==liveVoiceSession
+    }
 
     fun isPaused(context:Context):Boolean = synchronized(lock) {
         // A corrupt or inaccessible local preference is treated as paused.
@@ -27,7 +46,9 @@ internal object NexaNativeActionSafety {
             .getBoolean(KEY,false) } catch (_:Exception){true}
     }
 
-    fun permitsNewAction(context:Context):Boolean = !isPaused(context)
+    fun permitsNewAction(context:Context):Boolean = synchronized(lock) {
+        !isPaused(context) && activeVoiceScope()
+    }
 
     /** Monotonic generation invalidates any previously staged Voice approval
      * even if the owner pauses and then resumes within its original TTL.
@@ -47,7 +68,7 @@ internal object NexaNativeActionSafety {
         try {
             val prefs=context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
             val generation=prefs.getLong(GENERATION,0L)
-            generation.takeIf{it>=0L && !prefs.getBoolean(KEY,false)}
+            generation.takeIf{it>=0L && !prefs.getBoolean(KEY,false) && activeVoiceScope()}
         }catch (_:Exception){null}
     }
 
@@ -62,7 +83,7 @@ internal object NexaNativeActionSafety {
      */
     fun dispatchWithFence(context:Context,expected:Long,
                           operation:()->Boolean):Boolean? = synchronized(lock) {
-        if(!approvalFenceCurrent(context,expected))null else operation()
+        if(!approvalFenceCurrent(context,expected) || !activeVoiceScope())null else operation()
     }
 
     fun setPaused(context:Context,paused:Boolean):Boolean = synchronized(lock) {
