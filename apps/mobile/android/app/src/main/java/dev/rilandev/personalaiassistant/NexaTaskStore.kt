@@ -42,6 +42,7 @@ internal object NexaTaskStore {
             when(it){
                 "get_battery_level"->"device.battery_status"
                 "get_storage_usage"->"device.storage_status"
+                "get_visible_controls"->"device.visible_controls"
                 else->return null
             }
         }
