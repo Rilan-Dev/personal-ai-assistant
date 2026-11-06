@@ -1,0 +1,49 @@
+package dev.rilandev.personalaiassistant
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.util.UUID
+
+/** Local owner emergency-stop acceptance, no real app is launched. */
+@RunWith(AndroidJUnit4::class)
+class NexaNativeActionSafetyAndroidTest {
+    @Test fun pausePersistsAndBlocksNewClaimAfterNoReplayReceipt(){
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val previouslyPaused=NexaNativeActionSafety.isPaused(ctx)
+        try {
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,false))
+            assertFalse(NexaNativeActionSafety.isPaused(ctx))
+            val before="owner-"+UUID.randomUUID()
+            assertTrue(NexaUiActionJournal.claim(ctx,before,"tap",
+                "com.example.safe",origin="overlay"))
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,true))
+            assertTrue(NexaNativeActionSafety.isPaused(ctx))
+            assertFalse(NexaNativeActionSafety.permitsNewAction(ctx))
+            assertFalse("Overlay must stop",NexaUiActionJournal.claim(
+                ctx,"owner-"+UUID.randomUUID(),"tap","com.example.safe",origin="overlay"))
+            assertFalse("Voice must stop",NexaUiActionJournal.claim(
+                ctx,"owner-"+UUID.randomUUID(),"scroll_down","com.example.safe",
+                origin="live-voice"))
+            assertFalse("Chat launch must stop",NexaUiActionJournal.claim(
+                ctx,"owner-"+UUID.randomUUID(),"app_launch","com.example.safe",
+                origin="chat"))
+            assertFalse("Reviewed text must stop",NexaUiActionJournal.claim(
+                ctx,"owner-"+UUID.randomUUID(),"text_fill","com.example.safe",
+                "a".repeat(64),origin="overlay"))
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,false))
+            assertTrue(NexaNativeActionSafety.permitsNewAction(ctx))
+            assertFalse("Resuming does not reset a permanently consumed token",
+                NexaUiActionJournal.claim(ctx,before,"tap","com.example.safe",
+                    origin="overlay"))
+            assertTrue("Fresh owner choice can be used after explicit resumption",
+                NexaUiActionJournal.claim(ctx,"owner-"+UUID.randomUUID(),"tap",
+                    "com.example.safe",origin="overlay"))
+        }finally{
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,previouslyPaused))
+        }
+    }
+}
