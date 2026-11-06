@@ -61,6 +61,14 @@ class FlashlightControlModule(private val context: ReactApplicationContext) :
 
     @ReactMethod fun setFlashlight(enabled: Boolean, promise: Promise) {
         main.post {
+            // Emergency stop blocks new hardware activation. Turning OFF an
+            // already-enabled light remains permitted so the owner can safely
+            // end an earlier physical-world action.
+            if(enabled && !NexaNativeActionSafety.permitsNewAction(context)){
+                promise.reject("OWNER_ACTIONS_PAUSED",
+                    "Nexa device actions are paused. Flashlight was not enabled.")
+                return@post
+            }
             if (pending != null) {
                 promise.reject("TORCH_BUSY", "Flashlight operation already in progress")
                 return@post
