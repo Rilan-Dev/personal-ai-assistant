@@ -136,7 +136,7 @@ class NexaLauncherNavigationService : AccessibilityService() {
                 LauncherNavigationState.found()
                 return
             }
-            swipe()
+            swipe(pkg)
         } finally {
             root.recycle()
         }
@@ -165,9 +165,14 @@ class NexaLauncherNavigationService : AccessibilityService() {
         }
         return false
     }
-    private fun swipe() {
+    private fun swipe(homePackage:String) {
         if(!NexaNativeActionSafety.permitsNewAction(this)){
             LauncherNavigationState.stop("owner_paused")
+            return
+        }
+        if(!homePackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
+            !LauncherNavigationState.allows(homePackage)) {
+            LauncherNavigationState.stop("wrong_screen")
             return
         }
         val index = LauncherNavigationState.beginSwipe()
@@ -184,16 +189,46 @@ class NexaLauncherNavigationService : AccessibilityService() {
         val gesture = GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path, 0, 380))
             .build()
-        if (!dispatchGesture(gesture, object : GestureResultCallback() {
-                override fun onCompleted(gestureDescription: GestureDescription?) {
-                    LauncherNavigationState.swipeFinished(true)
-                    handler.removeCallbacks(analyze)
-                    handler.postDelayed(analyze, 550L)
+        // This bounded launcher gesture belongs to the owner-initiated
+        // navigation request, but is still a consequential Android effect.
+        // Reserve its permanent one-time token BEFORE any gesture dispatch.
+        val token=java.util.UUID.randomUUID().toString()
+        val kind=if(left)"scroll_left" else "scroll_right"
+        if(!NexaUiActionJournal.claim(this,token,kind,homePackage,origin="chat")) {
+            LauncherNavigationState.stop("action_journal_unavailable")
+            return
+        }
+        try {
+            val accepted=dispatchGesture(gesture,object:GestureResultCallback(){
+                override fun onCompleted(gestureDescription:GestureDescription?) {
+                    Thread({
+                        val saved=NexaUiActionJournal.finish(
+                            this@NexaLauncherNavigationService,token,"android_accepted")
+                        handler.post {
+                            LauncherNavigationState.swipeFinished(saved)
+                            if(saved) {
+                                handler.removeCallbacks(analyze)
+                                handler.postDelayed(analyze,550L)
+                            }
+                        }
+                    },"nexa-launcher-gesture-result").start()
                 }
-                override fun onCancelled(gestureDescription: GestureDescription?) {
-                    LauncherNavigationState.swipeFinished(false)
+                override fun onCancelled(gestureDescription:GestureDescription?) {
+                    Thread({
+                        NexaUiActionJournal.finish(
+                            this@NexaLauncherNavigationService,token,"android_rejected")
+                        handler.post{LauncherNavigationState.swipeFinished(false)}
+                    },"nexa-launcher-gesture-rejected").start()
                 }
-            }, handler)) LauncherNavigationState.swipeFinished(false)
+            },handler)
+            if(!accepted){
+                NexaUiActionJournal.finish(this,token,"android_rejected")
+                LauncherNavigationState.swipeFinished(false)
+            }
+        }catch(_:Exception){
+            NexaUiActionJournal.finish(this,token,"unknown")
+            LauncherNavigationState.stop("gesture_outcome_uncertain")
+        }
     }
     override fun onInterrupt() {
         handler.removeCallbacks(analyze)
