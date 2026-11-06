@@ -12,19 +12,23 @@ package dev.rilandev.personalaiassistant
  */
 internal object NexaVoiceActionScope {
     data class Parent(val taskId:String,val sessionId:String,
-                      val ordinal:Int,val command:String)
+                      val ordinal:Int,val command:String,
+                      val packageName:String)
     private val local=ThreadLocal<Parent?>()
 
     fun active():Parent?=local.get()
 
     fun <T> during(eligible:Boolean,taskId:String,sessionId:String,
-                   ordinal:Int,command:String,block:()->T):T {
+                   ordinal:Int,command:String,packageName:String,
+                   block:()->T):T {
         if(!eligible)return block()
         check(local.get()==null){"Voice action context already active"}
         require(Regex("task-[A-Za-z0-9_-]{8,96}").matches(taskId))
         require(sessionId.length in 1..100 && ordinal in 0..7 &&
-            command.length in 1..500)
-        local.set(Parent(taskId,sessionId,ordinal,command))
+            command.length in 1..500 &&
+            (packageName.isEmpty() ||
+                packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}"))))
+        local.set(Parent(taskId,sessionId,ordinal,command,packageName))
         return try{block()}finally{local.remove()}
     }
 
