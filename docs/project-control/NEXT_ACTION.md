@@ -662,8 +662,15 @@ Do not mark physical phone, iOS, true wake word, or WhatsApp sending verified.
 - The ordered native gates for `1469be4` built successfully but emulator instrumentation found five failures. The reviewed-text digest receipt and owner-read-plan test fixtures are fixed locally; all three Android gates must now be rerun sequentially against the new Development SHA.
 - A local Maestro CLI is available from a temporary install. After the signed release-test artifact is built, install it on physical Infinix X6831 and run the four experimental flows in order. Keep real notification-panel visibility and bound-service assertions strict; no messages are to be sent.
 - Local Windows Gradle remains limited by Ninja's 260-character C++ codegen path. Do not promote to `main` or call the release-test APK a public release.
-
 ## 2026-11-06 — Post-launch observation implementation gate
 - Source milestone: exact package-only observed app destination; separate from mere Intent acceptance and never proof of task success.
 - Verify **this exact Development SHA** with focused Android instrumentation and release-test UI acceptance on emulator and Infinix phone; test cold launches, denied Accessibility, changed foreground app, pause, and no unintended messaging.
 - General observed multi-step coordinator, exact recipient/composer and message-send review, cross-interface recovery, and signing/rollback certification remain OPEN. Do not mark these complete from a single evidence milestone.
+
+## 2026-11-07 — Signed APK and device QA status
+- Signed release-test APK from Development source `fbda03447d44072b1124f294fed22f810038086b` (version `0.3.1800066237`) is installed on the API 37 emulator and physical Infinix X6831. Its SHA-256 is `3f9ee0f0d326957037068016f799e9f0b9dfd4f19884dc1549547139425cfd3d`.
+- The updated ordered main Maestro suite passed on the emulator, 14/14 in 17m 57s. The ordered experimental suite passed there, 4/4 in 4m 6s. An isolated Screen Assist setting flow passed again afterward.
+- On the Infinix, Screen Assist was enabled and bound after APK upgrade. A live Chat request to open the notification bar completed after owner approval and resume; Android System UI appeared in the UI hierarchy. This verifies the action on the installed APK, independently of Maestro.
+- Physical-phone Maestro remains unverified on this APK: its `dev.mobile.maestro` driver closes during `deviceInfo` before any YAML step. ADB restart, forced driver reinstall, and freeing Chrome/Clock memory did not restore it. The phone showed only 82 MB free with heavy swap at the failure. Do not count the 14 immediate runner failures as app flow failures.
+- Next: restore a stable phone test-driver session and run the main and experimental suites on the Infinix. The general observed multi-step agent, silent screen observation for action tasks, arbitrary app interaction, automatic messaging, and persistent voice session are still source-development gaps; the green Maestro flows do not prove them. A Sarvam key pasted in chat was not used; rotate it before live provider testing.
+

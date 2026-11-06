@@ -27,7 +27,7 @@ tags:
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Assistant command"
-- inputText: "Open Calendar"
+- inputText: "Open Clock"
 - hideKeyboard
 - tapOn:
     text: "Send message"
@@ -37,14 +37,14 @@ tags:
 - assertVisible:
     text: "Tool: device.open_app"
 - assertVisible:
-    text: ".*calendar.*"
+    text: ".*clock.*"
 - tapOn: "Approve once"
 - extendedWaitUntil:
     visible: "Resume saved task"
     timeout: 20000
 - tapOn: "Resume saved task"
 - extendedWaitUntil:
-    visible: "Calendar"
+    visible: "World Clock"
     timeout: 30000
 - assertNotVisible: "How can I help today?"
-- takeScreenshot: nexa-calendar-opened-by-name
+- takeScreenshot: nexa-clock-opened-by-name

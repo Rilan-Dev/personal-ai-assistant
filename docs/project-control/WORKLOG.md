@@ -1,5 +1,12 @@
 # Worklog
 
+## 2026-11-07 — Current signed APK passed emulator suites; upgraded physical phone
+- GitHub Actions signed release-test workflow `42231566298` succeeded for Development `fbda03447d44072b1124f294fed22f810038086b`. Installed version `0.3.1800066237` on emulator and Infinix; the APK artifact hash matches `3f9ee0f0d326957037068016f799e9f0b9dfd4f19884dc1549547139425cfd3d`.
+- Fixed emulator DNS and reran all fourteen main Maestro flows together: 14/14 passed in 17m 57s. Four experimental flows passed together: 4/4 in 4m 6s. Chrome is stopped after its search result to prevent delayed activity transitions; the email gate corrects an observed duplicated IME character before sending its local request; installed-app acceptance uses Clock to avoid Calendar's account setup.
+- On the Infinix, ADB install -r succeeded without removing app data. Screen Assist was enabled and bound. Used the phone UI to send `Open notification bar`, approved once, resumed, and observed `com.android.systemui` in the UI hierarchy. No notification content was stored and no external message was sent.
+- A full phone Maestro attempt failed all fourteen flows in under one second because the Maestro device server died at `deviceInfo`, before executing YAML. An isolated retry after ADB restart and driver reinstall failed the same way. The phone was under severe memory pressure; force-stopping Chrome, Clock and the stale test driver raised free memory temporarily but did not fix startup. This is a phone test-harness failure, not a verified app regression.
+- The experimental scripts cover messaging app choice and reviewed input preparation only. They do not verify autonomous app navigation, actual third-party input insertion, sending, or continuous voice. Sarvam live provider tests were not performed with the key exposed in chat.
+
 ## 2026-11-06 — Dynamic Chat app lookup and emulator build
 - Observed the installed signed APK reply to `Open Calculator` with a fixed native-tool list and no launch. Changed Chat intent admission, direct-provider schema, bridge validation, and Android launch execution to resolve a uniquely named installed launcher app instead of a fixed WhatsApp list.
 - Added an exact-label Android instrumentation case and a Calendar Maestro acceptance flow. Native debug compilation and APK/test-APK assembly passed; the test APK passed five focused instrumentation checks. Full Node suite passed 396/396 and TypeScript checks passed.

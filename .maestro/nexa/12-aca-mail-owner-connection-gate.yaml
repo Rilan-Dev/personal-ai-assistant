@@ -7,6 +7,7 @@ tags:
   - security
   - cloud
 ---
+- stopApp: com.android.chrome
 - launchApp:
     clearState: true
     permissions:
@@ -36,6 +37,17 @@ tags:
 - tapOn: "Assistant command"
 - inputText: "Summarize unread emails"
 - hideKeyboard
+# The emulator IME occasionally duplicates the first key when a freshly
+# opened composer gains focus. Correct that observed input before sending.
+- runFlow:
+    when:
+      visible: "SSummarize unread emails"
+    commands:
+      - tapOn: "SSummarize unread emails"
+      - eraseText: 100
+      - inputText: "Summarize unread emails"
+      - hideKeyboard
+- assertVisible: "Summarize unread emails"
 - tapOn:
     text: "Send message"
 - extendedWaitUntil:

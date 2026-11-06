@@ -75,3 +75,6 @@ tags:
       text: ".*[Ww]hat is [Aa][Ii].*"
     timeout: 65000
 - takeScreenshot: nexa-chrome-ai-search-results
+# Chrome can keep a delayed activity transition pending after the page loads.
+# Release it before the next isolated Nexa flow starts.
+- stopApp: com.android.chrome
