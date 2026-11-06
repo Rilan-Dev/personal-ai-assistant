@@ -183,6 +183,17 @@ internal object NexaLegacyVoiceTaskMirror {
                 }?:return false
                 if(step.first!=TOOL || step.second=="checkpoint_advanced" ||
                     step.second=="uncertain")return false
+                // Once the owner has consumed this exact step's durable
+                // approval, a stale Voice cursor may never propose another
+                // dispatch of the same step, including after a UI reconnect.
+                val stepAlreadyClaimed=db.rawQuery(
+                    "SELECT 1 FROM agent_step_approvals a "+
+                        "JOIN agent_task_steps s ON s.step_id=a.step_id "+
+                        "WHERE s.task_id=? AND s.ordinal=? "+
+                        "AND a.state='consumed' LIMIT 1",
+                    arrayOf(taskId,ordinal.toString())
+                ).use{it.moveToFirst()}
+                if(stepAlreadyClaimed)return false
                 // No legacy Voice cursor may use a final coordinator mandate
                 // as a way around its own reviewed UI action policy.
                 val mandate=db.rawQuery(
