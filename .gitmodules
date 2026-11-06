@@ -1,0 +1,3 @@
+[submodule "third_party/maestro-upstream"]
+	path = third_party/maestro-upstream
+	url = https://github.com/mobile-dev-inc/Maestro.git
