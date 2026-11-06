@@ -388,8 +388,9 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             val id=j.optString("appId")
             val saved=j.optLong("savedAt",-1L)
             val end=j.optLong("expiresAt",-1L)
-            if(j.optInt("version")!=2 || id !in allowedMessageApps ||
+            if(j.length()!=5 || j.optInt("version")!=2 || id !in allowedMessageApps ||
                 j.optString("source")!="owner_confirmed" ||
+                j.opt("savedAt") !is Number || j.opt("expiresAt") !is Number ||
                 saved<=0L || end<=saved || end-saved>365L*86_400_000L)
                 null else j
         }catch(_:Exception){null}
