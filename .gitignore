@@ -1,7 +1,5 @@
 node_modules/
 **/node_modules/
-.env
-.env.*
 !.env.example
 *.keystore
 *.jks
@@ -26,3 +24,4 @@ device-acceptance-*.json
 __pycache__/
 *.pyc
 work
+config.bat
