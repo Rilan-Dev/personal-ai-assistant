@@ -252,6 +252,15 @@ internal object NexaPhoneVoiceTools {
             apps.any{it.label==label && it.packageName==pkg}
     }
 
+    /** Fixed local owner command: resolve the actual installed launcher label
+     * for one compile-time allowlisted package, never from model input.
+     * Duplicate activities or aliases are denied rather than guessed.
+     */
+    fun uniqueInstalledPackageChoice(context:Context,pkg:String):AppChoice? {
+        if(!pkg.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,180}")))return null
+        return launchableApps(context).filter{it.packageName==pkg}.singleOrNull()
+    }
+
     private fun launchableApps(context: Context): List<AppChoice> {
         val pm=context.packageManager
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
