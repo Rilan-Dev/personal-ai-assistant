@@ -166,11 +166,28 @@ class RealtimeVoiceService : Service() {
                     val checkpointOk=task==null || NexaConversationDb.saveTask(
                         this,task.taskId,operationSession,"executing",task.stepIndex,
                         task.originalRequest,task.steps,"Owner reviewed step")
+                    // A separate, consumed native step receipt is required
+                    // before ANY approved compound-Voice tool dispatch. It
+                    // binds the saved owner step, Android command and target
+                    // package. An interrupted/duplicate step cannot claim it
+                    // again. The actual tool's own permission/window checks
+                    // remain mandatory and cannot be bypassed by this receipt.
+                    val staleTask=task!=null && currentCompound!==task
+                    val boundStep=if(task!=null && checkpointOk && !staleTask &&
+                        active.get() && operationSession==voiceSessionId &&
+                        approved && age in 0..60_000L)
+                        NexaLegacyVoiceStepApproval.consume(
+                            this,task.taskId,operationSession,task.stepIndex,
+                            task.current().orEmpty(),pending.command,
+                            pending.installedApp?.packageName.orEmpty())
+                        else true
                     val outcome = try { when {
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
-                    !active.get() || operationSession != voiceSessionId -> "Session stopped; no action performed."
+                    staleTask || !active.get() || operationSession != voiceSessionId ->
+                        "Session or task changed; no action performed."
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
+                    !boundStep -> "Voice step authorization was not durably consumed. No action performed."
                     pending.command.startsWith("chrome_search:") ->
                         NexaBrowserTaskActions.openChromeSearchApproved(
                             this,pending.command.removePrefix("chrome_search:"))
