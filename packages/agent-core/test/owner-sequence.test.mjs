@@ -16,6 +16,12 @@ test("exact owner sequence parses six bounded steps and preserves quoted text",(
   assert.deepEqual(plan?.map(x=>x.callId),
     ["owner-seq-1","owner-seq-2","owner-seq-3","owner-seq-4"]);
   assert.equal(parseOwnerMultiToolRequest("Check battery then check storage")?.length,2);
+  assert.deepEqual(parseOwnerMultiToolRequest("Open WhatsApp and tap Search")?.map(x=>x.toolId),
+    ["device.open_app","screen.tap_label"]);
+  assert.equal(parseOwnerMultiToolRequest("What's my battery percentage and check storage")?.length,2);
+  assert.equal(parseOwnerMultiToolRequest('Open Chrome and search what is ai then check battery')?.length,2);
+  assert.equal(parseOwnerMultiToolRequest('Tap Search then type "please then and after" into Notes')?.[1].input.exactText,
+    'please then and after');
 });
 
 test("entire sequence fails closed if any step could send, grant, transfer or hide approval",()=>{
