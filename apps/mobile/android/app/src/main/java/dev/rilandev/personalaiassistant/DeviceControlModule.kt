@@ -156,6 +156,31 @@ class DeviceControlModule(
         promise.resolve(result)
     }
 
+    /** Explicit Chat owner-approved, redacted visible-control observation.
+     * No screen contents, editable values, coordinates, tap or submission.
+     * The one-shot native task claim and evidence are coordinator-owned.
+     */
+    @ReactMethod
+    fun readVisibleControls(promise:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true) {
+            promise.reject("NOT_FOREGROUND","Open Nexa to approve screen inspection")
+            return
+        }
+        if(!ScreenAssistState.connected || ScreenAssistService.active==null) {
+            promise.reject("ACCESSIBILITY_DISABLED",
+                "Enable Screen Assist in Android Accessibility Settings")
+            return
+        }
+        val result=NexaTaskCoordinator.executeOwnerDeviceRead(
+            context,"visible screen controls","chat")
+        if(!result.startsWith("Visible non-sensitive controls in ")) {
+            promise.reject("SCREEN_OBSERVATION_UNAVAILABLE",
+                "No verified external-app control observation was available")
+            return
+        }
+        promise.resolve(result)
+    }
+
     @ReactMethod
     fun openSupportedApp(app: String, promise: Promise) {
         if(context.currentActivity?.hasWindowFocus()!=true){
