@@ -76,7 +76,7 @@ internal object NexaTextInputState {
 internal object NexaTextInputActions {
     private data class Pending(val token:String,val packageName:String,val windowId:Int,
         val clazz:String,val resource:String,val box:Rect,val target:String,
-        val expiry:Long,val reviewedDigest:String)
+        val expiry:Long,val reviewedDigest:String,val pauseGeneration:Long)
     private data class Found(val count:Int,val node:AccessibilityNodeInfo?)
     private val lock=Any()
     private var pending:Pending?=null
@@ -165,10 +165,12 @@ internal object NexaTextInputActions {
             if(found.count!=1)return "Found ${found.count} matching empty text fields. Need exactly one; nothing typed."
             val node=found.node ?:return "The field is no longer available."
             val bounds=Rect().also{node.getBoundsInScreen(it)}
+            val pauseGeneration=NexaNativeActionSafety.approvalFence(service)
+                ?:return "Device actions are paused. No text-entry review started."
             synchronized(lock){pending=Pending(UUID.randomUUID().toString(),pkg,root.windowId,
                 node.className?.toString().orEmpty(),node.viewIdResourceName.orEmpty(),
                 bounds,draft.targetLabel,SystemClock.elapsedRealtime()+25_000L,
-                NexaTextInputPolicy.approvedDraftDigest(pkg,draft.targetLabel,draft.exactText))}
+                NexaTextInputPolicy.approvedDraftDigest(pkg,draft.targetLabel,draft.exactText),pauseGeneration)}
             return "One empty '${draft.targetLabel}' input is visible in $pkg. Approve one text insertion; no submit or send."
         }catch(_:Exception){cancel();return "Screen changed during inspection. Nothing typed."}
         finally{try{root.recycle()}catch(_:Exception){}}
@@ -177,9 +179,10 @@ internal object NexaTextInputActions {
         val approval=synchronized(lock){val p=pending;pending=null;p}
             ?:return "No pending approved text entry."
         if(SystemClock.elapsedRealtime()>=approval.expiry ||
-            !ScreenAssistState.connected || ScreenAssistService.active !== service){
+            !ScreenAssistState.connected || ScreenAssistService.active !== service ||
+            !NexaNativeActionSafety.approvalFenceCurrent(service,approval.pauseGeneration)){
             NexaTextInputState.clear()
-            return "Approval expired or Screen Assist disconnected. No entry attempted."
+            return "Approval expired, owner paused actions, or Screen Assist disconnected. No entry attempted."
         }
         val draft=NexaTextInputState.take()?:return "Text-entry request expired."
         if(draft.targetLabel!=approval.target ||
@@ -207,7 +210,14 @@ internal object NexaTextInputActions {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                         draft.exactText)
                 }
-                val accepted=node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                val accepted=NexaNativeActionSafety.dispatchWithFence(
+                    service,approval.pauseGeneration) {
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                }
+                if(accepted==null){
+                    NexaUiActionJournal.finish(service,approval.token,"android_rejected")
+                    return "Owner paused device actions since review. No entry attempted."
+                }
                 val matches=accepted &&
                     NexaEditableNode.containsExactTextAfterDispatch(node,draft.exactText)
                 NexaUiActionJournal.finish(service,approval.token,
