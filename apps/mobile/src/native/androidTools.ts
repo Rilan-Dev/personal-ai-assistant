@@ -1,6 +1,6 @@
 import { NativeModules, Platform } from "react-native";
 import { setVerifiedFlashlight } from "./androidFlashlight";
-import type { Tool } from "@paa/agent-core";
+import type { Tool, ToolExecutionContext } from "@paa/agent-core";
 import { isLaunchableAppLabel } from "@paa/agent-contracts";
 
 type NativeStatus = {
@@ -28,13 +28,13 @@ interface DeviceControlBridge {
   openChromeSearch(query: string): Promise<LaunchOutcome>;
   openNotificationShade(): Promise<{notificationShadeAccepted: boolean}>;
   observeLaunchedAppPackage(expectedPackage:string): Promise<boolean>;
-  performReviewedScreenTap(label:string):Promise<{
+  performReviewedScreenTap(label:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
   }>;
-  performReviewedScreenScroll(direction:string):Promise<{
+  performReviewedScreenScroll(direction:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
   }>;
-  performReviewedScreenText(label:string,text:string):Promise<{
+  performReviewedScreenText(label:string,text:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     submitted:false;verification:"exact_text_visible"
   }>;
 }
@@ -85,6 +85,16 @@ const reviewedFieldLabel=(value:unknown):value is string=>
 const reviewedText=(value:unknown):value is string=>
   typeof value==="string"&&value.length>=1&&value.length<=500&&
   value.trim().length>0&&!/[\x00-\x08\x0b-\x1f]/.test(value);
+
+/** Explicit owner-approved claim metadata from AgentHarness, never model input. */
+function nativeStepMandate(ctx:ToolExecutionContext):[string,string,string]{
+  if(typeof ctx.sessionId!=="string"||typeof ctx.callId!=="string"||
+     typeof ctx.approvalFingerprint!=="string"||
+     ctx.sessionId.length<1||ctx.callId.length<1||
+     ctx.approvalFingerprint.length<10)
+    throw Error("Native action requires a consumed, fingerprint-bound owner approval");
+  return [ctx.sessionId,ctx.callId,ctx.approvalFingerprint];
+}
 
 /** A Kotlin bridge is the only permitted path to native device operations. */
 export function createAndroidTools(): Tool[] {
@@ -218,9 +228,9 @@ export function createAndroidTools(): Tool[] {
       capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
       validateInput:(input):input is Record<string,unknown>=>
         plainObject(input)&&Object.keys(input).length===1&&safeControlLabel(input.label),
-      execute:async({label})=>({
+      execute:async({label},ctx)=>({
         status:"success",
-        data:await getBridge().performReviewedScreenTap(String(label))
+        data:await getBridge().performReviewedScreenTap(String(label),...nativeStepMandate(ctx))
       })
     },
     {
@@ -230,9 +240,10 @@ export function createAndroidTools(): Tool[] {
       validateInput:(input):input is Record<string,unknown>=>
         plainObject(input)&&Object.keys(input).length===1&&
         ["up","down","left","right"].includes(String(input.direction)),
-      execute:async({direction})=>({
+      execute:async({direction},ctx)=>({
         status:"success",
-        data:await getBridge().performReviewedScreenScroll(String(direction))
+        data:await getBridge().performReviewedScreenScroll(
+          String(direction),...nativeStepMandate(ctx))
       })
     },
     {
@@ -242,10 +253,10 @@ export function createAndroidTools(): Tool[] {
       validateInput:(input):input is Record<string,unknown>=>
         plainObject(input)&&Object.keys(input).length===2&&
         reviewedFieldLabel(input.targetLabel)&&reviewedText(input.exactText),
-      execute:async({targetLabel,exactText})=>({
+      execute:async({targetLabel,exactText},ctx)=>({
         status:"success",
         data:await getBridge().performReviewedScreenText(
-          String(targetLabel),String(exactText))
+          String(targetLabel),String(exactText),...nativeStepMandate(ctx))
       })
     }
   ];
