@@ -26,3 +26,15 @@ test("clearing remembered messaging apps requires two owner-visible UI presses",
   assert.match(ui,/if\(clearAllMessageMemoryBusy\|\|!clearAllMessageMemoryReview\|\|!engine\.live\)return/);
   assert.match(ui,/setMessagePreference\(null\)/);
 });
+
+test("any exact alias can be inspected and forgotten from the owner Tools screen",()=>{
+  const ui=source("apps/mobile/App.tsx");
+  assert.match(ui,/const inspectRememberedMessageAlias=async/);
+  assert.match(ui,/const forgetSearchedMessageAlias=async/);
+  assert.match(ui,/recipientMemoryKey\(memoryAliasQuery\)/);
+  assert.match(ui,/await messageAppPreferenceDetails\(key\)/);
+  assert.match(ui,/await forgetMessageApp\(key\)/);
+  assert.match(ui,/setMemoryAliasResult\(null\)/);
+  assert.match(ui,/Recipient alias to manage private channel preference/);
+  assert.match(ui,/Forget this alias’s saved app/);
+});
