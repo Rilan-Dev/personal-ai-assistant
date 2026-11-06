@@ -639,6 +639,10 @@ export default function App() {
   const [messageChosen,setMessageChosen]=useState<InstalledMessageApp|null>(null);
   const [messageBusy,setMessageBusy]=useState(false);
   const [messageNotice,setMessageNotice]=useState('');
+  const [memoryAliasQuery,setMemoryAliasQuery]=useState('');
+  const [memoryAliasResult,setMemoryAliasResult]=useState<MessageAppPreference|null>(null);
+  const [memoryLookupBusy,setMemoryLookupBusy]=useState(false);
+  const [memoryLookupNotice,setMemoryLookupNotice]=useState('');
   const [clearAllMessageMemoryReview,setClearAllMessageMemoryReview]=useState(false);
   const [clearAllMessageMemoryBusy,setClearAllMessageMemoryBusy]=useState(false);
   const [clearAllMessageMemoryNotice,setClearAllMessageMemoryNotice]=useState('');
@@ -849,6 +853,39 @@ export default function App() {
       setMessageNotice(e instanceof Error?e.message:'Could not securely remember the app. No app was selected.');
     }finally{setMessageBusy(false);}
   };
+  const inspectRememberedMessageAlias=async()=>{
+    if(memoryLookupBusy||!engine.live)return;
+    const key=recipientMemoryKey(memoryAliasQuery);
+    if(!key){
+      setMemoryAliasResult(null);
+      setMemoryLookupNotice('Enter a saved recipient alias (2–50 letters or numbers).');
+      return;
+    }
+    setMemoryLookupBusy(true);
+    try{
+      const result=await messageAppPreferenceDetails(key);
+      setMemoryAliasResult(result);
+      setMemoryLookupNotice(result?'Stored app choice found for this alias. No contact identity is inferred.':
+        'No remembered messaging app for this alias.');
+    }catch(e){
+      setMemoryAliasResult(null);
+      setMemoryLookupNotice(e instanceof Error?e.message:
+        'Encrypted preference lookup failed. No change was made.');
+    }finally{setMemoryLookupBusy(false);}
+  };
+  const forgetSearchedMessageAlias=async()=>{
+    const key=recipientMemoryKey(memoryAliasQuery);
+    if(!key||!memoryAliasResult||memoryLookupBusy||!engine.live)return;
+    setMemoryLookupBusy(true);
+    try{
+      await forgetMessageApp(key);
+      setMemoryAliasResult(null);
+      setMessagePreference(null);
+      setMessageChosen(null);
+      setMemoryLookupNotice('Deleted the saved channel choice for this alias. No messages were sent.');
+    }catch(e){setMemoryLookupNotice(e instanceof Error?e.message:'Unable to delete encrypted preference.');}
+    finally{setMemoryLookupBusy(false);}
+  };
   const clearAllMessageChannelMemory=async()=>{
     if(clearAllMessageMemoryBusy||!clearAllMessageMemoryReview||!engine.live)return;
     setClearAllMessageMemoryBusy(true);
@@ -856,6 +893,7 @@ export default function App() {
       const count=await forgetAllRememberedMessageApps();
       setMessagePreference(null);
       setMessageChosen(null);
+      setMemoryAliasResult(null);
       setMessageRecipientConfirmed(false);
       setClearAllMessageMemoryNotice('Deleted '+count+
         ' stored recipient-to-app preferences from encrypted device memory. Provider keys, chats and conversations were unchanged.');
@@ -2125,6 +2163,28 @@ export default function App() {
         {engine.live&&<View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Private recipient-app memory</Text>
           <Text style={styles.settingHelp}>Saved app choices are encrypted on this phone and only hint at a preferred channel. They do not identify a contact or authorize sending. You can forget an individual choice in a message review, or remove every saved channel preference here.</Text>
+          <TextInput accessibilityLabel="Recipient alias to manage private channel preference"
+            value={memoryAliasQuery} maxLength={50} style={styles.composerInput}
+            placeholder="Recipient alias, e.g. Mom" placeholderTextColor="#7f8ba5"
+            onChangeText={value=>{
+              setMemoryAliasQuery(value);setMemoryAliasResult(null);setMemoryLookupNotice('');
+            }}/>
+          <Pressable accessibilityRole="button" style={styles.outlineAction}
+            disabled={memoryLookupBusy} onPress={()=>void inspectRememberedMessageAlias()}>
+            <Text style={styles.outlineActionText}>Look up saved app for this alias</Text>
+          </Pressable>
+          {memoryAliasResult&&<View style={styles.actionCard}>
+            <Text style={styles.settingTitle}>Saved app: {memoryAliasResult.appId}</Text>
+            <Text style={styles.settingHelp}>Source: {memoryAliasResult.source==='owner_confirmed'?'Owner selected':'Legacy preference'}.
+              {memoryAliasResult.expiresAt>0?' Expires '+new Date(memoryAliasResult.expiresAt).toLocaleDateString():
+                ' No expiry recorded.'} This never confirms a contact identity.</Text>
+            <Pressable accessibilityRole="button" disabled={memoryLookupBusy}
+              style={styles.outlineAction} onPress={()=>void forgetSearchedMessageAlias()}>
+              <Text style={styles.outlineActionText}>Forget this alias’s saved app</Text>
+            </Pressable>
+          </View>}
+          {memoryLookupBusy&&<ActivityIndicator/>}
+          {memoryLookupNotice!==''&&<Text style={styles.settingHelp}>{memoryLookupNotice}</Text>}
           {!clearAllMessageMemoryReview?
             <Pressable accessibilityRole="button" disabled={clearAllMessageMemoryBusy}
               style={styles.outlineAction} onPress={()=>{
