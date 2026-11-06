@@ -51,6 +51,31 @@ class NexaOwnerSequentialUiMandateAndroidTest {
         }
     }
 
+    @Test fun parentWillNotAdmitNextStepUntilNativeGestureObservationIsCommitted(){
+        val previous=NexaNativeActionSafety.isPaused(context)
+        try{
+            assertTrue(NexaNativeActionSafety.setPaused(context,false))
+            val session="native-verify-"+UUID.randomUUID()
+            val label=JSONObject().put("label","Search")
+            val call="owner-seq-1"
+            val fp=fingerprint(session,call,"screen.tap_label",label)
+            assertTrue(NexaAgentActionAudit.claim(context,session,call,fp,true))
+            assertTrue(NexaAgentActionAudit.reserveReviewedUiStep(
+                context,session,call,fp,"screen.tap_label",label))
+            assertFalse(NexaAgentActionAudit.recordReviewedUiEvidence(
+                context,session,call,fp,"screen.tap_label","observed_change"))
+            assertTrue(NexaAgentActionAudit.recordSettlement(
+                context,session,call,fp,false))
+            val second="owner-seq-2"
+            val scroll=JSONObject().put("direction","down")
+            val fp2=fingerprint(session,second,"screen.scroll",scroll)
+            assertFalse("An accepted tap does not grant the next action",
+                NexaAgentActionAudit.claim(context,session,second,fp2,true))
+        }finally{
+            assertTrue(NexaNativeActionSafety.setPaused(context,previous))
+        }
+    }
+
     @Test fun ownerPauseAndResumeRevokesAnAlreadyClaimedChatEffect(){
         val previouslyPaused=NexaNativeActionSafety.isPaused(context)
         try{
