@@ -17,6 +17,7 @@ import android.content.Context
 internal object NexaNativeActionSafety {
     private const val STORE="nexa_native_action_safety_v1"
     private const val KEY="owner_paused_device_actions"
+    private const val GENERATION="owner_pause_generation"
     private val lock=Any()
 
     fun isPaused(context:Context):Boolean = synchronized(lock) {
@@ -27,11 +28,25 @@ internal object NexaNativeActionSafety {
 
     fun permitsNewAction(context:Context):Boolean = !isPaused(context)
 
+    /** Monotonic generation invalidates any previously staged Voice approval
+     * even if the owner pauses and then resumes within its original TTL.
+     * A preference-read failure returns a non-matching fence value.
+     */
+    fun pauseGeneration(context:Context):Long = synchronized(lock) {
+        try { context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
+            .getLong(GENERATION,0L) }catch (_:Exception){-1L}
+    }
+
     fun setPaused(context:Context,paused:Boolean):Boolean = synchronized(lock) {
         try {
             val prefs=context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
-            prefs.edit().putBoolean(KEY,paused).commit() &&
-                prefs.getBoolean(KEY,!paused)==paused
+            val old=prefs.getLong(GENERATION,0L)
+            if(old<0L || (paused && old==Long.MAX_VALUE))return@synchronized false
+            val generation=if(paused)old+1L else old
+            prefs.edit().putBoolean(KEY,paused)
+                .putLong(GENERATION,generation).commit() &&
+                prefs.getBoolean(KEY,!paused)==paused &&
+                prefs.getLong(GENERATION,-1L)==generation
         }catch (_:Exception){false}
     }
 }
