@@ -155,6 +155,7 @@ internal object NexaScreenScroll {
                 }
             }
             if(matches!=1 || target==null) return "Scroll target changed or ambiguous. No action requested."
+            val scrollTarget=target
             val direction="scroll_"+approved.direction
             if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg,origin=origin))
                 return "Secure action journal unavailable or approval already used. No scroll requested."
@@ -162,7 +163,7 @@ internal object NexaScreenScroll {
             val before=NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
             val performed=NexaNativeActionSafety.dispatchWithFence(
-                service,approved.pauseGeneration) { target.performAction(action) }
+                service,approved.pauseGeneration) { scrollTarget.performAction(action) }
             if(performed==null) {
                 NexaUiActionVerifier.cancel(approved.token)
                 NexaUiActionJournal.finish(service,approved.token,"android_rejected")
