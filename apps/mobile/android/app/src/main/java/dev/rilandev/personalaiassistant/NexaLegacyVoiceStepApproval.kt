@@ -36,11 +36,15 @@ internal object NexaLegacyVoiceStepApproval {
      */
     fun consume(context:Context,taskId:String,sessionId:String,ordinal:Int,
                 plannedStep:String,command:String,packageName:String="",
-                approvedBySavedPolicy:Boolean=false):Boolean {
+                approvedBySavedPolicy:Boolean=false,
+                screenStructureDigest:String=""):Boolean {
         if(!Regex("task-[A-Za-z0-9_-]{8,96}").matches(taskId)||
             sessionId.length !in 1..100 || ordinal !in 0..7 ||
             plannedStep.length !in 5..160 || command.length !in 1..500 ||
-            packageName.length>200 || listOf(sessionId,plannedStep,command,packageName)
+            packageName.length>200 ||
+            (screenStructureDigest.isNotEmpty() &&
+                !screenStructureDigest.matches(Regex("[0-9a-f]{64}"))) ||
+            listOf(sessionId,plannedStep,command,packageName)
                 .any{raw->raw.any{it.code<32}})
             return false
         return try{synchronized(lock){
@@ -88,10 +92,11 @@ internal object NexaLegacyVoiceStepApproval {
                     if(claimed)return@synchronized false
                     val now=System.currentTimeMillis()
                     val targetDigest=digest(
-                        "nexa-voice-target-v1:"+packageName+":"+plannedStep)
+                        "nexa-voice-target-v1:"+packageName+":"+screenStructureDigest+":"+plannedStep)
                     val inputDigest=digest(
                         "nexa-voice-command-v1:"+taskId+":"+sessionId+":"+
                             ordinal+":"+plannedStep+":"+command+":"+packageName+
+                            ":"+screenStructureDigest+
                             ":"+(if(approvedBySavedPolicy)"saved_policy" else "owner_tap"))
                     check(db.compileStatement(
                         "INSERT INTO agent_step_approvals(approval_id,step_id,"+
