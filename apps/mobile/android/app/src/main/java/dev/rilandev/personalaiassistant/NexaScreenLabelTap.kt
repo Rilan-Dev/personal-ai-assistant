@@ -17,7 +17,8 @@ internal object NexaScreenLabelTap {
     private fun labelKey(raw:String):String =
         raw.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]"""),"")
 
-    fun approved(service:ScreenAssistService, requested:String):String {
+    fun approved(service:ScreenAssistService, requested:String,
+                 origin:String="overlay"):String {
         val label=requested.trim()
         if(label.length !in 2..45 || unsafe.containsMatchIn(label))
             return "Unsafe or invalid requested control; no tap was sent."
@@ -82,7 +83,7 @@ internal object NexaScreenLabelTap {
             val found=targets.values.single()
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
-            if(!NexaUiActionJournal.claim(service,token,"tap",pkg))
+            if(!NexaUiActionJournal.claim(service,token,"tap",pkg,origin=origin))
                 return "Action journal rejected this request. No tap occurred."
             NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before)
             // Clicking a verified search input transfers focus only. Never
