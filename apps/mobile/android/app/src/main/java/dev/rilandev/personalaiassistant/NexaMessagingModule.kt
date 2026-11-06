@@ -111,6 +111,10 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
             p.reject("NOT_FOREGROUND","Open SMS draft from visible Nexa review")
             return
         }
+        if (!NexaNativeActionSafety.permitsNewAction(context)) {
+            p.reject("ACTIONS_PAUSED","Resume Nexa device actions before opening an SMS draft")
+            return
+        }
         val digits = phone.trim()
         if (!digits.matches(Regex("\\+[1-9][0-9]{7,14}")) ||
             message.length !in 1..500 || message.isBlank() ||
@@ -153,6 +157,10 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
         message: String, p: Promise) {
         if (context.currentActivity?.hasWindowFocus()!=true) {
             p.reject("NOT_FOREGROUND","Review the message in Nexa first")
+            return
+        }
+        if (!NexaNativeActionSafety.permitsNewAction(context)) {
+            p.reject("ACTIONS_PAUSED","Resume Nexa device actions before opening a messaging app")
             return
         }
         if (!ScreenAssistState.connected || ScreenAssistService.active==null ||
