@@ -11,7 +11,8 @@ import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberM
   messageAppPreferenceDetails,forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
   reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
 import type {MessageAppPreference} from './src/native/nexaMessaging';
-import { createAndroidTools, nativeDeviceAvailable } from './src/native/androidTools';
+import { createAndroidTools, nativeDeviceAvailable, nativeActionSafetyAvailable,
+  readNativeActionsPaused, updateNativeActionsPaused } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
@@ -643,6 +644,46 @@ export default function App() {
   const [textEntryRequest,setTextEntryRequest]=useState<ReviewedTextEntry|null>(null);
   const [textEntryBusy,setTextEntryBusy]=useState(false);
   const [textEntryNotice,setTextEntryNotice]=useState('');
+  const [nativeActionsPaused,setNativeActionsPaused]=useState<boolean|null>(null);
+  const [nativeSafetyBusy,setNativeSafetyBusy]=useState(false);
+  const [nativeSafetyNotice,setNativeSafetyNotice]=useState('');
+  useEffect(()=>{
+    if(!engine.live || !nativeActionSafetyAvailable())return;
+    let mounted=true;
+    void readNativeActionsPaused()
+      .then(value=>{if(mounted)setNativeActionsPaused(value);})
+      .catch(()=>{if(mounted){
+        setNativeActionsPaused(null);
+        setNativeSafetyNotice('Native safety preference could not be read. Device actions may be blocked.');
+      }});
+    return ()=>{mounted=false;};
+  },[engine.live]);
+  const toggleNativeActionPause=async()=>{
+    if(nativeActionsPaused===null || nativeSafetyBusy ||
+        !nativeActionSafetyAvailable())return;
+    const next=!nativeActionsPaused;
+    setNativeSafetyBusy(true);
+    setNativeSafetyNotice('');
+    try{
+      const stored=await updateNativeActionsPaused(next);
+      setNativeActionsPaused(stored);
+      if(stored){
+        screenGrant.revoke();
+        iconReviews.clear();
+        setPendingApproval(null);
+        setMessageRequest(null);
+        setMessageChosen(null);
+        setTextEntryRequest(null);
+        await cancelReviewedTextInput().catch(()=>{});
+      }
+      setNativeSafetyNotice(stored?
+        'New Nexa device actions are blocked. Existing Android actions cannot be undone.':
+        'Device actions resumed. Each new action still requires its normal review and Android permissions.');
+    }catch{
+      setNativeSafetyNotice('Could not change the owner stop setting. Check it again before using device tools.');
+      setNativeActionsPaused(null);
+    }finally{setNativeSafetyBusy(false);}
+  };
   // Consume one explicitly spoken command only after Nexa's RN UI becomes
   // active. Native code never selects contacts or invokes WhatsApp Send.
   useEffect(()=>{
@@ -2458,6 +2499,19 @@ export default function App() {
 
       {tab === 'settings' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Preferences</Text><Text style={styles.pageSubtitle}>Manage AI connections and privacy.</Text></View>
+        {engine.live&&<View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Native device actions · owner stop</Text>
+          <Text style={styles.cardText}>Pause Nexa-initiated app launches, screen taps, scrolling, text entry and navigation across Chat, Voice and floating Tools. This does not revoke Android permissions or undo an action already sent.</Text>
+          <Text style={styles.settingHelp}>Status: {nativeActionsPaused===null?'Unavailable':nativeActionsPaused?'Paused · new actions blocked':'Active · normal approvals still required'}</Text>
+          <Pressable accessibilityRole="button"
+            accessibilityLabel={nativeActionsPaused?'Resume Nexa device actions':'Pause Nexa device actions'}
+            disabled={nativeSafetyBusy||nativeActionsPaused===null}
+            style={nativeActionsPaused?styles.primaryInline:styles.outlineAction}
+            onPress={()=>void toggleNativeActionPause()}>
+            <Text style={nativeActionsPaused?styles.primaryInlineText:styles.outlineActionText}>{nativeSafetyBusy?'Saving…':nativeActionsPaused?'Resume device actions':'Pause device actions'}</Text>
+          </Pressable>
+          {nativeSafetyNotice!==''&&<Text style={styles.feedback}>{nativeSafetyNotice}</Text>}
+        </View>}
         {engine.live && <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
             <Text style={styles.cardHeading}>AI Comms Agent · Email</Text>
