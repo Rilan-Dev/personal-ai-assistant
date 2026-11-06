@@ -1,3 +1,10 @@
+
+## 2026-11-06 — New implementation milestone and remaining engineering
+Implemented in Development: limited safe non-sensitive screen-control observations with a durable Kotlin read claim, and shared Android launch dispatch with exact installed-app revalidation, one-shot no-replay audit and Chat/Voice origin attribution. Chat launch remains human-approved by the existing harness; Voice launch by the visible owner card.
+The remaining substantive development is the **general step executor** under one parent task ID: unify observed UI action receipt linkage, recipient/window/field-specific native mandates, general observation-driven multi-step continuation, safe failure and cancellation, voice session continuity, and production kill-switch/rollback. No automatic Send or permission bypass.
+Do not promote `main` or claim a release until the exact-commit Kotlin build, real-device behavioral acceptance, signing lineage, and recovery/rollback gates pass.
+---
+
 ## 2026-11-06 — Dynamic Chat app launch development and emulator gate
 - Chat source now accepts a single owner-requested installed app name and Android resolves one exact launcher label at execution time. The Kotlin bridge, 396 Node tests, TypeScript checks, native compile, and focused Android instrumentation passed. A new Maestro flow covers opening Calendar through Chat.
 - The current emulator has a locally built debug APK for this source. Debug JavaScript required Metro, and the UI remained blank after bundle load, so the new Maestro flow has not passed. Build and install a signed release-test APK from this exact source, then rerun flow 15 and the ordered suite. Do not count source/instrumentation success as UI acceptance.
