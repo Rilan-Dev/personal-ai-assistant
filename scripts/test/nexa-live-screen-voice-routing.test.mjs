@@ -42,9 +42,9 @@ test('screen reading is bounded and excludes password/input fields and app keygu
 test('click and scroll require a current external Accessibility window and one approved action',()=>{
   assert.match(overview,/NexaScreenActions\.inspect\(service\)/);
   assert.match(overview,/NexaScreenActions\.select\(snap\.token,matches\.single\(\)\.id\)/);
-  assert.match(overview,/NexaScreenActions\.confirm\(service,snap\.token\)/);
+  assert.match(overview,/NexaScreenActions\.confirm\(service,snap\.token,origin="live-voice"\)/);
   assert.match(overview,/NexaScreenScroll\.prepare\(service,direction\)/);
-  assert.match(overview,/NexaScreenScroll\.confirm\(service\)/);
+  assert.match(overview,/NexaScreenScroll\.confirm\(service,origin="live-voice"\)/);
   assert.match(scroll,/if\(direction !in setOf\("up","down","left","right"\)\)/);
   assert.match(scroll,/ACTION_SCROLL_LEFT/);
   assert.match(scroll,/ACTION_SCROLL_RIGHT/);
