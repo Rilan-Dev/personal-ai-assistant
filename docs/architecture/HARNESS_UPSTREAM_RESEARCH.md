@@ -247,3 +247,12 @@ permission was added.
 ## 2026-11-06 — Android-only observed app destination, no harness substitution
 - Re-inspected LangGraph.js `langchain-ai/langgraphjs@585b78bbc8249014c6d092ff0e38699679b33034`, `libs/langgraph-core/src/graph/state.ts` (StateGraph execution/checkpoint imports; MIT), and Deep Agents JS `langchain-ai/deepagentsjs@2160d187f5d5c330ed83e575ad0f406e98bdada3`, `libs/deepagents/src/agent.ts` (agent/middleware composition; MIT).
 - Neither upstream runtime can prove an Android Intent's destination package is visible. We adopt no new packages and copy no upstream code; the existing Kotlin `NexaUiActionJournal` and Android Accessibility service remain the evidence and permission boundaries. Retained rollback: remove the delayed observation call while keeping permanent claimed launch receipts. Tests cover exact-package classification, wrong-kind rejection and no replay.
+
+## 2026-11-07 — Android owner-pause/approval race fence
+
+Source reviewed at the implementation boundary:
+- LangGraph.js, `langchain-ai/langgraphjs@03981062e9010b7454b8e9e290455d9d96306db9`, `libs/langgraph-core/src/graph/state.ts`, MIT: graph compilation and state execution remain backend planning concerns, not device-side authorization or Android Accessibility dispatch.
+- Deep Agents JS, `langchain-ai/deepagentsjs@2160d187f5d5c330ed83e575ad0f406e98bdada3`, `libs/deepagents/src/agent.ts`, MIT: middleware and agent construction do not provide native Android owner approvals, app/field identity attestation, or one-time journal atomicity.
+- Existing on-device `NexaUiActionJournal` and Kotlin action controllers remain authoritative. No upstream code was copied, no new dependency or second agent loop was added.
+
+Implementation boundary: an owner-created UI review captures the native persistent Pause generation. The final one-time Android gesture/Intent uses the same native synchronization boundary as Pause and refuses a stale generation, including Pause followed by Resume. This mitigates a check/dispatch race without introducing Send, arbitrary coordinates, model approvals, automatic retries or a general autonomous device executor. Outcome receipts still distinguish Android dispatch from observed UI changes and verified business results. Rollback: revert only this bounded generation-fence milestone on Development after independent approval; preserve the durable no-replay journal and existing approvals.
