@@ -19,12 +19,16 @@ const safeLabel=(v:string):boolean=>
 function clauses(raw:string):string[]|null {
   if(raw.length<18||raw.length>850||/[\x00-\x1f]/.test(raw))return null;
   const request=raw.trim().replace(/^hey\s+nexa[,!]?\s+/i,"");
-  const separator=/\s+(?:and then|then)\s+/gi;
+  // "and tap"/"and scroll" are explicit commands. Do not split
+  // Chrome's legitimate "open Chrome and search" intent.
+  const separator=/\s+(?:(?:and\s+)?then|and(?=\s+(?:tap|click|press|scroll|swipe|type|enter|write|insert|check|show|open|launch|start|turn|switch)))\s+/gi;
   const pieces:string[]=[];
   let start=0,quote:string|null=null;
   for(let i=0;i<request.length;i++){
     const ch=request[i];
-    if(ch==="\""||ch==="“"||ch==="”"||ch==="'"){
+    const contraction=ch==="'"&&/[\p{L}\p{N}]/u.test(request[i-1]??"")&&
+      /[\p{L}\p{N}]/u.test(request[i+1]??"");
+    if(!contraction&&(ch==="\""||ch==="“"||ch==="”"||ch==="'")){
       if(quote===null)quote=ch==="“"?"”":ch;
       else if(ch===quote)quote=null;
       continue;
@@ -44,7 +48,8 @@ function clauses(raw:string):string[]|null {
 }
 
 function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
-  const text=raw.replace(/^please\s+/i,"").trim().replace(/[.!?]+$/,"").trim();
+  const original=raw.replace(/^please\s+/i,"").trim();
+  const text=original.replace(/[.!?]+$/,"").trim();
   const native=parseNativeOwnerIntent(text);
   if(native)return native;
   const storage=text.match(/^(?:check|show|read|what is|what's) (?:my |the )?(?:phone |device )?storage(?: status| space| usage)?$/i);
@@ -56,7 +61,7 @@ function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
   const tap=text.match(/^(?:tap|click|press) (?:on )?(?:the )?([\p{L}\p{N} _.-]{2,45})$/iu);
   if(tap&&safeLabel(tap[1].trim()))
     return {toolId:"screen.tap_label",input:{label:tap[1].trim()}};
-  const entry=parseReviewedTextEntry(text);
+  const entry=parseReviewedTextEntry(original);
   if(entry&&safeLabel(entry.targetLabel))
     return {toolId:"screen.fill_text",input:{
       targetLabel:entry.targetLabel,exactText:entry.exactText
