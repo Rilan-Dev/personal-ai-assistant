@@ -45,3 +45,27 @@ test('pausing blocks permanent UI claims and legacy Voice owner approvals',()=>{
   assert.match(src('NexaToolOverlayService.kt'),/Pause device actions/);
   assert.match(src('NexaToolOverlayModule.kt'),/setOf\("chat","voice","tools","settings"\)/);
 });
+
+
+test('owner pause generation fences all reviewed text, message and screen actions',()=>{
+  const gate=src('NexaNativeActionSafety.kt');
+  assert.match(gate,/fun approvalFence\(/);
+  assert.match(gate,/fun approvalFenceCurrent\(/);
+  assert.match(gate,/fun dispatchWithFence\(/);
+  assert.match(gate,/synchronized\(lock\)/);
+  for(const name of [
+    'NexaTextInputActions.kt','NexaMessageInputActions.kt',
+    'NexaScreenActions.kt','NexaScreenScroll.kt'
+  ]){
+    const native=src(name);
+    assert.match(native,/NexaNativeActionSafety\.approvalFence\(/,name);
+    assert.match(native,/NexaNativeActionSafety\.approvalFenceCurrent\(/,name);
+    assert.match(native,/NexaNativeActionSafety\.dispatchWithFence\(/,name);
+  }
+  for(const name of [
+    'NexaTaskCoordinator.kt','NexaScreenLabelTap.kt',
+    'NexaWhatsAppChatActions.kt','NexaLauncherSwipe.kt'
+  ]){
+    assert.match(src(name),/NexaNativeActionSafety\.dispatchWithFence\(/,name);
+  }
+});
