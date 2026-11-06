@@ -47,6 +47,7 @@ internal object NexaLegacyVoiceStepApproval {
             listOf(sessionId,plannedStep,command,packageName)
                 .any{raw->raw.any{it.code<32}})
             return false
+        if(!NexaNativeActionSafety.permitsNewAction(context))return false
         return try{synchronized(lock){
             val helper=NexaConversationDb(context)
             try{
