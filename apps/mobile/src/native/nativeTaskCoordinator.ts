@@ -156,6 +156,9 @@ export type UnifiedTaskSummary={
   stepCount:number;
   verifiedSteps:number;
   detailsRedacted?:boolean;
+  /** Opaque attribution only; an observed UI dispatch is not a verified parent step. */
+  parentTaskId?:string;
+  parentOrdinal?:number;
 };
 export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
   const native=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
@@ -178,7 +181,15 @@ export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
       Number.isSafeInteger(t.stepCount)&&Number(t.stepCount)>=0&&
       Number(t.stepCount)<=8&&Number.isSafeInteger(t.verifiedSteps)&&
       Number(t.verifiedSteps)>=0&&Number(t.verifiedSteps)<=Number(t.stepCount)&&
-      (t.detailsRedacted===undefined||typeof t.detailsRedacted==='boolean');
+      (t.detailsRedacted===undefined||typeof t.detailsRedacted==='boolean')&&
+      (t.parentTaskId===undefined||
+        (t.source==='ui_action_audit' &&
+          typeof t.parentTaskId==='string' &&
+          /^task-[A-Za-z0-9_-]{8,96}$/.test(t.parentTaskId) &&
+          t.parentTaskId!==t.taskId))&&
+      (t.parentOrdinal===undefined||
+        (t.parentTaskId!==undefined&&Number.isSafeInteger(t.parentOrdinal)&&
+          Number(t.parentOrdinal)>=0&&Number(t.parentOrdinal)<8));
   };
   if(parsed.some(x=>!valid(x)))throw Error('Unrecognized task index entry');
   return parsed;
