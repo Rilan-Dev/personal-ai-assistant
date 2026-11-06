@@ -22,6 +22,8 @@ internal object NexaScreenLabelTap {
         val label=requested.trim()
         if(label.length !in 2..45 || unsafe.containsMatchIn(label))
             return "Unsafe or invalid requested control; no tap was sent."
+        val generation=NexaNativeActionSafety.approvalFence(service)
+            ?:return "Owner paused device actions. No tap permitted."
         val root=service.externalWindowRoot() ?:return "No permitted external app is visible. Enable Screen Assist."
         try {
             val pkg=root.packageName?.toString().orEmpty()
@@ -88,7 +90,15 @@ internal object NexaScreenLabelTap {
             NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before)
             // Clicking a verified search input transfers focus only. Never
             // use ACTION_SET_TEXT or read/edit the field's current contents.
-            return if(found.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
+                found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            if(clicked==null){
+                NexaUiActionVerifier.cancel(token)
+                NexaUiActionJournal.finish(service,token,"android_rejected")
+                return "Owner paused actions before tap. No tap dispatched."
+            }
+            return if(clicked) {
                 NexaUiActionVerifier.observeAfter(service,token,before)
                 NexaUiActionJournal.finish(service,token,"android_accepted")
                 "Android accepted one tap on the visible $label control. Check the resulting screen; completion is not yet confirmed."
