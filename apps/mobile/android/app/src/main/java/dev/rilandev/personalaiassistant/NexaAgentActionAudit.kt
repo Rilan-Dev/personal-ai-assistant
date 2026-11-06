@@ -427,7 +427,11 @@ internal object NexaAgentActionAudit {
             if(gestureToken!=null && NexaUiActionJournal.outcomeFor(
                     context,gestureToken,"tap") !in setOf(
                     "android_accepted","observed_change",
-                    "structural_change_observed","window_change_observed"))
+                    "structural_change_observed","window_change_observed",
+                    // A real chat transition can change Accessibility
+                    // window ID; the exact live header+composer recheck
+                    // above, not this token, is the completion evidence.
+                    "context_changed_unverified"))
                 return false
         }else{
             if(evidence!="observed_change" ||
