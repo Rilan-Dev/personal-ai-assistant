@@ -98,7 +98,7 @@ internal object NexaScreenVoiceOverview {
             ?:return "Enable Nexa Screen Assist in Android Accessibility Settings first."
         val ready=NexaScreenScroll.prepare(service,direction)
         if(!NexaScreenScroll.isPending())return ready
-        return NexaScreenScroll.confirm(service)
+        return NexaScreenScroll.confirm(service,origin="live-voice")
     }
 
     /** Only harmless navigation icons, freshly matched against current nodes. */
@@ -122,7 +122,7 @@ internal object NexaScreenVoiceOverview {
             NexaScreenActions.reset()
             return "The icon changed before the approved tap. No action occurred."
         }
-        return NexaScreenActions.confirm(service,snap.token)
+        return NexaScreenActions.confirm(service,snap.token,origin="live-voice")
     }
 
     fun readApproved(): String {
