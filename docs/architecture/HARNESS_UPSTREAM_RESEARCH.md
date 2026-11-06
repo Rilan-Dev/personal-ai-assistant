@@ -1,5 +1,11 @@
 # Agentic harness source review — October 31, 2026
 
+## 2026-11-06 — Dynamic Android task ingress source check
+- Rechecked LangGraph.js HEAD `4030632d3d58a22601fdd1fa3be35b805a76f6a1`: `libs/langgraph-core/src/graph/state.ts` still exports `StateGraph` with node/edge construction and `.compile()`; MIT license at repository `LICENSE`. The app already uses the installed LangGraph package only in the Node planner. This milestone reuses that existing planning boundary and does not run a second graph in Android.
+- Rechecked Deep Agents JS HEAD `e80b3af2c842515cf3af2bb59a1f2be8a46d266c`: `libs/deepagents/src/agent.ts` builds `createDeepAgent` with filesystem, task, subagent and summarization middleware and optional human interrupts; MIT license at repository `LICENSE`. Its generic filesystem and tool loop are not adopted for Android screen actions.
+- Compared alternatives for this device task: OpenAI Agents SDK would add a second tool runner; Pydantic AI and smolagents would require a separate Python process; OpenHands focuses on development environments. None supplies Android's current-window identity, Accessibility node grounding or one-shot native action claims. Keep the existing Node planner plus Kotlin executor boundary.
+- For the first Chat milestone, reuse Android's existing launcher-label lookup in `NexaPhoneVoiceTools.findLaunchableApp`, but revalidate the exact resolved package in the native Chat bridge. Do not infer an opened screen from an Intent dispatch or introduce cloud upload of the installed-app list.
+
 ## Reviewed upstream code (pinned reading snapshots)
 - LangGraph.js: https://github.com/langchain-ai/langgraphjs/tree/959f041dfb8f6bbafa6af3ebb4bc20484a9290da
   - StateGraph, Annotation, START/END, and compile/invoke patterns in upstream

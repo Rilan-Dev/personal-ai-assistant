@@ -1,0 +1,50 @@
+appId: dev.rilandev.personalaiassistant
+name: Nexa opens an installed app by its visible name
+tags:
+  - nexa
+  - agent
+  - apps
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: 'Make your assistant yours.'
+    timeout: 30000
+- tapOn: "Tools"
+- assertVisible: "Tools & permissions"
+- scrollUntilVisible:
+    element: "App launching"
+    direction: DOWN
+    timeout: 25000
+- tapOn: "App launching"
+- tapOn: "Chat"
+- assertVisible: "How can I help today?"
+- tapOn: "Assistant command"
+- inputText: "Open Calendar"
+- hideKeyboard
+- tapOn:
+    text: "Send message"
+- extendedWaitUntil:
+    visible: "Approval needed"
+    timeout: 30000
+- assertVisible:
+    text: "Tool: device.open_app"
+- assertVisible:
+    text: ".*calendar.*"
+- tapOn: "Approve once"
+- extendedWaitUntil:
+    visible: "Resume saved task"
+    timeout: 20000
+- tapOn: "Resume saved task"
+- extendedWaitUntil:
+    visible: "Calendar"
+    timeout: 30000
+- assertNotVisible: "How can I help today?"
+- takeScreenshot: nexa-calendar-opened-by-name

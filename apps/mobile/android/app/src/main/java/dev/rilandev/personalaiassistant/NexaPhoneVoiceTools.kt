@@ -199,20 +199,7 @@ internal object NexaPhoneVoiceTools {
         val target=match.groupValues[1].trim().removeSuffix(" app").trim()
         if(target in setOf("app","an app","settings","launcher","the app","uh","um","er","huh") || target.length<2)
             return null
-        val pm=context.packageManager
-        val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-        val entries=try {
-            @Suppress("DEPRECATION")
-            pm.queryIntentActivities(intent,0)
-        }catch (_:Exception){emptyList()}
-        val available=entries.asSequence().mapNotNull { resolved ->
-            val pkg=resolved.activityInfo?.packageName.orEmpty()
-            if(pkg.isBlank() || pkg==context.packageName)return@mapNotNull null
-            val label=resolved.loadLabel(pm)?.toString()?.trim().orEmpty()
-            if(label.isBlank() || label.length>80)return@mapNotNull null
-            val normalized=label.lowercase(Locale.ROOT)
-            AppChoice(label,pkg)
-        }.distinctBy{it.packageName}.take(120).toList()
+        val available=launchableApps(context)
         val exact=available.filter { candidate ->
             val label=candidate.label.lowercase(Locale.ROOT)
             label==target || label.removeSuffix(" app")==target
@@ -238,6 +225,35 @@ internal object NexaPhoneVoiceTools {
             else -> Decision.Immediate("More than one app matches $target. " +
                 "Please choose the exact app name in Nexa before opening.")
         }
+    }
+
+    /** Chat launch resolves only one exact, currently installed launcher label. */
+    fun findExactLaunchableApp(context: Context, name: String): AppChoice? {
+        val target=name.trim().lowercase(Locale.ROOT)
+            .let { if(it=="whatsapp-business") "whatsapp business" else it }
+        if(target.length !in 2..56 ||
+            !target.matches(Regex("[a-z0-9][a-z0-9 ._+-]*"))) return null
+        val matches=launchableApps(context).filter { candidate ->
+            val label=candidate.label.lowercase(Locale.ROOT)
+            label==target || label.removeSuffix(" app")==target
+        }
+        return matches.singleOrNull()
+    }
+
+    private fun launchableApps(context: Context): List<AppChoice> {
+        val pm=context.packageManager
+        val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val entries=try {
+            @Suppress("DEPRECATION")
+            pm.queryIntentActivities(intent,0)
+        }catch (_:Exception){emptyList()}
+        return entries.asSequence().mapNotNull { resolved ->
+            val pkg=resolved.activityInfo?.packageName.orEmpty()
+            if(pkg.isBlank() || pkg==context.packageName)return@mapNotNull null
+            val label=resolved.loadLabel(pm)?.toString()?.trim().orEmpty()
+            if(label.isBlank() || label.length>80)return@mapNotNull null
+            AppChoice(label,pkg)
+        }.distinctBy{it.packageName to it.label}.toList()
     }
 
     /** Bounded edit distance, no uncontrolled fuzzy match on short app names. */

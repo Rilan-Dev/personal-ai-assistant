@@ -60,6 +60,14 @@ export type NativeOwnerIntent = {
   input: Record<string, unknown>;
 };
 
+/** A bounded visible app label, never a package ID, URI, or command. */
+export function isLaunchableAppLabel(value: unknown): value is string {
+  return typeof value === "string" && value.length >= 2 && value.length <= 56 &&
+    value.trim() === value && /^[a-z0-9][a-z0-9 ._+-]*$/.test(value) &&
+    !/\s{2}|\b(?:and|then|send|text|message|call|dial|delete|install|uninstall)\b/.test(value) &&
+    !new Set(["app","an app","the app"]).has(value);
+}
+
 export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | null {
   const chromeQuery=parseChromeSearchIntent(request);
   if(chromeQuery) return {toolId:"device.browser_search",input:{query:chromeQuery}};
@@ -82,6 +90,11 @@ export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | nul
     return {toolId:"device.open_camera",input:{}};
   const app = text.match(/^(?:open|launch|start) (?:my |the )?(whatsapp business|whatsapp)(?: app)?$/);
   if (app) return {toolId:"device.open_app",input:{app:app[1]==="whatsapp business"?"whatsapp-business":"whatsapp"}};
+  const namedApp = text.match(/^(?:open|launch|start) (?:my |the )?([a-z0-9][a-z0-9 ._+-]{1,55})(?: app)?$/);
+  if (namedApp) {
+    const label=namedApp[1].replace(/ app$/,"").trim();
+    if (isLaunchableAppLabel(label)) return {toolId:"device.open_app",input:{app:label}};
+  }
   return null;
 }
 

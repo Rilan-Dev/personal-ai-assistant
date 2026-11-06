@@ -10,8 +10,13 @@ tags:
 # Do not confuse this prewarm with the later searched query.
 - openLink:
     link: https://www.google.com
-    autoVerify: true
+    autoVerify: false
     browser: true
+- runFlow:
+    when:
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
 - runFlow:
     when:
       visible: "Stay signed out"

@@ -1,13 +1,15 @@
 appId: dev.rilandev.personalaiassistant
-name: Nexa approves and actually opens Android notification shade
+name: Nexa grants Screen Assist through Android Settings
 tags:
   - nexa
   - agent
   - notification
   - experimental
 ---
-# Screen Assist must be enabled through real Android Settings, not app-ops,
-# shell automation, or a test-only Accessibility service injection.
+# Maestro's active UI automation session suppresses Android Accessibility
+# services. This flow grants the real Android setting; the separate post-run
+# device check verifies the service is bound after Maestro exits. The live
+# notification action is tested only after the runner has released the service.
 - launchApp:
     clearState: true
     permissions:
@@ -18,50 +20,35 @@ tags:
     direction: DOWN
     timeout: 25000
 - tapOn: "Show optional permissions and features"
-# Reuse the independently proven overlay-permission flow before Accessibility.
-- runFlow:
-    when:
-      visible: "Allow display over apps.*"
-    commands:
-      - scrollUntilVisible:
-          element:
-            text: "Allow display over apps.*"
-          direction: DOWN
-          timeout: 25000
-      - tapOn:
-          text: "Allow display over apps.*"
-      - scrollUntilVisible:
-          element: "Nexa AI"
-          direction: DOWN
-          timeout: 25000
-      - tapOn: "Nexa AI"
-      - tapOn: "Allow display over apps"
-      - back
-      - back
-- launchApp:
-    stopApp: false
-- launchApp:
-    stopApp: false
-- scrollUntilVisible:
-    element: ".*(Explore 6 optional features|Hide optional features).*"
-    direction: DOWN
-    timeout: 25000
 - runFlow:
     when:
       visible: "Explore 6 optional features"
     commands:
       - tapOn: "Show optional permissions and features"
+# Overlay permission is checked separately after Maestro, because OEMs expose
+# either an inline toggle or a nested details screen for the same grant.
 - scrollUntilVisible:
     element: "One-time screen assistance"
-    direction: UP
+    direction: DOWN
     timeout: 25000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
-- scrollUntilVisible:
-    element: "Nexa Screen Assist"
-    direction: DOWN
-    timeout: 30000
-- tapOn: "Nexa Screen Assist"
+# Android 17 may open the system full-control consent immediately when this
+# app's one-time accessibility shortcut is selected. Confirm it when shown.
+- runFlow:
+    when:
+      visible: "Allow Nexa Screen Assist to have full control of your device\\?"
+    commands:
+      - tapOn: "Allow"
+- runFlow:
+    when:
+      notVisible: "Use Nexa Screen Assist"
+    commands:
+      - scrollUntilVisible:
+          element: "Nexa Screen Assist"
+          direction: DOWN
+          timeout: 30000
+      - tapOn: "Nexa Screen Assist"
 - extendedWaitUntil:
     visible: "Use Nexa Screen Assist"
     timeout: 25000
@@ -70,22 +57,20 @@ tags:
       visible: "Use Nexa Screen Assist"
     commands:
       - tapOn: "Use Nexa Screen Assist"
-# The service may already be enabled from an earlier run. Android asks for a
-# second confirmation before disabling it; keep the owner's existing grant.
-- runFlow:
-    when:
-      visible: "Turn off Nexa Screen Assist\\?"
-    commands:
-      - tapOn: "Keep on"
-# On Pixel 6 Android 13, do not toggle a second alias after "Use Nexa Screen Assist".
+# Android confirms the accessibility grant in a separate system-owned dialog.
+# Accept that explicit confirmation as part of the user-approved test batch.
 - runFlow:
     when:
       visible: "Allow"
     commands:
       - tapOn: "Allow"
-# Android 13+ may block Accessibility for an APK installed outside an app store.
-# Follow only the stock Android consent UI if the restricted-settings dialog
-# actually appeared. Never grant via adb, shell, app-ops or test-only service.
+- runFlow:
+    when:
+      visible: "Turn off Nexa Screen Assist\\?"
+    commands:
+      - tapOn: "Keep on"
+# On Android 13+, the Settings app may require the owner to allow restricted
+# settings for a sideloaded app. Follow only the system consent screens.
 - runFlow:
     when:
       visible: "Restricted setting"
@@ -102,7 +87,6 @@ tags:
       - extendedWaitUntil:
           visible: "App info"
           timeout: 25000
-      - takeScreenshot: nexa-android-app-info-restricted
       - tapOn: "More options"
       - tapOn: "Allow restricted settings"
       - runFlow:
@@ -118,9 +102,11 @@ tags:
           timeout: 25000
       - tapOn:
           text: "Open Accessibility.*One-time screen assistance.*"
-      - extendedWaitUntil:
-          visible: "Accessibility"
-          timeout: 25000
+      - runFlow:
+          when:
+            visible: "Allow Nexa Screen Assist to have full control of your device\\?"
+          commands:
+            - tapOn: "Allow"
       - runFlow:
           when:
             visible: "Downloaded apps"
@@ -143,99 +129,10 @@ tags:
             - tapOn: "Use Nexa Screen Assist"
       - runFlow:
           when:
-            visible: "Turn off Nexa Screen Assist\\?"
-          commands:
-            - tapOn: "Keep on"
-      # Do not toggle a second Accessibility switch alias on retry.
-      - runFlow:
-          when:
             visible: "Allow"
           commands:
             - tapOn: "Allow"
-- takeScreenshot: nexa-native-screen-assist-owner-granted
-# Do not infer an Accessibility grant from visiting Android Settings.
-# A native action is impossible until Android has bound the service.
-- launchApp:
-    stopApp: false
-- takeScreenshot: nexa-setup-accessibility-return-status
-# If Android's owner grant did not connect the service, preserve the actual
-# UI state before the strict acceptance assertion below fails. Maestro may
-# suppress unrelated AccessibilityServices: this remains NO-GO, not a pass.
-- scrollUntilVisible:
-    element: "Why One-time screen assistance is needed"
-    direction: UP
-    timeout: 25000
-- tapOn: "Why One-time screen assistance is needed"
-- scrollUntilVisible:
-    element: ".*Refresh status"
-    direction: DOWN
-    timeout: 25000
-- tapOn: ".*Refresh status"
-- runFlow:
-    when:
-      visible:
-        text: "Nexa Screen Assist disconnected.*"
-    commands:
-      - takeScreenshot: nexa-screen-assist-enabled-but-unbound
-- runFlow:
-    when:
-      visible:
-        text: "Nexa Screen Assist disabled.*"
-    commands:
-      - takeScreenshot: nexa-screen-assist-permission-not-enabled
-- scrollUntilVisible:
-    element: "Nexa Screen Assist connected\\."
-    direction: UP
-    timeout: 25000
-- extendedWaitUntil:
-    visible:
-      text: "Nexa Screen Assist connected\\."
-    timeout: 25000
-- takeScreenshot: nexa-native-screen-assist-connected
-# Return using the real launcher, not a private service API.
-- scrollUntilVisible:
-    element: "Show floating bubble"
-    direction: DOWN
-    timeout: 25000
-- tapOn: "Show floating bubble"
-- pressKey: home
-- extendedWaitUntil:
-    visible:
-      text: "Nexa assistant.*Tap to expand.*"
-    timeout: 25000
-- tapOn:
-    text: "Nexa assistant.*"
-- assertVisible: "How can I help?"
-- tapOn: "Ask a local tool…"
-- inputText: "open notification bar"
-- hideKeyboard
-- tapOn: "Send"
-- extendedWaitUntil:
-    visible:
-      text: "Owner approval needed: open notification shade"
-    timeout: 15000
-- tapOn: "Confirm requested action"
-# Capture screen promptly after approval. Retain this image if any later
-# assertion fails, instead of losing the only visual evidence.
-- takeScreenshot: nexa-notification-post-approval
-# WindowManager may detach asynchronously; wait for the expanded Nexa
-# panel to disappear rather than sampling its stale accessibility frame.
-- extendedWaitUntil:
-    notVisible:
-      text: "How can I help?"
-    timeout: 12000
-- takeScreenshot: nexa-notification-after-approved-action
-# These checks distinguish native rejection, Screen Assist being off, and
-# a timed-out owner approval from an accepted-but-unobserved global action.
-- assertNotVisible:
-    text: ".*Screen Assist is disabled.*"
-- assertNotVisible:
-    text: ".*Approval expired.*"
-- assertNotVisible:
-    text: ".*Android refused to open the notification shade.*"
-# Verify the actual OS notification panel, not a Nexa string saying accepted.
-- extendedWaitUntil:
-    visible:
-      text: ".*(No notifications|Notification settings|Internet|Clear all).*"
-    timeout: 25000
-- takeScreenshot: nexa-android-notification-shade-visible
+# Preserve the Android Settings screen as visible evidence. A separate
+# post-Maestro check verifies this grant actually bound ScreenAssistService.
+- assertVisible: "Use Nexa Screen Assist"
+- takeScreenshot: nexa-screen-assist-owner-setting-enabled

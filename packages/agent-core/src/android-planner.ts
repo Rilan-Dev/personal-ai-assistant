@@ -63,7 +63,7 @@ export const androidIntentPlanner: Planner = {
     if (call) return { type: "tool", call };
     return {
       type: "clarify",
-      question: "Native controls currently support: Open Chrome and search a public query, open the notification shade, open camera or WhatsApp, check device status or battery, turn flashlight on/off, and test approval. Each device action requires its own approval. Multi-step actions and messaging are not enabled yet."
+      question: "Native controls currently support: open a uniquely named installed app, open Chrome and search a public query, open the notification shade, open camera, check device status or battery, turn flashlight on/off, and test approval. Multi-step screen actions and messaging are not enabled yet."
     };
   }
 };

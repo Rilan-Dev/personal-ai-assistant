@@ -2,8 +2,3 @@ flows:
   - '*.yaml'
 executionOrder:
   continueOnFailure: true
-  flowsOrder:
-    - 10-agent-notification-shade
-    - 11-whatsapp-owner-review
-    - 12-message-app-chooser
-    - 13-reviewed-generic-text-field

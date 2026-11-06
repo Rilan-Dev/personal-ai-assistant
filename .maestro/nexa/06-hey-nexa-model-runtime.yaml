@@ -33,6 +33,18 @@ tags:
     timeout: 120000
 - tapOn:
     text: "Enable Hey Nexa.*"
+# The runtime asks for microphone access only when listening starts on some
+# Android versions, even when Maestro granted install-time permissions.
+- runFlow:
+    when:
+      visible: "Allow Nexa AI to record audio\\?"
+    commands:
+      - tapOn: "While using the app"
+- runFlow:
+    when:
+      visible: "Allow Nexa AI to send you notifications\\?"
+    commands:
+      - tapOn: "Allow"
 - extendedWaitUntil:
     visible: ".*Listening for Hey Nexa.*"
     timeout: 30000

@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 import { setVerifiedFlashlight } from "./androidFlashlight";
 import type { Tool } from "@paa/agent-core";
+import { isLaunchableAppLabel } from "@paa/agent-contracts";
 
 type NativeStatus = {
   platform: string;
@@ -42,7 +43,7 @@ const emptyInput = (value: unknown): value is Record<string, unknown> =>
 const appInput = (value: unknown): value is Record<string, unknown> =>
   plainObject(value) &&
   Object.keys(value).length === 1 &&
-  (value.app === "whatsapp" || value.app === "whatsapp-business");
+  isLaunchableAppLabel(value.app);
 
 /** A Kotlin bridge is the only permitted path to native device operations. */
 export function createAndroidTools(): Tool[] {
@@ -136,7 +137,7 @@ export function createAndroidTools(): Tool[] {
     },
     {
       id: "device.open_app",
-      description: "Launch an allowlisted installed Android application",
+      description: "Launch a uniquely named installed Android application",
       capabilities: ["apps.launch"],
       risk: "medium",
       hasExternalSideEffect: true,

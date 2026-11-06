@@ -7,6 +7,7 @@ const component=source("apps/mobile/src/components/NexaSetupScreen.tsx");
 const bridge=source("apps/mobile/src/native/nexaSetup.ts");
 const flow=source(".maestro/experimental/10-agent-notification-shade.yaml");
 const service=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/ScreenAssistService.kt");
+const runtimeAcceptance=source("docs/qa/NEXA_SCREEN_ASSIST_RUNTIME_ACCEPTANCE_20261104.md");
 
 test("setup status distinguishes Settings enabled from genuinely connected Accessibility service",()=>{
   assert.match(setup,/screenAssistConnected/);
@@ -22,12 +23,11 @@ test("user-facing Setup requires connected service before claiming native screen
   assert.match(component,/Nexa Screen Assist disconnected/);
   assert.match(component,/Toggle the service off and on/);
 });
-test("Maestro must observe bound Screen Assist before it asks Nexa to open notification bar",()=>{
-  assert.ok(flow.includes('element: "Nexa Screen Assist connected\\\\."'),
-    "The flow must wait for the real connected-service status shown by Setup");
-  assert.ok(flow.indexOf("Nexa Screen Assist connected") < flow.indexOf("open notification bar"));
-  assert.match(flow,/Confirm requested action/);
-  assert.match(flow,/No notifications\|Notification settings\|Internet\|Clear all/);
+test("Maestro grants Screen Assist in Settings; the bound service and shade are checked after Maestro exits",()=>{
+  assert.match(flow,/assertVisible: "Use Nexa Screen Assist"/);
+  assert.doesNotMatch(flow,/- inputText: "open notification bar"/);
+  assert.match(runtimeAcceptance,/open notification bar/);
+  assert.match(runtimeAcceptance,/actual Android System UI notification shade appears/);
 });
 
 test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{
@@ -43,7 +43,7 @@ test("Android 13 restricted settings are consented in Android UI, not sideload b
   assert.ok(flow.includes('visible: "Restricted setting"'));
   assert.ok(flow.includes('tapOn: "Allow restricted settings"'));
   assert.doesNotMatch(flow,/adb shell|appops set|settings put secure/);
-  assert.ok(flow.indexOf("Nexa Screen Assist connected") < flow.indexOf("open notification bar"));
+  assert.doesNotMatch(flow,/- inputText: "open notification bar"/);
 });
 
 test("onUnbind invalidates only the current Screen Assist service instance",()=>{

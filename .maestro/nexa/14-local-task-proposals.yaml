@@ -27,13 +27,13 @@ tags:
 - extendedWaitUntil:
     visible: "Review the ELV quotation and prepare a follow up"
     timeout: 30000
-- assertVisible: "Awaiting your review · execution disabled"
+- assertVisible: "Awaiting owner review · no action started"
 - takeScreenshot: nexa-local-task-proposal-recorded-no-execution
 - tapOn: "Cancel proposal"
 - extendedWaitUntil:
     visible: "Canceled permanently"
     timeout: 30000
-- assertNotVisible: "Awaiting your review · execution disabled"
+- assertNotVisible: "Awaiting owner review · no action started"
 - takeScreenshot: nexa-local-task-proposal-cancelled
 - stopApp
 - launchApp
@@ -41,5 +41,5 @@ tags:
 - extendedWaitUntil:
     visible: "Canceled permanently"
     timeout: 30000
-- assertNotVisible: "Awaiting your review · execution disabled"
+- assertNotVisible: "Awaiting owner review · no action started"
 - takeScreenshot: nexa-local-task-cancelled-after-relaunch

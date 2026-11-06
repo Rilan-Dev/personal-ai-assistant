@@ -16,3 +16,4 @@ executionOrder:
     - 11-reviewed-tool-approval-lifecycle
     - 12-aca-mail-owner-connection-gate
     - 14-local-task-proposals
+    - 15-agent-installed-app-launch

@@ -9,9 +9,10 @@ test("plans camera launch without screen automation", async () => {
     call: { callId: "native-1", toolId: "device.open_camera", input: {} }
   });
 });
-test("plans allowlisted WhatsApp only", async () => {
+test("plans a named installed-app lookup", async () => {
   assert.equal((await run("Hey Nexa, open WhatsApp")).call.input.app, "whatsapp");
   assert.equal((await run("Open WhatsApp Business")).call.input.app, "whatsapp-business");
+  assert.equal((await run("Open Calendar")).call.input.app, "calendar");
 });
 test("checks bridge diagnostics", async () => {
   assert.equal((await run("Check device status")).call.toolId, "device.status");
@@ -20,7 +21,7 @@ test("refuses multi-action instructions rather than partially executing", async 
   for (const text of [
     "Open WhatsApp and send ROM a birthday message",
     "Open camera and take a picture",
-    "Open my banking application",
+    "Open my banking application and transfer money",
     "Call ROM",
     "Where am I"
   ]) assert.equal((await run(text)).type, "clarify", text);

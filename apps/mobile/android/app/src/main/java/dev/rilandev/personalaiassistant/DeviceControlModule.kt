@@ -162,15 +162,12 @@ class DeviceControlModule(
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve the app launch")
             return
         }
-        val packageId = when (app) {
-            "whatsapp" -> "com.whatsapp"
-            "whatsapp-business" -> "com.whatsapp.w4b"
-            "github" -> "com.github.android"
-            else -> {
-                promise.reject("UNSUPPORTED_APP", "App not on native allowlist")
-                return
-            }
+        val choice=NexaPhoneVoiceTools.findExactLaunchableApp(context,app)
+        if(choice==null){
+            promise.reject("APP_NOT_UNIQUE_OR_INSTALLED", "No unique installed app has that visible name")
+            return
         }
+        val packageId=choice.packageName
         val intent = context.packageManager.getLaunchIntentForPackage(packageId)
         if (intent == null) {
             promise.reject("NOT_INSTALLED", "Supported app not installed or not visible")

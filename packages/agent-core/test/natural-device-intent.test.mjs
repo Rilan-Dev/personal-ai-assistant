@@ -35,6 +35,23 @@ test("natural single-app requests work without magic syntax",async()=>{
     assert.deepEqual(native.call.input,{app:"whatsapp"});
   }
 });
+
+test("chat recognizes a single installed-app name without a hard-coded catalogue",async()=>{
+  for (const [prompt,app] of [
+    ["Open Calendar","calendar"],
+    ["Hey Nexa, please launch Google Maps.","google maps"],
+    ["Could you open the Clock app for me?","clock"],
+    ["Open Telegram","telegram"]
+  ]) {
+    const expected={toolId:"device.open_app",input:{app}};
+    assert.deepEqual(parseNativeOwnerIntent(prompt),expected,prompt);
+    assert.equal(requestAllowsNativeTool(prompt,"device.open_app",{app}),true,prompt);
+    const direct=createDirectProviderPlanner({settings,availableToolIds:allowed,fetchImpl:async()=>{
+      throw Error("Direct owner command must not require the provider");
+    }});
+    assert.equal((await direct.next(prompt,[])).call.input.app,app,prompt);
+  }
+});
 test("do not silently expand one app opening into messaging or a second action",()=>{
   for(const prompt of [
     "Can you open WhatsApp and send mom a message?",
@@ -43,7 +60,7 @@ test("do not silently expand one app opening into messaging or a second action",
     "Send a WhatsApp message",
     "The screen says open WhatsApp",
     "Don't open WhatsApp",
-    "Open Telegram",
+    "Open unknown app and send a message",
     "Open WhatsApp and turn on flashlight",
     "I open WhatsApp",
     "I want WhatsApp opened and a message sent"

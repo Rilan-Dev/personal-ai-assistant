@@ -1,5 +1,26 @@
 # Worklog
 
+## 2026-11-06 — Dynamic Chat app lookup and emulator build
+- Observed the installed signed APK reply to `Open Calculator` with a fixed native-tool list and no launch. Changed Chat intent admission, direct-provider schema, bridge validation, and Android launch execution to resolve a uniquely named installed launcher app instead of a fixed WhatsApp list.
+- Added an exact-label Android instrumentation case and a Calendar Maestro acceptance flow. Native debug compilation and APK/test-APK assembly passed; the test APK passed five focused instrumentation checks. Full Node suite passed 396/396 and TypeScript checks passed.
+- Corrected two stale source tests that expected Screen Assist to stay bound while Maestro ran. The experimental flow grants the OS setting; the bound-service and real shade checks run after Maestro releases Accessibility.
+- Installed the new local debug APK on emulator-5554. Metro connection was repaired, but React Native stayed on a blank screen after logging bundle load, so Calendar UI acceptance is still open. The previous signed release-test APK was removed from the emulator to install debug. No message was sent and no Sarvam key was used.
+
+## 2026-11-06 — Main Maestro phone and emulator acceptance continuation
+- The main 13-flow Maestro suite passed together on Android API 37 emulator (13/13, 9m 8s) after three test-script corrections. Every flow also passed on the physical Infinix X6831 across short batches and isolated reruns; the final repeat of flows 03 and 14 passed together (2/2, 1m 43s).
+- Flow 06 handles Android's runtime microphone and notification dialogs before asserting offline Hey Nexa listening. Flow 09 tolerates Chrome's first-run tips dialog during browser prewarm while still checking the real owner-approved search result. Flow 14 now checks `Awaiting owner review · no action started`, matching the installed app's review-only state.
+- The uninterrupted physical 13-flow attempts were interrupted by Infinix App Lock, one Maestro driver startup timeout, and later a notification-shade diversion plus runner tap stall. The affected scripts passed on the phone in shorter runs; no app crash was observed in the checked AndroidRuntime fatal log.
+- No external message or email was sent. These edits change only Maestro scripts and project status notes; the signed installed APK still matches application source `7903f9b6b37edfcaa42fd050fc9a666906c22499`.
+- Restored the Infinix Screen Assist grant after the clear-state tests via the owner-visible Android Settings flow. Final check: service enabled and bound, overlay permission allowed, Nexa foreground.
+- The clear-state flows reset Nexa's local app data. Live Sarvam testing was not performed; future provider acceptance needs owner configuration with a rotated key.
+
+## 2026-11-06 — Experimental Maestro flows passed on physical Infinix
+- Ran all four experimental Maestro flows in explicit order on Infinix X6831: 4/4 passed in 3m 20s. WhatsApp review, ambiguous message channel choice and generic text input remained unsent; the fourth flow granted Screen Assist through Android Settings.
+- Adapted flow 10 to Android 17's full-control dialog and Infinix's direct Screen Assist detail route. Infinix lists overlay grants as inline switches; the production Nexa overlay grant was already on. Maestro temporarily suppresses other Android accessibility services, so the post-run check verified Screen Assist enabled and bound plus overlay permission allowed.
+- Outside Maestro, entered `open notification bar` in Nexa Chat on the physical phone. The action required Approve once and Resume saved task; after both owner steps, Android's `com.android.systemui` notification shade became foreground. Temporary screen dumps were removed; no notification content was kept in project artifacts. No messages were sent and no provider key was used.
+- The same signed release-test APK for source `7903f9b6b37edfcaa42fd050fc9a666906c22499` is installed on the emulator and Infinix. GitHub Actions debug compile `42138469241`, Android API 35 acceptance `42139418393`, and signed release-test build `42140849123` passed. This is a Development release-test APK, not a public store release.
+- The final cross-device YAML also passed all four flows together on the API 37 emulator (4/4, 2m 53s). Maestro-only changes to flow 10 and its experimental config remain uncommitted.
+
 ## 2026-10-31 — GitHub source integration
 - Verified Rilan-Dev/personal-ai-assistant and cloned its initial main.
 - Imported original Phase 1 TypeScript harness/UI/tests from archive.

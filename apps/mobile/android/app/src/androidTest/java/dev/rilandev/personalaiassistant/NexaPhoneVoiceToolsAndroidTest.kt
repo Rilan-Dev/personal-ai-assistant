@@ -35,6 +35,17 @@ class NexaPhoneVoiceToolsAndroidTest {
         assertNull(NexaPhoneVoiceTools.findLaunchableApp(app,"call +919876543210"))
     }
 
+    @Test fun chatAppLaunchUsesExactInstalledLauncherLabel() {
+        val clock=NexaPhoneVoiceTools.findExactLaunchableApp(app,"Clock")
+        assertNotNull("The emulator should expose Clock as a launcher app",clock)
+        assertEquals("Clock",clock!!.label)
+        val calendar=NexaPhoneVoiceTools.findExactLaunchableApp(app,"Calendar")
+        assertNotNull("The emulator should expose Calendar as a launcher app",calendar)
+        assertEquals("com.google.android.calendar",calendar!!.packageName)
+        assertNull(NexaPhoneVoiceTools.findExactLaunchableApp(app,"Clock and send a message"))
+        assertNull(NexaPhoneVoiceTools.findExactLaunchableApp(app,"an app that does not exist"))
+    }
+
     @Test fun sarvamModelFunctionSchemaIsReadOnlyAndArgumentsAreValidated() {
         val defs=NexaSarvamReadTools.definitions()
         assertEquals(3,defs.length())

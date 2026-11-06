@@ -1,7 +1,7 @@
 import type { Planner } from "./runtime.ts";
 import { androidIntentPlanner } from "./android-planner.ts";
 import type { PlannerDecision } from "../../agent-contracts/src/index.ts";
-import { parseNativeOwnerIntent, requestAllowsNativeTool } from "../../agent-contracts/src/intent-policy.ts";
+import { isLaunchableAppLabel, parseNativeOwnerIntent, requestAllowsNativeTool } from "../../agent-contracts/src/intent-policy.ts";
 
 /**
  * BYOK direct-to-provider mode. The API key is never bundled into the APK
@@ -49,10 +49,10 @@ const INSTRUCTIONS = [
   "- device.battery_status {} (check battery level/charging)",
   "- device.open_camera {} (launch camera; NO capture)",
   '- device.browser_search {"query":"what is ai"} (open Chrome Google search results, after approval; never claim results reviewed)',
-  '- device.open_app {"app":"whatsapp"} OR {"app":"whatsapp-business"} (launch ONLY, no messages)',
+  '- device.open_app {"app":"calendar"} (use the exact visible installed app name from the owner request; launch ONLY)',
   '- device.set_flashlight {"enabled":true} OR {"enabled":false} (one-time approval + CAMERA grant)',
   '- device.open_notification_shade {} (one-time approval; never read notification contents)',
-  "NEVER claim that you can send messages, read contacts, listen in the background, or control other apps.",
+  "NEVER claim that you can send messages, read contacts, listen in the background, or interact with app screens.",
   "NEVER invent tool observations or claim an action succeeded before the phone confirms it.",
   "A multi-step, ambiguous or unsupported phone-control request must be a clarify answer, never a partial tool action.",
   "Only select a device tool when requested explicitly. The phone rejects unapproved/invalid calls.",
@@ -91,7 +91,7 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
     ? Object.keys(input).length === 1 && typeof input.query === "string" &&
       input.query.length >= 3 && input.query.length <= 90
     : d.toolId === "device.open_app"
-    ? Object.keys(input).length === 1 && (input.app === "whatsapp" || input.app === "whatsapp-business")
+    ? Object.keys(input).length === 1 && isLaunchableAppLabel(input.app)
     : d.toolId === "device.set_flashlight"
       ? Object.keys(input).length === 1 && typeof input.enabled === "boolean"
       : Object.keys(input).length === 0;
