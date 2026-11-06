@@ -147,6 +147,6 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
         val prefs = context.getSharedPreferences("nexa_overlay", android.content.Context.MODE_PRIVATE)
         val tab = prefs.getString("pending_tab", "") ?: ""
         prefs.edit().remove("pending_tab").apply()
-        p.resolve(if (tab in setOf("chat","voice","tools")) tab else "")
+        p.resolve(if (tab in setOf("chat","voice","tools","settings")) tab else "")
     }
 }
