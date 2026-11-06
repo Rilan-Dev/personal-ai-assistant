@@ -98,6 +98,15 @@ class DeviceControlModule(
                 "Could not persist owner device-action safety preference")
             return
         }
+        if(paused){
+            // The owner may have prepared a target before stopping actions.
+            // Never leave a previously reviewed native screen/text selection
+            // available for a later Resume toggle to silently reuse.
+            NexaScreenActions.reset()
+            NexaScreenScroll.cancel()
+            NexaMessageInputActions.cancel()
+            NexaTextInputActions.cancel()
+        }
         promise.resolve(NexaNativeActionSafety.isPaused(context))
     }
 
