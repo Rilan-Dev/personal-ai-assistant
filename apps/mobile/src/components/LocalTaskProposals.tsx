@@ -388,14 +388,17 @@ export function LocalTaskProposals({prefill}:{prefill?:{
         </View>}
       </View>)}
       <Text style={styles.heading}>All task progress</Text>
-      <Text style={styles.help}>Read-only index across device tasks and older voice checkpoints. A voice checkpoint is not verified external-app delivery or permission to resume.</Text>
+      <Text style={styles.help}>Read-only index of native tasks, approved UI actions, older Chat actions and Voice checkpoints. Dispatch is not proof of delivery, external-app completion or permission to replay.</Text>
       {allTasks.length===0&&<Text style={styles.help}>No task records found.</Text>}
       {allTasks.map(task=><View key={task.source+':'+task.taskId} style={styles.item}>
         <Text style={styles.goal}>{task.origin==='live-voice'?'Voice':task.origin==='chat'?'Chat':task.origin} · {task.status}</Text>
-        <Text style={styles.help}>Source: {task.source==='native'?'Native task store':task.source==='ui_action_audit'?'Approved UI action audit':'Legacy voice checkpoint'} · {new Date(task.updatedAt).toLocaleString()}</Text>
+        <Text style={styles.help}>Source: {task.source==='native'?'Native task store':task.source==='ui_action_audit'?'Approved UI action audit':task.source==='chat_action_audit'?'Chat action journal audit':'Legacy voice checkpoint'} · {new Date(task.updatedAt).toLocaleString()}</Text>
         {task.source==='native'&&<Text style={styles.help}>Verified local steps: {task.verifiedSteps}/{task.stepCount}</Text>}
         {task.source==='ui_action_audit'&&<Text style={styles.help}>
           Android dispatch or visual-change evidence only. Not proof of external-app navigation, message delivery or task completion. Never automatically replayed.
+        </Text>}
+        {task.source==='chat_action_audit'&&<Text style={styles.help}>
+          Encrypted Chat action claim and journal settlement only. No independently verified device or business result. An uncertain claim is never replayed.
         </Text>}
         {task.source==='legacy_voice_checkpoint'&&<Text style={styles.help}>Older voice task · completion not independently verified here</Text>}
         {task.source==='legacy_voice_checkpoint'&&task.detailsRedacted&&
