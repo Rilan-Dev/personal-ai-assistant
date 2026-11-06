@@ -84,7 +84,10 @@ class RealtimeVoiceService : Service() {
         val callId: String, val app: String, val command: String,
         val installedApp: NexaPhoneVoiceTools.AppChoice? = null,
         val createdAtMs: Long = SystemClock.elapsedRealtime()
-    )
+    ) {
+        // An automatic low-risk approval is not a fresh human button tap.
+        @Volatile var approvedBySavedPolicy:Boolean=false
+    }
     private var pendingAppTool: PendingAppTool? = null
     private var currentCompound: NexaVoiceTaskCursor? = null
     // A model function name is not owner authority: this short-lived, one-use
@@ -173,13 +176,16 @@ class RealtimeVoiceService : Service() {
                     // again. The actual tool's own permission/window checks
                     // remain mandatory and cannot be bypassed by this receipt.
                     val staleTask=task!=null && currentCompound!==task
+                    val policyStillValid=!pending.approvedBySavedPolicy ||
+                        NexaVoicePermissionPolicy.canExecute(this,pending.command)
                     val boundStep=if(task!=null && checkpointOk && !staleTask &&
                         active.get() && operationSession==voiceSessionId &&
-                        approved && age in 0..60_000L)
+                        approved && age in 0..60_000L && policyStillValid)
                         NexaLegacyVoiceStepApproval.consume(
                             this,task.taskId,operationSession,task.stepIndex,
                             task.current().orEmpty(),pending.command,
-                            pending.installedApp?.packageName.orEmpty())
+                            pending.installedApp?.packageName.orEmpty(),
+                            pending.approvedBySavedPolicy)
                         else true
                     val outcome = try { when {
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
@@ -187,6 +193,7 @@ class RealtimeVoiceService : Service() {
                         "Session or task changed; no action performed."
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
+                    !policyStillValid -> "Saved Voice permission was revoked. No action performed."
                     !boundStep -> "Voice step authorization was not durably consumed. No action performed."
                     pending.command.startsWith("chrome_search:") ->
                         NexaBrowserTaskActions.openChromeSearchApproved(
@@ -899,11 +906,12 @@ class RealtimeVoiceService : Service() {
         if(selectedProvider=="sarvam-api" && NexaVoicePermissionPolicy.canExecute(this,tool.command)) {
             // Current user request plus persistent low-risk grant, never model-only
             // arbitrary permission bypass. High-risk classes cannot be whitelisted.
-            main.post { if(active.get() && pendingAppTool===tool)
+            main.post { if(active.get() && pendingAppTool===tool) {
+                tool.approvedBySavedPolicy=true
                 onStartCommand(Intent(this,RealtimeVoiceService::class.java).apply{
                     action=ACTION_APPROVE_TOOL
                 },0,0)
-            }
+            } }
         }
     }
 
