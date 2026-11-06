@@ -187,29 +187,27 @@ class DeviceControlModule(
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve the app launch")
             return
         }
+        // Resolve one exact launcher label; no guessed app or model-generated
+        // package name may reach the shared native dispatch coordinator.
         val choice=NexaPhoneVoiceTools.findExactLaunchableApp(context,app)
         if(choice==null){
-            promise.reject("APP_NOT_UNIQUE_OR_INSTALLED", "No unique installed app has that visible name")
+            promise.reject("APP_NOT_UNIQUE_OR_INSTALLED",
+                "No unique installed app has that visible name")
             return
         }
-        val packageId=choice.packageName
-        val intent = context.packageManager.getLaunchIntentForPackage(packageId)
-        if (intent == null) {
-            promise.reject("NOT_INSTALLED", "Supported app not installed or not visible")
-            return
-        }
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-            val result = Arguments.createMap()
-            result.putBoolean("intentDispatched", true)
-            result.putString("packageId", packageId)
-            result.putString("verification", "not_observed")
-            promise.resolve(result)
-        } catch (e: SecurityException) {
-            promise.reject("APP_LAUNCH_DENIED", "Android denied launching this app")
-        } catch (e: ActivityNotFoundException) {
-            promise.reject("APP_UNAVAILABLE", "Application launch activity missing")
+        when(NexaTaskCoordinator.dispatchOwnerApprovedAppLaunch(
+            context,choice.label,choice.packageName,"chat")){
+            "accepted" -> {
+                val result=Arguments.createMap()
+                result.putBoolean("intentDispatched",true)
+                result.putString("packageId",choice.packageName)
+                result.putString("verification","not_observed")
+                promise.resolve(result)
+            }
+            "uncertain" -> promise.reject("APP_LAUNCH_OUTCOME_UNKNOWN",
+                "Android launch outcome is uncertain. Inspect the phone; do not retry automatically.")
+            else -> promise.reject("APP_LAUNCH_REFUSED",
+                "Native task journal or exact installed-app binding refused the launch")
         }
     }
 
