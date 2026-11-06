@@ -24,6 +24,8 @@ internal object NexaBrowserTaskActions {
     }
 
     fun openChromeSearchApproved(context:Context,query:String):String {
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. No search launched."
         val q=safeQuery(query) ?:return "Rejected: invalid public Chrome search query."
         val url=Uri.Builder().scheme("https").authority("www.google.com")
             .appendPath("search").appendQueryParameter("q",q).build()
@@ -46,6 +48,8 @@ internal object NexaBrowserTaskActions {
      * Accepted global action is NOT evidence that notifications were read.
      */
     fun notificationsApproved(context:Context, boundService:ScreenAssistService?=ScreenAssistService.active):String {
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. Notification shade not opened."
         val service=boundService
             ?: return "Screen Assist is disabled. Notification shade was not opened."
         val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
@@ -58,6 +62,8 @@ internal object NexaBrowserTaskActions {
     }
 
     fun goBackApproved(context:Context):String {
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. No Back navigation occurred."
         val service=ScreenAssistService.active
             ?:return "Screen Assist is disabled. No Back action occurred."
         val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
