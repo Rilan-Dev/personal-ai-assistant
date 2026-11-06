@@ -21,6 +21,8 @@ interface DeviceControlBridge {
   getBatteryStatus(): Promise<{ levelPercent: number; charging: boolean; source: string }>;
   getStorageStatus(): Promise<{ totalGb:number; freeGb:number; usedGb:number; source:string }>;
   readVisibleControls(): Promise<string>;
+  nativeDeviceActionsPaused(): Promise<boolean>;
+  setNativeDeviceActionsPaused(paused:boolean): Promise<boolean>;
   openSupportedApp(app: string): Promise<LaunchOutcome>;
   openCamera(): Promise<LaunchOutcome>;
   openChromeSearch(query: string): Promise<LaunchOutcome>;
@@ -46,6 +48,24 @@ const appInput = (value: unknown): value is Record<string, unknown> =>
   Object.keys(value).length === 1 &&
   isLaunchableAppLabel(value.app);
 
+/** An owner-initiated local kill switch: no AI tool is allowed to call its setter.
+ * It blocks new third-party actions even if a provider or UI still requests one.
+ */
+export const nativeActionSafetyAvailable=():boolean =>
+  nativeDeviceAvailable() &&
+  typeof NativeModules.PAADeviceControl?.nativeDeviceActionsPaused === "function" &&
+  typeof NativeModules.PAADeviceControl?.setNativeDeviceActionsPaused === "function";
+
+export async function readNativeActionsPaused():Promise<boolean>{
+  if(!nativeActionSafetyAvailable())throw Error("Native action safety control is unavailable");
+  return getBridge().nativeDeviceActionsPaused();
+}
+export async function updateNativeActionsPaused(paused:boolean):Promise<boolean>{
+  if(!nativeActionSafetyAvailable())throw Error("Native action safety control is unavailable");
+  const actual=await getBridge().setNativeDeviceActionsPaused(paused);
+  if(actual!==paused)throw Error("Owner action safety preference was not persisted");
+  return actual;
+}
 /** A Kotlin bridge is the only permitted path to native device operations. */
 export function createAndroidTools(): Tool[] {
   return [
