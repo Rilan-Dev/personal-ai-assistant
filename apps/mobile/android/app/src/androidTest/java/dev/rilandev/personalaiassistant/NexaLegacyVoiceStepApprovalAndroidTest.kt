@@ -122,6 +122,36 @@ class NexaLegacyVoiceStepApprovalAndroidTest {
         }
     }
 
+    @Test fun compoundScrollNeedsOneExactParentLinkedNativeScrollObservation(){
+        val task="task-"+UUID.randomUUID()
+        val session=UUID.randomUUID().toString()
+        val steps=listOf("scroll down","show screen controls")
+        val request=steps.joinToString(" and then ")
+        val packageName="com.example.calendar"
+        assertTrue(NexaConversationDb.saveTask(
+            context,task,session,"planned",0,request,steps))
+        assertTrue(NexaConversationDb.saveTask(
+            context,task,session,"executing",0,request,steps))
+        assertTrue(NexaLegacyVoiceStepApproval.consume(
+            context,task,session,0,steps[0],"scroll_screen:down",packageName))
+        val token=UUID.randomUUID().toString()
+        assertTrue(NexaVoiceActionScope.during(
+            true,task,session,0,"scroll_screen:down",packageName){
+            NexaUiActionJournal.claim(
+                context,token,"scroll_down",packageName,origin="live-voice")
+        })
+        // A durable claim or Android accepting the scroll is NOT enough.
+        assertFalse(NexaVoiceScrollEvidence.observed(context,task,session,0,"down"))
+        assertFalse(NexaVoiceScrollEvidence.observed(context,task,session,0,"up"))
+        assertTrue(NexaUiActionJournal.finish(context,token,"android_accepted"))
+        assertFalse(NexaVoiceScrollEvidence.observed(context,task,session,0,"down"))
+        // Simulated bounded Accessibility event classification, no gesture.
+        assertTrue(NexaUiActionJournal.markObservation(
+            context,token,"scroll_event_observed"))
+        assertTrue(NexaVoiceScrollEvidence.observed(context,task,session,0,"down"))
+        assertFalse(NexaVoiceScrollEvidence.observed(context,task,session,0,"up"))
+    }
+
     @Test fun uncertainVoiceCheckpointCanNeverReceiveAnotherApproval(){
         val task="task-"+UUID.randomUUID()
         val session=UUID.randomUUID().toString()
