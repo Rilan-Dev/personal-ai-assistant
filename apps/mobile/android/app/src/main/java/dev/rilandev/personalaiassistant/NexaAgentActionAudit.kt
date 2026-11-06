@@ -411,6 +411,15 @@ internal object NexaAgentActionAudit {
             "screen.compose_whatsapp"->"message_fill"
             else->"text_fill"
         }
+        if(toolId in setOf("screen.open_whatsapp_chat","screen.compose_whatsapp")){
+            val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                catch(_:Exception){null} ?:return false
+            val recipient=args.optString("recipientHint")
+            // A model-provided status is never proof. Reinspect the external
+            // WhatsApp header and composer at the native receipt boundary.
+            if(!NexaWhatsAppChatActions.verifiedOpen(ScreenAssistService.active,recipient))
+                return false
+        }
         if(toolId=="screen.fill_text"||toolId=="screen.compose_whatsapp"){
             if(evidence!="exact_text_visible" || gestureToken!=null)return false
         }else if(toolId=="screen.open_whatsapp_chat"){
