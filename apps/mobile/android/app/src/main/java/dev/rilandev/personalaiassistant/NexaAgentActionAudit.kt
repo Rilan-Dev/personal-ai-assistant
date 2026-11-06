@@ -52,6 +52,8 @@ internal object NexaAgentActionAudit {
     fun claim(context:Context,session:String,call:String,
               fingerprint:String,requiresApproval:Boolean):Boolean{
         if(!valid(session,call,fingerprint))return false
+        val generation=if(requiresApproval)
+            NexaNativeActionSafety.approvalFence(context) ?:return false else -1L
         return try{synchronized(lock){
             val ownerKey=sessionKey(session)
             val actionKey=callKey(session,call)
@@ -127,7 +129,8 @@ internal object NexaAgentActionAudit {
                     if(already)return@synchronized false
                     val args=NexaConversationDb.sealNativeTaskArguments(
                         JSONObject().put("fingerprintDigest",sha(fingerprint))
-                            .put("approvalRequired",requiresApproval).toString()
+                            .put("approvalRequired",requiresApproval)
+                            .put("pauseGeneration",generation).toString()
                     )
                     check(db.compileStatement(
                         "INSERT INTO agent_task_steps(step_id,task_id,ordinal,tool_id,"+
@@ -195,7 +198,7 @@ internal object NexaAgentActionAudit {
                         if(!row.moveToFirst())return@synchronized false
                         val data=JSONObject(NexaConversationDb
                             .openNativeTaskArguments(row.getBlob(0)))
-                        data.length()==2 &&
+                        data.length()==3 &&
                             shaPattern.matches(data.optString("fingerprintDigest")) &&
                             data.optString("fingerprintDigest")==sha(fingerprint)
                     }
@@ -320,8 +323,11 @@ internal object NexaAgentActionAudit {
                         else{
                             val proof=JSONObject(NexaConversationDb
                                 .openNativeTaskArguments(row.getBlob(0)))
-                            val matches=proof.length()==2 &&
+                            val matches=proof.length()==3 &&
                                 proof.optBoolean("approvalRequired",false) &&
+                                proof.optLong("pauseGeneration",-1L)>=0L &&
+                                proof.optLong("pauseGeneration",-1L)==
+                                    NexaNativeActionSafety.approvalFence(context) &&
                                 proof.optString("fingerprintDigest")==sha(fingerprint) &&
                                 row.getString(1)==sha(
                                     "nexa-chat-owner-approval-v1:"+fingerprint) &&
