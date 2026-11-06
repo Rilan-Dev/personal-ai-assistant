@@ -308,7 +308,7 @@ export default function App() {
       // Explicit overlay navigation is consumed once. No background AI action.
       if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
         .then(target=>{
-          if (target==='chat'||target==='voice'||target==='tools') setTab(target);
+          if (target==='chat'||target==='voice'||target==='tools'||target==='settings') setTab(target);
         }).catch(()=>{});
     }).catch(()=>{
       if (mounted) setSetupNotice('Android permission center is unavailable. You can still use basic Chat.');
@@ -319,7 +319,7 @@ export default function App() {
         void pollScreenAssistConnection(8,connectionPollGeneration);
         if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
           .then(target=>{
-            if (target==='chat'||target==='voice'||target==='tools') setTab(target);
+            if (target==='chat'||target==='voice'||target==='tools'||target==='settings') setTab(target);
           }).catch(()=>{});
       }
     });
