@@ -38,6 +38,7 @@ internal object NexaUnifiedTaskTimeline {
         // Neither recovery path ever dispatches or retries an Android action.
         NexaTaskCoordinator.recoverStaleInFlight(context)
         NexaUiTaskAudit.recoverStale(context)
+        NexaAgentActionAudit.recoverStale(context)
         val maximum=limit.coerceIn(1,60)
         val helper=NexaConversationDb(context)
         try{
@@ -61,6 +62,7 @@ internal object NexaUnifiedTaskTimeline {
                         !status.matches(current))continue
                     val source=when(c.getString(5)){
                         NexaUiTaskAudit.POLICY -> "ui_action_audit"
+                        NexaAgentActionAudit.POLICY -> "chat_action_audit"
                         NexaLegacyVoiceTaskMirror.POLICY -> "legacy_voice_checkpoint"
                         else -> "native"
                     }
