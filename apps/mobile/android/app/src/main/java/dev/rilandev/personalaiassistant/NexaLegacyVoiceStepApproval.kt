@@ -35,7 +35,8 @@ internal object NexaLegacyVoiceStepApproval {
      * an explicit, revocable low-risk Voice policy, not an LLM tool call.
      */
     fun consume(context:Context,taskId:String,sessionId:String,ordinal:Int,
-                plannedStep:String,command:String,packageName:String=""):Boolean {
+                plannedStep:String,command:String,packageName:String="",
+                approvedBySavedPolicy:Boolean=false):Boolean {
         if(!Regex("task-[A-Za-z0-9_-]{8,96}").matches(taskId)||
             sessionId.length !in 1..100 || ordinal !in 0..7 ||
             plannedStep.length !in 5..160 || command.length !in 1..500 ||
@@ -90,7 +91,8 @@ internal object NexaLegacyVoiceStepApproval {
                         "nexa-voice-target-v1:"+packageName+":"+plannedStep)
                     val inputDigest=digest(
                         "nexa-voice-command-v1:"+taskId+":"+sessionId+":"+
-                            ordinal+":"+plannedStep+":"+command+":"+packageName)
+                            ordinal+":"+plannedStep+":"+command+":"+packageName+
+                            ":"+(if(approvedBySavedPolicy)"saved_policy" else "owner_tap"))
                     check(db.compileStatement(
                         "INSERT INTO agent_step_approvals(approval_id,step_id,"+
                             "target_digest,input_digest,state,expires_at,consumed_at) "+
@@ -106,8 +108,10 @@ internal object NexaLegacyVoiceStepApproval {
                     })
                     db.execSQL(
                         "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
-                            "VALUES(?,?,'voice_step_owner_review_consumed',?)",
-                        arrayOf(taskId,stepId,now)
+                            "VALUES(?,?,?,?)",
+                        arrayOf(taskId,stepId,if(approvedBySavedPolicy)
+                            "voice_step_saved_policy_consumed" else
+                            "voice_step_owner_review_consumed",now)
                     )
                     db.setTransactionSuccessful()
                     true
