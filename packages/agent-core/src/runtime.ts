@@ -6,6 +6,9 @@ import type { DurableActionJournal, SessionCheckpoint, SessionStatus, ObservedAc
 export interface ToolExecutionContext {
   readonly signal?: AbortSignal;
   readonly sessionId: string;
+  /** Android verifies the exact claimed owner-review step before dispatch. */
+  readonly callId?: string;
+  readonly approvalFingerprint?: string;
 }
 export interface Tool extends ToolMetadata {
   validateInput: (input: unknown) => input is ToolInput;
@@ -156,7 +159,8 @@ export class AgentHarness {
       }
       emit({ type: "executing", call });
       let outcome: ToolOutcome;
-      try { outcome = await tool.execute(call.input, { signal: options.signal, sessionId: options.sessionId }); }
+      try { outcome = await tool.execute(call.input, { signal: options.signal, sessionId: options.sessionId,
+        callId: call.callId, approvalFingerprint: fingerprint }); }
       catch { outcome = { status: "error", message: "Tool execution failed" }; }
       if (journal) {
         try { await journal.finishAction(options.sessionId, call.callId,
