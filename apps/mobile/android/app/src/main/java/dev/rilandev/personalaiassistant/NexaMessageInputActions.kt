@@ -64,7 +64,7 @@ internal object NexaMessageInputPolicy {
 internal object NexaMessageInputActions {
     private data class Prepared(val token:String,val packageName:String,val windowId:Int,
         val fieldClass:String,val fieldId:String,val bounds:Rect,val expiresAt:Long,
-        val reviewedDigest:String)
+        val reviewedDigest:String,val pauseGeneration:Long)
     private data class Inspection(val matches:Int,val candidate:AccessibilityNodeInfo?,
         val recipientVisible:Boolean)
     private val lock=Any()
@@ -135,13 +135,15 @@ internal object NexaMessageInputActions {
                 return "Expected one empty message input box, found ${scanned.matches}. No text entered."
             val node=scanned.candidate ?: return "No verified composer was found."
             val rect=Rect().also{node.getBoundsInScreen(it)}
+            val pauseGeneration=NexaNativeActionSafety.approvalFence(service)
+                ?:return "Device actions are paused. No message-field review started."
             synchronized(lock) {
                 prepared=Prepared(UUID.randomUUID().toString(),draft.packageName,
                     root.windowId,node.className?.toString().orEmpty(),
                     node.viewIdResourceName.orEmpty(),rect,
                     SystemClock.elapsedRealtime()+25_000L,
                     NexaMessageInputPolicy.approvedDraftDigest(draft.appId,
-                        draft.packageName,draft.recipientHint,draft.message))
+                        draft.packageName,draft.recipientHint,draft.message),pauseGeneration)
             }
             return "One empty input box is visible in ${draft.appId} for ${draft.recipientHint}. Confirm once to fill the prepared text. Nothing has been sent."
         } catch(_:Exception) {
@@ -154,9 +156,10 @@ internal object NexaMessageInputActions {
         val approval=synchronized(lock){val x=prepared; prepared=null; x}
             ?: return "Message input confirmation was not requested or expired."
         if(SystemClock.elapsedRealtime()>=approval.expiresAt ||
-            !ScreenAssistState.connected || ScreenAssistService.active !== service) {
+            !ScreenAssistState.connected || ScreenAssistService.active !== service ||
+            !NexaNativeActionSafety.approvalFenceCurrent(service,approval.pauseGeneration)) {
             NexaMessageDraftState.clear()
-            return "Message approval expired or Accessibility disconnected. Nothing was typed."
+            return "Message approval expired, owner paused actions, or Accessibility disconnected. Nothing was typed."
         }
         val draft=NexaMessageDraftState.take() ?:
             return "Message draft expired. No text was entered."
@@ -187,7 +190,14 @@ internal object NexaMessageInputActions {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                         draft.message)
                 }
-                val accepted=node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                val accepted=NexaNativeActionSafety.dispatchWithFence(
+                    service,approval.pauseGeneration) {
+                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                }
+                if(accepted==null) {
+                    NexaUiActionJournal.finish(service,approval.token,"android_rejected")
+                    return "Owner paused device actions since review. No message was entered."
+                }
                 val verified=accepted &&
                     NexaEditableNode.containsExactTextAfterDispatch(node,draft.message)
                 NexaUiActionJournal.finish(service,approval.token,
