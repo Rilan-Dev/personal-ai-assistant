@@ -26,7 +26,7 @@ internal object NexaLauncherSwipe {
     }
 
     fun gesture(service:ScreenAssistService,root:AccessibilityNodeInfo,
-                direction:String,token:String):String {
+                direction:String,token:String,pauseGeneration:Long):String {
         if(direction !in setOf("left","right") || !isHome(service,root))
             return "Horizontal gesture is only available on the verified launcher."
         val bounds=Rect().also {root.getBoundsInScreen(it)}
@@ -47,15 +47,17 @@ internal object NexaLauncherSwipe {
             return "Action journal denied repeat/unapproved gesture."
         NexaUiActionVerifier.begin(token,"scroll",pkg,root.windowId,before)
         val queued=try {
-            service.dispatchGesture(description,
+            NexaNativeActionSafety.dispatchWithFence(service,pauseGeneration) {
+                service.dispatchGesture(description,
                 object:AccessibilityService.GestureResultCallback(){
                     override fun onCancelled(gestureDescription:GestureDescription?) {
                         NexaUiActionVerifier.cancel(token)
                         NexaUiActionJournal.markObservation(service,token,"unverified")
                     }
                 },Handler(Looper.getMainLooper()))
+            }
         }catch(_:Exception){false}
-        if(!queued) {
+        if(queued!=true) {
             NexaUiActionVerifier.cancel(token)
             NexaUiActionJournal.finish(service,token,"android_rejected")
             return "Android refused the launcher gesture. No retry."
