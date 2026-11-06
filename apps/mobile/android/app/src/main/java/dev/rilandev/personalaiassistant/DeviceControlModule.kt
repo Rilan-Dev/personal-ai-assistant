@@ -192,6 +192,10 @@ class DeviceControlModule(
      */
     @ReactMethod
     fun readVisibleControls(promise:Promise) {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
+            return
+        }
         if(context.currentActivity?.hasWindowFocus()!=true) {
             promise.reject("NOT_FOREGROUND","Open Nexa to approve screen inspection")
             return
@@ -213,6 +217,10 @@ class DeviceControlModule(
 
     @ReactMethod
     fun openSupportedApp(app: String, promise: Promise) {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
+            return
+        }
         if(context.currentActivity?.hasWindowFocus()!=true){
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve the app launch")
             return
@@ -247,6 +255,10 @@ class DeviceControlModule(
      */
     @ReactMethod
     fun openChromeSearch(query: String, promise: Promise) {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
+            return
+        }
         if(context.currentActivity?.hasWindowFocus()!=true){
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve Chrome search")
             return
@@ -286,6 +298,10 @@ class DeviceControlModule(
     /** One owner-approved system navigation action; no notification text is read. */
     @ReactMethod
     fun openNotificationShade(promise: Promise) {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
+            return
+        }
         if (context.currentActivity?.hasWindowFocus() != true) {
             promise.reject("NOT_FOREGROUND", "Open Nexa and approve the notification shade action")
             return
@@ -306,6 +322,10 @@ class DeviceControlModule(
 
     @ReactMethod
     fun openCamera(promise: Promise) {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
+            return
+        }
         if(context.currentActivity?.hasWindowFocus()!=true){
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve camera launch")
             return
