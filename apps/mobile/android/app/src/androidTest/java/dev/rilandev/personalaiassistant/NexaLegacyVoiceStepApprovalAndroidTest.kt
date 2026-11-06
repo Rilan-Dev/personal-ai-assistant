@@ -64,6 +64,55 @@ class NexaLegacyVoiceStepApprovalAndroidTest {
             context,task,session,1,steps[1],"read_visible_screen_text"))
     }
 
+    @Test fun uiActionClaimLinksOneChildToThePreviouslyApprovedVoiceStep(){
+        val task="task-"+UUID.randomUUID()
+        val session=UUID.randomUUID().toString()
+        val steps=listOf("open Calendar","show screen controls")
+        val request=steps.joinToString(" and then ")
+        assertTrue(NexaConversationDb.saveTask(
+            context,task,session,"planned",0,request,steps))
+        assertTrue(NexaConversationDb.saveTask(
+            context,task,session,"executing",0,request,steps))
+        assertTrue(NexaLegacyVoiceStepApproval.consume(
+            context,task,session,0,steps[0],"open",
+            "com.google.android.calendar"))
+
+        // A real gesture is NEVER dispatched here. Only the durable claim is
+        // reserved, exactly as the UI executor does before external activity.
+        val token=UUID.randomUUID().toString()
+        val wrong=NexaVoiceActionScope.during(true,task,session,0,"open"){
+            NexaUiActionJournal.claim(context,token,"tap",
+                "com.google.android.calendar",origin="live-voice")
+        }
+        assertFalse(wrong)
+        val valid=NexaVoiceActionScope.during(true,task,session,0,"open"){
+            NexaUiActionJournal.claim(context,token,"app_launch",
+                "com.google.android.calendar",origin="live-voice")
+        }
+        assertTrue(valid)
+        val duplicate=NexaVoiceActionScope.during(true,task,session,0,"open"){
+            NexaUiActionJournal.claim(context,UUID.randomUUID().toString(),
+                "app_launch","com.google.android.calendar",origin="live-voice")
+        }
+        assertFalse(duplicate)
+        NexaConversationDb(context).use{helper->
+            helper.readableDatabase.rawQuery(
+                "SELECT detail_cipher FROM agent_task_events "+
+                    "WHERE task_id=? AND event_kind='voice_ui_child_claimed'",
+                arrayOf(task)
+            ).use{cursor->
+                assertTrue(cursor.moveToFirst())
+                val detail=org.json.JSONObject(NexaConversationDb
+                    .unsealNativeTaskArguments(cursor.getBlob(0)))
+                assertEquals("app_launch",detail.getString("actionKind"))
+                assertEquals(0,detail.getInt("ordinal"))
+                assertTrue(detail.getString("childTaskId").startsWith("task-"))
+                assertTrue(detail.getString("childStepId").startsWith("step-"))
+                assertFalse(cursor.moveToNext())
+            }
+        }
+    }
+
     @Test fun uncertainVoiceCheckpointCanNeverReceiveAnotherApproval(){
         val task="task-"+UUID.randomUUID()
         val session=UUID.randomUUID().toString()
