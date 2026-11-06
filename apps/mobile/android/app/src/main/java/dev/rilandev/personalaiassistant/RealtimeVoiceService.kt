@@ -855,7 +855,7 @@ class RealtimeVoiceService : Service() {
             // after Android updates the foreground Accessibility window.
             if(!outcome.startsWith("Android accepted a uniquely grounded WhatsApp chat-row tap") &&
                 !outcome.startsWith("Matching chat header and composer are already visible")) {
-                closeCompound(cursor,"unverified",outcome)
+                closeCompound(cursor,"uncertain",outcome)
                 return
             }
             val name=tool.command.removePrefix("open_whatsapp_chat:")
@@ -870,7 +870,7 @@ class RealtimeVoiceService : Service() {
                         if(!active.get() || currentCompound!==cursor ||
                             voiceSessionId!=session)return@post
                         if(!verified) {
-                            closeCompound(cursor,"unverified",
+                            closeCompound(cursor,"uncertain",
                                 "WhatsApp conversation header not independently verified")
                             sarvamApiTransport?.toolResult(
                                 "Chat-row tap was not confirmed in WhatsApp. No further action.")
@@ -889,6 +889,47 @@ class RealtimeVoiceService : Service() {
                     }
                 },"nexa-chat-verification").start()
             },1200L)
+            return
+        }
+        if(tool.command.startsWith("scroll_screen:")){
+            // Android accepting a scroll is not evidence of a scroll EVENT.
+            // The verifier checks the exact parent step + its sole linked UI
+            // child after the native Accessibility observer has committed.
+            if(!outcome.startsWith("Android accepted one scroll request.")){
+                closeCompound(cursor,"uncertain",
+                    "Scroll dispatch or outcome was not confirmed")
+                return
+            }
+            val direction=tool.command.removePrefix("scroll_screen:")
+            val session=voiceSessionId
+            val ordinal=cursor.stepIndex
+            main.postDelayed({
+                if(!active.get() || currentCompound!==cursor ||
+                    session!=voiceSessionId)return@postDelayed
+                Thread({
+                    val observed=NexaVoiceScrollEvidence.observed(
+                        this,cursor.taskId,session,ordinal,direction)
+                    main.post {
+                        if(!active.get() || currentCompound!==cursor ||
+                            session!=voiceSessionId || cursor.stepIndex!=ordinal)
+                            return@post
+                        if(!observed) {
+                            closeCompound(cursor,"uncertain",
+                                "Exact Android scroll event was not verified")
+                            sarvamApiTransport?.toolResult(
+                                "Scroll could not be independently verified. No further step.")
+                            return@post
+                        }
+                        val next=cursor.advance(true)
+                        checkpointAndContinue(cursor,
+                            if(cursor.finished)"completed" else "verified",
+                            "Parent-linked Accessibility scroll event verified") {
+                            if(next==null)currentCompound=null
+                            else handleSarvamOwnerRequest(next,true)
+                        }
+                    }
+                },"nexa-voice-scroll-observation").start()
+            },1600L)
             return
         }
         val isAppOpen=tool.command.startsWith("open ") || tool.command=="open" ||
