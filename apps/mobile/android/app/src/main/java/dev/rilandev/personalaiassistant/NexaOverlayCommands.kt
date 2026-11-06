@@ -34,6 +34,8 @@ internal object NexaOverlayCommands {
         context.packageManager.getLaunchIntentForPackage(pkg) != null
 
     private fun launch(context: Context, pkg: String, app: String): String {
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. No app launch requested."
         val intent = context.packageManager.getLaunchIntentForPackage(pkg)
             ?: return "$app not installed or hidden by Android"
         return try {
@@ -179,6 +181,8 @@ internal object NexaOverlayCommands {
         }
 
     private fun findGitHubOnHome(context: Context): String {
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. No launcher navigation started."
         if (!installed(context, "com.github.android")) return "GitHub is not installed"
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val pkg = context.packageManager.resolveActivity(home, 0)
