@@ -240,6 +240,18 @@ internal object NexaPhoneVoiceTools {
         return matches.singleOrNull()
     }
 
+    /** Revalidate an EXACT native owner-reviewed launcher choice immediately
+     * before dispatch. App labels and package bindings are untrusted after
+     * the owner looked at them: two duplicate labels are never guessed.
+     */
+    fun sameInstalledLaunchChoice(context:Context,label:String,pkg:String):Boolean {
+        if(label.isBlank() || label.length>80 ||
+            !pkg.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,180}")))return false
+        val apps=launchableApps(context)
+        return apps.count{it.label.equals(label,ignoreCase=true)}==1 &&
+            apps.any{it.label==label && it.packageName==pkg}
+    }
+
     private fun launchableApps(context: Context): List<AppChoice> {
         val pm=context.packageManager
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
