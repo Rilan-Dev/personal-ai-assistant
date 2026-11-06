@@ -8,7 +8,7 @@ import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntent
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageAppForDays,
-  messageAppPreferenceDetails,forgetMessageApp,openReviewedSmsDraft,openManualMessageComposer,
+  messageAppPreferenceDetails,forgetMessageApp,forgetAllRememberedMessageApps,openReviewedSmsDraft,openManualMessageComposer,
   reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
 import type {MessageAppPreference} from './src/native/nexaMessaging';
 import { createAndroidTools, nativeDeviceAvailable, nativeActionSafetyAvailable,
@@ -639,6 +639,9 @@ export default function App() {
   const [messageChosen,setMessageChosen]=useState<InstalledMessageApp|null>(null);
   const [messageBusy,setMessageBusy]=useState(false);
   const [messageNotice,setMessageNotice]=useState('');
+  const [clearAllMessageMemoryReview,setClearAllMessageMemoryReview]=useState(false);
+  const [clearAllMessageMemoryBusy,setClearAllMessageMemoryBusy]=useState(false);
+  const [clearAllMessageMemoryNotice,setClearAllMessageMemoryNotice]=useState('');
   const [rememberDays,setRememberDays]=useState<30|90|365>(90);
   const [messagePreference,setMessagePreference]=useState<MessageAppPreference|null>(null);
   const [messageRecipientConfirmed,setMessageRecipientConfirmed]=useState(false);
@@ -845,6 +848,24 @@ export default function App() {
     }catch(e){
       setMessageNotice(e instanceof Error?e.message:'Could not securely remember the app. No app was selected.');
     }finally{setMessageBusy(false);}
+  };
+  const clearAllMessageChannelMemory=async()=>{
+    if(clearAllMessageMemoryBusy||!clearAllMessageMemoryReview||!engine.live)return;
+    setClearAllMessageMemoryBusy(true);
+    try{
+      const count=await forgetAllRememberedMessageApps();
+      setMessagePreference(null);
+      setMessageChosen(null);
+      setMessageRecipientConfirmed(false);
+      setClearAllMessageMemoryNotice('Deleted '+count+
+        ' stored recipient-to-app preferences from encrypted device memory. Provider keys, chats and conversations were unchanged.');
+    }catch(e){
+      setClearAllMessageMemoryNotice(e instanceof Error?e.message:
+        'The native memory deletion could not be confirmed.');
+    }finally{
+      setClearAllMessageMemoryBusy(false);
+      setClearAllMessageMemoryReview(false);
+    }
   };
   const forgetRecipientChannel=async()=>{
     if(!messageRequest||messageBusy)return;
@@ -2101,6 +2122,34 @@ export default function App() {
         </Pressable>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
+        {engine.live&&<View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Private recipient-app memory</Text>
+          <Text style={styles.settingHelp}>Saved app choices are encrypted on this phone and only hint at a preferred channel. They do not identify a contact or authorize sending. You can forget an individual choice in a message review, or remove every saved channel preference here.</Text>
+          {!clearAllMessageMemoryReview?
+            <Pressable accessibilityRole="button" disabled={clearAllMessageMemoryBusy}
+              style={styles.outlineAction} onPress={()=>{
+                setClearAllMessageMemoryReview(true);
+                setClearAllMessageMemoryNotice('');
+              }}>
+              <Text style={styles.outlineActionText}>Review clearing all remembered apps</Text>
+            </Pressable>:
+            <View style={styles.actionCard}>
+              <Text style={styles.settingTitle}>Delete all saved recipient app choices?</Text>
+              <Text style={styles.settingHelp}>This cannot be undone. Only encrypted messaging-app preferences are erased. Credentials, conversation history and queued draft messages are not deleted.</Text>
+              <View style={styles.buttonRow}>
+                <Pressable accessibilityRole="button" disabled={clearAllMessageMemoryBusy}
+                  style={styles.outlineInline} onPress={()=>setClearAllMessageMemoryReview(false)}>
+                  <Text style={styles.outlineInlineText}>Cancel deletion</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" disabled={clearAllMessageMemoryBusy}
+                  style={styles.primaryInline} onPress={()=>void clearAllMessageChannelMemory()}>
+                  <Text style={styles.primaryInlineText}>Erase saved channel choices</Text>
+                </Pressable>
+              </View>
+            </View>}
+          {clearAllMessageMemoryBusy&&<ActivityIndicator/>}
+          {clearAllMessageMemoryNotice!==''&&<Text style={styles.feedback}>{clearAllMessageMemoryNotice}</Text>}
+        </View>}
         {(textEntryRequest || messageRequest) && <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Active task review</Text>
           <Text style={styles.settingHelp}>The request is kept local. Choose an app or an input field here before completing a device action.</Text>
