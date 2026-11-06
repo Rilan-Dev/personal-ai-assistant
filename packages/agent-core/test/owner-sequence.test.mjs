@@ -143,3 +143,60 @@ test("six-step sequence has an extra completion turn and never claims success ea
   assert.equal(end.type,"done");
   assert.match(end.response,/6 owner-requested steps/);
 });
+
+
+test("recipient-bound WhatsApp multi-step request never includes Send",()=>{
+  const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "I am in a meeting and will call later"';
+  const steps=parseOwnerMultiToolRequest(request);
+  assert.deepEqual(steps?.map(s=>s.toolId),[
+    "device.open_app","screen.open_whatsapp_chat","screen.compose_whatsapp"
+  ]);
+  assert.deepEqual(steps?.[1].input,{recipientHint:"Mom"});
+  assert.deepEqual(steps?.[2].input,{recipientHint:"Mom",
+    exactText:"I am in a meeting and will call later"});
+  assert.equal(steps?.some(s=>s.toolId.includes("send")),false);
+});
+
+test("multi-step WhatsApp drafting rejects switched recipient and unsupported context",()=>{
+  for(const cmd of [
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Dad saying "hi"',
+    'Open Calendar then open chat with Mom then prepare WhatsApp message for Mom saying "hi"',
+    'Open WhatsApp then prepare WhatsApp message for Mom saying "hi"',
+    'Open WhatsApp then open chat with Mom then tap Search then prepare WhatsApp message for Mom saying "hi"',
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then send it',
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then prepare WhatsApp message for Mom saying "again"',
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi and then pay"',
+  ]) {
+    const result=parseOwnerMultiToolRequest(cmd);
+    if(cmd.includes('"hi and then pay"')) {
+      assert.equal(result?.[2].input.exactText,'hi and then pay');
+    }else assert.equal(result,null,cmd);
+  }
+});
+
+test("recipient evidence is not a generic window-change or a model assertion",async()=>{
+  const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hello"';
+  const steps=parseOwnerMultiToolRequest(request);
+  const check=(index,data)=>evidenceForOwnerStep(
+    steps[index],{status:"success",data},index===2).safe;
+  assert.equal(check(1,{verification:"observed_change",actionAccepted:true}),false);
+  assert.equal(check(1,{verification:"verified_chat_header",
+    recipientMatched:false,messageComposerVisible:true,submitted:false}),false);
+  assert.equal(check(1,{verification:"verified_chat_header",
+    recipientMatched:true,messageComposerVisible:true,submitted:false}),true);
+  assert.equal(check(2,{verification:"exact_text_visible",
+    recipientMatched:true,submitted:false,sent:false}),true);
+  assert.equal(check(2,{verification:"exact_text_visible",
+    recipientMatched:true,submitted:false,sent:true}),false);
+  assert.equal(check(2,{verification:"exact_text_visible",
+    recipientMatched:false,submitted:false,sent:false}),false);
+  const planner=createOwnerSequentialPlanner(androidIntentPlanner);
+  const stopped=await planner.next(request,[{
+    call:steps[0],outcome:{status:"success",data:{
+      intentDispatched:true,verification:"destination_package_observed"}}
+  },{
+    call:steps[1],outcome:{status:"success",data:{
+      verification:"observed_change",actionAccepted:true}}
+  }]);
+  assert.equal(stopped.type,"clarify");
+});
