@@ -11,8 +11,9 @@ import android.content.Context
  * already dispatched before a pause.
  *
  * The preference is deliberately local to the device. The model/provider
- * cannot set or clear it. Only an unlocked, foreground Nexa UI may call
- * setPaused() through the React Native owner control.
+ * cannot change it: the unlocked foreground Nexa UI may Pause or Resume,
+ * while the owner-tapped floating overlay may only Pause. No agent tool
+ * exposes this setter.
  */
 internal object NexaNativeActionSafety {
     private const val STORE="nexa_native_action_safety_v1"
