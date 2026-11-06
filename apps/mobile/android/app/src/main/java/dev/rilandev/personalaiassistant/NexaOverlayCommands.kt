@@ -33,15 +33,20 @@ internal object NexaOverlayCommands {
     private fun installed(context: Context, pkg: String): Boolean =
         context.packageManager.getLaunchIntentForPackage(pkg) != null
 
-    private fun launch(context: Context, pkg: String, app: String): String {
+    private fun launch(context: Context,pkg:String,app:String,origin:String):String {
         if(!NexaNativeActionSafety.permitsNewAction(context))
             return "Nexa device actions are paused. No app launch requested."
-        val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-            ?: return "$app not installed or hidden by Android"
-        return try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            "$app launch requested · screen opening not verified"
-        } catch (_: Exception) { "Android blocked $app launch" }
+        // Trust only the fixed app/package grammar; resolve one real launcher
+        // entry before calling the SAME durable Kotlin claim as Chat/Voice.
+        // An unknown or duplicated launcher remains a user-visible refusal.
+        val choice=NexaPhoneVoiceTools.uniqueInstalledPackageChoice(context,pkg)
+            ?:return "$app has no unique launcher on this phone. Nothing opened."
+        return when(NexaTaskCoordinator.dispatchOwnerApprovedAppLaunch(
+            context,choice.label,choice.packageName,origin)){
+            "accepted" -> "$app launch requested · Android Intent accepted, screen not verified"
+            "uncertain" -> "$app launch outcome uncertain. Inspect the phone. No automatic retry."
+            else -> "$app launch denied by native owner task policy. No action retried."
+        }
     }
 
     fun status(context: Context): String {
@@ -142,17 +147,17 @@ internal object NexaOverlayCommands {
                 if (installed(context, "com.whatsapp.w4b")) "WhatsApp Business is installed"
                 else "WhatsApp Business not installed or not visible"
             "open github", "open github app", "open my github app" ->
-                launch(context, "com.github.android", "GitHub")
+                launch(context, "com.github.android", "GitHub",origin)
             "open brave", "open brave app", "open brave browser", "open my brave",
             "open my brave app", "open my brave browser" ->
-                launch(context, "com.brave.browser", "Brave")
+                launch(context, "com.brave.browser", "Brave",origin)
             "check brave", "is brave installed" ->
                 if (installed(context, "com.brave.browser")) "Brave is installed"
                 else "Brave not installed or not visible"
             "open whatsapp", "open my whatsapp" ->
-                launch(context, "com.whatsapp", "WhatsApp")
+                launch(context, "com.whatsapp", "WhatsApp",origin)
             "open whatsapp business" ->
-                launch(context, "com.whatsapp.w4b", "WhatsApp Business")
+                launch(context, "com.whatsapp.w4b", "WhatsApp Business",origin)
             "find github", "find github app", "find my github app", "launcher search" ->
                 findGitHubOnHome(context)
             "app settings", "open app settings", "privacy settings" ->
