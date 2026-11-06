@@ -11,6 +11,10 @@ import type {Planner} from "./runtime.ts";
  */
 const maxSteps=6;
 const forbiddenTap=/\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\b/i;
+const recipientHint=(v:string):boolean=>
+  v.length>=2&&v.length<=50&&v.trim()===v&&
+  /^[\p{L}][\p{L}\p{N} '-]{1,49}$/u.test(v)&&
+  !/\b(?:and|then|send|submit|pay|buy|call|delete|grant|allow|confirm|password|otp)\b/i.test(v);
 const safeLabel=(v:string):boolean=>
   v.length>=2&&v.length<=45&&v.trim()===v&&
   /^[\p{L}\p{N}][\p{L}\p{N} _.-]*$/u.test(v)&&!forbiddenTap.test(v);
@@ -61,6 +65,14 @@ function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
   const tap=text.match(/^(?:tap|click|press) (?:on )?(?:the )?([\p{L}\p{N} _.-]{2,45})$/iu);
   if(tap&&safeLabel(tap[1].trim()))
     return {toolId:"screen.tap_label",input:{label:tap[1].trim()}};
+  const chat=text.match(/^(?:open|show) (?:the )?(?:whatsapp )?chat with ([\p{L}][\p{L}\p{N} '-]{1,49})$/iu);
+  if(chat&&recipientHint(chat[1].trim()))
+    return {toolId:"screen.open_whatsapp_chat",input:{recipientHint:chat[1].trim()}};
+  const compose=original.match(/^(?:prepare|compose|draft) (?:a )?whatsapp message (?:for|to) ([\p{L}][\p{L}\p{N} '-]{1,49}) (?:saying|that says) ["“]([^"”\r\n]{1,500})["”]$/iu);
+  if(compose&&recipientHint(compose[1].trim())&&compose[2].trim())
+    return {toolId:"screen.compose_whatsapp",input:{
+      recipientHint:compose[1].trim(),exactText:compose[2]
+    }};
   const entry=parseReviewedTextEntry(original);
   if(entry&&safeLabel(entry.targetLabel))
     return {toolId:"screen.fill_text",input:{
@@ -76,6 +88,24 @@ export function parseOwnerMultiToolRequest(raw:unknown):readonly ToolCall[]|null
   if(!list)return null;
   const steps=list.map(parseClause);
   if(steps.some(s=>s===null))return null;
+  const bound=steps as Array<Pick<ToolCall,"toolId"|"input">>;
+  // App launch alone is not recipient proof; each chat header is checked
+  // by native Android before its separately approved draft insertion.
+  let launchedWhatsApp=false,verifiedHint:string|null=null;
+  for(const step of bound){
+    if(step.toolId==="device.open_app")
+      launchedWhatsApp=step.input.app==="whatsapp";
+    if(step.toolId==="screen.open_whatsapp_chat"){
+      if(!launchedWhatsApp)return null;
+      verifiedHint=String(step.input.recipientHint);
+    }
+    if(step.toolId==="screen.compose_whatsapp"){
+      if(!verifiedHint||step.input.recipientHint!==verifiedHint)return null;
+      verifiedHint=null;
+    }
+    if(["screen.tap_label","screen.scroll","screen.fill_text"].includes(step.toolId))
+      verifiedHint=null;
+  }
   return Object.freeze((steps as Array<Pick<ToolCall,"toolId"|"input">>)
     .map((s,i)=>Object.freeze({callId:"owner-seq-"+(i+1),toolId:s.toolId,
       input:Object.freeze({...s.input})})));
@@ -114,6 +144,15 @@ export function evidenceForOwnerStep(call:ToolCall,outcome:ToolOutcome,
   if(call.toolId==="screen.tap_label"||call.toolId==="screen.scroll")
     return {safe:x.verification==="observed_change"&&x.actionAccepted===true,
       reason:"The screen change was not verified; no next step executed"};
+  if(call.toolId==="screen.open_whatsapp_chat")
+    return {safe:x.verification==="verified_chat_header" &&
+      x.recipientMatched===true&&x.messageComposerVisible===true &&
+      x.submitted===false,
+      reason:"The exact recipient header and message composer were not verified"};
+  if(call.toolId==="screen.compose_whatsapp")
+    return {safe:x.verification==="exact_text_visible"&&x.recipientMatched===true&&
+      x.submitted===false&&x.sent===false,
+      reason:"The approved recipient or draft text was not verified; nothing sent"};
   if(call.toolId==="screen.fill_text")
     return {safe:x.verification==="exact_text_visible"&&x.submitted===false,
       reason:"The exact reviewed text was not visible in the field"};
