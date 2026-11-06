@@ -37,6 +37,12 @@ interface DeviceControlBridge {
   performReviewedScreenText(label:string,text:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     submitted:false;verification:"exact_text_visible"
   }>;
+  performReviewedWhatsAppChat(recipientHint:string,sessionId:string,callId:string,fingerprint:string):Promise<{
+    verification:"verified_chat_header";recipientMatched:true;messageComposerVisible:true;submitted:false;sent:false
+  }>;
+  performReviewedWhatsAppDraft(recipientHint:string,exactText:string,sessionId:string,callId:string,fingerprint:string):Promise<{
+    verification:"exact_text_visible";recipientMatched:true;submitted:false;sent:false
+  }>;
 }
 
 export const nativeDeviceAvailable = (): boolean =>
@@ -244,6 +250,36 @@ export function createAndroidTools(): Tool[] {
         status:"success",
         data:await getBridge().performReviewedScreenScroll(
           String(direction),...nativeStepMandate(ctx))
+      })
+    },
+    {
+      id:"screen.open_whatsapp_chat",
+      description:"Open or verify one exact WhatsApp chat header and its composer, after owner's per-step approval; no message read or send.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===1&&
+        typeof input.recipientHint==="string"&&
+        /^[\p{L}][\p{L}\p{N} '-]{1,49}$/u.test(input.recipientHint)&&
+        !/\b(?:and|then|send|submit|pay|buy|call|delete|grant|allow|confirm|password|otp)\b/i.test(input.recipientHint),
+      execute:async({recipientHint},ctx)=>({
+        status:"success",
+        data:await getBridge().performReviewedWhatsAppChat(
+          String(recipientHint),...nativeStepMandate(ctx))
+      })
+    },
+    {
+      id:"screen.compose_whatsapp",
+      description:"Fill exact owner-reviewed message in a WhatsApp composer only when the same recipient's header is verified. Never send.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===2&&
+        typeof input.recipientHint==="string"&&
+        /^[\p{L}][\p{L}\p{N} '-]{1,49}$/u.test(input.recipientHint)&&
+        reviewedText(input.exactText),
+      execute:async({recipientHint,exactText},ctx)=>({
+        status:"success",
+        data:await getBridge().performReviewedWhatsAppDraft(
+          String(recipientHint),String(exactText),...nativeStepMandate(ctx))
       })
     },
     {
