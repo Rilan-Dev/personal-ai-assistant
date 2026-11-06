@@ -54,6 +54,9 @@ function clauses(raw:string):string[]|null {
 function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
   const original=raw.replace(/^please\s+/i,"").trim();
   const text=original.replace(/[.!?]+$/,"").trim();
+  const chat=text.match(/^(?:open|show) (?:the )?(?:whatsapp )?chat with ([\p{L}][\p{L}\p{N} '-]{1,49})$/iu);
+  if(chat&&recipientHint(chat[1].trim()))
+    return {toolId:"screen.open_whatsapp_chat",input:{recipientHint:chat[1].trim()}};
   const native=parseNativeOwnerIntent(text);
   if(native)return native;
   const storage=text.match(/^(?:check|show|read|what is|what's) (?:my |the )?(?:phone |device )?storage(?: status| space| usage)?$/i);
@@ -65,9 +68,6 @@ function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
   const tap=text.match(/^(?:tap|click|press) (?:on )?(?:the )?([\p{L}\p{N} _.-]{2,45})$/iu);
   if(tap&&safeLabel(tap[1].trim()))
     return {toolId:"screen.tap_label",input:{label:tap[1].trim()}};
-  const chat=text.match(/^(?:open|show) (?:the )?(?:whatsapp )?chat with ([\p{L}][\p{L}\p{N} '-]{1,49})$/iu);
-  if(chat&&recipientHint(chat[1].trim()))
-    return {toolId:"screen.open_whatsapp_chat",input:{recipientHint:chat[1].trim()}};
   const compose=original.match(/^(?:prepare|compose|draft) (?:a )?whatsapp message (?:for|to) ([\p{L}][\p{L}\p{N} '-]{1,49}) (?:saying|that says) ["“]([^"”\r\n]{1,500})["”]$/iu);
   if(compose&&recipientHint(compose[1].trim())&&compose[2].trim())
     return {toolId:"screen.compose_whatsapp",input:{
