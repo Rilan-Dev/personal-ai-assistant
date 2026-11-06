@@ -50,6 +50,7 @@ test('pausing blocks permanent UI claims and legacy Voice owner approvals',()=>{
 test('owner pause generation fences all reviewed text, message and screen actions',()=>{
   const gate=src('NexaNativeActionSafety.kt');
   assert.match(gate,/fun approvalFence\(/);
+  assert.match(gate,/getLong\(GENERATION,0L\)/); // first install has no pause record
   assert.match(gate,/fun approvalFenceCurrent\(/);
   assert.match(gate,/fun dispatchWithFence\(/);
   assert.match(gate,/synchronized\(lock\)/);
