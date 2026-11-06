@@ -108,7 +108,8 @@ internal object NexaWhatsAppChatActions {
         return Scan(eligible.size,eligible.maxOfOrNull{it.evidence}?:0,
             eligible.singleOrNull()?.target,open)
     }
-    fun openApproved(service:ScreenAssistService,recipient:String):String {
+    fun openApproved(service:ScreenAssistService,recipient:String,
+                     origin:String="overlay"):String {
         if(NexaWhatsAppChatIntent.followupRecipient("open chat with "+recipient)==null)
             return "Invalid chat-recipient hint. No action taken."
         if(!ScreenAssistState.connected || ScreenAssistService.active!==service)
@@ -132,7 +133,7 @@ internal object NexaWhatsAppChatActions {
             val target=scan.target ?:return "The matched chat row is no longer available."
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
-            if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp"))
+            if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp",origin=origin))
                 return "The encrypted action journal refused the chat tap. Nothing opened."
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
             return if(target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
