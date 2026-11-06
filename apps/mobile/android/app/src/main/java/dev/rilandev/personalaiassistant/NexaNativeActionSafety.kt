@@ -38,6 +38,33 @@ internal object NexaNativeActionSafety {
             .getLong(GENERATION,0L) }catch (_:Exception){-1L}
     }
 
+    /**
+     * Capture the native owner's emergency-stop generation at review time.
+     * Any Pause (even if followed by Resume) invalidates the old approval.
+     * This never grants an action; the existing one-shot claim is still required.
+     */
+    fun approvalFence(context:Context):Long? = synchronized(lock) {
+        try {
+            val prefs=context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
+            val generation=prefs.getLong(GENERATION,-1L)
+            generation.takeIf{it>=0L && !prefs.getBoolean(KEY,false)}
+        }catch (_:Exception){null}
+    }
+
+    fun approvalFenceCurrent(context:Context,expected:Long):Boolean =
+        expected>=0L && approvalFence(context)==expected
+
+    /**
+     * Linearize the final native dispatch against the owner's Pause button.
+     * Call ONLY around the single Android gesture/Intent, never around
+     * journal writes, provider calls, observation waits or callbacks.
+     * Null means blocked; false means Android rejected the gesture.
+     */
+    fun dispatchWithFence(context:Context,expected:Long,
+                          operation:()->Boolean):Boolean? = synchronized(lock) {
+        if(!approvalFenceCurrent(context,expected))null else operation()
+    }
+
     fun setPaused(context:Context,paused:Boolean):Boolean = synchronized(lock) {
         try {
             val prefs=context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
