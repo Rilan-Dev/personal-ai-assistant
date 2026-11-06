@@ -111,7 +111,7 @@ internal object NexaScreenScroll {
         } else true
     }
 
-    fun confirm(service: ScreenAssistService): String {
+    fun confirm(service: ScreenAssistService, origin:String="overlay"): String {
         val approved=synchronized(lock){
             val t=pending
             pending=null // claim before dispatch; no retry, even if the OS result is uncertain
@@ -152,7 +152,7 @@ internal object NexaScreenScroll {
             }
             if(matches!=1 || target==null) return "Scroll target changed or ambiguous. No action requested."
             val direction="scroll_"+approved.direction
-            if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg))
+            if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg,origin=origin))
                 return "Secure action journal unavailable or approval already used. No scroll requested."
             val action=scrollAction(approved.direction)
             val before=NexaUiActionVerifier.fingerprint(root)
