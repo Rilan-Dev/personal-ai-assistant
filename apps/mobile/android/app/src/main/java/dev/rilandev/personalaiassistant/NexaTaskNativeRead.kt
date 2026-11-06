@@ -16,14 +16,21 @@ internal object NexaTaskNativeRead {
         "get_storage_usage" to "storage",
         "device.battery_status" to "battery",
         "device.storage_status" to "storage",
-        "device.status" to "device status"
+        "device.status" to "device status",
+        "get_visible_controls" to "visible screen controls",
+        "device.visible_controls" to "visible screen controls"
     )
     val proposedReadTools: Set<String> =
-        setOf("device.status", "device.battery_status", "device.storage_status")
+        setOf("device.status", "device.battery_status", "device.storage_status",
+            "device.visible_controls")
 
     fun observe(context: Context, trustedToolId: String): String? {
         val exactCommand = mapping[trustedToolId] ?: return null
-        val result = try { NexaPhoneVoiceTools.deviceFacts(context, exactCommand) }
+        val result = try {
+            if(exactCommand=="visible screen controls")
+                NexaTaskScreenObservation.observe(context)
+            else NexaPhoneVoiceTools.deviceFacts(context, exactCommand)
+        }
             catch (_:Exception) { null }
         if (result.isNullOrBlank() || result.length > 1000 ||
             result.contains("unavailable", ignoreCase=true) ||
