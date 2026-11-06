@@ -159,6 +159,9 @@ export type UnifiedTaskSummary={
   /** Opaque attribution only; an observed UI dispatch is not a verified parent step. */
   parentTaskId?:string;
   parentOrdinal?:number;
+  /** Claimed UI effects and narrower observed screen changes, not goal success. */
+  linkedUiActions?:number;
+  observedUiActions?:number;
 };
 export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
   const native=NativeModules.PAAConversationHistory as TaskNativeBridge|undefined;
@@ -189,7 +192,16 @@ export async function listUnifiedTaskTimeline():Promise<UnifiedTaskSummary[]>{
           t.parentTaskId!==t.taskId))&&
       (t.parentOrdinal===undefined||
         (t.parentTaskId!==undefined&&Number.isSafeInteger(t.parentOrdinal)&&
-          Number(t.parentOrdinal)>=0&&Number(t.parentOrdinal)<8));
+          Number(t.parentOrdinal)>=0&&Number(t.parentOrdinal)<8))&&
+      (t.linkedUiActions===undefined ||
+        (t.source==='legacy_voice_checkpoint' &&
+          Number.isSafeInteger(t.linkedUiActions) &&
+          Number(t.linkedUiActions)>=1&&Number(t.linkedUiActions)<=8))&&
+      (t.observedUiActions===undefined ||
+        (t.linkedUiActions!==undefined &&
+          Number.isSafeInteger(t.observedUiActions)&&
+          Number(t.observedUiActions)>=0 &&
+          Number(t.observedUiActions)<=Number(t.linkedUiActions)));
   };
   if(parsed.some(x=>!valid(x)))throw Error('Unrecognized task index entry');
   return parsed;
