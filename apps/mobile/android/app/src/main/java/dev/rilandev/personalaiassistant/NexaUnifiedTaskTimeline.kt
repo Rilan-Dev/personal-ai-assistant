@@ -17,7 +17,8 @@ internal object NexaUnifiedTaskTimeline {
         val taskId:String,val source:String,val origin:String,
         val status:String,val revision:Int,val updatedAt:Long,
         val stepCount:Int,val verifiedSteps:Int,val detailsRedacted:Boolean=false,
-        val parentTaskId:String?=null,val parentOrdinal:Int?=null
+        val parentTaskId:String?=null,val parentOrdinal:Int?=null,
+        val linkedUiActions:Int=0,val observedUiActions:Int=0
     ) {
         fun json():JSONObject=JSONObject()
             .put("taskId",taskId)
@@ -32,6 +33,8 @@ internal object NexaUnifiedTaskTimeline {
             .apply {
                 if(parentTaskId!=null)put("parentTaskId",parentTaskId)
                 if(parentOrdinal!=null)put("parentOrdinal",parentOrdinal)
+                if(linkedUiActions>0)put("linkedUiActions",linkedUiActions)
+                if(linkedUiActions>0)put("observedUiActions",observedUiActions)
             }
     }
     private val id=Regex("task-[A-Za-z0-9_-]{8,96}")
@@ -120,13 +123,36 @@ internal object NexaUnifiedTaskTimeline {
                     }catch(_:Exception){/* Old/redacted rows have no link. */}
                 }
             }
+            val childStatuses=mutableMapOf<String,String>()
+            if(links.isNotEmpty()){
+                db.rawQuery(
+                    "SELECT task_id,status FROM agent_tasks "+
+                        "WHERE policy_version=? ORDER BY updated_at DESC LIMIT ?",
+                    arrayOf(NexaUiTaskAudit.POLICY,(maximum*6).toString())
+                ).use{rows->
+                    while(rows.moveToNext()){
+                        val child=rows.getString(0)
+                        if(child in links)childStatuses[child]=rows.getString(1)
+                    }
+                }
+            }
+            val totals=mutableMapOf<String,Pair<Int,Int>>()
+            for((child,parent) in links){
+                val old=totals[parent.first] ?: (0 to 0)
+                totals[parent.first]=(old.first+1) to
+                    (old.second+if(childStatuses[child]=="observed")1 else 0)
+            }
             val result=JSONArray()
             for(item in all.sortedByDescending{it.updatedAt}.take(maximum)){
                 val parent=if(item.source=="ui_action_audit")
                     links[item.taskId] else null
-                result.put(if(parent==null)item.json()
-                    else item.copy(parentTaskId=parent.first,
-                        parentOrdinal=parent.second).json())
+                val counts=if(item.source=="legacy_voice_checkpoint")
+                    totals[item.taskId] else null
+                val summary=item.copy(
+                    parentTaskId=parent?.first,parentOrdinal=parent?.second,
+                    linkedUiActions=counts?.first ?: 0,
+                    observedUiActions=counts?.second ?: 0)
+                result.put(summary.json())
             }
             return result
         }finally{helper.close()}
