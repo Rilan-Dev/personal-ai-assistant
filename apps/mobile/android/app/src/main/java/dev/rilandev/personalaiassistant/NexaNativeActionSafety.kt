@@ -46,7 +46,7 @@ internal object NexaNativeActionSafety {
     fun approvalFence(context:Context):Long? = synchronized(lock) {
         try {
             val prefs=context.getSharedPreferences(STORE,Context.MODE_PRIVATE)
-            val generation=prefs.getLong(GENERATION,-1L)
+            val generation=prefs.getLong(GENERATION,0L)
             generation.takeIf{it>=0L && !prefs.getBoolean(KEY,false)}
         }catch (_:Exception){null}
     }
