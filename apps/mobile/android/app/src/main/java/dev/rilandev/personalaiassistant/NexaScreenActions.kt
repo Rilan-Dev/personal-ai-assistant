@@ -77,7 +77,7 @@ internal object NexaScreenActions {
      * Consume the approval before attempting ACTION_CLICK. On any error, require a
      * brand-new inspect-and-approve sequence; no automatic retry after uncertainty.
      */
-    fun confirm(service: ScreenAssistService, token: String): String {
+    fun confirm(service: ScreenAssistService, token: String, origin:String="overlay"): String {
         val candidate: Pair<OverlayScreenSnapshot, ObservedIcon> = synchronized(lock) {
             val snap = current
             val selected = snap?.icons?.singleOrNull { it.id == chosenId }
@@ -127,7 +127,8 @@ internal object NexaScreenActions {
             }
             // Observed target must still have exactly one matching actionable node.
             if (duplicate || matched == null) return "Target changed or ambiguous. No action requested."
-            if (!NexaUiActionJournal.claim(service, snapshot.token, "tap", snapshot.packageName))
+            if (!NexaUiActionJournal.claim(service, snapshot.token, "tap", snapshot.packageName,
+                origin=origin))
                 return "Secure action journal unavailable or approval already used. No click requested."
             val before = NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(snapshot.token,"tap",snapshot.packageName,root.windowId,before)
