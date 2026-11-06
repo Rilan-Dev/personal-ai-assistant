@@ -795,6 +795,46 @@ internal object NexaTaskCoordinator {
     }
 
     /**
+     * Shared Android Intent dispatch gate for a previously owner-approved app
+     * choice. Chat/Voice callers retain their existing human confirmation.
+     * The exact package+label must still be uniquely installed; the irreversible
+     * audit/approval-consumption record is written BEFORE starting the app.
+     *
+     * No successful business outcome or observed destination is inferred from
+     * startActivity. Unknown/claimed results are NEVER automatically retried.
+     * This audit path does not create an executable general-purpose mandate.
+     */
+    fun dispatchOwnerApprovedAppLaunch(context:Context,label:String,
+                                       packageName:String,origin:String):String {
+        if(origin !in setOf("chat","live-voice","assistant-role","overlay"))
+            return "denied"
+        val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE)
+            as? android.app.KeyguardManager
+        if(keyguard?.isKeyguardLocked==true ||
+            !NexaPhoneVoiceTools.sameInstalledLaunchChoice(context,label,packageName))
+            return "denied"
+        val intent=context.packageManager.getLaunchIntentForPackage(packageName)
+            ?:return "denied"
+        val token=UUID.randomUUID().toString()
+        if(!NexaUiActionJournal.claim(context,token,"app_launch",packageName,
+            origin=origin))return "denied"
+        return try {
+            context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            if(NexaUiActionJournal.finish(context,token,"android_accepted"))
+                "accepted" else "uncertain"
+        }catch (_:android.content.ActivityNotFoundException){
+            NexaUiActionJournal.finish(context,token,"android_rejected")
+            "denied"
+        }catch (_:SecurityException){
+            NexaUiActionJournal.finish(context,token,"android_rejected")
+            "denied"
+        }catch (_:Exception){
+            NexaUiActionJournal.finish(context,token,"unknown")
+            "uncertain"
+        }
+    }
+
+    /**
      * Called only by a trusted explicit user-intent path. Raw model tool
      * calls cannot invoke this. There is NO general tool dispatch mechanism.
      */
