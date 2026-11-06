@@ -298,7 +298,8 @@ internal object NexaAgentActionAudit {
                               fingerprint:String,toolId:String,
                               requested:JSONObject):Boolean{
         if(!valid(session,call,fingerprint) ||
-            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text") ||
+            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
+                "screen.open_whatsapp_chat","screen.compose_whatsapp") ||
             !NexaNativeActionSafety.permitsNewAction(context))return false
         return try{synchronized(lock){
             val bound=JSONArray(fingerprint)
@@ -318,6 +319,13 @@ internal object NexaAgentActionAudit {
                     args.optString("direction") in setOf("up","down","left","right")
                 "screen.fill_text"->args.length()==2 &&
                     args.optString("targetLabel").length in 2..60 &&
+                    args.optString("exactText").length in 1..500
+                "screen.open_whatsapp_chat"->args.length()==1 &&
+                    args.optString("recipientHint").matches(
+                        Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}"))
+                "screen.compose_whatsapp"->args.length()==2 &&
+                    args.optString("recipientHint").matches(
+                        Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}")) &&
                     args.optString("exactText").length in 1..500
                 else->false
             }
@@ -390,19 +398,28 @@ internal object NexaAgentActionAudit {
                                   fingerprint:String,toolId:String,
                                   evidence:String,gestureToken:String?=null):Boolean {
         if(!valid(session,call,fingerprint) ||
-            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text"))
+            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
+                "screen.open_whatsapp_chat","screen.compose_whatsapp"))
             return false
         val expectedKind=when(toolId){
-            "screen.tap_label"->"tap"
+            "screen.tap_label","screen.open_whatsapp_chat"->"tap"
             "screen.scroll"->{
                 val args=try{JSONArray(fingerprint).optJSONObject(3)}
                     catch(_:Exception){null} ?:return false
                 "scroll_"+args.optString("direction")
             }
+            "screen.compose_whatsapp"->"message_fill"
             else->"text_fill"
         }
-        if(toolId=="screen.fill_text"){
+        if(toolId=="screen.fill_text"||toolId=="screen.compose_whatsapp"){
             if(evidence!="exact_text_visible" || gestureToken!=null)return false
+        }else if(toolId=="screen.open_whatsapp_chat"){
+            if(evidence!="verified_chat_header")return false
+            if(gestureToken!=null && NexaUiActionJournal.outcomeFor(
+                    context,gestureToken,"tap") !in setOf(
+                    "android_accepted","observed_change",
+                    "structural_change_observed","window_change_observed"))
+                return false
         }else{
             if(evidence!="observed_change" ||
                 gestureToken.isNullOrBlank() ||
