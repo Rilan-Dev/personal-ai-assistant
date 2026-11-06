@@ -203,6 +203,8 @@ class RealtimeVoiceService : Service() {
                             task?.taskId.orEmpty(),operationSession,task?.stepIndex ?: -1,
                             pending.command
                         ) { when {
+                    !NexaNativeActionSafety.permitsNewAction(this) ->
+                        "Nexa device actions are paused by the owner. No action performed."
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
                     staleTask || !active.get() || operationSession != voiceSessionId ->
                         "Session or task changed; no action performed."
