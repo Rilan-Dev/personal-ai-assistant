@@ -23,7 +23,7 @@ internal object NexaUiTaskAudit {
     const val POLICY="ui-action-audit-v1"
     private val sha=Regex("[0-9a-f]{64}")
     private val allowed=setOf("tap","scroll_up","scroll_down","scroll_left",
-        "scroll_right","message_fill","text_fill")
+        "scroll_right","message_fill","text_fill","app_launch")
     private val observed=setOf("observed_change","scroll_event_observed",
         "window_change_observed","structural_change_observed")
     private val uncertain=setOf("unknown","no_observable_change",
@@ -42,9 +42,10 @@ internal object NexaUiTaskAudit {
     /** Must be called only inside the caller's outer SQLite transaction. */
     fun createInTransaction(db:SQLiteDatabase,tokenDigest:String,
                             actionKind:String,packageDigest:String,now:Long,
-                            reviewedInputDigest:String?=null):Boolean{
+                            reviewedInputDigest:String?=null,origin:String="overlay"):Boolean{
         if(!sha.matches(tokenDigest)||!sha.matches(packageDigest)||
             actionKind !in allowed ||
+            origin !in setOf("chat","live-voice","assistant-role","overlay") ||
             (actionKind in setOf("message_fill","text_fill") &&
                 !sha.matches(reviewedInputDigest.orEmpty())) ||
             (actionKind !in setOf("message_fill","text_fill") &&
@@ -65,14 +66,15 @@ internal object NexaUiTaskAudit {
         db.compileStatement(
             "INSERT INTO agent_tasks(task_id,session_id,origin,status,policy_version,"+
                 "plan_revision,goal_cipher,created_at,updated_at) "+
-                "VALUES(?,?,'overlay','running',?,1,?,?,?)"
+                "VALUES(?,?,?,'running',?,1,?,?,?)"
         ).use{stmt->
             stmt.bindString(1,taskId)
             stmt.bindString(2,"owner-ui-"+tokenDigest.take(24))
-            stmt.bindString(3,POLICY)
-            stmt.bindBlob(4,goal)
-            stmt.bindLong(5,now)
+            stmt.bindString(3,origin)
+            stmt.bindString(4,POLICY)
+            stmt.bindBlob(5,goal)
             stmt.bindLong(6,now)
+            stmt.bindLong(7,now)
             check(stmt.executeInsert()!=-1L)
         }
         db.compileStatement(
