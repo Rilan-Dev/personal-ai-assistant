@@ -40,7 +40,8 @@ test("Android secure journal uses Keystore AES-GCM and synchronous claims", () =
   assert.match(journal,/AES\/GCM\/NoPadding/);
   assert.match(journal,/setKeySize\(256\)/);
   assert.match(journal,/putString\(k, encrypt\(v\)\)\.commit\(\)/);
-  assert.match(journal,/write\(k, record\("claimed", fp\)\); p\.resolve\(true\)/);
+  assert.match(journal,/write\(k, record\("claimed", fp,\s*if\(requiresApproval\)generation else null\)\); p\.resolve\(true\)/);
+  assert.match(journal,/old\.optLong\("pauseGeneration",-1L\)==generation/);
   assert.doesNotMatch(journal,/MODE_WORLD_READABLE|allowBackup="true"/);
 });
 test("Android UI cannot run live tools without the native secure journal", () => {
