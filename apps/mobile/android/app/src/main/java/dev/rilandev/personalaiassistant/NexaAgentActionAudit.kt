@@ -5,6 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
 import org.json.JSONObject
+import org.json.JSONArray
 
 /**
  * The EXISTING Chat AgentJournal remains the sole approval / tool-execution
@@ -249,6 +250,97 @@ internal object NexaAgentActionAudit {
                         arrayOf(taskId,stepId,if(uncertain)
                             "chat_action_uncertain_no_replay" else
                             "chat_dispatch_settled_unverified",now)
+                    )
+                    db.setTransactionSuccessful()
+                    true
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }}catch(_:Exception){false}
+    }
+
+    /**
+     * Make the actual Chat Accessibility effect a CHILD of the already
+     * owner-approved, preclaimed AgentHarness step. This never mints an
+     * approval or trusts a provider's claim. The exact fingerprint includes
+     * session, call ID, allowlisted tool ID and all raw reviewed arguments.
+     * An irreversible reservation event is committed before any UI effect.
+     *
+     * A duplicate invocation for the SAME Chat step is rejected even while
+     * its outer AgentJournal state is still "claimed". Neither SQLite task
+     * metadata nor event names retain raw contact, screen or text details.
+     */
+    fun reserveReviewedUiStep(context:Context,session:String,call:String,
+                              fingerprint:String,toolId:String,
+                              requested:JSONObject):Boolean{
+        if(!valid(session,call,fingerprint) ||
+            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text") ||
+            !NexaNativeActionSafety.permitsNewAction(context))return false
+        return try{synchronized(lock){
+            val bound=JSONArray(fingerprint)
+            if(bound.length()!=4 || bound.optString(0)!=session ||
+                bound.optString(1)!=call || bound.optString(2)!=toolId ||
+                requested.length() !in 1..2)return@synchronized false
+            val args=bound.optJSONObject(3) ?:return@synchronized false
+            if(args.length()!=requested.length())return@synchronized false
+            for(key in requested.keys()){
+                if(!args.has(key) || args.opt(key)!=requested.opt(key))
+                    return@synchronized false
+            }
+            val allowedArgs=when(toolId){
+                "screen.tap_label"->args.length()==1 &&
+                    args.optString("label").length in 2..45
+                "screen.scroll"->args.length()==1 &&
+                    args.optString("direction") in setOf("up","down","left","right")
+                "screen.fill_text"->args.length()==2 &&
+                    args.optString("targetLabel").length in 2..60 &&
+                    args.optString("exactText").length in 1..500
+                else->false
+            }
+            if(!allowedArgs)return@synchronized false
+            val taskId=opaqueId("task-",sessionKey(session))
+            val stepId=opaqueId("step-",callKey(session,call))
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.writableDatabase
+                db.beginTransaction()
+                try{
+                    val now=System.currentTimeMillis()
+                    val validClaim=db.rawQuery(
+                        "SELECT s.arguments_cipher,a.input_digest,a.state,"+
+                            "a.consumed_at,a.expires_at FROM agent_tasks t "+
+                            "JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                            "JOIN agent_step_approvals a ON a.step_id=s.step_id "+
+                            "WHERE t.task_id=? AND t.policy_version=? "+
+                            "AND t.origin='chat' AND t.status='running' "+
+                            "AND s.step_id=? AND s.status='outcome_unknown' "+
+                            "AND s.tool_id='legacy.chat.action' LIMIT 2",
+                        arrayOf(taskId,POLICY,stepId)
+                    ).use{row->
+                        if(!row.moveToFirst())false
+                        else{
+                            val proof=JSONObject(NexaConversationDb
+                                .openNativeTaskArguments(row.getBlob(0)))
+                            val matches=proof.length()==2 &&
+                                proof.optBoolean("approvalRequired",false) &&
+                                proof.optString("fingerprintDigest")==sha(fingerprint) &&
+                                row.getString(1)==sha(
+                                    "nexa-chat-owner-approval-v1:"+fingerprint) &&
+                                row.getString(2)=="consumed" &&
+                                row.getLong(3)>0L && row.getLong(4)>now
+                            matches && !row.moveToNext()
+                        }
+                    }
+                    if(!validClaim)return@synchronized false
+                    val already=db.rawQuery(
+                        "SELECT 1 FROM agent_task_events WHERE task_id=? "+
+                            "AND step_id=? AND event_kind='chat_native_ui_reserved' LIMIT 1",
+                        arrayOf(taskId,stepId)
+                    ).use{it.moveToFirst()}
+                    if(already)return@synchronized false
+                    db.execSQL(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
+                            "VALUES(?,?,'chat_native_ui_reserved',?)",
+                        arrayOf(taskId,stepId,now)
                     )
                     db.setTransactionSuccessful()
                     true
