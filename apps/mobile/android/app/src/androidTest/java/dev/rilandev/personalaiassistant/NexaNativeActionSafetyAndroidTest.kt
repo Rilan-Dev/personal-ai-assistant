@@ -20,7 +20,10 @@ class NexaNativeActionSafetyAndroidTest {
             val before="owner-"+UUID.randomUUID()
             assertTrue(NexaUiActionJournal.claim(ctx,before,"tap",
                 "com.example.safe",origin="overlay"))
+            val beforePauseGeneration=NexaNativeActionSafety.pauseGeneration(ctx)
             assertTrue(NexaNativeActionSafety.setPaused(ctx,true))
+            assertEquals(beforePauseGeneration+1L,
+                NexaNativeActionSafety.pauseGeneration(ctx))
             assertTrue(NexaNativeActionSafety.isPaused(ctx))
             assertFalse(NexaNativeActionSafety.permitsNewAction(ctx))
             assertFalse("Overlay must stop",NexaUiActionJournal.claim(
@@ -34,8 +37,11 @@ class NexaNativeActionSafetyAndroidTest {
             assertFalse("Reviewed text must stop",NexaUiActionJournal.claim(
                 ctx,"owner-"+UUID.randomUUID(),"text_fill","com.example.safe",
                 "a".repeat(64),origin="overlay"))
+            val stoppedGeneration=NexaNativeActionSafety.pauseGeneration(ctx)
             assertTrue(NexaNativeActionSafety.setPaused(ctx,false))
             assertTrue(NexaNativeActionSafety.permitsNewAction(ctx))
+            assertEquals("Resume cannot restore old Voice approval generation",
+                stoppedGeneration,NexaNativeActionSafety.pauseGeneration(ctx))
             assertFalse("Resuming does not reset a permanently consumed token",
                 NexaUiActionJournal.claim(ctx,before,"tap","com.example.safe",
                     origin="overlay"))
