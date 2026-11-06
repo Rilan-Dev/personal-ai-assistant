@@ -546,6 +546,130 @@ class DeviceControlModule(
         }
     }
 
+
+    /**
+     * Native WhatsApp-only, owner-reviewed contact navigation. One exact
+     * recipient hint is sealed in the AgentHarness fingerprint and independently
+     * compared to the actual visible WhatsApp header + composer AFTER tap.
+     * No contact DB lookup, message entry, Send or automatic retry.
+     */
+    @ReactMethod
+    fun performReviewedWhatsAppChat(recipientHint:String,sessionId:String,
+                                    callId:String,fingerprint:String,promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,sessionId,callId,
+                fingerprint,"screen.open_whatsapp_chat",
+                JSONObject().put("recipientHint",recipientHint))){
+            promise.reject("CHAT_STEP_NOT_CLAIMED",
+                "The exact WhatsApp recipient was not approved for this step")
+            return
+        }
+        try {
+            var receipt:String?=null
+            val outcome=NexaWhatsAppChatActions.openApproved(service,recipientHint,
+                origin="chat",claimedToken={receipt=it})
+            val dispatched=outcome.startsWith("Android accepted a uniquely grounded")
+            val alreadyOpen=outcome.startsWith("Matching chat header and composer")
+            if(!dispatched && !alreadyOpen){
+                promise.reject("CHAT_ROW_UNVERIFIED",
+                    "No unique, approved WhatsApp chat row was identified")
+                return
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val verified=NexaWhatsAppChatActions.verifiedOpen(service,recipientHint)
+                    if(!verified){
+                        promise.reject("CHAT_HEADER_NOT_VERIFIED",
+                            "The intended contact's exact visible header and composer were not verified")
+                        return@postDelayed
+                    }
+                    if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,
+                            sessionId,callId,fingerprint,
+                            "screen.open_whatsapp_chat","verified_chat_header",receipt)){
+                        promise.reject("CHAT_EVIDENCE_NOT_COMMITTED",
+                            "WhatsApp header verified but parent step evidence was not committed")
+                        return@postDelayed
+                    }
+                    val result=Arguments.createMap()
+                    result.putString("verification","verified_chat_header")
+                    result.putBoolean("recipientMatched",true)
+                    result.putBoolean("messageComposerVisible",true)
+                    result.putBoolean("submitted",false)
+                    result.putBoolean("sent",false)
+                    promise.resolve(result)
+                }catch(_:Exception){
+                    promise.reject("CHAT_VERIFICATION_UNCERTAIN",
+                        "WhatsApp navigation uncertain; no automatic retry")
+                }
+            },if(dispatched)1400L else 0L)
+        }catch(_:Exception){
+            promise.reject("CHAT_NAVIGATION_UNCERTAIN",
+                "The WhatsApp chat action was not verified. No automatic retry.")
+        }
+    }
+
+    /**
+     * Owner-reviewed composition ONLY: match actual WhatsApp package,
+     * identical recipient header, one empty composer, exact text and durable
+     * no-replay claim. Pressing Send is NEVER exposed to the agent.
+     */
+    @ReactMethod
+    fun performReviewedWhatsAppDraft(recipientHint:String,exactText:String,
+                                     sessionId:String,callId:String,fingerprint:String,
+                                     promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,sessionId,callId,
+                fingerprint,"screen.compose_whatsapp",
+                JSONObject().put("recipientHint",recipientHint)
+                    .put("exactText",exactText))){
+            promise.reject("MESSAGE_STEP_NOT_CLAIMED",
+                "The recipient and exact draft text were not approved for this step")
+            return
+        }
+        try {
+            if(!NexaWhatsAppChatActions.verifiedOpen(service,recipientHint) ||
+                !NexaMessageDraftState.stage(
+                    "whatsapp","com.whatsapp",recipientHint,exactText)){
+                promise.reject("MESSAGE_RECIPIENT_UNVERIFIED",
+                    "The exact selected chat is not open or draft data is invalid")
+                return
+            }
+            val preflight=NexaMessageInputActions.prepare(service)
+            if(!preflight.startsWith("One empty input box is visible")) {
+                NexaMessageDraftState.clear()
+                NexaMessageInputActions.cancel()
+                promise.reject("MESSAGE_COMPOSER_UNVERIFIED",
+                    "One safe, empty message input was not uniquely verified")
+                return
+            }
+            val outcome=NexaMessageInputActions.confirm(service,origin="chat")
+            if(!outcome.startsWith("Exact prepared text is visible") ||
+                !NexaWhatsAppChatActions.verifiedOpen(service,recipientHint)){
+                promise.reject("MESSAGE_DRAFT_UNCERTAIN",
+                    "The recipient or exact draft text was not verified; no automatic retry or send")
+                return
+            }
+            if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,
+                    sessionId,callId,fingerprint,"screen.compose_whatsapp",
+                    "exact_text_visible")){
+                promise.reject("MESSAGE_EVIDENCE_NOT_COMMITTED",
+                    "Exact draft was visible but parent task evidence could not be committed")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putString("verification","exact_text_visible")
+            result.putBoolean("recipientMatched",true)
+            result.putBoolean("submitted",false)
+            result.putBoolean("sent",false)
+            promise.resolve(result)
+        }catch(_:Exception){
+            NexaMessageDraftState.clear()
+            NexaMessageInputActions.cancel()
+            promise.reject("MESSAGE_DRAFT_UNCERTAIN",
+                "Reviewed message preparation was not verified. No Send attempted.")
+        }
+    }
+
     /** Package-only evidence after an approved launcher Intent. */
     @ReactMethod
     fun observeLaunchedAppPackage(expectedPackage:String,promise:Promise) {
