@@ -152,7 +152,7 @@ internal object NexaMessageInputActions {
         } finally {try{root.recycle()}catch(_:Exception){}}
     }
 
-    fun confirm(service:ScreenAssistService):String {
+    fun confirm(service:ScreenAssistService,origin:String="overlay"):String {
         val approval=synchronized(lock){val x=prepared; prepared=null; x}
             ?: return "Message input confirmation was not requested or expired."
         if(SystemClock.elapsedRealtime()>=approval.expiresAt ||
@@ -183,7 +183,7 @@ internal object NexaMessageInputActions {
                 node.viewIdResourceName.orEmpty()!=approval.fieldId)
                 return "Message field moved or changed. No text was entered."
             if(!NexaUiActionJournal.claim(service,approval.token,"message_fill",
-                    approval.packageName,approval.reviewedDigest))
+                    approval.packageName,approval.reviewedDigest,origin=origin))
                 return "The durable one-time action journal is unavailable. No text entered."
             return try {
                 val args=Bundle().apply{
