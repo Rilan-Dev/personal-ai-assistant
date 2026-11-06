@@ -17,6 +17,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+import org.json.JSONObject
 
 /**
  * Small, explicitly scoped Android bridge. No accessibility, shell, SMS or
@@ -409,8 +410,16 @@ class DeviceControlModule(
     }
 
     @ReactMethod
-    fun performReviewedScreenTap(label:String,promise:Promise) {
+    fun performReviewedScreenTap(label:String,sessionId:String,callId:String,
+                                 fingerprint:String,promise:Promise) {
         val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.tap_label",
+                JSONObject().put("label",label))){
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED",
+                "This tap has no consumed owner-approved step mandate")
+            return
+        }
         try {
             var receipt:String?=null
             val result=NexaScreenLabelTap.approved(service,label,origin="chat",
@@ -428,12 +437,20 @@ class DeviceControlModule(
     }
 
     @ReactMethod
-    fun performReviewedScreenScroll(direction:String,promise:Promise) {
+    fun performReviewedScreenScroll(direction:String,sessionId:String,callId:String,
+                                    fingerprint:String,promise:Promise) {
         if(direction !in setOf("up","down","left","right")){
             promise.reject("INVALID_SCROLL","Unsupported scroll direction")
             return
         }
         val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.scroll",
+                JSONObject().put("direction",direction))){
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED",
+                "This scroll has no consumed owner-approved step mandate")
+            return
+        }
         try{
             val preflight=NexaScreenScroll.prepare(service,direction)
             if(!preflight.startsWith("Confirm scroll ") &&
@@ -467,8 +484,17 @@ class DeviceControlModule(
      * text/field/target digest; never press Enter, Submit or Send.
      */
     @ReactMethod
-    fun performReviewedScreenText(targetLabel:String,exactText:String,promise:Promise) {
+    fun performReviewedScreenText(targetLabel:String,exactText:String,
+                                  sessionId:String,callId:String,fingerprint:String,
+                                  promise:Promise) {
         val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.fill_text",
+                JSONObject().put("targetLabel",targetLabel).put("exactText",exactText))){
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED",
+                "Text entry has no consumed, exact owner-approved step mandate")
+            return
+        }
         try {
             if(!NexaTextInputState.stage(targetLabel,exactText)){
                 promise.reject("TEXT_REVIEW_INVALID","Unsafe or invalid reviewed text field")
