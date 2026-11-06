@@ -54,7 +54,9 @@ internal object NexaUiTaskAudit {
                                              packageDigest:String,
                                              now:Long):Boolean{
         val scope=NexaVoiceActionScope.active() ?:return true
-        if(NexaVoiceActionScope.expectedUiKind(scope.command)!=actionKind)
+        if(NexaVoiceActionScope.expectedUiKind(scope.command)!=actionKind ||
+            !scope.packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
+            digest(scope.packageName)!=packageDigest)
             return false
         val stepId=db.rawQuery(
             "SELECT s.step_id FROM agent_tasks t "+
