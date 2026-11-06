@@ -194,7 +194,15 @@ class RealtimeVoiceService : Service() {
                             pending.approvedBySavedPolicy,
                             pending.screenBinding?.structureDigest.orEmpty())
                         else true
-                    val outcome = try { when {
+                    val outcome = try {
+                        NexaVoiceActionScope.during(
+                            task!=null && checkpointOk && !staleTask &&
+                                active.get() && operationSession==voiceSessionId &&
+                                approved && age in 0..60_000L && policyStillValid &&
+                                screenStillGrounded && boundStep,
+                            task?.taskId.orEmpty(),operationSession,task?.stepIndex ?: -1,
+                            pending.command
+                        ) { when {
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
                     staleTask || !active.get() || operationSession != voiceSessionId ->
                         "Session or task changed; no action performed."
@@ -236,7 +244,8 @@ class RealtimeVoiceService : Service() {
                     pending.installedApp != null ->
                         NexaPhoneVoiceTools.launchApproved(this,pending.installedApp)
                     else -> NexaOverlayCommands.handle(this,pending.command)
-                } } catch (failure:Exception) {
+                } }
+                } catch (failure:Exception) {
                     "Android refused the approved screen action ("+
                         failure.javaClass.simpleName+"). No automatic retry."
                 }
