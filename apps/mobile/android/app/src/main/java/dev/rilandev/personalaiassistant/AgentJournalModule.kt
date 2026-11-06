@@ -519,8 +519,15 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                         old.optString("fingerprint") == fp
                     else old == null
                 if (!permitted) p.resolve(false)
-                else {
-                    // Synchronous encrypted commit precedes the native tool invocation.
+                else if (!NexaAgentActionAudit.claim(
+                        reactApplicationContext,s,c,fp,requiresApproval)) {
+                    // Canonical durable ledger is the first no-replay fence.
+                    // Do not dispatch when that reservation is unavailable.
+                    p.resolve(false)
+                } else {
+                    // Existing secure journal still owns final action approval.
+                    // If this write fails the earlier SQLite claim remains a
+                    // terminal no-replay tombstone, never a reusable grant.
                     write(k, record("claimed", fp)); p.resolve(true)
                 }
             }
@@ -532,6 +539,12 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
                 val k = action(s,c)
                 val old = existing(k)
                 check(old?.optString("status") == "claimed")
+                // Record only dispatch settlement, never external fulfillment.
+                // A failed audit write leaves the encrypted action already
+                // claimed, so Android cannot receive an automatic replay.
+                check(NexaAgentActionAudit.recordSettlement(
+                    reactApplicationContext,s,c,
+                    old.getString("fingerprint"),uncertain))
                 write(k, record(if (uncertain) "uncertain" else "settled",
                     old.getString("fingerprint")))
             }
