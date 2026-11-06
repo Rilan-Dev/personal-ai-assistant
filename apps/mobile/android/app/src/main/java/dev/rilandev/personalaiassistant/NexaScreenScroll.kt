@@ -113,7 +113,7 @@ internal object NexaScreenScroll {
         } else true
     }
 
-    fun confirm(service: ScreenAssistService, origin:String="overlay"): String {
+    fun confirm(service: ScreenAssistService, origin:String="overlay", claimedToken:(String)->Unit={}): String {
         val approved=synchronized(lock){
             val t=pending
             pending=null // claim before dispatch; no retry, even if the OS result is uncertain
@@ -130,7 +130,7 @@ internal object NexaScreenScroll {
             if(approved.classname=="__home_launcher_swipe__") {
                 if(!NexaLauncherSwipe.isHome(service,root))
                     return "Launcher changed; no swipe allowed."
-                return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token,approved.pauseGeneration)
+                return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token,approved.pauseGeneration,claimedToken)
             }
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
@@ -159,6 +159,7 @@ internal object NexaScreenScroll {
             val direction="scroll_"+approved.direction
             if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg,origin=origin))
                 return "Secure action journal unavailable or approval already used. No scroll requested."
+            claimedToken(approved.token)
             val action=scrollAction(approved.direction)
             val before=NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
