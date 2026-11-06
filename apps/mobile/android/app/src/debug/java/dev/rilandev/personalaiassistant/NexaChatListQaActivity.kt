@@ -13,18 +13,19 @@ import android.widget.TextView
 class NexaChatListQaActivity:Activity() {
     lateinit var messageInput:EditText
         private set
-    companion object {
-        @Volatile var duplicateContact=false
-        @Volatile var chatRowClicks=0
-        @Volatile var sendClicks=0
-        @Volatile var opened=false
-    }
+    private var duplicateContact=false
+    private var chatRowClicks=0
+    private var sendClicks=0
+    private var opened=false
+    private var qaRunId=""
     private fun base()=LinearLayout(this).apply {
         orientation=LinearLayout.VERTICAL
         setPadding(22,24,22,24)
     }
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
+        duplicateContact=intent.getBooleanExtra("duplicate",false)
+        qaRunId=intent.getStringExtra("qa_run").orEmpty()
         chatRowClicks=0;sendClicks=0;opened=false
         showChatList()
     }
@@ -35,6 +36,7 @@ class NexaChatListQaActivity:Activity() {
             setContentDescription("WhatsApp - Synthetic QA only")
             importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_YES
         })
+        area.addView(status())
         area.addView(TextView(this).apply { text="Ask Meta AI or Search" })
         fun addRow(name:String) {
             val row=LinearLayout(this).apply{
@@ -71,6 +73,7 @@ class NexaChatListQaActivity:Activity() {
             contentDescription="WhatsApp - Synthetic QA only"
             importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_YES
         })
+        area.addView(status())
         area.addView(TextView(this).apply{
             text="Nova Forever 🖤";contentDescription="Nova Forever 🖤"
             textSize=19f
@@ -83,8 +86,12 @@ class NexaChatListQaActivity:Activity() {
         area.addView(messageInput)
         area.addView(Button(this).apply{
             text="Send"
-            setOnClickListener{sendClicks++}
+            setOnClickListener{sendClicks++;showConversation()}
         })
         setContentView(area)
+    }
+    private fun status()=TextView(this).apply {
+        text="QA run: $qaRunId · Duplicate contacts: $duplicateContact · Chat row clicks: $chatRowClicks · Send clicks: $sendClicks · Opened: $opened"
+        contentDescription=text.toString()
     }
 }

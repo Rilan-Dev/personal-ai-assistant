@@ -1,11 +1,8 @@
 package dev.rilandev.personalaiassistant
 
-import android.os.SystemClock
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -14,20 +11,36 @@ import org.junit.runner.RunWith
  * No WhatsApp account, real contact, communications permission or sending. */
 @RunWith(AndroidJUnit4::class)
 class NexaWhatsAppChatUiAndroidTest {
-    private fun root():AccessibilityNodeInfo =
-        NexaQaAccessibilityRoot.ownWindow("WhatsApp - Synthetic QA only")
+    @Test fun partiallyClippedTargetNeedsAtLeastEightyPercentVisible() {
+        val window=android.graphics.Rect(0,0,1080,2400)
+        assertEquals(android.graphics.Rect(0,328,910,445),
+            NexaWhatsAppChatActions.visibleTargetBounds(
+                android.graphics.Rect(-125,328,910,445),window))
+        assertNull(NexaWhatsAppChatActions.visibleTargetBounds(
+            android.graphics.Rect(-500,328,100,445),window))
+        assertNull(NexaWhatsAppChatActions.visibleTargetBounds(
+            android.graphics.Rect(1200,328,1400,445),window))
+    }
+
+    private fun root(runId:String):AccessibilityNodeInfo =
+        NexaQaAccessibilityRoot.ownWindow("QA run: $runId")
+
+    private fun fixtureTree(root:AccessibilityNodeInfo)=NexaQaAccessibilityRoot.nodes(root)
+        .joinToString(" | ") { node ->
+            "${node.className}:${node.text}:${node.contentDescription}:${node.isClickable}:${android.graphics.Rect().also{node.getBoundsInScreen(it)}}"
+        }
 
     @Test fun duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader() {
-        NexaChatListQaActivity.duplicateContact=false
-        ActivityScenario.launch(NexaChatListQaActivity::class.java).use{ scenario ->
-            val initial=root()
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
+        try {
+            val initial=root(runId)
             val scan=NexaWhatsAppChatActions.inspect(initial,"Nova Forever")
             assertEquals("One clickable chat-row target",1,scan.candidates)
             assertEquals(100,scan.bestEvidence)
             assertFalse(scan.alreadyOpen)
             assertNotNull(scan.target)
             assertTrue(scan.target!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            root().let { current ->
+            root(runId).let { current ->
                 assertTrue("New chat header + message composer must both be present",
                     NexaWhatsAppChatActions.inspect(current,"Nova Forever").alreadyOpen)
                 val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -54,36 +67,45 @@ class NexaWhatsAppChatUiAndroidTest {
                 assertTrue("Android must accept a single composer text insertion",
                     composers.single().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,payload))
             }
-            scenario.onActivity {
-                assertEquals(1,NexaChatListQaActivity.chatRowClicks)
-                assertEquals("Synthetic test: I will call later",
-                    it.messageInput.text.toString())
-                assertEquals(0,NexaChatListQaActivity.sendClicks)
-                assertTrue(NexaChatListQaActivity.opened)
-            }
+            val after=NexaQaAccessibilityRoot.waitForText(runId,
+                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Send clicks: 0 · Opened: true")
+            assertTrue(NexaQaAccessibilityRoot.nodes(after).any{
+                it.text?.toString()=="Synthetic test: I will call later"
+            })
+            assertTrue(NexaQaAccessibilityRoot.nodes(after).any{
+                it.text?.toString()?.contains("Chat row clicks: 1 · Send clicks: 0 · Opened: true")==true
+            })
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
         }
     }
     @Test fun uncertainSpeechVariantCanBeFoundButNotWrongAlias() {
-        NexaChatListQaActivity.duplicateContact=false
-        ActivityScenario.launch(NexaChatListQaActivity::class.java).use{
-            val current=root()
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
+        try {
+            val current=root(runId)
             val close=NexaWhatsAppChatActions.inspect(current,"Nva Forever")
-            assertEquals(1,close.candidates)
+            assertEquals(fixtureTree(current),1,close.candidates)
             assertEquals(85,close.bestEvidence)
             assertEquals(0,NexaWhatsAppChatActions.inspect(current,"Map Forward").candidates)
-            assertEquals(0,NexaChatListQaActivity.sendClicks)
+            assertTrue(NexaQaAccessibilityRoot.nodes(current).any{
+                it.text?.toString()?.contains("Duplicate contacts: false · Chat row clicks: 0 · Send clicks: 0 · Opened: false")==true
+            })
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
         }
     }
     @Test fun twoIdenticalChatRowsRemainAmbiguousAndAreNeverTapped() {
-        NexaChatListQaActivity.duplicateContact=true
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,true)
         try {
-            ActivityScenario.launch(NexaChatListQaActivity::class.java).use{
-                val scan=NexaWhatsAppChatActions.inspect(root(),"Nova Forever")
-                assertEquals(2,scan.candidates)
-                assertNull("Two different rows cannot become an approved target",scan.target)
-                assertEquals(0,NexaChatListQaActivity.chatRowClicks)
-                assertEquals(0,NexaChatListQaActivity.sendClicks)
-            }
-        }finally {NexaChatListQaActivity.duplicateContact=false}
+            val current=root(runId)
+            val scan=NexaWhatsAppChatActions.inspect(current,"Nova Forever")
+            assertEquals(fixtureTree(current),2,scan.candidates)
+            assertNull("Two different rows cannot become an approved target",scan.target)
+            assertTrue(NexaQaAccessibilityRoot.nodes(current).any{
+                it.text?.toString()?.contains("Duplicate contacts: true · Chat row clicks: 0 · Send clicks: 0 · Opened: false")==true
+            })
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
+        }
     }
 }

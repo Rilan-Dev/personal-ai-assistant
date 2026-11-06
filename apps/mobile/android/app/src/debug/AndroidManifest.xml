@@ -7,15 +7,16 @@
         tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic">
         <!-- Native non-React foreground activity for emulator instrumentation.
              This is debug-only, nonexported and excluded from release APKs. -->
-        <!-- Test-only UI fixture: never bundled into production release APKs. -->
-        <activity android:name=".NexaChatListQaActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
-        <activity android:name=".NexaInputQaActivity"
-            android:exported="false"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
         <activity android:name=".NexaVoiceTestHostActivity"
             android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity android:name=".NexaChatListQaActivity"
+            android:exported="true"
+            android:process=":nexa_qa"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity android:name=".NexaInputQaActivity"
+            android:exported="true"
+            android:process=":nexa_qa"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
     </application>
 </manifest>

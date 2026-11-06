@@ -4,12 +4,26 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
+import java.io.FileInputStream
+import java.util.UUID
 
 /** Strict, test-only Accessibility root selection for owner-isolated emulator.
  * ActiveWindow can point at a lingering IME or system permission dialog.
  * Never inspect any non-app window's text or return its nodes to the tests.
  */
 internal object NexaQaAccessibilityRoot {
+    fun nodes(root:AccessibilityNodeInfo):List<AccessibilityNodeInfo> {
+        val result=mutableListOf<AccessibilityNodeInfo>()
+        val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        while(queue.isNotEmpty()&&result.size<160) {
+            val node=queue.removeFirst()
+            result.add(node)
+            for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
+        }
+        return result
+    }
+
     private fun matchesFixture(root:AccessibilityNodeInfo,marker:String):Boolean {
         val bounds=android.graphics.Rect().also{root.getBoundsInScreen(it)}
         if(bounds.width()<=0 || bounds.height()<=0 || root.childCount<=0)return false
@@ -18,8 +32,8 @@ internal object NexaQaAccessibilityRoot {
         var visited=0
         while(queue.isNotEmpty()&&visited++<160) {
             val node=queue.removeFirst()
-            if(node.text?.toString()==marker ||
-                node.contentDescription?.toString()==marker)return true
+            if(node.text?.toString()?.startsWith(marker)==true ||
+                node.contentDescription?.toString()?.startsWith(marker)==true)return true
             for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
         }
         return false
@@ -47,11 +61,13 @@ internal object NexaQaAccessibilityRoot {
                 observedPackage=pkg
                 if(pkg==app && matchesFixture(active,marker))return active
             }
-            val windows=try{automation.windows}catch(_:Exception){emptyList()}
-            for(window in windows) {
-                val root=try{window.root}catch(_:Exception){null}?:continue
-                if(root.packageName?.toString()==app &&
-                    matchesFixture(root,marker))return root
+            if(it%4==0) {
+                val windows=try{automation.windows}catch(_:Exception){emptyList()}
+                for(window in windows) {
+                    val root=try{window.root}catch(_:Exception){null}?:continue
+                    if(root.packageName?.toString()==app &&
+                        matchesFixture(root,marker))return root
+                }
             }
             SystemClock.sleep(100L)
         }
@@ -59,5 +75,32 @@ internal object NexaQaAccessibilityRoot {
         // or any credential or personal contact.
         throw AssertionError("Synthetic target window not accessible/ready; active package="+
             observedPackage.take(75))
+    }
+
+    fun launchFixture(activity:Class<*>,duplicate:Boolean?=null):String {
+        val packageName=InstrumentationRegistry.getInstrumentation().targetContext.packageName
+        val component="$packageName/${activity.name}"
+        val extra=duplicate?.let { " --ez duplicate $it" }.orEmpty()
+        val runId=UUID.randomUUID().toString().replace("-","")
+        val descriptor=InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("am start -n $component -f 0x10008000$extra --es qa_run $runId")
+        val output=FileInputStream(descriptor.fileDescriptor).bufferedReader().use{it.readText()}
+        check(!output.contains("Error",ignoreCase=true)) { "Could not launch synthetic test fixture" }
+        return runId
+    }
+
+    fun waitForText(runId:String,expected:String):AccessibilityNodeInfo {
+        repeat(50) {
+            val root=ownWindow("QA run: $runId")
+            if(nodes(root).any{it.text?.toString()==expected})return root
+            SystemClock.sleep(100L)
+        }
+        throw AssertionError("Synthetic fixture did not expose the reviewed text outcome")
+    }
+
+    fun closeFixture() {
+        val descriptor=InstrumentationRegistry.getInstrumentation().uiAutomation
+            .executeShellCommand("input keyevent 4")
+        FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
     }
 }

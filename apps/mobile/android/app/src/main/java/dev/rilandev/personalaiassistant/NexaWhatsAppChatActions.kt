@@ -28,6 +28,21 @@ internal object NexaWhatsAppChatActions {
         return minWidth>0 && minHeight>0 &&
             overlap.width()*5>=minWidth*4 && overlap.height()*2>=minHeight
     }
+    /** Return the on-screen portion only when most of the semantic target is
+     * actually visible. Android can report decor bounds slightly outside the
+     * app window during edge-to-edge/instrumented windows; rejecting every
+     * partially clipped node loses a clear target, while accepting a sliver
+     * would make a tap unsafe. The click still uses the live accessibility
+     * node, never these bounds as a coordinate. */
+    internal fun visibleTargetBounds(bounds:Rect,window:Rect):Rect? {
+        if(bounds.isEmpty || window.isEmpty)return null
+        val visible=Rect(bounds)
+        if(!visible.intersect(window))return null
+        val targetArea=bounds.width().toLong()*bounds.height().toLong()
+        val visibleArea=visible.width().toLong()*visible.height().toLong()
+        if(targetArea<=0L || visibleArea*5L<targetArea*4L)return null
+        return visible
+    }
     private fun messageComposerPresent(root:AccessibilityNodeInfo):Boolean {
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>();queue.add(root)
         var seen=0
@@ -70,9 +85,9 @@ internal object NexaWhatsAppChatActions {
                     candidate=candidate.parent
                 if(candidate!=null && candidate.isClickable && candidate.isEnabled &&
                     !candidate.isPassword && !candidate.isEditable) {
-                    val rect=Rect().also{candidate.getBoundsInScreen(it)}
-                    if(!rect.isEmpty && rect.width()>25 && rect.height()>20 &&
-                        window.contains(rect)) {
+                    val rawRect=Rect().also{candidate.getBoundsInScreen(it)}
+                    val rect=visibleTargetBounds(rawRect,window)
+                    if(rect!=null && rect.width()>25 && rect.height()>20) {
                         val previousIndex=rows.indexOfFirst{sameRow(it.bounds,rect)}
                         if(previousIndex<0)rows.add(Row(candidate,score,Rect(rect)))
                         else {

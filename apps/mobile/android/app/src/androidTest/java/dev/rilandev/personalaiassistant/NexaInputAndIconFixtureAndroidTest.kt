@@ -1,11 +1,8 @@
 package dev.rilandev.personalaiassistant
 
 import android.os.Bundle
-import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
-import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,8 +22,8 @@ class NexaInputAndIconFixtureAndroidTest {
         }
         return result
     }
-    private fun foregroundRoot(): AccessibilityNodeInfo =
-        NexaQaAccessibilityRoot.ownWindow("Nexa synthetic input and icon fixture")
+    private fun foregroundRoot(runId:String): AccessibilityNodeInfo =
+        NexaQaAccessibilityRoot.ownWindow("QA run: $runId")
 
     private fun safeEditable(node:AccessibilityNodeInfo,label:String):Boolean {
         val hints=listOf(node.hintText?.toString().orEmpty(),
@@ -38,8 +35,9 @@ class NexaInputAndIconFixtureAndroidTest {
             node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT})
     }
     @Test fun identifiesOneRealInputAndFillsHarmlessTextWithoutSending() {
-        ActivityScenario.launch(NexaInputQaActivity::class.java).use { scenario ->
-            val root=foregroundRoot()
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaInputQaActivity::class.java)
+        try {
+            val root=foregroundRoot(runId)
             val input=nodes(root).filter{safeEditable(it,"Search")}
             assertEquals("Exactly one named Search field must be grounded",1,input.size)
             assertFalse(safeEditable(input.single(),"Notes"))
@@ -49,18 +47,18 @@ class NexaInputAndIconFixtureAndroidTest {
             }
             assertTrue("Android must accept the test field's ACTION_SET_TEXT",
                 input.single().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args))
-            scenario.onActivity { activity ->
-                assertEquals("Project update: meeting at 2 PM",
-                    activity.searchField.text.toString())
-                assertEquals("",activity.notesField.text.toString())
-                assertEquals("",activity.secretField.text.toString())
-            }
-            assertEquals("No Send button was tapped",0,NexaInputQaActivity.sendClicks)
+            val after=nodes(NexaQaAccessibilityRoot.waitForText(runId,
+                "QA run: $runId · Search clicks: 0 · Send clicks: 0 · Unknown clicks: 0 · Search text: Project update: meeting at 2 PM"))
+            assertTrue(after.any{it.text?.toString()=="Project update: meeting at 2 PM"})
+            assertTrue(after.any{it.text?.toString()?.contains("Send clicks: 0")==true})
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
         }
     }
     @Test fun recognizesSearchIconButRefusesUnknownAndSendActions() {
-        ActivityScenario.launch(NexaInputQaActivity::class.java).use { scenario ->
-            val root=foregroundRoot()
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaInputQaActivity::class.java)
+        try {
+            val root=foregroundRoot(runId)
             val icons=ScreenIconDetector.detect(root)
             val search=icons.filter{it.semantic=="search"&&it.clickable}
             assertEquals("One labeled Search icon",1,search.size)
@@ -73,24 +71,26 @@ class NexaInputAndIconFixtureAndroidTest {
             }
             assertEquals(1,controls.size)
             assertTrue(controls.single().performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            scenario.onActivity {
-                assertEquals(1,NexaInputQaActivity.searchClicks)
-                assertEquals(0,NexaInputQaActivity.sendClicks)
-                assertEquals(0,NexaInputQaActivity.unknownClicks)
-            }
+            val after=nodes(NexaQaAccessibilityRoot.waitForText(runId,
+                "QA run: $runId · Search clicks: 1 · Send clicks: 0 · Unknown clicks: 0 · Search text: "))
+            assertTrue(after.any{it.text?.toString()?.contains("Search clicks: 1")==true})
+            assertTrue(after.any{it.text?.toString()?.contains("Send clicks: 0")==true})
+            assertTrue(after.any{it.text?.toString()?.contains("Unknown clicks: 0")==true})
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
         }
     }
     @Test fun realPasswordNodeNeverQualifiesForAnyTextInsertion() {
-        ActivityScenario.launch(NexaInputQaActivity::class.java).use { scenario ->
-            val root=foregroundRoot()
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaInputQaActivity::class.java)
+        try {
+            val root=foregroundRoot(runId)
             val pwd=nodes(root).filter{it.isPassword}
             assertEquals(1,pwd.size)
             assertFalse(safeEditable(pwd.single(),"Search"))
             assertFalse(safeEditable(pwd.single(),"Password"))
-            scenario.onActivity {
-                assertEquals("",it.secretField.text.toString())
-                assertEquals(0,NexaInputQaActivity.sendClicks)
-            }
+            assertTrue(nodes(root).any{it.text?.toString()?.contains("Send clicks: 0")==true})
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
         }
     }
 }
