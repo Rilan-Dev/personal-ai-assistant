@@ -815,12 +815,21 @@ internal object NexaTaskCoordinator {
             return "denied"
         val intent=context.packageManager.getLaunchIntentForPackage(packageName)
             ?:return "denied"
+        val pauseGeneration=NexaNativeActionSafety.approvalFence(context)
+            ?:return "denied"
         val token=UUID.randomUUID().toString()
         if(!NexaUiActionJournal.claim(context,token,"app_launch",packageName,
             origin=origin))return "denied"
         return try {
-            context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-            if(NexaUiActionJournal.finish(context,token,"android_accepted")) {
+            val launched=NexaNativeActionSafety.dispatchWithFence(
+                context,pauseGeneration) {
+                context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                true
+            }
+            if(launched!=true){
+                NexaUiActionJournal.finish(context,token,"android_rejected")
+                "denied"
+            }else if(NexaUiActionJournal.finish(context,token,"android_accepted")) {
                 // A successful Intent is only an OS dispatch receipt. Obtain
                 // a separate, one-shot package observation if Accessibility
                 // remains available; never wait, retry or infer task success.
