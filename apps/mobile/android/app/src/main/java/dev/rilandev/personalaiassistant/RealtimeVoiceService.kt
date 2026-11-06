@@ -87,6 +87,8 @@ class RealtimeVoiceService : Service() {
     ) {
         // An automatic low-risk approval is not a fresh human button tap.
         @Volatile var approvedBySavedPolicy:Boolean=false
+        // The exact third-party app/window visible at review time.
+        @Volatile var screenBinding:NexaVoiceScreenBinding.Bound?=null
     }
     private var pendingAppTool: PendingAppTool? = null
     private var currentCompound: NexaVoiceTaskCursor? = null
@@ -178,14 +180,19 @@ class RealtimeVoiceService : Service() {
                     val staleTask=task!=null && currentCompound!==task
                     val policyStillValid=!pending.approvedBySavedPolicy ||
                         NexaVoicePermissionPolicy.canExecute(this,pending.command)
+                    val screenStillGrounded=!NexaVoiceScreenBinding.requires(pending.command) ||
+                        NexaVoiceScreenBinding.stillMatches(this,pending.screenBinding)
                     val boundStep=if(task!=null && checkpointOk && !staleTask &&
                         active.get() && operationSession==voiceSessionId &&
-                        approved && age in 0..60_000L && policyStillValid)
+                        approved && age in 0..60_000L && policyStillValid &&
+                        screenStillGrounded)
                         NexaLegacyVoiceStepApproval.consume(
                             this,task.taskId,operationSession,task.stepIndex,
                             task.current().orEmpty(),pending.command,
-                            pending.installedApp?.packageName.orEmpty(),
-                            pending.approvedBySavedPolicy)
+                            pending.screenBinding?.packageName ?:
+                                pending.installedApp?.packageName.orEmpty(),
+                            pending.approvedBySavedPolicy,
+                            pending.screenBinding?.structureDigest.orEmpty())
                         else true
                     val outcome = try { when {
                     !checkpointOk -> "Task checkpoint could not be saved. No action executed."
@@ -194,6 +201,7 @@ class RealtimeVoiceService : Service() {
                     !approved -> "Denied by owner. No device operation performed."
                     age !in 0..60_000L -> "Approval expired. Request it again."
                     !policyStillValid -> "Saved Voice permission was revoked. No action performed."
+                    !screenStillGrounded -> "The reviewed Android app or screen changed. No action performed."
                     !boundStep -> "Voice step authorization was not durably consumed. No action performed."
                     pending.command.startsWith("chrome_search:") ->
                         NexaBrowserTaskActions.openChromeSearchApproved(
@@ -902,6 +910,8 @@ class RealtimeVoiceService : Service() {
     }
 
     private fun offerOwnerTool(tool:PendingAppTool) {
+        if(NexaVoiceScreenBinding.requires(tool.command))
+            tool.screenBinding=NexaVoiceScreenBinding.capture(this)
         expirePendingTool(tool)
         // An app discovered by fuzzy launcher label matching may be wrong.
         // Always show its exact target for review, even in trusted navigation.
