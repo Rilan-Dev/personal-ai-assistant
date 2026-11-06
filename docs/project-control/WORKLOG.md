@@ -1,5 +1,13 @@
 # Worklog
 
+## 2026-11-07 — Generation-scoped reviewed Android action dispatch
+- Implemented and committed the native owner-Pause generation fence across reviewed external text input, exact message-field insertion, icon taps, semantic label taps, scrolls and launcher swipes, uniquely grounded WhatsApp chat rows, and approved app launching.
+- The final Android effect uses `NexaNativeActionSafety.dispatchWithFence` under the same native lock as Pause, preventing dispatch after a stale approval (even after Resume). It supplements, never replaces, the existing permanent one-shot SQLite action claim. No message Send, model-granted approval, multi-step auto executor or new permission was enabled.
+- Added `NexaNativeActionSafetyAndroidTest.pauseAndResumeInvalidateEveryStagedNativeActionFence` and Node source-contract regressions. On combined Development `d8a458c84da2`, 399/399 Node tests, TypeScript and Expo web export passed; app and instrumentation-test Kotlin compilation previously passed on `70eab05e1f83` (BUILD SUCCESSFUL, 153 tasks).
+- Fresh QA clone cannot assemble a debug APK without its untracked debug keystore; this is a local test-signing requirement, not a source compile failure. A disposable debug-only signing identity is used for the isolated rebuild; real release signing remains CI-only. The exact-build APK and new on-device test result must be recorded separately. No `main` promotion, no production Docker mutation or third-party message delivery.
+- Upstream code review pinned LangGraph.js `03981062e9` and Deep Agents JS `2160d187f5`; no upstream implementation code copied and no additional agent execution loop was added. Remaining general-purpose Android task scheduling, observed multi-screen execution, provider-backed voice and current-SHA device/release certification remain separate.
+
+
 ## 2026-11-07 — Current signed APK passed emulator suites; upgraded physical phone
 - GitHub Actions signed release-test workflow `42231566298` succeeded for Development `fbda03447d44072b1124f294fed22f810038086b`. Installed version `0.3.1800066237` on emulator and Infinix; the APK artifact hash matches `3f9ee0f0d326957037068016f799e9f0b9dfd4f19884dc1549547139425cfd3d`.
 - Fixed emulator DNS and reran all fourteen main Maestro flows together: 14/14 passed in 17m 57s. Four experimental flows passed together: 4/4 in 4m 6s. Chrome is stopped after its search result to prevent delayed activity transitions; the email gate corrects an observed duplicated IME character before sending its local request; installed-app acceptance uses Clock to avoid Calendar's account setup.
