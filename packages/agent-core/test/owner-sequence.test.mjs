@@ -123,3 +123,23 @@ test("changed step argument and fake evidence stop the continuation",async()=>{
   }]);
   assert.equal(fake.type,"clarify");
 });
+
+
+test("six-step sequence has an extra completion turn and never claims success early",async()=>{
+  const request="Check battery then check storage then check device status "+
+    "then check battery then check storage then check device status";
+  const steps=parseOwnerMultiToolRequest(request);
+  assert.equal(steps?.length,6);
+  const data={
+    "device.battery_status":{levelPercent:50,charging:false},
+    "device.storage_status":{totalGb:64,freeGb:24},
+    "device.status":{platform:"android",accessibilityEnabled:false}
+  };
+  const planner=createOwnerSequentialPlanner(androidIntentPlanner);
+  const observations=steps.map(call=>({call,outcome:{
+    status:"success",data:data[call.toolId]
+  }}));
+  const end=await planner.next(request,observations);
+  assert.equal(end.type,"done");
+  assert.match(end.response,/6 owner-requested steps/);
+});
