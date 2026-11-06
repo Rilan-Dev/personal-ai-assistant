@@ -19,7 +19,7 @@ internal object NexaScreenActionPolicy {
 }
 internal data class OverlayScreenSnapshot(
     val token: String, val packageName: String, val windowId: Int,
-    val expiresAt: Long, val icons: List<ObservedIcon>
+    val expiresAt: Long, val icons: List<ObservedIcon>, val pauseGeneration: Long
 )
 internal object NexaScreenActions {
     private val lock = Any()
@@ -45,8 +45,10 @@ internal object NexaScreenActions {
                 return null to "Protected, system or Nexa window; inspection refused."
             }
             val icons = ScreenIconDetector.detect(root).take(24)
+            val generation=NexaNativeActionSafety.approvalFence(service)
+                ?:return null to "Device actions are paused. No action review started."
             val snapshot = OverlayScreenSnapshot(UUID.randomUUID().toString(), pkg,
-                root.windowId, SystemClock.elapsedRealtime() + 12_000L, icons)
+                root.windowId, SystemClock.elapsedRealtime() + 12_000L, icons,generation)
             synchronized(lock) { current = snapshot }
             return snapshot to "Visible icon metadata captured. Choose an allowed action for confirmation."
         } finally {
@@ -89,6 +91,8 @@ internal object NexaScreenActions {
             snap to selected
         }
         val (snapshot, icon) = candidate
+        if(!NexaNativeActionSafety.approvalFenceCurrent(service,snapshot.pauseGeneration))
+            return "Owner paused device actions since inspection. Review a fresh icon."
         if (!ScreenAssistState.connected) return "Screen Assist was disabled. No action requested."
         val keyguard = service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if (keyguard?.isKeyguardLocked == true) return "Screen locked. No action requested."
@@ -127,12 +131,22 @@ internal object NexaScreenActions {
             }
             // Observed target must still have exactly one matching actionable node.
             if (duplicate || matched == null) return "Target changed or ambiguous. No action requested."
+            val target=matched
             if (!NexaUiActionJournal.claim(service, snapshot.token, "tap", snapshot.packageName,
                 origin=origin))
                 return "Secure action journal unavailable or approval already used. No click requested."
             val before = NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(snapshot.token,"tap",snapshot.packageName,root.windowId,before)
-            return if (matched.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+            val clicked=NexaNativeActionSafety.dispatchWithFence(
+                service,snapshot.pauseGeneration) {
+                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            if(clicked==null) {
+                NexaUiActionVerifier.cancel(snapshot.token)
+                NexaUiActionJournal.finish(service,snapshot.token,"android_rejected")
+                return "Owner paused actions since review. No click dispatched."
+            }
+            return if (clicked) {
                 NexaUiActionVerifier.observeAfter(service,snapshot.token,before)
                 if (!NexaUiActionJournal.finish(service,snapshot.token,"android_accepted"))
                     "Android accepted a click request; journal outcome uncertain. No retry."
