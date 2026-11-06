@@ -21,3 +21,14 @@ Nexa should accept a task through Chat, Hey Nexa, or the floating overlay; ident
 Android's Accessibility, notification, overlay, microphone, and contacts access require the user to grant the applicable OS permissions. Nexa cannot silently enable or bypass them. A user-selected persistent task policy can reduce repeated in-app prompts for routine taps and scrolling, while keeping revocation visible. Secure or unsupported apps may block observation or interaction and must be reported as such.
 
 Acceptance must exercise real emulator screens, including ambiguous app/recipient choice, stale coordinates, app switches, input field verification, cancellation, process restart, and no accidental message sends. A provider key exposed in chat should be rotated before live Sarvam tests and entered directly in Nexa's private settings.
+
+## 2026-11-06 — Canonical safe screen observation and owner-approved launcher audit
+
+Implemented in `Development`:
+- `NexaTaskScreenObservation` reads one fresh, visible external Accessibility window behind Nexa, capped at 180 traversed nodes and 12 controls. It returns only short, sanitized **clickable control labels** and coarse on-screen zones. Editable/password values, screenshots, raw coordinates, URLs, phone/email content and untrusted instructions are not retained.
+- The literal owner intent `visible screen controls` is now recognized by the same Kotlin `NexaTaskCoordinator` as battery/storage. Its claimed read step has a persisted `android_accessibility` observation digest. Saved read-only plans can include the same tool; the separate debug-only gate still controls their activation.
+- Chat exposes `device.visible_controls` behind an explicit medium-risk owner approval and a foreground, connected Screen Assist check. Chat's tool cannot choose a native action, tap any control, or obtain editable text.
+- Chat and owner-approved Voice app launches now dispatch through `NexaTaskCoordinator.dispatchOwnerApprovedAppLaunch`. It rechecks the uniquely installed package/visible label; then `NexaUiActionJournal` commits a permanent `app_launch` claim, consumed audit receipt and trusted origin **before** Android's Intent. A successful Intent is marked `android_accepted` / `not_observed`, never navigation or task success; no automatic retries occur.
+- These UI action receipts remain audit-only. The existing RN Chat and visible Voice owner confirmations still authorize the request, with Screen Assist, native package/window and one-shot controls unchanged. No second AI planner or action executor was introduced.
+
+Still pending: convert multi-step UI actions into one parent Kotlin task ID with per-step versioned mandates, post-launch observed package verification, safe replay-free continuation, exact recipient/chat observation, and owner-controlled final Send. Generic arbitrary Accessibility autonomy and production execution remain disabled.
