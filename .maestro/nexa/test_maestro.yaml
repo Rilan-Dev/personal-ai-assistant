@@ -1,0 +1,24 @@
+appId: com.transsion.XOSLauncher
+name: Maestro Test
+tags:
+  - nexa
+  - smoke
+  - cloud
+---
+- launchApp:
+    clearState: false
+    permissions:
+      all: allow
+# - runFlow:
+#     when:
+#       visible: "Don.t allow"
+#     commands:
+#       - tapOn: "Don.t allow"
+# - extendedWaitUntil:
+#     visible: 'Make your assistant yours.'
+#     timeout: 30000
+# - assertVisible: "Record"
+# - takeScreenshot: nexa-fresh-setup
+# - tapOn: "Record"
+- tapOn:
+    id: "folder_icon_b_r_bg"

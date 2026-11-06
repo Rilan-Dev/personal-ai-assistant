@@ -4,13 +4,15 @@ import {spawnSync} from "node:child_process";
 import {readFileSync,mkdtempSync,writeFileSync,chmodSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {delimiter,join} from "node:path";
+import {python3Command} from "./python-command.mjs";
 
 const script="scripts/acceptance/android_build_preflight.py";
+const python3=python3Command();
 
 test("Android build preflight is read-only and reports actionable results",()=>{
   const src=readFileSync(script,"utf8");
   assert.doesNotMatch(src,/sdkmanager|gradlew|git push|gh workflow run|rm -rf|subprocess\.Popen/);
-  const r=spawnSync("python3",[script,"--mode","compile","--json"],{
+  const r=spawnSync(python3,[script,"--mode","compile","--json"],{
     encoding:"utf8",timeout:10000
   });
   assert.ok([0,2].includes(r.status),r.stderr);
@@ -24,7 +26,7 @@ test("Android build preflight is read-only and reports actionable results",()=>{
 });
 
 test("Emulator preflight checks hardware acceleration and stricter capacity",()=>{
-  const r=spawnSync("python3",[script,"--mode","emulator","--json"],{
+  const r=spawnSync(python3,[script,"--mode","emulator","--json"],{
     encoding:"utf8",timeout:10000
   });
   assert.ok([0,2].includes(r.status),r.stderr);
@@ -43,7 +45,7 @@ test("JDK version check runs under Python 3.6 using portable subprocess argument
       ? "@echo off\r\necho openjdk version \"21.0.12.1\" 1>&2\r\n"
       : ["#!/bin/sh", "echo 'openjdk version \"21.0.12.1\"' >&2", ""].join("\n"));
     if(!windows)chmodSync(fake,0o755);
-    const result=spawnSync("python3",[script,"--mode","compile","--json"],{
+    const result=spawnSync(python3,[script,"--mode","compile","--json"],{
       encoding:"utf8",timeout:10000,
       env:{...process.env,PATH:work+delimiter+process.env.PATH}
     });

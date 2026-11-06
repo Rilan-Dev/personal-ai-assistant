@@ -127,6 +127,11 @@ android {
     }
     buildTypes {
         debug {
+            // Local device QA can keep the signed release-test app and its
+            // owner settings while installing the separately signed debug APK.
+            if ((findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()) {
+                applicationIdSuffix '.debug'
+            }
             // Development-only: reviewed, low-risk native reads require an
             // explicit owner Run press. Production release stays disabled.
             buildConfigField "boolean", "NEXA_REVIEWED_READ_PLAN_ENABLED", "true"

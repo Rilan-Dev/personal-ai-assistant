@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import {python3Command} from "./python-command.mjs";
 
 test("physical Android UAT kit is opt-in, reads no PII, and never controls hardware automatically", () => {
   const source = readFileSync("scripts/acceptance/android_device.py","utf8");
@@ -19,9 +20,7 @@ test("physical Android UAT kit is opt-in, reads no PII, and never controls hardw
 });
 test("owner acceptance kit fails closed when no ADB/phone is connected", () => {
   const windows=process.platform==="win32";
-  const python=windows
-    ? spawnSync("where.exe",["python3"],{encoding:"utf8"}).stdout.trim().split(/\r?\n/)[0]
-    : "python3";
+  const python=python3Command();
   const result = spawnSync(python,["scripts/acceptance/android_device.py","--check"],
     {encoding:"utf8",env:{...process.env,PATH:windows?"":"/usr/bin:/bin"}});
   // No authorized device is connected on CI; invalid setups must not claim success.
