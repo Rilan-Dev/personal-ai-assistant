@@ -285,17 +285,14 @@ internal object NexaPhoneVoiceTools {
         return previous[right.length]
     }
 
-    /** Called ONLY after explicit approval in the visible native overlay. */
-    fun launchApproved(context:Context, app:AppChoice):String {
-        if(!app.packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,180}")))
-            return "Invalid Android application identifier."
-        val intent=context.packageManager.getLaunchIntentForPackage(app.packageName)
-            ?:return "${app.label} is not available to launch on this phone."
-        return try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            "${app.label} launch requested. Android has not confirmed the screen opened."
-        }catch (_:Exception){
-            "Android could not open ${app.label}."
+    /** Called ONLY after explicit approval in the visible native overlay.
+     * Same Kotlin task authority and one-shot audit claim as Chat app launch.
+     */
+    fun launchApproved(context:Context, app:AppChoice):String =
+        when(NexaTaskCoordinator.dispatchOwnerApprovedAppLaunch(
+            context,app.label,app.packageName,"live-voice")){
+            "accepted" -> "${app.label} launch requested. Android accepted the Intent, but the destination is not yet verified."
+            "uncertain" -> "App launch outcome is uncertain. Inspect the phone. No automatic retry."
+            else -> "Native owner-approved launch was refused. No app launch attempted."
         }
-    }
 }
