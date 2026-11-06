@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.Context
 import android.os.BatteryManager
 import android.app.StatusBarManager
+import android.app.KeyguardManager
 import android.content.ComponentName
 import android.graphics.drawable.Icon
 import android.os.Build
@@ -74,6 +75,35 @@ class DeviceControlModule(
         }catch (_:Exception){
             promise.reject("STORAGE_UNAVAILABLE","Could not read Android storage")
         }
+    }
+
+    /** This control is callable only from the unlocked foreground Nexa UI.
+     * Neither an AI tool nor a Voice provider receives this setter.
+     */
+    @ReactMethod
+    fun setNativeDeviceActionsPaused(paused:Boolean,promise:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            promise.reject("NOT_FOREGROUND",
+                "Open Nexa to pause or resume native device actions")
+            return
+        }
+        val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE)
+            as? android.app.KeyguardManager
+        if(keyguard?.isKeyguardLocked==true){
+            promise.reject("PHONE_LOCKED","Unlock your phone to change this control")
+            return
+        }
+        if(!NexaNativeActionSafety.setPaused(context,paused)){
+            promise.reject("SAFETY_STORAGE_FAILED",
+                "Could not persist owner device-action safety preference")
+            return
+        }
+        promise.resolve(NexaNativeActionSafety.isPaused(context))
+    }
+
+    @ReactMethod
+    fun nativeDeviceActionsPaused(promise:Promise){
+        promise.resolve(NexaNativeActionSafety.isPaused(context))
     }
 
     @ReactMethod
