@@ -388,13 +388,23 @@ class DeviceControlModule(
         return service
     }
 
-    private fun finishUiStepAfterObservation(token:String,kind:String,p:Promise) {
+    private fun finishUiStepAfterObservation(token:String,kind:String,
+                                              session:String,call:String,
+                                              fingerprint:String,toolId:String,
+                                              p:Promise) {
         android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
             try {
                 val status=NexaUiActionJournal.outcomeFor(context,token,kind)
                 val observed=status in setOf("observed_change",
                     "structural_change_observed","window_change_observed",
                     "scroll_event_observed")
+                if(observed && !NexaAgentActionAudit.recordReviewedUiEvidence(
+                        context,session,call,fingerprint,toolId,
+                        "observed_change",token)){
+                    p.reject("UI_EVIDENCE_NOT_COMMITTED",
+                        "Native UI change was observed but the parent task record is uncertain")
+                    return@postDelayed
+                }
                 val result=Arguments.createMap()
                 result.putBoolean("actionAccepted",true)
                 result.putString("verification",
@@ -430,7 +440,8 @@ class DeviceControlModule(
                     "Android rejected or could not uniquely ground the requested tap")
                 return
             }
-            finishUiStepAfterObservation(token,"tap",promise)
+            finishUiStepAfterObservation(token,"tap",sessionId,callId,
+                fingerprint,"screen.tap_label",promise)
         }catch(_:Exception){
             promise.reject("UI_TAP_UNCERTAIN","Tap outcome uncertain. No automatic replay.")
         }
@@ -470,7 +481,8 @@ class DeviceControlModule(
                     "Android did not verify scroll dispatch. No automatic retry.")
                 return
             }
-            finishUiStepAfterObservation(token,"scroll_"+direction,promise)
+            finishUiStepAfterObservation(token,"scroll_"+direction,
+                sessionId,callId,fingerprint,"screen.scroll",promise)
         }catch(_:Exception){
             NexaScreenScroll.cancel()
             promise.reject("SCROLL_OUTCOME_UNCERTAIN",
@@ -513,6 +525,13 @@ class DeviceControlModule(
             if(!visible){
                 promise.reject("TEXT_OUTCOME_UNCERTAIN",
                     "Reviewed text insertion was not verified. Nothing was submitted.")
+                return
+            }
+            if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,
+                    sessionId,callId,fingerprint,"screen.fill_text",
+                    "exact_text_visible")){
+                promise.reject("TEXT_PARENT_EVIDENCE_FAILED",
+                    "Native field verified the text, but could not commit the parent task evidence")
                 return
             }
             val result=Arguments.createMap()
