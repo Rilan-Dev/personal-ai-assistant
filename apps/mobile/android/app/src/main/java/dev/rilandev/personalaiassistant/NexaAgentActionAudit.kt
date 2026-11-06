@@ -1,98 +1,144 @@
 package dev.rilandev.personalaiassistant
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.UUID
 import org.json.JSONObject
 
 /**
- * Audit-only mirror for the EXISTING Chat AgentJournal action claim.
+ * The EXISTING Chat AgentJournal remains the sole approval / tool-execution
+ * authority. This is an AUDIT-ONLY mirror in the canonical encrypted task DB.
  *
- * The secure AgentJournal remains the sole approver/execution authority for
- * its tool calls. This class never dispatches Android actions, issues a mandate,
- * or interprets a settled journal entry as evidence of business completion.
+ * One owner request is represented by one agent-task identity derived from
+ * the Chat session. Subsequent tool calls in that request append bounded
+ * steps, never create competing task authorities. A call's SQLite claim is
+ * committed BEFORE AgentJournal's encrypted action-claim write. If either
+ * store fails, the claimed action is never replayed automatically.
  *
- * SQLite is claimed FIRST. If the later encrypted journal write fails the
- * SQLite claim remains an irreversible no-replay tombstone. Thus a crash
- * between the two storage systems can deny a retry, but cannot authorize one.
+ * A "settled" tool dispatch is NOT independently verified device action,
+ * external-app navigation, provider delivery, or business-task completion.
  */
 internal object NexaAgentActionAudit {
     const val POLICY="chat-action-audit-v1"
     private val lock=Any()
-    private val digestPattern=Regex("[0-9a-f]{64}")
+    private const val MAX_STEPS=8
+    private val shaPattern=Regex("[0-9a-f]{64}")
+    private val claimedStates=setOf("running","settled_unverified")
 
-    private fun sha(value:String):String =
+    private fun sha(text:String):String =
         MessageDigest.getInstance("SHA-256")
-            .digest(value.toByteArray(StandardCharsets.UTF_8))
+            .digest(text.toByteArray(StandardCharsets.UTF_8))
             .joinToString(""){"%02x".format(it.toInt() and 255)}
 
-    private fun identity(session:String,call:String):String =
+    private fun sessionKey(session:String):String =
+        sha("nexa-chat-request-v1:"+session.length+":"+session)
+
+    private fun callKey(session:String,call:String):String =
         sha("nexa-chat-action-v1:"+session.length+":"+session+":"+
             call.length+":"+call)
 
     private fun opaqueId(prefix:String,key:String):String =
         prefix+UUID.nameUUIDFromBytes(
-            (prefix+":"+key).toByteArray(StandardCharsets.UTF_8)
-        ).toString()
+            (prefix+":"+key).toByteArray(StandardCharsets.UTF_8)).toString()
 
     private fun valid(session:String,call:String,fingerprint:String):Boolean =
         session.length in 1..256 && call.length in 1..256 &&
         fingerprint.length in 1..4096 &&
         session.none{it.code<32} && call.none{it.code<32}
 
-    /**
-     * Reserve this old Chat journal action in the canonical v3 ledger BEFORE
-     * the calling bridge marks the secure journal as claimed. No model-supplied
-     * task id, tool permission, or plaintext arguments are stored.
-     */
+    /** A durable claim is a no-replay fence, not a grant or an executor. */
     fun claim(context:Context,session:String,call:String,
-              fingerprint:String,requiresApproval:Boolean):Boolean {
+              fingerprint:String,requiresApproval:Boolean):Boolean{
         if(!valid(session,call,fingerprint))return false
         return try{synchronized(lock){
-            val key=identity(session,call)
-            val taskId=opaqueId("task-",key)
-            val stepId=opaqueId("step-",key)
+            val ownerKey=sessionKey(session)
+            val actionKey=callKey(session,call)
+            val taskId=opaqueId("task-",ownerKey)
+            val stepId=opaqueId("step-",actionKey)
+            val opaqueSession="owner-chat-"+ownerKey.take(32)
             val now=System.currentTimeMillis()
             val helper=NexaConversationDb(context)
             try{
                 val db=helper.writableDatabase
                 db.beginTransaction()
                 try{
-                    val already=db.rawQuery(
-                        "SELECT 1 FROM agent_tasks WHERE task_id=? LIMIT 1",
+                    val prior=db.rawQuery(
+                        "SELECT session_id,origin,policy_version,status FROM agent_tasks "+
+                            "WHERE task_id=?",arrayOf(taskId)
+                    ).use{row->
+                        if(!row.moveToFirst())null
+                        else listOf(row.getString(0),row.getString(1),
+                            row.getString(2),row.getString(3))
+                    }
+                    if(prior==null){
+                        val goal=NexaConversationDb.sealNativeTaskArguments(
+                            "Chat request: individual tool settlements remain unverified")
+                        check(db.compileStatement(
+                            "INSERT INTO agent_tasks(task_id,session_id,origin,status,"+
+                                "policy_version,plan_revision,goal_cipher,created_at,updated_at) "+
+                                "VALUES(?,?,'chat','running',?,1,?,?,?)"
+                        ).use{stmt->
+                            stmt.bindString(1,taskId)
+                            stmt.bindString(2,opaqueSession)
+                            stmt.bindString(3,POLICY)
+                            stmt.bindBlob(4,goal)
+                            stmt.bindLong(5,now)
+                            stmt.bindLong(6,now)
+                            stmt.executeInsert()!=-1L
+                        })
+                    }else{
+                        if(prior.size!=4 || prior[0]!=opaqueSession ||
+                            prior[1]!="chat" || prior[2]!=POLICY ||
+                            prior[3] !in claimedStates)return@synchronized false
+                        // No second action while the preceding step is claimed,
+                        // uncertain, rejected, or yet to be reconciled.
+                        val unsafe=db.rawQuery(
+                            "SELECT 1 FROM agent_task_steps WHERE task_id=? "+
+                                "AND status<>'dispatch_settled' LIMIT 1",
+                            arrayOf(taskId)
+                        ).use{it.moveToFirst()}
+                        if(unsafe)return@synchronized false
+                        check(db.compileStatement(
+                            "UPDATE agent_tasks SET status='running',"+
+                                "plan_revision=plan_revision+1,updated_at=? "+
+                                "WHERE task_id=? AND policy_version=? "+
+                                "AND status IN ('running','settled_unverified')"
+                        ).use{stmt->
+                            stmt.bindLong(1,now)
+                            stmt.bindString(2,taskId)
+                            stmt.bindString(3,POLICY)
+                            stmt.executeUpdateDelete()==1
+                        })
+                    }
+                    val ordinal=db.rawQuery(
+                        "SELECT COUNT(*) FROM agent_task_steps WHERE task_id=?",
                         arrayOf(taskId)
+                    ).use{row->
+                        check(row.moveToFirst())
+                        row.getInt(0)
+                    }
+                    if(ordinal>=MAX_STEPS)return@synchronized false
+                    val already=db.rawQuery(
+                        "SELECT 1 FROM agent_task_steps WHERE step_id=? LIMIT 1",
+                        arrayOf(stepId)
                     ).use{it.moveToFirst()}
                     if(already)return@synchronized false
-                    val goal=NexaConversationDb.sealNativeTaskArguments(
-                        "Legacy Chat tool action; owner approval belongs to AgentJournal")
                     val args=NexaConversationDb.sealNativeTaskArguments(
                         JSONObject().put("fingerprintDigest",sha(fingerprint))
-                            .put("approvalRequired",requiresApproval).toString())
-                    check(db.compileStatement(
-                        "INSERT INTO agent_tasks(task_id,session_id,origin,status,"+
-                            "policy_version,plan_revision,goal_cipher,created_at,updated_at) "+
-                            "VALUES(?,?,'chat','running',?,1,?,?,?)"
-                    ).use{stmt->
-                        stmt.bindString(1,taskId)
-                        stmt.bindString(2,"owner-chat-"+key.take(32))
-                        stmt.bindString(3,POLICY)
-                        stmt.bindBlob(4,goal)
-                        stmt.bindLong(5,now)
-                        stmt.bindLong(6,now)
-                        stmt.executeInsert()!=-1L
-                    })
+                            .put("approvalRequired",requiresApproval).toString()
+                    )
                     check(db.compileStatement(
                         "INSERT INTO agent_task_steps(step_id,task_id,ordinal,tool_id,"+
                             "status,risk,expected_evidence,arguments_cipher) "+
-                            "VALUES(?,?,0,'legacy.chat.action','outcome_unknown',"+
+                            "VALUES(?,?,?,'legacy.chat.action','outcome_unknown',"+
                             "?,'owner_review',?)"
                     ).use{stmt->
                         stmt.bindString(1,stepId)
                         stmt.bindString(2,taskId)
-                        stmt.bindString(3,if(requiresApproval)"medium" else "low")
-                        stmt.bindBlob(4,args)
+                        stmt.bindLong(3,ordinal.toLong())
+                        stmt.bindString(4,if(requiresApproval)"medium" else "low")
+                        stmt.bindBlob(5,args)
                         stmt.executeInsert()!=-1L
                     })
                     db.execSQL(
@@ -107,18 +153,13 @@ internal object NexaAgentActionAudit {
         }}catch(_:Exception){false}
     }
 
-    /**
-     * Records only the old journal's disposition. "Settled" means the
-     * dispatcher finished; it does NOT verify an external app, delivered
-     * message, changed device fact, or completed an owner's business goal.
-     */
+    /** The old journal's disposition is recorded, NOT a completed action. */
     fun recordSettlement(context:Context,session:String,call:String,
                          fingerprint:String,uncertain:Boolean):Boolean{
         if(!valid(session,call,fingerprint))return false
         return try{synchronized(lock){
-            val key=identity(session,call)
-            val taskId=opaqueId("task-",key)
-            val stepId=opaqueId("step-",key)
+            val taskId=opaqueId("task-",sessionKey(session))
+            val stepId=opaqueId("step-",callKey(session,call))
             val helper=NexaConversationDb(context)
             try{
                 val db=helper.writableDatabase
@@ -127,8 +168,8 @@ internal object NexaAgentActionAudit {
                     val bound=db.rawQuery(
                         "SELECT s.arguments_cipher FROM agent_task_steps s "+
                             "JOIN agent_tasks t ON t.task_id=s.task_id "+
-                            "WHERE s.step_id=? AND s.task_id=? AND "+
-                            "s.status='outcome_unknown' AND t.policy_version=? "+
+                            "WHERE s.step_id=? AND s.task_id=? "+
+                            "AND s.status='outcome_unknown' AND t.policy_version=? "+
                             "AND t.status='running'",
                         arrayOf(stepId,taskId,POLICY)
                     ).use{row->
@@ -136,7 +177,7 @@ internal object NexaAgentActionAudit {
                         val data=JSONObject(NexaConversationDb
                             .openNativeTaskArguments(row.getBlob(0)))
                         data.length()==2 &&
-                            digestPattern.matches(data.optString("fingerprintDigest")) &&
+                            shaPattern.matches(data.optString("fingerprintDigest")) &&
                             data.optString("fingerprintDigest")==sha(fingerprint)
                     }
                     if(!bound)return@synchronized false
@@ -144,22 +185,23 @@ internal object NexaAgentActionAudit {
                     val taskState=if(uncertain)"uncertain" else "settled_unverified"
                     val stepState=if(uncertain)"uncertain" else "dispatch_settled"
                     check(db.compileStatement(
-                        "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
-                            "updated_at=? WHERE task_id=? AND policy_version=? AND status='running'"
-                    ).use{stmt->
-                        stmt.bindString(1,taskState)
-                        stmt.bindLong(2,now)
-                        stmt.bindString(3,taskId)
-                        stmt.bindString(4,POLICY)
-                        stmt.executeUpdateDelete()==1
-                    })
-                    check(db.compileStatement(
                         "UPDATE agent_task_steps SET status=? WHERE step_id=? "+
                             "AND task_id=? AND status='outcome_unknown'"
                     ).use{stmt->
                         stmt.bindString(1,stepState)
                         stmt.bindString(2,stepId)
                         stmt.bindString(3,taskId)
+                        stmt.executeUpdateDelete()==1
+                    })
+                    check(db.compileStatement(
+                        "UPDATE agent_tasks SET status=?,plan_revision=plan_revision+1,"+
+                            "updated_at=? WHERE task_id=? AND policy_version=? "+
+                            "AND status='running'"
+                    ).use{stmt->
+                        stmt.bindString(1,taskState)
+                        stmt.bindLong(2,now)
+                        stmt.bindString(3,taskId)
+                        stmt.bindString(4,POLICY)
                         stmt.executeUpdateDelete()==1
                     })
                     db.execSQL(
@@ -176,7 +218,7 @@ internal object NexaAgentActionAudit {
         }}catch(_:Exception){false}
     }
 
-    /** Crash/ANR recovery only; never dispatches another tool call. */
+    /** Recovery only, never reissues a tool call. */
     fun recoverStale(context:Context,staleAfterMs:Long=120_000L):Int{
         if(staleAfterMs<60_000L)return 0
         return try{synchronized(lock){
@@ -185,16 +227,14 @@ internal object NexaAgentActionAudit {
                 val db=helper.writableDatabase
                 db.beginTransaction()
                 try{
-                    val tasks=mutableListOf<String>()
                     val now=System.currentTimeMillis()
+                    val stale=mutableListOf<String>()
                     db.rawQuery(
                         "SELECT task_id FROM agent_tasks WHERE policy_version=? "+
                             "AND status='running' AND updated_at<? LIMIT 100",
                         arrayOf(POLICY,(now-staleAfterMs).toString())
-                    ).use{row->
-                        while(row.moveToNext())tasks.add(row.getString(0))
-                    }
-                    for(taskId in tasks){
+                    ).use{row->while(row.moveToNext())stale.add(row.getString(0))}
+                    for(taskId in stale){
                         db.execSQL(
                             "UPDATE agent_tasks SET status='uncertain',"+
                                 "plan_revision=plan_revision+1,updated_at=? "+
@@ -213,7 +253,7 @@ internal object NexaAgentActionAudit {
                         )
                     }
                     db.setTransactionSuccessful()
-                    tasks.size
+                    stale.size
                 }finally{db.endTransaction()}
             }finally{helper.close()}
         }}catch(_:Exception){0}
