@@ -358,4 +358,168 @@ class DeviceControlModule(
             promise.reject("NO_CAMERA", "Camera activity missing")
         }
     }
+    /**
+     * AgentHarness has already consumed ONE owner-visible action approval.
+     * The native controller still independently checks the live Accessibility
+     * window, unique target, Pause generation and permanent SQLite claim.
+     * We only return evidence for the exact receipt created by this call.
+     * Neither accepted gestures nor an unchanged screen mean task success.
+     */
+    private fun sequencedScreenService(p:Promise):ScreenAssistService? {
+        if(!NexaNativeActionSafety.permitsNewAction(context)){
+            p.reject("OWNER_ACTIONS_PAUSED","Device actions are paused")
+            return null
+        }
+        if(context.currentActivity?.hasWindowFocus()!=true){
+            p.reject("NOT_FOREGROUND","Review this step in the unlocked Nexa Chat")
+            return null
+        }
+        val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if(keyguard?.isKeyguardLocked==true){
+            p.reject("PHONE_LOCKED","Unlock your phone before executing a screen step")
+            return null
+        }
+        val service=ScreenAssistService.active
+        if(!ScreenAssistState.connected || service==null){
+            p.reject("ACCESSIBILITY_DISABLED","Screen Assist is disconnected; no action performed")
+            return null
+        }
+        return service
+    }
+
+    private fun finishUiStepAfterObservation(token:String,kind:String,p:Promise) {
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                val status=NexaUiActionJournal.outcomeFor(context,token,kind)
+                val observed=status in setOf("observed_change",
+                    "structural_change_observed","window_change_observed",
+                    "scroll_event_observed")
+                val result=Arguments.createMap()
+                result.putBoolean("actionAccepted",true)
+                result.putString("verification",
+                    if(observed)"observed_change" else "not_observed")
+                // The observation describes a UI change, NOT successful
+                // recipient navigation, business outcome or submitted message.
+                result.putBoolean("businessOutcomeVerified",false)
+                p.resolve(result)
+            }catch(_:Exception){
+                p.reject("UI_OUTCOME_UNCERTAIN","Could not verify the claimed step; do not replay it")
+            }
+        },1250L)
+    }
+
+    @ReactMethod
+    fun performReviewedScreenTap(label:String,promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        try {
+            var receipt:String?=null
+            val result=NexaScreenLabelTap.approved(service,label,origin="chat",
+                claimedToken={receipt=it})
+            val token=receipt
+            if(token==null || !result.startsWith("Android accepted one tap")){
+                promise.reject("UI_TAP_DENIED",
+                    "Android rejected or could not uniquely ground the requested tap")
+                return
+            }
+            finishUiStepAfterObservation(token,"tap",promise)
+        }catch(_:Exception){
+            promise.reject("UI_TAP_UNCERTAIN","Tap outcome uncertain. No automatic replay.")
+        }
+    }
+
+    @ReactMethod
+    fun performReviewedScreenScroll(direction:String,promise:Promise) {
+        if(direction !in setOf("up","down","left","right")){
+            promise.reject("INVALID_SCROLL","Unsupported scroll direction")
+            return
+        }
+        val service=sequencedScreenService(promise)?:return
+        try{
+            val preflight=NexaScreenScroll.prepare(service,direction)
+            if(!preflight.startsWith("Confirm scroll ") &&
+                !preflight.startsWith("Confirm one ")){
+                promise.reject("SCROLL_TARGET_UNAVAILABLE",
+                    "No unique safe scroll target is currently visible")
+                return
+            }
+            var receipt:String?=null
+            val outcome=NexaScreenScroll.confirm(service,origin="chat",
+                claimedToken={receipt=it})
+            val token=receipt
+            if(token==null ||
+                (!outcome.startsWith("Android accepted one scroll") &&
+                 !outcome.startsWith("Android queued one"))){
+                promise.reject("SCROLL_OUTCOME_UNCERTAIN",
+                    "Android did not verify scroll dispatch. No automatic retry.")
+                return
+            }
+            finishUiStepAfterObservation(token,"scroll_"+direction,promise)
+        }catch(_:Exception){
+            NexaScreenScroll.cancel()
+            promise.reject("SCROLL_OUTCOME_UNCERTAIN",
+                "Screen context changed. No automatic retry.")
+        }
+    }
+
+    /**
+     * The owner reviewed the exact label AND text in the harness approval.
+     * Reuse the existing two-check native field inspector and one-time
+     * text/field/target digest; never press Enter, Submit or Send.
+     */
+    @ReactMethod
+    fun performReviewedScreenText(targetLabel:String,exactText:String,promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        try {
+            if(!NexaTextInputState.stage(targetLabel,exactText)){
+                promise.reject("TEXT_REVIEW_INVALID","Unsafe or invalid reviewed text field")
+                return
+            }
+            val preflight=NexaTextInputActions.prepare(service)
+            if(!preflight.startsWith("One empty '")){
+                NexaTextInputState.clear()
+                NexaTextInputActions.cancel()
+                promise.reject("TEXT_FIELD_UNVERIFIED",
+                    "The reviewed named empty field was not uniquely visible")
+                return
+            }
+            val outcome=NexaTextInputActions.confirm(service)
+            val visible=outcome.startsWith("Requested text is visible in the approved field.")
+            if(!visible){
+                promise.reject("TEXT_OUTCOME_UNCERTAIN",
+                    "Reviewed text insertion was not verified. Nothing was submitted.")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putBoolean("submitted",false)
+            result.putString("verification","exact_text_visible")
+            promise.resolve(result)
+        }catch(_:Exception) {
+            NexaTextInputState.clear()
+            NexaTextInputActions.cancel()
+            promise.reject("TEXT_OUTCOME_UNCERTAIN",
+                "Text-entry result uncertain. Do not retry or submit automatically.")
+        }
+    }
+
+    /** Package-only evidence after an approved launcher Intent. */
+    @ReactMethod
+    fun observeLaunchedAppPackage(expectedPackage:String,promise:Promise) {
+        if(!expectedPackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
+            NexaPhoneVoiceTools.uniqueInstalledPackageChoice(context,expectedPackage)==null){
+            promise.resolve(false)
+            return
+        }
+        val service=ScreenAssistService.active
+        if(!ScreenAssistState.connected || service==null){
+            promise.resolve(false)
+            return
+        }
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+        try{
+            promise.resolve(root?.isVisibleToUser==true &&
+                root.packageName?.toString()==expectedPackage)
+        }catch(_:Exception){promise.resolve(false)}
+        finally{try{root?.recycle()}catch(_:Exception){}}
+    }
+
 }
