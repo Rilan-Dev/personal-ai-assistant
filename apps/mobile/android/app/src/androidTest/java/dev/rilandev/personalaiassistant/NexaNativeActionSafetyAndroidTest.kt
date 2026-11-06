@@ -11,6 +11,44 @@ import java.util.UUID
 /** Local owner emergency-stop acceptance, no real app is launched. */
 @RunWith(AndroidJUnit4::class)
 class NexaNativeActionSafetyAndroidTest {
+    @Test fun pauseAndResumeInvalidateEveryStagedNativeActionFence(){
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val wasPaused=NexaNativeActionSafety.isPaused(ctx)
+        try{
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,false))
+            val oldFence=NexaNativeActionSafety.approvalFence(ctx)
+            assertNotNull(oldFence)
+            var invoked=0
+            assertEquals(true,NexaNativeActionSafety.dispatchWithFence(ctx,oldFence!!){
+                invoked++;true
+            })
+            assertEquals(1,invoked)
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,true))
+            assertNull(NexaNativeActionSafety.approvalFence(ctx))
+            assertFalse(NexaNativeActionSafety.approvalFenceCurrent(ctx,oldFence))
+            assertNull(NexaNativeActionSafety.dispatchWithFence(ctx,oldFence){
+                invoked++;true
+            })
+            assertEquals(1,invoked)
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,false))
+            assertFalse("An old reviewed UI action cannot resume after Pause",
+                NexaNativeActionSafety.approvalFenceCurrent(ctx,oldFence))
+            assertNull(NexaNativeActionSafety.dispatchWithFence(ctx,oldFence){
+                invoked++;true
+            })
+            assertEquals(1,invoked)
+            val fresh=NexaNativeActionSafety.approvalFence(ctx)
+            assertNotNull(fresh)
+            assertNotEquals(oldFence,fresh)
+            assertEquals(false,NexaNativeActionSafety.dispatchWithFence(ctx,fresh!!){
+                invoked++;false
+            })
+            assertEquals(2,invoked)
+        }finally{
+            assertTrue(NexaNativeActionSafety.setPaused(ctx,wasPaused))
+        }
+    }
+
     @Test fun pausePersistsAndBlocksNewClaimAfterNoReplayReceipt(){
         val ctx=ApplicationProvider.getApplicationContext<Context>()
         val previouslyPaused=NexaNativeActionSafety.isPaused(ctx)
