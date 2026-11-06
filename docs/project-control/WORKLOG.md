@@ -1,5 +1,13 @@
 # Worklog
 
+## 2026-11-07 — Exact-source Android debug APK assembly and emulator boot diagnosis
+- The isolated AlmaLinux checkout fast-forwarded to Development `d8a458c84da2`, including the new Pause generation fence and the concurrent Maestro QA changes. On that source, `npm test` passed **399/399**, `npm run typecheck` passed and `npm run web:export` completed.
+- `./gradlew :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin` passed at `70eab05` (153 actionable tasks); after the initial debug APK assembly exposed an absent *local* `app/debug.keystore`, a disposable isolated **debug-only** key was generated without touching CI/release credentials. The repeat `./gradlew :app:assembleDebug :app:assembleDebugAndroidTest` then reported **BUILD SUCCESSFUL** in 1m 42s (243 tasks).
+- The resulting local debug/test APK hashes were `8bbfdbde160cfa0e5dfd9644da3162068cb3b0e051a7d29260ad7e4fc37af435` and `f49bcd3adfdde2e66872916f94086efd4711bd37c09f3442dc03bb1557aedcd5` respectively. Neither is a CI-signed consumer release artifact.
+- An Android API 35 emulator was launched twice on the home server, first with SwiftShader indirect graphics, then with graphics/Vulkan disabled. Both native emulator processes exited **139** before boot completed. ADB never retained a booted device; therefore the new `NexaNativeActionSafetyAndroidTest` **was not executed on a device**. The earlier signed Infinix/device acceptance recorded in the other entry applies to an older source commit and does not certify this milestone.
+- No source files, Docker containers, production databases, `main` ref, or external messages were changed by these local build/boot operations. The disposable debug key remains outside Git, and no release authorization is implied.
+
+
 ## 2026-11-07 — Generation-scoped reviewed Android action dispatch
 - Implemented and committed the native owner-Pause generation fence across reviewed external text input, exact message-field insertion, icon taps, semantic label taps, scrolls and launcher swipes, uniquely grounded WhatsApp chat rows, and approved app launching.
 - The final Android effect uses `NexaNativeActionSafety.dispatchWithFence` under the same native lock as Pause, preventing dispatch after a stale approval (even after Resume). It supplements, never replaces, the existing permanent one-shot SQLite action claim. No message Send, model-granted approval, multi-step auto executor or new permission was enabled.
