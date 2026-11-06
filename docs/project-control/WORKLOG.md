@@ -1008,3 +1008,12 @@ Maestro Cloud run 41936403045 passed 12/13 flows. The only failure was the exact
 - Routed both Chat and Voice approved app launches through the same native dispatch gate. Intent acceptance is explicitly unverified; unknown outcomes cannot be retried automatically.
 - Added synthetic Android policy/claim tests and retained the existing Keystore-backed custom.db v3 schema. No new privilege, server database, Docker deployment, production send or `main` promotion.
 - Node 396/396 and TypeScript passed after the safe screen-read implementation. Final Android compilation must be checked for the exact current SHA.
+
+## 2026-11-06 — Durable owner emergency stop and pause-revocation generation
+- Added `NexaNativeActionSafety`: local persistent owner pause flag plus monotonic Pause generation. Pausing blocks newly claimed external actions, and a Voice approval offered before Pause cannot be consumed after Resume.
+- Enforced native stop at the UI claim, legacy Voice step receipt, Chat launch/camera/browser/shade, Voice tool dispatch, overlay app launch/launcher navigation, Android global Back/notification, and flashlight ON paths. Turning flashlight OFF remains possible.
+- Added foreground unlocked owner Pause/Resume in Nexa Preferences and a one-way Pause button in the floating overlay; the overlay shortcut opens owner safety settings. Pausing clears staged UI click/scroll/message/text targets and RN in-memory pending reviews.
+- No Android Keystore or custom.db migration; irreversible action tombstones and approved-send requirements remain intact. Existing general task execution feature flags remain disabled.
+- Added owner-pause Android instrumentation source and Node source assertions. Kotlin runtime/physical phone and rollback gates still require exact-commit acceptance.
+- Recovery/limitations: OS actions already dispatched cannot be undone; the stop prevents new work but does not prove completion or implement the missing generalized task scheduler.
+- Runbook: `docs/architecture/NEXA_OWNER_ACTION_PAUSE_RUNBOOK_20261106.md`.
