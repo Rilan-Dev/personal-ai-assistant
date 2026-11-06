@@ -405,6 +405,10 @@ export function LocalTaskProposals({prefill}:{prefill?:{
         {task.source==='chat_action_audit'&&<Text style={styles.help}>
           Encrypted Chat action claim and journal settlement only. No independently verified device or business result. An uncertain claim is never replayed.
         </Text>}
+        {task.source==='legacy_voice_checkpoint'&&
+          (task.linkedUiActions??0)>0&&<Text style={styles.help}>
+            Linked Android actions: {task.linkedUiActions} claimed · {task.observedUiActions??0} with observed screen changes. Neither count proves the full request finished.
+          </Text>}
         {task.source==='legacy_voice_checkpoint'&&<Text style={styles.help}>Older voice task · completion not independently verified here</Text>}
         {task.source==='legacy_voice_checkpoint'&&task.detailsRedacted&&
           <Text style={styles.help}>Private Voice details cleared; audit identity retained.</Text>}
