@@ -23,6 +23,10 @@ class NexaWhatsAppComposeModule(private val context: ReactApplicationContext) :
             p.reject("NOT_FOREGROUND", "Compose only from the visible Nexa screen")
             return
         }
+        if (!NexaNativeActionSafety.permitsNewAction(context)) {
+            p.reject("ACTIONS_PAUSED","Resume Nexa device actions before opening the WhatsApp draft")
+            return
+        }
         // Dialable E.164 digits only. No parsing URLs or accepting encoded query
         // parameters from a model. Country codes are mandatory.
         // Require an international +country-code value. A national-only phone
