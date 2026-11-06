@@ -178,6 +178,11 @@ class RealtimeVoiceService : Service() {
                     // again. The actual tool's own permission/window checks
                     // remain mandatory and cannot be bypassed by this receipt.
                     val staleTask=task!=null && currentCompound!==task
+                    val nativeActionsEnabled=NexaNativeActionSafety.permitsNewAction(this)
+                    val actionPackage=pending.screenBinding?.packageName ?:
+                        pending.installedApp?.packageName ?:
+                        if(pending.command.startsWith("chrome_search:"))"com.android.chrome"
+                        else ""
                     val policyStillValid=!pending.approvedBySavedPolicy ||
                         NexaVoicePermissionPolicy.canExecute(this,pending.command)
                     val screenStillGrounded=!NexaVoiceScreenBinding.requires(pending.command) ||
@@ -185,12 +190,11 @@ class RealtimeVoiceService : Service() {
                     val boundStep=if(task!=null && checkpointOk && !staleTask &&
                         active.get() && operationSession==voiceSessionId &&
                         approved && age in 0..60_000L && policyStillValid &&
-                        screenStillGrounded)
+                        screenStillGrounded && nativeActionsEnabled)
                         NexaLegacyVoiceStepApproval.consume(
                             this,task.taskId,operationSession,task.stepIndex,
                             task.current().orEmpty(),pending.command,
-                            pending.screenBinding?.packageName ?:
-                                pending.installedApp?.packageName.orEmpty(),
+                            actionPackage,
                             pending.approvedBySavedPolicy,
                             pending.screenBinding?.structureDigest.orEmpty())
                         else true
@@ -199,9 +203,9 @@ class RealtimeVoiceService : Service() {
                             task!=null && checkpointOk && !staleTask &&
                                 active.get() && operationSession==voiceSessionId &&
                                 approved && age in 0..60_000L && policyStillValid &&
-                                screenStillGrounded && boundStep,
+                                screenStillGrounded && boundStep && nativeActionsEnabled,
                             task?.taskId.orEmpty(),operationSession,task?.stepIndex ?: -1,
-                            pending.command
+                            pending.command,actionPackage
                         ) { when {
                     !NexaNativeActionSafety.permitsNewAction(this) ->
                         "Nexa device actions are paused by the owner. No action performed."
