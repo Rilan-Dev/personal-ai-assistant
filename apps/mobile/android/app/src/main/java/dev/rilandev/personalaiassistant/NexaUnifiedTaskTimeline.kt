@@ -16,7 +16,8 @@ internal object NexaUnifiedTaskTimeline {
     private data class Summary(
         val taskId:String,val source:String,val origin:String,
         val status:String,val revision:Int,val updatedAt:Long,
-        val stepCount:Int,val verifiedSteps:Int,val detailsRedacted:Boolean=false
+        val stepCount:Int,val verifiedSteps:Int,val detailsRedacted:Boolean=false,
+        val parentTaskId:String?=null,val parentOrdinal:Int?=null
     ) {
         fun json():JSONObject=JSONObject()
             .put("taskId",taskId)
@@ -28,6 +29,10 @@ internal object NexaUnifiedTaskTimeline {
             .put("stepCount",stepCount)
             .put("verifiedSteps",verifiedSteps)
             .put("detailsRedacted",detailsRedacted)
+            .apply {
+                if(parentTaskId!=null)put("parentTaskId",parentTaskId)
+                if(parentOrdinal!=null)put("parentOrdinal",parentOrdinal)
+            }
     }
     private val id=Regex("task-[A-Za-z0-9_-]{8,96}")
     private val status=Regex("[a-z_]{1,40}")
@@ -91,9 +96,38 @@ internal object NexaUnifiedTaskTimeline {
                         current,0,c.getLong(3),0,0))
                 }
             }
+            // Parent/child links were sealed in the SAME SQLite transaction
+            // as each voice-origin UI action's permanent claim. Decrypt only
+            // opaque IDs and the ordinal for this owner-visible local index.
+            // Never expose target package digests or untrusted screen text.
+            val links=mutableMapOf<String,Pair<String,Int>>()
+            db.rawQuery(
+                "SELECT task_id,detail_cipher FROM agent_task_events "+
+                    "WHERE event_kind='voice_ui_child_claimed' "+
+                    "AND detail_cipher IS NOT NULL ORDER BY id DESC LIMIT ?",
+                arrayOf((maximum*6).toString())
+            ).use{rows->
+                while(rows.moveToNext()){
+                    try{
+                        val parent=rows.getString(0)
+                        val data=JSONObject(NexaConversationDb
+                            .unsealNativeTaskArguments(rows.getBlob(1)))
+                        val child=data.optString("childTaskId")
+                        val ordinal=data.optInt("ordinal",-1)
+                        if(id.matches(parent)&&id.matches(child)&&
+                            ordinal in 0..7 && !links.containsKey(child))
+                            links[child]=parent to ordinal
+                    }catch(_:Exception){/* Old/redacted rows have no link. */}
+                }
+            }
             val result=JSONArray()
-            for(item in all.sortedByDescending{it.updatedAt}.take(maximum))
-                result.put(item.json())
+            for(item in all.sortedByDescending{it.updatedAt}.take(maximum)){
+                val parent=if(item.source=="ui_action_audit")
+                    links[item.taskId] else null
+                result.put(if(parent==null)item.json()
+                    else item.copy(parentTaskId=parent.first,
+                        parentOrdinal=parent.second).json())
+            }
             return result
         }finally{helper.close()}
     }
