@@ -8,9 +8,9 @@ const source=(name)=>readFileSync(dir+name,"utf8");
 test("named visible-label click uses the journal canonical tap kind",()=>{
   const labelTap=source("NexaScreenLabelTap.kt");
   const journal=source("NexaUiActionJournal.kt");
-  assert.match(labelTap,/NexaUiActionJournal\.claim\(service,token,"tap",pkg\)/);
+  assert.match(labelTap,/NexaUiActionJournal\.claim\(service,token,"tap",pkg,origin=origin\)/);
   assert.doesNotMatch(labelTap,/NexaUiActionJournal\.claim\(service,token,"tap_label",pkg\)/);
-  assert.match(journal,/kind !in setOf\("tap","scroll_up","scroll_down","scroll_left","scroll_right"\)/);
+  assert.match(journal,/kind !in setOf\("tap","scroll_up","scroll_down","scroll_left","scroll_right",/);
 });
 test("launcher horizontal gesture uses the accepted scroll_left/scroll_right kinds",()=>{
   const launcher=source("NexaLauncherSwipe.kt");
