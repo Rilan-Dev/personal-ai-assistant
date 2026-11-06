@@ -171,7 +171,8 @@ internal object NexaUiActionJournal {
         }
 
     /** Exact one-time approval lookup. Only the status is returned, never UI data. */
-    fun outcomeFor(ctx: Context, approvalToken: String): String? = synchronized(lock) {
+    fun outcomeFor(ctx: Context, approvalToken: String, kind:String="tap"): String? = synchronized(lock) {
+        if(kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right")) return@synchronized null
         if(approvalToken.length !in 16..128) return@synchronized null
         try {
             val id=digest(approvalToken)
@@ -179,7 +180,7 @@ internal object NexaUiActionJournal {
             var status: String?=null
             for(i in 0 until entries.length()) {
                 val event=entries.getJSONObject(i)
-                if(event.optString("id")==id && event.optString("kind")=="tap") {
+                if(event.optString("id")==id && event.optString("kind")==kind) {
                     status=event.optString("status")
                     break
                 }
