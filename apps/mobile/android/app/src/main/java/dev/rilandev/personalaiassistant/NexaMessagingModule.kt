@@ -42,7 +42,7 @@ internal object NexaMessageChannels {
         installed(context).firstOrNull { it.first == id }?.third
 
     fun permitsManualComposer(id: String): Boolean =
-        id == "imo" || id == "botim" || id == "whatsapp-business"
+        id == "imo" || id == "botim" || id == "whatsapp-business" || id == "whatsapp"
 }
 
 /** Ephemeral and single-use; message body never enters SharedPreferences. */
