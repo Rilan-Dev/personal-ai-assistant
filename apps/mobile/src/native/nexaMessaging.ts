@@ -20,6 +20,7 @@ type MemoryBridge = {
   messageAppPreferenceDetails?(recipient:string):Promise<string|null>;
   rememberedMessageApp(recipient:string):Promise<string|null>;
   forgetMessageApp(recipient:string):Promise<boolean>;
+  forgetAllMessageAppPreferences?():Promise<number>;
 };
 
 function messaging():MessagingBridge {
@@ -106,6 +107,19 @@ export async function rememberMessageAppForDays(alias:string,id:MessageAppId,
   if(typeof api.rememberMessageAppForDays!=='function'||
     !await api.rememberMessageAppForDays(alias,id,days))
     throw Error('Nexa could not save the owner-selected app and retention');
+}
+/** Explicit owner-only irreversible privacy action. Android checks foreground
+ * unlocked UI and erases only securely identified saved channel preferences.
+ * Other personal data, provider keys and conversation history are untouched.
+ */
+export async function forgetAllRememberedMessageApps():Promise<number>{
+  const method=memory().forgetAllMessageAppPreferences;
+  if(typeof method!=='function')
+    throw Error('Update Nexa to clear all recipient channel memories');
+  const count=await method();
+  if(!Number.isSafeInteger(count)||count<0||count>8000)
+    throw Error('Unable to verify private memory deletion');
+  return count;
 }
 export const forgetMessageApp=async(alias:string)=>{
   if(!await memory().forgetMessageApp(alias))throw Error('Unable to delete saved preference');
