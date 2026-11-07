@@ -312,7 +312,7 @@ class DeviceControlModule(
             promise.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
             return
         }
-        val result = NexaBrowserTaskActions.notificationsApproved(context)
+        val result = NexaBrowserTaskActions.notificationsApproved(context,origin="chat")
         if (!result.startsWith("Android accepted")) {
             promise.reject("NOTIFICATION_SHADE_FAILED", result)
             return
