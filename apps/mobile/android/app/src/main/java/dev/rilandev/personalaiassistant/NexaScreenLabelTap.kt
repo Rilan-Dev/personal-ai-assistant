@@ -19,8 +19,22 @@ internal object NexaScreenLabelTap {
         raw.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]"""),"")
 
     fun approved(service:ScreenAssistService, requested:String,
-                 origin:String="overlay", claimedToken:(String)->Unit={}):String {
+                 origin:String="overlay", claimedToken:(String)->Unit={}):String =
+        approvedRelative(service,requested,null,origin,claimedToken)
+
+    /**
+     * A separately owner-reviewed, non-sensitive relative selector. This
+     * preserves the original action executor, Pause fence and permanent claim.
+     * A relationship chooses a target only; it cannot authorize a gesture.
+     */
+    fun approvedRelative(service:ScreenAssistService, requested:String,
+                         relative:NexaMaestroRelativeTap?,
+                         origin:String="overlay",
+                         claimedToken:(String)->Unit={}):String {
         val label=requested.trim()
+        if(relative!=null && (label!=relative.target ||
+            NexaMaestroRelativeTap.fromAction(relative.toAction())!=relative))
+            return "Invalid relative target. No action attempted."
         if(label.length !in 2..45 || unsafe.containsMatchIn(label))
             return "Unsafe or invalid requested control; no tap was sent."
         val generation=NexaNativeActionSafety.approvalFence(service)
@@ -37,6 +51,7 @@ internal object NexaScreenLabelTap {
             // descendant nodes. Count the actual clickable target, not each
             // repeated accessibility label.
             val targets=linkedMapOf<String,AccessibilityNodeInfo>()
+            val anchors=linkedMapOf<String,AccessibilityNodeInfo>()
             var inspected=0
             while(queue.isNotEmpty() && inspected++<200) {
                 val node=queue.removeFirst()
@@ -51,6 +66,16 @@ internal object NexaScreenLabelTap {
                         node.viewIdResourceName.orEmpty())
                         .any {it.contains("search",ignoreCase=true)}
                 if(node.isEditable && !isSearchInput)continue
+                if(relative!=null && !node.isEditable && node.isEnabled &&
+                    listOf(node.text?.toString().orEmpty(),
+                        node.contentDescription?.toString().orEmpty())
+                        .any { it.trim().equals(relative.anchor,ignoreCase=true) }) {
+                    val anchorBounds=Rect().also { node.getBoundsInScreen(it) }
+                    if(!anchorBounds.isEmpty && rootRect.contains(anchorBounds)) {
+                        anchors[listOf(anchorBounds.left,anchorBounds.top,
+                            anchorBounds.right,anchorBounds.bottom).joinToString(":")]=node
+                    }
+                }
                 val visible=if(node.isEditable)
                     listOf(node.contentDescription?.toString().orEmpty(),
                         node.hintText?.toString().orEmpty())
@@ -82,12 +107,15 @@ internal object NexaScreenLabelTap {
                 for(i in 0 until node.childCount)node.getChild(i)?.let{ queue.addLast(it) }
             }
             if(targets.isEmpty())return "No enabled clickable control named $label was found on this screen."
-            if(targets.size!=1)return "Multiple controls named $label are visible. No tap performed."
+            if(relative==null && targets.size!=1)
+                return "Multiple controls named $label are visible. No tap performed."
+            if(relative!=null && anchors.size!=1)
+                return "The relative anchor is missing or ambiguous. No tap performed."
             val candidates=targets.values.toList()
             // The historical search-field exception permits focus only.
             // Maestro's generic selector intentionally rejects editable nodes.
             val found=if(candidates.any { it.isEditable }) {
-                if(candidates.size!=1 || !label.equals("search",ignoreCase=true))
+                if(relative!=null || candidates.size!=1 || !label.equals("search",ignoreCase=true))
                     return "Multiple or unsafe editable controls. No tap performed."
                 candidates.single()
             } else {
@@ -99,9 +127,24 @@ internal object NexaScreenLabelTap {
                         candidate.isPassword, candidate.isClickable, candidate.isEnabled
                     )
                 }
+                val contextAnchors=anchors.values.map { anchorNode ->
+                    val box=Rect().also { anchorNode.getBoundsInScreen(it) }
+                    NexaMaestroTapCandidate(
+                        relative!!.anchor,anchorNode.viewIdResourceName.orEmpty(),box,
+                        anchorNode.isVisibleToUser,false,false,false,anchorNode.isEnabled
+                    )
+                }
+                val query=if(relative==null) MaestroQuery(text=label)
+                else MaestroQuery(
+                    text=label,
+                    belowText=relative.anchor.takeIf { relative.direction=="below" },
+                    aboveText=relative.anchor.takeIf { relative.direction=="above" },
+                    leftOfText=relative.anchor.takeIf { relative.direction=="left" },
+                    rightOfText=relative.anchor.takeIf { relative.direction=="right" }
+                )
                 val index=NexaMaestroTargetSelection.choose(
                     pkg,root.windowId,pkg,root.windowId,rootRect,
-                    MaestroQuery(text=label),grounded
+                    query,grounded,contextAnchors
                 ) ?:return if(candidates.size>1)
                     "Multiple controls named $label are visible. No tap performed."
                 else "The verified Maestro selector rejected $label. No tap performed."
