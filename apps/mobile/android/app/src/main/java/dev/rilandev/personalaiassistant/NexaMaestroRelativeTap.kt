@@ -18,6 +18,21 @@ internal data class NexaMaestroRelativeTap(
             """^(?:hey\s+nexa[,!]?\s+)?(?:please\s+)?(?:tap|click|press|select)\s+(?:on\s+)?(?:the\s+)?(.+?)\s+(below|above|left of|right of)\s+(?:the\s+)?(.+)$""",
             RegexOption.IGNORE_CASE
         )
+        private val relativeLead=Regex(
+            """^(?:hey\s+nexa[,!]?\s+)?(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:tap|click|press|select)\b""",
+            RegexOption.IGNORE_CASE
+        )
+        private val relationWord=Regex(
+            """\b(?:below|above|left\s+of|right\s+of)\b""",
+            RegexOption.IGNORE_CASE
+        )
+        /** A malformed relative owner request must NOT be reinterpreted as
+         * a generic label tap by the next command parser.
+         */
+        fun looksRelative(raw:String):Boolean =
+            raw.length in 8..150 && relativeLead.containsMatchIn(raw.trim()) &&
+                relationWord.containsMatchIn(raw)
+
         private val unsafeWords=Regex(
             """\b(?:below|above|left|right|then|and|followed|after|before|send|submit|pay|purchase|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|otp|logout)\b""",
             RegexOption.IGNORE_CASE
