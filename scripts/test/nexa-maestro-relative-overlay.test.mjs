@@ -15,7 +15,7 @@ test('floating chat routes relative requests before broad tap labels',()=>{
   const plain=overlay.indexOf('NexaPhoneVoiceTools.tapVisibleLabelIntent(query)',start);
   assert.ok(start>=0&&relative>start&&plain>relative,
     'relative selection must not fall through into unscoped label lookup');
-  assert.match(overlay,/proposeOwnerDeviceAction\("tap_relative:\$\{relative.direction\}/);
+  assert.match(overlay,/proposeOwnerDeviceAction\(\s*"tap_relative:\$\{relative.direction\}/);
 });
 test('relative action uses the same approval expiry and native action journal',()=>{
   const overlay=read('NexaToolOverlayService.kt');
