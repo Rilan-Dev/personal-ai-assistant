@@ -281,28 +281,20 @@ class DeviceControlModule(
             promise.reject("INVALID_SEARCH", "Search requires a short public text query")
             return
         }
-        val url=Uri.Builder().scheme("https").authority("www.google.com")
-            .appendPath("search").appendQueryParameter("q",clean).build()
-        val intent=Intent(Intent.ACTION_VIEW,url).apply {
-            setPackage("com.android.chrome")
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Do not bypass the app-launch journal: even a public browser search
+        // is an external Android action and must obey Pause/Voice Stop.
+        val outcome=NexaBrowserTaskActions.openChromeSearchApproved(
+            context,clean,origin="chat")
+        if(!outcome.startsWith("Chrome search launch requested")){
+            promise.reject("CHROME_NOT_VERIFIED",outcome)
+            return
         }
-        try {
-            context.startActivity(intent)
-            val result=Arguments.createMap()
-            result.putBoolean("intentDispatched",true)
-            result.putString("packageId","com.android.chrome")
-            result.putString("action","chrome_search")
-            result.putString("verification","not_observed")
-            promise.resolve(result)
-        } catch (_:ActivityNotFoundException) {
-            promise.reject("CHROME_UNAVAILABLE","Chrome is not installed or cannot handle a search")
-        } catch (_:SecurityException) {
-            promise.reject("CHROME_DENIED","Android denied the Chrome search")
-        } catch (_:Exception) {
-            promise.reject("CHROME_UNAVAILABLE","Android could not open Chrome")
-        }
+        val result=Arguments.createMap()
+        result.putBoolean("intentDispatched",true)
+        result.putString("packageId","com.android.chrome")
+        result.putString("action","chrome_search")
+        result.putString("verification","not_observed")
+        promise.resolve(result)
     }
 
     /** One owner-approved system navigation action; no notification text is read. */
@@ -340,23 +332,29 @@ class DeviceControlModule(
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve camera launch")
             return
         }
-        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (intent.resolveActivity(context.packageManager) == null) {
-            promise.reject("NO_CAMERA", "No compatible camera application available")
+        val intent=Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        val target=try{intent.resolveActivity(context.packageManager)}
+            catch(_:Exception){null}
+        if(target==null || target.packageName=="android"){
+            promise.reject("NO_CAMERA",
+                "No uniquely resolved camera application is available")
             return
         }
-        try {
-            context.startActivity(intent)
-            val result = Arguments.createMap()
-            result.putBoolean("intentDispatched", true)
-            result.putString("action", "camera")
-            result.putString("verification", "not_observed")
-            promise.resolve(result)
-        } catch (e: SecurityException) {
-            promise.reject("CAMERA_DENIED", "Android denied launching the camera")
-        } catch (e: ActivityNotFoundException) {
-            promise.reject("NO_CAMERA", "Camera activity missing")
+        when(NexaApprovedExternalAction.launch(context,intent,
+                target.packageName,origin="chat")){
+            NexaApprovedExternalAction.Result.ACCEPTED->{
+                val result=Arguments.createMap()
+                result.putBoolean("intentDispatched",true)
+                result.putString("action","camera")
+                result.putString("verification","not_observed")
+                promise.resolve(result)
+            }
+            NexaApprovedExternalAction.Result.DENIED->
+                promise.reject("CAMERA_DENIED",
+                    "A paused or changed camera target was rejected before launch")
+            NexaApprovedExternalAction.Result.UNCERTAIN->
+                promise.reject("CAMERA_OUTCOME_UNKNOWN",
+                    "Android camera launch outcome is uncertain. No automatic retry.")
         }
     }
     /**
