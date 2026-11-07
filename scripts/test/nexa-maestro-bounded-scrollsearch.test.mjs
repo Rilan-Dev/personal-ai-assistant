@@ -39,11 +39,24 @@ test('bounded search refuses ambiguous scroll containers and disabled launcher s
 
 test('a new floating scroll request invalidates older pending owner actions', () => {
   const overlay = read('NexaToolOverlayService.kt');
-  const query = overlay.indexOf('val query = raw.trim().take(150)');
-  const reset = overlay.indexOf('proposedDeviceAction=null', query);
-  const route = overlay.indexOf('NexaBoundedScrollSearch.parse(query)', query);
-  assert.ok(query >= 0 && reset > query && route > reset,
+  const entry = overlay.indexOf('private fun sendLocal(raw: String)');
+  const query = overlay.indexOf('val query = raw.trim().take(150)', entry);
+  const reset = overlay.indexOf('proposedDeviceAction=null', entry);
+  const route = overlay.indexOf('NexaBoundedScrollSearch.parse(query)', entry);
+  assert.ok(entry >= 0 && query > entry && reset > entry && reset < route,
     'the prior owner action must be revoked before admitting a new scroll task');
   assert.match(overlay, /private fun startBoundedScrollSearch\(query:String\) \{[\s\S]*?NexaMessageInputActions\.cancel\(\)/);
   assert.match(overlay, /private fun startBoundedScrollSearch\(query:String\) \{[\s\S]*?NexaTextInputActions\.cancel\(\)/);
+});
+
+test('a fresh owner message cancels old bounded-search approvals before any task branch', () => {
+  const overlay = read('NexaToolOverlayService.kt');
+  const begin = overlay.indexOf('private fun sendLocal(raw: String)');
+  const review = overlay.indexOf('val task=NexaOwnerTaskReview.parse(raw.trim())', begin);
+  const cancel = overlay.indexOf('cancelBoundedScrollSearch()', begin);
+  const clear = overlay.indexOf('proposedDeviceAction=null', begin);
+  assert.ok(begin >= 0 && cancel > begin && cancel < review,
+    'new owner message must cancel the previous scroll guide before any task');
+  assert.ok(clear > begin && clear < review,
+    'old owner device-action proposals must be revoked before task review');
 });
