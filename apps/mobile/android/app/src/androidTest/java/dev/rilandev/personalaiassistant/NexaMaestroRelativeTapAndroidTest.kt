@@ -43,4 +43,18 @@ class NexaMaestroRelativeTapAndroidTest {
         assertNull(NexaMaestroRelativeTap.fromAction("tap_relative:below|Send|Recent"))
         assertNull(NexaMaestroRelativeTap.fromAction("tap_relative:unknown|Open|Recent"))
     }
+    @Test fun malformedRelativeInstructionsNeverDowngradeToGenericTap() {
+        for(text in listOf(
+            "tap Open below Account",
+            "tap Open below Recent and send it",
+            "tap Open left of Password",
+            "tap Pay right of Recent"
+        )) {
+            assertTrue(text,NexaMaestroRelativeTap.looksRelative(text))
+            assertNull(text,NexaMaestroRelativeTap.parse(text))
+        }
+        assertFalse(NexaMaestroRelativeTap.looksRelative("tap Search"))
+        assertFalse(NexaMaestroRelativeTap.looksRelative("check my battery"))
+    }
+
 }
