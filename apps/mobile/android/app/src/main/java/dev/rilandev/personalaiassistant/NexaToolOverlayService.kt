@@ -485,6 +485,10 @@ class NexaToolOverlayService : Service() {
         // New owner speech/text cancels prior pending UI goals and unconfirmed
         // overlay device actions before routing task reviews or local tools.
         cancelBoundedScrollSearch()
+        guidedNavigation.cancel()
+        activeEvidenceToken=null
+        inspectedScreen=null
+        NexaScreenActions.reset()
         proposedDeviceAction=null
         proposedDeviceActionExpiresAt=0L
         // The overlay can only propose an owner-visible task draft; it cannot
