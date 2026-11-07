@@ -336,7 +336,8 @@ class NexaToolOverlayService : Service() {
         // Avoid offering a dead approval button if Android did not actually
         // connect the user-enabled screen-assistance service.
         if((action=="open_notification_shade" || action=="go_back" ||
-            action.startsWith("tap_visible_label:")) &&
+            action.startsWith("tap_visible_label:") ||
+            action.startsWith("tap_relative:")) &&
             (ScreenAssistService.active==null || !ScreenAssistState.connected)) {
             proposedDeviceAction=null
             proposedDeviceActionExpiresAt=0L
@@ -430,6 +431,14 @@ class NexaToolOverlayService : Service() {
                             ScreenAssistService.active?.let {
                                 NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
                             } ?: "Screen Assist is disabled. No tap performed."
+                        action.startsWith("tap_relative:") -> {
+                            val relative=NexaMaestroRelativeTap.fromAction(action)
+                            if(relative==null) "Relative tap review was malformed. Nothing tapped."
+                            else ScreenAssistService.active?.let {
+                                NexaScreenLabelTap.approvedRelative(
+                                    it,relative.target,relative,origin="overlay")
+                            } ?: "Screen Assist is disabled. No tap performed."
+                        }
                         else -> "Invalid device action. No operation performed."
                     }
                 } catch (_:Exception) { "Android action was refused or became uncertain." }
@@ -524,6 +533,14 @@ class NexaToolOverlayService : Service() {
         }
         if(NexaPhoneVoiceTools.wantsGoBack(query)) {
             proposeOwnerDeviceAction("go_back","Navigate Back once")
+            return
+        }
+        val relative=NexaMaestroRelativeTap.parse(query)
+        if(relative!=null) {
+            proposeOwnerDeviceAction(
+                "tap_relative:${relative.direction}|${relative.target}|${relative.anchor}",
+                "Tap the uniquely grounded ${relative.target} control "+
+                    "${relative.direction} ${relative.anchor}; no generic coordinate tap")
             return
         }
         val requestedLabel=NexaPhoneVoiceTools.tapVisibleLabelIntent(query)
