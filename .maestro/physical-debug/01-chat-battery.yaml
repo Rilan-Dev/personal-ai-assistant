@@ -1,0 +1,23 @@
+appId: dev.rilandev.personalaiassistant.debug
+name: Nexa owner-safe physical Chat battery check
+tags:
+  - physical
+  - debug-only
+  - read-only
+---
+# No clearState: retain the owner's encrypted journal and settings.
+# Requires a matching debug APK and USB Metro forwarding.
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 30000
+- tapOn: "Chat"
+- extendedWaitUntil:
+    visible: "How can I help today?"
+    timeout: 30000
+- tapOn: "Check battery"
+- extendedWaitUntil:
+    visible:
+      text: "Android reports battery at [0-9]{1,3}%;.*"
+    timeout: 30000
