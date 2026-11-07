@@ -26,3 +26,13 @@ test('floating Chat reuses the existing reviewed scroll action and only advances
   assert.match(overlay, /Cancel scroll search/);
   assert.match(overlay, /Confirm scroll/);
 });
+
+test('bounded search refuses ambiguous scroll containers and disabled launcher swipes', () => {
+  const scroll = read('NexaScreenScroll.kt');
+  const overlay = read('NexaToolOverlayService.kt');
+  assert.match(scroll, /requireUniqueContainer:Boolean=false/);
+  assert.match(scroll, /eligibleContainers\.size!=1/);
+  assert.match(scroll, /!requireUniqueContainer\s*&&\s*NexaLauncherSwipe\.isHome/);
+  assert.match(overlay, /NexaScreenScroll\.prepare\(service,request\.direction,requireUniqueContainer=true\)/);
+  assert.match(overlay, /NexaScreenScroll\.prepare\(nextService,nextRequest\.direction,requireUniqueContainer=true\)/);
+});
