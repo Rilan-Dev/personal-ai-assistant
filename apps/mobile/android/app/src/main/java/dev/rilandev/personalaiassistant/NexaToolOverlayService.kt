@@ -195,7 +195,7 @@ class NexaToolOverlayService : Service() {
             render()
             return
         }
-        val prepared=NexaScreenScroll.prepare(service,request.direction)
+        val prepared=NexaScreenScroll.prepare(service,request.direction,requireUniqueContainer=true)
         if(!NexaScreenScroll.isPending()){
             cancelBoundedScrollSearch()
             note="Scroll search stopped: $prepared"
@@ -275,7 +275,7 @@ class NexaToolOverlayService : Service() {
                         cancelBoundedScrollSearch()
                         note="Scroll task changed. No additional action performed."
                     }else{
-                        val prepared=NexaScreenScroll.prepare(nextService,nextRequest.direction)
+                        val prepared=NexaScreenScroll.prepare(nextService,nextRequest.direction,requireUniqueContainer=true)
                         if(!NexaScreenScroll.isPending()){
                             cancelBoundedScrollSearch()
                             note="Scroll search cannot continue: $prepared"
@@ -1020,7 +1020,7 @@ class NexaToolOverlayService : Service() {
                                 "Current steps: ${boundedScrollSearch.attempts(now)}.",11f,true))
                             addView(button("Cancel scroll search") {
                                 cancelBoundedScrollSearch()
-                                note="Scroll search cancelled. No gesture requested."
+                                note="Scroll search cancelled. No further gesture will be requested."
                                 render()
                             })
                         }
