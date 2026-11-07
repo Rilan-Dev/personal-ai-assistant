@@ -166,6 +166,8 @@ class NexaToolOverlayService : Service() {
         activeEvidenceToken=null
         NexaScreenActions.reset()
         inspectedScreen=null
+        NexaMessageInputActions.cancel()
+        NexaTextInputActions.cancel()
         section="tools"
         val request=NexaBoundedScrollSearch.parse(query)
         val service=ScreenAssistService.active
@@ -494,14 +496,14 @@ class NexaToolOverlayService : Service() {
         }
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
+        // Reject any older unconfirmed action before routing the new owner goal.
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
         val scrollRequest=NexaBoundedScrollSearch.parse(query)
         if(scrollRequest!=null){
             startBoundedScrollSearch(query)
             return
         }
-        // A newer owner request invalidates an older unconfirmed proposal.
-        proposedDeviceAction=null
-        proposedDeviceActionExpiresAt=0L
         val search=NexaPhoneVoiceTools.chromeSearchQuery(query)
         if(search!=null) {
             proposeOwnerDeviceAction("chrome_search:$search",
