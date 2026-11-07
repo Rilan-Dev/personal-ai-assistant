@@ -481,6 +481,12 @@ class NexaToolOverlayService : Service() {
     }
 
     private fun sendLocal(raw: String) {
+        if(raw.isBlank())return
+        // New owner speech/text cancels prior pending UI goals and unconfirmed
+        // overlay device actions before routing task reviews or local tools.
+        cancelBoundedScrollSearch()
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
         // The overlay can only propose an owner-visible task draft; it cannot
         // create executable work or substitute for the Save review action.
         val task=NexaOwnerTaskReview.parse(raw.trim())
@@ -496,9 +502,6 @@ class NexaToolOverlayService : Service() {
         }
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
-        // Reject any older unconfirmed action before routing the new owner goal.
-        proposedDeviceAction=null
-        proposedDeviceActionExpiresAt=0L
         val scrollRequest=NexaBoundedScrollSearch.parse(query)
         if(scrollRequest!=null){
             startBoundedScrollSearch(query)
