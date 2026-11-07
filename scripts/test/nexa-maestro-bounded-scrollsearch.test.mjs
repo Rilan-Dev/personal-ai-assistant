@@ -36,3 +36,14 @@ test('bounded search refuses ambiguous scroll containers and disabled launcher s
   assert.match(overlay, /NexaScreenScroll\.prepare\(service,request\.direction,requireUniqueContainer=true\)/);
   assert.match(overlay, /NexaScreenScroll\.prepare\(nextService,nextRequest\.direction,requireUniqueContainer=true\)/);
 });
+
+test('a new floating scroll request invalidates older pending owner actions', () => {
+  const overlay = read('NexaToolOverlayService.kt');
+  const query = overlay.indexOf('val query = raw.trim().take(150)');
+  const reset = overlay.indexOf('proposedDeviceAction=null', query);
+  const route = overlay.indexOf('NexaBoundedScrollSearch.parse(query)', query);
+  assert.ok(query >= 0 && reset > query && route > reset,
+    'the prior owner action must be revoked before admitting a new scroll task');
+  assert.match(overlay, /private fun startBoundedScrollSearch\(query:String\) \{[\s\S]*?NexaMessageInputActions\.cancel\(\)/);
+  assert.match(overlay, /private fun startBoundedScrollSearch\(query:String\) \{[\s\S]*?NexaTextInputActions\.cancel\(\)/);
+});
