@@ -83,7 +83,8 @@ internal object NexaUiActionJournal {
               reviewedInputDigest:String?=null,origin:String="overlay"): Boolean =
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
-                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","text_fill","app_launch") ||
+                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","text_fill","app_launch",
+                    "nav_back","nav_notifications") ||
                 origin !in setOf("chat","live-voice","assistant-role","overlay") ||
                 !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
                 (kind in setOf("message_fill","text_fill") &&
