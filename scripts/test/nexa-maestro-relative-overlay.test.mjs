@@ -34,3 +34,10 @@ test('the live tap path refuses ambiguous relative anchor and unsafe editable no
   assert.match(tap,/NexaMaestroRelativeTap.fromAction\(relative.toAction\(\)\)/);
   assert.match(tap,/currentBounds!=reviewedBounds/);
 });
+
+test('relative anchor is freshly revalidated inside the owner Pause fence',()=>{
+  const tap=read('NexaScreenLabelTap.kt');
+  assert.match(tap,/private fun anchorStillUnique\(/);
+  assert.match(tap,/anchorStillUnique\(liveRoot,relative.anchor,reviewedAnchorBounds\)/);
+  assert.match(tap,/NexaNativeActionSafety.dispatchWithFence\([\s\S]*?anchorStillUnique/);
+});
