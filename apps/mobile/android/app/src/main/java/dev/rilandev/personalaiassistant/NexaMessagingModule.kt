@@ -136,12 +136,21 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
                 p.reject("NO_HANDLER","Default Messages app cannot open a draft")
                 return
             }
-            context.startActivity(intent)
-            val result=Arguments.createMap()
-            result.putBoolean("intentDispatched",true)
-            result.putBoolean("messageSent",false)
-            result.putString("verification","not_observed")
-            p.resolve(result)
+            when(NexaApprovedExternalAction.launch(context,intent,pkg,"chat")){
+                NexaApprovedExternalAction.Result.ACCEPTED->{
+                    val result=Arguments.createMap()
+                    result.putBoolean("intentDispatched",true)
+                    result.putBoolean("messageSent",false)
+                    result.putString("verification","not_observed")
+                    p.resolve(result)
+                }
+                NexaApprovedExternalAction.Result.DENIED->
+                    p.reject("SMS_DRAFT_DENIED",
+                        "The selected SMS app changed or device actions were paused. No draft opened.")
+                NexaApprovedExternalAction.Result.UNCERTAIN->
+                    p.reject("SMS_DRAFT_UNCERTAIN",
+                        "SMS composer launch is uncertain. Inspect the phone; do not retry automatically.")
+            }
         } catch (_: Exception) {
             p.reject("SMS_DRAFT_FAILED","Android could not open the SMS draft")
         }
@@ -184,12 +193,25 @@ class NexaMessagingModule(private val context: ReactApplicationContext):
             context.startService(Intent(context,NexaToolOverlayService::class.java).apply {
                 action=NexaToolOverlayService.ACTION_SHOW
             })
-            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            val result=Arguments.createMap()
-            result.putBoolean("intentDispatched",true)
-            result.putBoolean("messageSent",false)
-            result.putString("verification","not_observed")
-            p.resolve(result)
+            when(NexaApprovedExternalAction.launch(context,launch,pkg,"chat")){
+                NexaApprovedExternalAction.Result.ACCEPTED->{
+                    val result=Arguments.createMap()
+                    result.putBoolean("intentDispatched",true)
+                    result.putBoolean("messageSent",false)
+                    result.putString("verification","not_observed")
+                    p.resolve(result)
+                }
+                NexaApprovedExternalAction.Result.DENIED->{
+                    NexaMessageDraftState.clear()
+                    p.reject("COMPOSER_DENIED",
+                        "The selected messaging app changed or actions were paused. Nothing sent.")
+                }
+                NexaApprovedExternalAction.Result.UNCERTAIN->{
+                    NexaMessageDraftState.clear()
+                    p.reject("COMPOSER_UNCERTAIN",
+                        "Messaging app launch is uncertain. Check the phone; no automatic retry or Send.")
+                }
+            }
         } catch (_: Exception) {
             NexaMessageDraftState.clear()
             p.reject("COMPOSER_FAILED","Could not open selected messaging app")
