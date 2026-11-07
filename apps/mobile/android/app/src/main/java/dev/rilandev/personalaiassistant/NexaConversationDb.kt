@@ -192,7 +192,8 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             if(!tokenDigest.matches(Regex("[0-9a-f]{64}")) ||
                 !packageDigest.matches(Regex("[0-9a-f]{64}")) ||
                 kind !in setOf("tap","scroll_up","scroll_down","scroll_left",
-                    "scroll_right","message_fill","text_fill","app_launch") ||
+                    "scroll_right","message_fill","text_fill","app_launch",
+                    "nav_back","nav_notifications") ||
                 origin !in setOf("chat","live-voice","assistant-role","overlay") ||
                 (kind in setOf("message_fill","text_fill") &&
                     !Regex("[0-9a-f]{64}").matches(reviewedInputDigest.orEmpty())) ||
