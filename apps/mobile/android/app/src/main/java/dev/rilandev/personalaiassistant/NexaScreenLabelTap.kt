@@ -18,6 +18,40 @@ internal object NexaScreenLabelTap {
     private fun labelKey(raw:String):String =
         raw.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]"""),"")
 
+    /** A relative relationship is only trustworthy while its ONE matching
+     * anchor remains on the same current screen and at the reviewed bounds.
+     * Re-read a fresh root at dispatch, never trust stale node references.
+     */
+    private fun anchorStillUnique(root:AccessibilityNodeInfo,
+                                  anchor:String,reviewedAnchorBounds:Rect):Boolean {
+        return try {
+            val screen=Rect().also { root.getBoundsInScreen(it) }
+            if(screen.isEmpty || !root.isVisibleToUser)return false
+            val expected=listOf(reviewedAnchorBounds.left,reviewedAnchorBounds.top,
+                reviewedAnchorBounds.right,reviewedAnchorBounds.bottom).joinToString(":")
+            val unique=linkedSetOf<String>()
+            val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            var inspected=0
+            while(queue.isNotEmpty() && inspected++<200) {
+                val node=queue.removeFirst()
+                if(!node.isVisibleToUser || node.isPassword || node.isEditable)continue
+                if(node.isEnabled &&
+                    listOf(node.text?.toString().orEmpty(),
+                        node.contentDescription?.toString().orEmpty())
+                        .any { it.trim().equals(anchor,ignoreCase=true) }) {
+                    val box=Rect().also { node.getBoundsInScreen(it) }
+                    if(!box.isEmpty && screen.contains(box))
+                        unique.add(listOf(box.left,box.top,box.right,
+                            box.bottom).joinToString(":"))
+                }
+                for(i in 0 until node.childCount)
+                    node.getChild(i)?.let { queue.addLast(it) }
+            }
+            queue.isEmpty() && unique.size==1 && unique.single()==expected
+        }catch (_:Exception){false}
+    }
+
     fun approved(service:ScreenAssistService, requested:String,
                  origin:String="overlay", claimedToken:(String)->Unit={}):String =
         approvedRelative(service,requested,null,origin,claimedToken)
@@ -151,6 +185,9 @@ internal object NexaScreenLabelTap {
                 candidates[index]
             }
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
+            val reviewedAnchorBounds=anchors.values.singleOrNull()?.let { anchor ->
+                Rect().also { anchor.getBoundsInScreen(it) }
+            }
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap",pkg,origin=origin))
@@ -171,7 +208,9 @@ internal object NexaScreenLabelTap {
                             pkg,root.windowId,
                             liveRoot.packageName?.toString().orEmpty(),liveRoot.windowId
                         ) || !found.isVisibleToUser || !found.isEnabled ||
-                        currentBounds!=reviewedBounds) false
+                        currentBounds!=reviewedBounds ||
+                        (relative!=null && (reviewedAnchorBounds==null ||
+                            !anchorStillUnique(liveRoot,relative.anchor,reviewedAnchorBounds)))) false
                     else found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 } finally {
                     try {liveRoot.recycle()} catch (_:Exception) {}
