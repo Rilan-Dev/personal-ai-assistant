@@ -50,7 +50,9 @@ test("browser native tool stays approval-gated and scoped to Chrome",()=>{
   assert.match(browser,/NexaApprovedExternalAction.launch\(/);
   assert.match(gate,/NexaUiActionJournal.claim\(/);
   assert.match(gate,/NexaNativeActionSafety.dispatchWithFence\(/);
-  assert.match(native,/verification.*not_observed/);
+  assert.match(native,/NexaAppLaunchObservation.expectedVisibleNow/);
+  assert.match(native,/"destination_package_observed" else "not_observed"/);
+  assert.match(native,/resolveObservedAppLaunch\(/);
 });
 test("Android foreground browser launch is not falsely reported as web research completion",async()=>{
   const result=await androidIntentPlanner.next("Open Chrome and search what is AI",[
