@@ -50,3 +50,8 @@ test('invalid contextual command fails closed before generic label parsing',()=>
   assert.ok(start>=0&&failed>start&&generic>failed);
   assert.match(overlay,/Relative target\/anchor is invalid, sensitive or ambiguous/);
 });
+
+test('contextual tapping must not add fuzzy WhatsApp contact selection',()=>{
+  const tap=read('NexaScreenLabelTap.kt');
+  assert.match(tap,/relative==null && pkg=="com\.whatsapp" &&[\s\S]*?NexaWhatsAppChatMatch\.evidence/);
+});
