@@ -131,9 +131,9 @@ object MaestroSafeSelector {
         // All named anchors must resolve to one fully visible and non-sensitive
         // element. No first-match rule or indexed guess is allowed.
         fun anchor(value: String?): Entry? {
-            val label = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            val expected = value?.trim()?.takeIf { it.isNotEmpty() } ?: return null
             return entries.filter {
-                visibleSafe(it, screen.viewport) && label(it.node, label)
+                visibleSafe(it, screen.viewport) && label(it.node, expected)
             }.singleOrNull()
         }
         val anchors = listOf(query.belowText, query.aboveText, query.leftOfText,
