@@ -694,25 +694,4 @@ class DeviceControlModule(
         }
     }
 
-    /** Package-only evidence after an approved launcher Intent. */
-    @ReactMethod
-    fun observeLaunchedAppPackage(expectedPackage:String,promise:Promise) {
-        if(!expectedPackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
-            NexaPhoneVoiceTools.uniqueInstalledPackageChoice(context,expectedPackage)==null){
-            promise.resolve(false)
-            return
-        }
-        val service=ScreenAssistService.active
-        if(!ScreenAssistState.connected || service==null){
-            promise.resolve(false)
-            return
-        }
-        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
-        try{
-            promise.resolve(root?.isVisibleToUser==true &&
-                root.packageName?.toString()==expectedPackage)
-        }catch(_:Exception){promise.resolve(false)}
-        finally{try{root?.recycle()}catch(_:Exception){}}
-    }
-
 }
