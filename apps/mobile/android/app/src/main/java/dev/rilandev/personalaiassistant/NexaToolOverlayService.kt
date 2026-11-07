@@ -543,6 +543,12 @@ class NexaToolOverlayService : Service() {
                     "${relative.direction} ${relative.anchor}; no generic coordinate tap")
             return
         }
+        if(NexaMaestroRelativeTap.looksRelative(query)) {
+            section="tools"
+            note="Relative target/anchor is invalid, sensitive or ambiguous. No generic tap proposed."
+            render()
+            return
+        }
         val requestedLabel=NexaPhoneVoiceTools.tapVisibleLabelIntent(query)
         if(requestedLabel!=null) {
             proposeOwnerDeviceAction("tap_visible_label:$requestedLabel",
