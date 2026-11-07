@@ -23,7 +23,8 @@ internal object NexaBrowserTaskActions {
         }
     }
 
-    fun openChromeSearchApproved(context:Context,query:String):String {
+    fun openChromeSearchApproved(context:Context,query:String,
+                                 origin:String="live-voice"):String {
         if(!NexaNativeActionSafety.permitsNewAction(context))
             return "Nexa device actions are paused. No search launched."
         val q=safeQuery(query) ?:return "Rejected: invalid public Chrome search query."
@@ -32,13 +33,15 @@ internal object NexaBrowserTaskActions {
         val intent=Intent(Intent.ACTION_VIEW,url).apply {
             setPackage("com.android.chrome")
             addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        return try {
-            context.startActivity(intent)
-            "Chrome search launch requested for $q. Foreground results are not yet verified."
-        }catch (_:Exception) {
-            "Android could not open Chrome. Search was not performed."
+        return when(NexaApprovedExternalAction.launch(context,intent,
+                "com.android.chrome",origin)){
+            NexaApprovedExternalAction.Result.ACCEPTED ->
+                "Chrome search launch requested for $q. Foreground results are not yet verified."
+            NexaApprovedExternalAction.Result.DENIED ->
+                "Android refused the reviewed Chrome search. No launch occurred."
+            NexaApprovedExternalAction.Result.UNCERTAIN ->
+                "Chrome search dispatch is uncertain. Check the phone; no automatic retry."
         }
     }
 
