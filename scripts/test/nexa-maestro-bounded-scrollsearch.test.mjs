@@ -59,4 +59,8 @@ test('a fresh owner message cancels old bounded-search approvals before any task
     'new owner message must cancel the previous scroll guide before any task');
   assert.ok(clear > begin && clear < review,
     'old owner device-action proposals must be revoked before task review');
+  const guided = overlay.indexOf('guidedNavigation.cancel()', begin);
+  const selected = overlay.indexOf('NexaScreenActions.reset()', begin);
+  assert.ok(guided > begin && guided < review && selected > begin && selected < review,
+    'new owner goals must invalidate older guided navigation and selected icons');
 });
