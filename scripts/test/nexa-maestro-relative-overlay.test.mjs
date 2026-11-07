@@ -41,3 +41,12 @@ test('relative anchor is freshly revalidated inside the owner Pause fence',()=>{
   assert.match(tap,/anchorStillUnique\(liveRoot,relative.anchor,reviewedAnchorBounds\)/);
   assert.match(tap,/NexaNativeActionSafety.dispatchWithFence\([\s\S]*?anchorStillUnique/);
 });
+
+test('invalid contextual command fails closed before generic label parsing',()=>{
+  const overlay=read('NexaToolOverlayService.kt');
+  const start=overlay.indexOf('private fun sendLocal(raw: String)');
+  const failed=overlay.indexOf('NexaMaestroRelativeTap.looksRelative(query)',start);
+  const generic=overlay.indexOf('NexaPhoneVoiceTools.tapVisibleLabelIntent(query)',start);
+  assert.ok(start>=0&&failed>start&&generic>failed);
+  assert.match(overlay,/Relative target\/anchor is invalid, sensitive or ambiguous/);
+});
