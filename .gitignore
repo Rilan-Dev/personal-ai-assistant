@@ -1,5 +1,7 @@
 node_modules/
 **/node_modules/
+.env
+.env.*
 !.env.example
 *.keystore
 *.jks
@@ -15,6 +17,7 @@ build/
 android/.gradle/
 android/local.properties
 **/.gradle/
+**/.kotlin/
 **/build/
 **/Pods/
 
@@ -22,4 +25,5 @@ android/local.properties
 device-acceptance-*.json
 __pycache__/
 *.pyc
+work
 config.bat
