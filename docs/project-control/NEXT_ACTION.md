@@ -716,3 +716,19 @@ The pinned Maestro models are now wired to the **existing** Nexa label-tap path 
 The full natural-language Android agent remains incomplete. Continue in this order: (1) avoid conflicting physical-device installations and restore owner-managed Screen Assist + overlay permissions; (2) verify a single real externally approved tap from the **same exact source APK**; (3) add bounded inspect-scroll-verify with one per-gesture journal claim; (4) connect approved multi-step tool envelopes to the existing NexaTaskCoordinator without a second executor; (5) test Chat and floating overlay with safe app/field actions, preserving unsent messages and clear failure recovery.
 
 Physical test caveat: the .debug package disappeared after the focused instrumentation run while .qa and base packages were present, so a following Maestro Chat test failed at package launch. No full device-control acceptance until package state and permissions are stabilized. Do not merge to main or claim all Maestro features migrated. A host-side Maestro CLI remains separate from normal Android APK permissions.
+
+## 2026-11-07 — Bounded scroll search follow-up gates
+
+Feature `feature/nexa-bounded-scrollsearch-20261107` adds a finite local owner scroll-search guide, a unique-container requirement, and an existing-journal-only confirmation/evidence loop in floating Tools/Chat. There is no unattended tap, voice automation, messaging, or new Android permission authority.
+
+**Before merging this feature to Development:** finish the unique-container/stale-approval Node checks, run complete `npm test`, `npm run typecheck`, `npm run web:export`, pinned Maestro portable JUnit, Android app plus test APK compilation/instrumentation, and exact APK/signer verification. On a physically connected Infinix with user-granted Accessibility/overlay permissions, test a real unique target, absent target, duplicate label, wrong window/container, Pause during acceptance, cancel, max four scrolls, and no accidental Send. Preserve owner data; never clear app storage or grant OS permissions behind the owner's back.
+
+BridgeHead Windows Tailscale connection was interrupted during submodule checkout; ADB had no attached device. No physical-device acceptance can be claimed from source tests or a compiled APK alone. Existing unrelated general dynamic task executor, cross-interface Voice/overlay planner and fully verified WhatsApp messaging remain separate release gates; no automatic outbound send.
+
+## 2026-11-07 — Updated release gate after on-device tests
+
+Completed since the previous note: npm **420/420**, TypeScript checks, Expo web export, Maestro portable JUnit **9/9**, arm64 debug APK plus instrumentation APK assembly, same-app in-place debug upgrade, and **11/11 synthetic tests running on the physical Infinix**. The approved Android Accessibility and overlay grants persisted. See WORKLOG for exact evidence.
+
+**Only the live screen-control acceptance remains unresolved for this bounded-scrolling milestone:** the phone was asleep and securely locked (`deviceLocked=1`, NotificationShade foreground), so the external Maestro CLI could not find Nexa's Chat control. Unlocking must occur through the normal owner-controlled device flow; do not bypass the lock or weaken Android security. With a freely accessible phone, verify the actual floating Chat/Tools screen, request `scroll down until [safe label]`, accept each native scroll separately, confirm observed target after real scrolling, and exercise failure/cancel/Pause/no-send cases. Until successful, PR #117 remains open and **live floating/third-party scrolling is NO-GO**, despite compiled code and synthetic instrumentation.
+
+Full general-purpose agentic multi-app execution, richer Maestro command portability and voice/overlay continuity are separate engineering milestones; the entire desktop Maestro CLI cannot execute inside a non-root Android AccessibilityService.

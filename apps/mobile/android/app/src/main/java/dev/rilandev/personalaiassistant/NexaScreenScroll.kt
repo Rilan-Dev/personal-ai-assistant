@@ -48,7 +48,8 @@ internal object NexaScreenScroll {
             }
         } catch (_: Exception) { null }
     }
-    fun prepare(service: ScreenAssistService, direction: String): String {
+    fun prepare(service: ScreenAssistService, direction: String,
+                requireUniqueContainer:Boolean=false): String {
         cancel()
         if(direction !in setOf("up","down","left","right")) return "Unsupported scroll direction."
         val generation=NexaNativeActionSafety.approvalFence(service)
@@ -60,6 +61,9 @@ internal object NexaScreenScroll {
             var visited=0
             var best: AccessibilityNodeInfo?=null
             var bestArea=0L
+            // Bounded target search refuses multiple independently scrollable
+            // containers; ordinary owner scrolling retains prior behavior.
+            val eligibleContainers=linkedSetOf<String>()
             while(queue.isNotEmpty() && visited<200){
                 val node=queue.removeFirst()
                 visited++
@@ -70,16 +74,23 @@ internal object NexaScreenScroll {
                         val action=scrollAction(direction)
                         val actions=node.actionList.any { it.id==action }
                         val area=rect.width().toLong()*rect.height().toLong()
-                        if(actions && area>bestArea && area<500_000_000L && rect.left>=0 && rect.top>=0){
-                            best=node
-                            bestArea=area
+                        if(actions && area>0L && area<500_000_000L &&
+                            rect.left>=0 && rect.top>=0){
+                            eligibleContainers.add(
+                                listOf(node.className?.toString().orEmpty(),
+                                    node.viewIdResourceName.orEmpty(),rect.left,
+                                    rect.top,rect.right,rect.bottom).joinToString(":"))
+                            if(area>bestArea){
+                                best=node
+                                bestArea=area
+                            }
                         }
                     }
                     for(i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
                 }
             }
             if(best==null && direction in setOf("left","right") &&
-                NexaLauncherSwipe.isHome(service,root)) {
+                !requireUniqueContainer && NexaLauncherSwipe.isHome(service,root)) {
                 val full=Rect()
                 root.getBoundsInScreen(full)
                 val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
@@ -89,6 +100,8 @@ internal object NexaScreenScroll {
                 synchronized(lock){pending=target}
                 return "Confirm one $direction swipe on your Android home screen."
             }
+            if(requireUniqueContainer && eligibleContainers.size!=1)
+                return "Bounded scroll search requires one unique scrollable container. No gesture proposed."
             val candidate=best ?: return "No visible scrollable container supports that direction."
             val box=Rect()
             candidate.getBoundsInScreen(box)
