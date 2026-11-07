@@ -42,8 +42,14 @@ test("browser native tool stays approval-gated and scoped to Chrome",()=>{
   assert.match(tool,/id: "device.browser_search"/);
   assert.match(tool,/hasExternalSideEffect: true/);
   assert.match(tool,/capabilities: \["apps.launch"\]/);
-  assert.match(native,/setPackage\("com.android.chrome"\)/);
-  assert.match(native,/Uri.Builder\(\).scheme\("https"\).authority\("www.google.com"\)/);
+  const browser=readFileSync("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaBrowserTaskActions.kt","utf8");
+  const gate=readFileSync("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaApprovedExternalAction.kt","utf8");
+  assert.match(browser,/setPackage\("com.android.chrome"\)/);
+  assert.match(browser,/Uri.Builder\(\).scheme\("https"\).authority\("www.google.com"\)/);
+  assert.match(native,/NexaBrowserTaskActions.openChromeSearchApproved\(/);
+  assert.match(browser,/NexaApprovedExternalAction.launch\(/);
+  assert.match(gate,/NexaUiActionJournal.claim\(/);
+  assert.match(gate,/NexaNativeActionSafety.dispatchWithFence\(/);
   assert.match(native,/verification.*not_observed/);
 });
 test("Android foreground browser launch is not falsely reported as web research completion",async()=>{
