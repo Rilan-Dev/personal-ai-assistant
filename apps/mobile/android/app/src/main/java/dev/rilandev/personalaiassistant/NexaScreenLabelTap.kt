@@ -119,7 +119,7 @@ internal object NexaScreenLabelTap {
                 val match=visible.any {
                     it.trim().equals(label,ignoreCase=true) ||
                         requestedKey.isNotBlank() && labelKey(it)==requestedKey ||
-                        (pkg=="com.whatsapp" &&
+                        (relative==null && pkg=="com.whatsapp" &&
                             NexaWhatsAppChatMatch.evidence(label,it)>=85)
                 } ||
                     isSearchInput && label.equals("search",ignoreCase=true)
