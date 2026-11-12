@@ -15,7 +15,7 @@ internal data class NexaMaestroRelativeTap(
     companion object {
         private const val ACTION_PREFIX="tap_relative:"
         private val grammar=Regex(
-            """^(?:hey\s+nexa[,!]?\s+)?(?:please\s+)?(?:tap|click|press|select)\s+(?:on\s+)?(?:the\s+)?(.+?)\s+(below|above|left of|right of)\s+(?:the\s+)?(.+)$""",
+            """^(?:hey\s+nexa[,!]?\s+)?(?:please\s+)?(?:tap|click|press|select)\s+(?:on\s+)?(?:the\s+)?(.+?)\s+(below|above|left of|right of|inside)\s+(?:the\s+)?(.+)$""",
             RegexOption.IGNORE_CASE
         )
         private val relativeLead=Regex(
@@ -23,7 +23,7 @@ internal data class NexaMaestroRelativeTap(
             RegexOption.IGNORE_CASE
         )
         private val relationWord=Regex(
-            """\b(?:below|above|left\s+of|right\s+of)\b""",
+            """\b(?:below|above|left\s+of|right\s+of|inside)\b""",
             RegexOption.IGNORE_CASE
         )
         /** A malformed relative owner request must NOT be reinterpreted as
@@ -34,7 +34,7 @@ internal data class NexaMaestroRelativeTap(
                 relationWord.containsMatchIn(raw)
 
         private val unsafeWords=Regex(
-            """\b(?:below|above|left|right|then|and|followed|after|before|send|submit|pay|purchase|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|otp|logout)\b""",
+            """\b(?:below|above|left|right|inside|then|and|followed|after|before|send|submit|pay|purchase|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|otp|logout)\b""",
             RegexOption.IGNORE_CASE
         )
         private fun acceptable(value:String):Boolean =
@@ -52,6 +52,7 @@ internal data class NexaMaestroRelativeTap(
                 "above" -> "above"
                 "left of" -> "left"
                 "right of" -> "right"
+                "inside" -> "child"
                 else -> return null
             }
             return NexaMaestroRelativeTap(target,anchor,direction)
@@ -60,7 +61,7 @@ internal data class NexaMaestroRelativeTap(
         fun fromAction(encoded:String):NexaMaestroRelativeTap? {
             if(!encoded.startsWith(ACTION_PREFIX))return null
             val fields=encoded.removePrefix(ACTION_PREFIX).split('|')
-            if(fields.size!=3 || fields[0] !in setOf("below","above","left","right") ||
+            if(fields.size!=3 || fields[0] !in setOf("below","above","left","right","child") ||
                 !acceptable(fields[1]) || !acceptable(fields[2]))return null
             return NexaMaestroRelativeTap(fields[1],fields[2],fields[0])
         }
