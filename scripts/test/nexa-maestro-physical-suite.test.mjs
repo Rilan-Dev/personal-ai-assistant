@@ -15,3 +15,9 @@ test('physical QA runs isolated synthetic WhatsApp cases, rejecting false-positi
   assert.match(script,/\$LASTEXITCODE/);
   assert.match(script,/if\(\$failed -gt 0\)/);
 });
+
+test('physical fixture cases reuse one instrumentation session to avoid UiAutomation conflicts',()=>{
+  assert.doesNotMatch(script,/foreach \(\$case in \$cases\)/);
+  assert.match(script,/-join ','/);
+  assert.match(script,/am instrument -w -r -e class/);
+});
