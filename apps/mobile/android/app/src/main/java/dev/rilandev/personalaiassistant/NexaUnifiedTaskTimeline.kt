@@ -41,6 +41,54 @@ internal object NexaUnifiedTaskTimeline {
     private val status=Regex("[a-z_]{1,40}")
     private val origins=setOf("chat","live-voice","assistant-role","overlay")
 
+    /**
+     * Look up exactly one owner task, even after it scrolls out of the bounded
+     * recent timeline. Read-only: never treats a Voice checkpoint as approval,
+     * verified external execution, or a mandate to resume an Android action.
+     */
+    fun find(context:Context,taskId:String):JSONObject? {
+        if(!id.matches(taskId))return null
+        val helper=NexaConversationDb(context)
+        try {
+            val db=helper.readableDatabase
+            db.rawQuery(
+                "SELECT t.task_id,t.origin,t.status,t.plan_revision,t.updated_at,t.policy_version,"+
+                    "(SELECT COUNT(*) FROM agent_task_steps s WHERE s.task_id=t.task_id),"+
+                    "(SELECT COUNT(*) FROM agent_task_steps s "+
+                        "WHERE s.task_id=t.task_id AND s.status='verified'),"+
+                    "(SELECT COUNT(*) FROM agent_task_events e WHERE e.task_id=t.task_id "+
+                        "AND e.event_kind='owner_redacted_legacy_voice') "+
+                    "FROM agent_tasks t WHERE t.task_id=? LIMIT 1",
+                arrayOf(taskId)
+            ).use{c->
+                if(c.moveToFirst()) {
+                    val origin=c.getString(1)
+                    val current=c.getString(2)
+                    if(origin !in origins || !status.matches(current))return null
+                    val source=when(c.getString(5)) {
+                        NexaUiTaskAudit.POLICY -> "ui_action_audit"
+                        NexaAgentActionAudit.POLICY -> "chat_action_audit"
+                        NexaLegacyVoiceTaskMirror.POLICY -> "legacy_voice_checkpoint"
+                        else -> "native"
+                    }
+                    return Summary(taskId,source,origin,current,c.getInt(3),
+                        c.getLong(4),c.getInt(6),
+                        if(source=="native")c.getInt(7) else 0,
+                        c.getInt(8)>0).json()
+                }
+            }
+            db.rawQuery(
+                "SELECT status,updated_at FROM voice_task_checkpoints "+
+                    "WHERE task_id=? LIMIT 1",arrayOf(taskId)
+            ).use{c->
+                if(c.moveToFirst() && status.matches(c.getString(0)))
+                    return Summary(taskId,"legacy_voice_checkpoint","live-voice",
+                        c.getString(0),0,c.getLong(1),0,0).json()
+            }
+            return null
+        }finally{helper.close()}
+    }
+
     fun recent(context:Context,limit:Int):JSONArray {
         // Reconcile native and UI claims before calculating an owner timeline.
         // Neither recovery path ever dispatches or retries an Android action.
