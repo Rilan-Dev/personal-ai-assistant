@@ -40,8 +40,14 @@ class NexaWhatsAppChatUiAndroidTest {
             assertFalse(scan.alreadyOpen)
             assertNotNull(scan.target)
             assertTrue(scan.target!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
-            root(runId).let { current ->
-                assertTrue("New chat header + message composer must both be present",
+            // ACTION_CLICK returns before Android has published the destination
+            // Accessibility window. Await the fixture's changed navigation state,
+            // not the marker shared by both the chat list and conversation.
+            val openedStatus=
+                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Send clicks: 0 · Opened: true"
+            NexaQaAccessibilityRoot.waitForText(runId,openedStatus).let { current ->
+                assertTrue("New chat header + message composer must both be present: "+
+                    fixtureTree(current),
                     NexaWhatsAppChatActions.inspect(current,"Nova Forever").alreadyOpen)
                 val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
                 queue.add(current)
