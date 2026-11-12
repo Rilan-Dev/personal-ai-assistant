@@ -22,9 +22,9 @@ class NexaUnifiedTaskTimelineAndroidTest {
             context,voice,"voice-"+UUID.randomUUID(),"awaiting_approval",1,
             "Private voice task content",listOf("open supported app"),""))
         val summary=NexaUnifiedTaskTimeline.recent(context,60)
-        val rows=(0 until summary.length()).map{summary.getJSONObject(it)}
-        val chat=rows.firstOrNull{it.optString("taskId")==native}
-        val oldVoice=rows.firstOrNull{it.optString("taskId")==voice}
+        val chat=NexaUnifiedTaskTimeline.find(context,native)
+        val oldVoice=NexaUnifiedTaskTimeline.find(context,voice)
+        assertNull(NexaUnifiedTaskTimeline.find(context,"task-no-such-id-000000000"))
         assertNotNull(chat)
         assertNotNull(oldVoice)
         assertEquals("native",chat!!.getString("source"))
@@ -48,11 +48,16 @@ class NexaUnifiedTaskTimelineAndroidTest {
             NexaConversationDb.saveTask(
                 context,id,"voice-"+UUID.randomUUID(),"planned",0,
                 "Legacy checkpoint",listOf("read phone storage"),""))
+        val exact=NexaUnifiedTaskTimeline.find(context,id)
+        assertNotNull(exact)
+        assertEquals("native",exact!!.getString("source"))
         val result=NexaUnifiedTaskTimeline.recent(context,60)
         val matches=(0 until result.length()).map{result.getJSONObject(it)}
             .filter{it.optString("taskId")==id}
-        assertEquals(1,matches.size)
-        assertEquals("native",matches[0].getString("source"))
+        assertTrue("Recent window may truncate, but must never duplicate an ID",
+            matches.size<=1)
+        if(matches.isNotEmpty())
+            assertEquals("native",matches[0].getString("source"))
         val db=NexaConversationDb(context)
         try {
             db.readableDatabase.rawQuery(
