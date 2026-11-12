@@ -50,3 +50,56 @@
 | Release | Manual owner-run same-SHA APK, user acceptance, rollback/signing/provenance gates before promotion |
 
 **Rule:** A simulator or synthetic instrumentation pass never proves a third-party personal-assistant workflow succeeded. Do not run Maestro `clearState: true` / blanket permission denial flows on the owner's personal device. Sensitive screen/recipient artifacts stay on the owner's host.
+
+## 2026-11-13 verified hierarchy milestone — supersedes historical pending gates above
+
+**Branch:** `feature/nexa-bounded-scrollsearch-20261107`, draft PR #117.
+**Latest source:** `ca0bf0356247c12f0f9cad0e460f7da9a3c4d4c1` (includes all Development changes through `6e40cbe0051893aa7b949f47183bde9ff65e5c87`).
+**Exact Android-tested source:** `988fcee0c79a0b6ef3f6fff13318784e942a4026`. The subsequent merge changed only `scripts/test/nexa-release-lineage-preflight.test.mjs`; no compiled Android/Gradle source changed. Do not claim the tested APK was built from the later commit.
+**Pinned upstream:** Maestro `aaa248d7fd4ca4924444dc027af9c7a62a9be348`. All five directly compiled portable model files remain unchanged.
+
+### Implemented and verified now
+
+- New `NexaMaestroAccessibilityHierarchy` creates a bounded (180 nodes, 24 levels), ephemeral, redacted Android Accessibility tree and exposes only safe, already-grounded target hitboxes and explicit owner-named anchors; no action capability or extra screen-data transport.
+- `NexaMaestroTargetSelection.chooseFromTree` binds the original Maestro selector's true ancestor path to a **single** previously approved candidate, matching exact hitbox and resource ID. A nearby sibling is not a child. Ambiguous, missing, stale or partially visible targets fail closed.
+- Owner grammar now accepts `tap Open inside Recent` in addition to `below/above/left of/right of`. The `child` relation uses native hierarchy rather than the flattened geometric selector. Malformed and sensitive commands cannot downgrade to a generic tap.
+- Contextual actions require a current, matching hierarchy **twice**: at reviewed selection and again within the final `NexaNativeActionSafety.dispatchWithFence` before `ACTION_CLICK`. Exact package/window, target bounds, unique anchor, one-time approval and encrypted action journal remain authoritative. No auto-click, auto-send, screenshot data export or side-effect replay was added.
+- Bounded scroll search from PR #117 remains four separately approved scrolls / 90 seconds with journal/evidence, not an unrestricted Maestro workflow engine.
+- Security regression: on Windows, the emulator-only destructive-QA guard's tests use the installed Git Bash and an isolated fake ADB in that shell; **the real connected phone is never the target of those simulated destructive actions**. Additional Development signer-lineage test merged.
+
+### Evidence, date: 2026-11-13 (Asia/Dubai)
+
+| Gate | Actual result | Exact verification |
+|---|---|---|
+| Entire Node runtime / integration / safety regression | **454/454 PASS**, zero failures | `ca0bf03`; Windows log `%TEMP%\\nexa-node-ca0bf03.log` |
+| Focused relative/child selection source regressions | **8/8 PASS** | `988fcee`, `node --test scripts/test/nexa-maestro-relative-overlay.test.mjs` |
+| Windows emulator-only QA guard | **7/7 PASS** | `a4adeda`, isolated fake ADB, physical phone protected |
+| TypeScript, all workspaces | **PASS** | `988fcee`, `npm run typecheck` |
+| Expo web export | **PASS** | `988fcee`, `npm run web:export` |
+| Portable Maestro Kotlin unit suite | **PASS** | `988fcee`, `:maestro-portable:testDebugUnitTest` |
+| Android app and instrumentation Kotlin compile | **PASS** | `988fcee`, `:app:compileDebugKotlin :app:compileDebugAndroidTestKotlin` |
+| App and Android instrumentation APK assembly | **PASS** | `988fcee`, `:app:assembleDebug :app:assembleAndroidTest` |
+| Owner-authorized Infinix X6831 (Android 13), bounded scroll / hierarchy / parser / adapter suite | **20/20 PASS** | Installed **matching standard package** `dev.rilandev.personalaiassistant` and runner `dev.rilandev.personalaiassistant.test`; output `OK (20 tests)`, no failures. Windows log `%TEMP%\\nexa-physical-core-988fcee.log` |
+| Same device, synthetic WhatsApp chat row fixture | **3/3 PASS** | Output `OK (3 tests)`; `%TEMP%\\nexa-physical-whatsapp-988fcee.log` |
+| Built debug APK integrity | **SHA-256** `1617e92cfed6ed0796dc9623138e1cdc0cab6a505310d8fd7ee6e61f8e3da1db` | `988fcee`; both APKs installed in place with `adb install -r`; no clear/uninstall, no OS permission mutation |
+| Real third-party hierarchical tap and multi-step workflow | **NOT VERIFIED** | Device Screen Assist not enabled, no overlay permission granted; do not bypass user settings |
+| Production release/signing/rollback acceptance | **NO-GO** | Separate owner review and manual full acceptance required |
+
+**Test-runner trap corrected:** An older `.debug.test` runner on the phone did not contain the new hierarchy test and returned an instrumentation failure despite an ADB zero exit. We inspected APK and installed dex hashes, selected the new standard-package runner, and required the explicit `OK (20 tests)` summary. An instrumentation return code of `-1` alone is insufficient evidence.
+
+### Comprehensive source-reuse gap inventory (latest)
+
+| Maestro source/capability | Current use | Remaining work |
+|---|---|---|
+| `maestro-client/{Point,Bounds,TreeNode,SwipeDirection,ScrollDirection}.kt` | **Five upstream files compiled directly** | Retain immutable hash, provenance, license and source allowlist |
+| `Filters.kt`, `ElementSelector.kt` | **Only safe, deterministic selector ideas adapted** | Strict checked/enabled/focus/id predicates, typed bounded selector model; never introduce arbitrary regex, JS or YAML effects |
+| `ViewHierarchy.kt`, `UiElement.kt` | **Real native ancestor hierarchy now integrated**; visibility thresholds pure | Live occlusion, nested scroll-context, layout stability, safe detached-node handling, more robust bounds drift signals |
+| `Orchestra.kt` | **Bounded owner-approved scroll concept adapted** | Wait-until-visible with stable-settle evidence, deterministic conditional step receipts and cancellation across Chat/Voice/overlay |
+| `MaestroInputMethodService.kt` | **Not reused** | Evaluate optional owner-enabled IME only when exact native field identity and `ACTION_SET_TEXT` limitations are demonstrated |
+| `AndroidDriver.kt` / ADB and gRPC driver | **Deliberately excluded from APK** | Remains host-side Maestro QA; never add privileged second device executor |
+| CLI/MCP and debug reporters | **Test tooling only** | Run owner-unlocked real third-party UI smoke and retain privacy-safe local-only evidence |
+| Maestro AI/JS/YAML and full desktop/iOS execution | **Not imported by design** | Build Nexa-owned typed, allowlisted command orchestration if justified; do not import unrestricted scripts or duplicate model/driver |
+| WhatsApp/SMS/contact and other app flows | Nexa's own read-only/approved primitives; synthetic fixture tests passed | Real verified app, recipient, channel, composer, effect and no-send owner acceptance |
+| Sarvam live task coordination and persistent task evidence | Existing Nexa infrastructure, not proven by this Maestro PR | Single shared task checkpoint, pause/timeout, cancellation and receipt across voice, chat and floating surface |
+
+**Release status:** SOURCE REGRESSION PASS; NATIVE COMPILE PASS; SELECTED PHYSICAL SYNTHETIC INSTRUMENTATION PASS; REAL CROSS-APP ACCEPTANCE **NO-GO**; PRODUCTION **NO-GO**. Keep PR #117 draft and avoid promoting to `Development`/`main` until those separate gates are established. The main Windows checkout's unrelated working changes, installed app data, OS permissions and production services/databases remain untouched.
