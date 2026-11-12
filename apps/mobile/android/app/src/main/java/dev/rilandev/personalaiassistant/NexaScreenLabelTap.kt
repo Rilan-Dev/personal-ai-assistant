@@ -174,21 +174,27 @@ internal object NexaScreenLabelTap {
                     belowText=relative.anchor.takeIf { relative.direction=="below" },
                     aboveText=relative.anchor.takeIf { relative.direction=="above" },
                     leftOfText=relative.anchor.takeIf { relative.direction=="left" },
-                    rightOfText=relative.anchor.takeIf { relative.direction=="right" }
+                    rightOfText=relative.anchor.takeIf { relative.direction=="right" },
+                    childOfText=relative.anchor.takeIf { relative.direction=="child" }
                 )
-                val index=NexaMaestroTargetSelection.choose(
-                    pkg,root.windowId,pkg,root.windowId,rootRect,
-                    query,grounded,contextAnchors
-                ) ?:return if(candidates.size>1)
-                    "Multiple controls named $label are visible. No tap performed."
-                else "The verified Maestro selector rejected $label. No tap performed."
-                // Geometry-only relations are insufficient: require the
-                // same candidate in the ACTUAL observed Accessibility tree.
-                if (relative != null &&
+                // A true child relationship must use actual Accessibility
+                // ancestry, not the flattened adapter's synthetic sibling list.
+                // Geometric relations retain BOTH independent selection gates.
+                val index=if(relative?.direction=="child") {
                     NexaMaestroAccessibilityHierarchy.choose(
                         root,pkg,root.windowId,rootRect,query,grounded
-                    ) != index)
-                    return "Live parent/child hierarchy could not verify the relative control. No tap performed."
+                    )
+                } else {
+                    val geometric=NexaMaestroTargetSelection.choose(
+                        pkg,root.windowId,pkg,root.windowId,rootRect,
+                        query,grounded,contextAnchors
+                    )
+                    if(geometric!=null && relative!=null &&
+                        NexaMaestroAccessibilityHierarchy.choose(
+                            root,pkg,root.windowId,rootRect,query,grounded
+                        )!=geometric) null
+                    else geometric
+                } ?:return "The target or its unique live hierarchy could not be verified. No tap performed."
                 candidates[index]
             }
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
