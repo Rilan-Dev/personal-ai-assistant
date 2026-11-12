@@ -2,6 +2,9 @@
 # Capture REAL installed Nexa Android UI from the ephemeral CI emulator.
 # Never requests or grants Android permissions. No accounts or messages.
 set -euo pipefail
+root="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+# A real phone's package data must never be cleared by the CI screenshot kit.
+source "$root/scripts/acceptance/require-synthetic-emulator.sh"
 app="dev.rilandev.personalaiassistant"
 out="artifacts/nexa-ui-screenshots"
 mkdir -p "$out"
