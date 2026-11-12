@@ -55,3 +55,16 @@ test('contextual tapping must not add fuzzy WhatsApp contact selection',()=>{
   const tap=read('NexaScreenLabelTap.kt');
   assert.match(tap,/relative==null && pkg=="com\.whatsapp" &&[\s\S]*?NexaWhatsAppChatMatch\.evidence/);
 });
+
+test('explicit nested controls use real Android parent paths, not flattened geometry',()=>{
+  const parser=read('NexaMaestroRelativeTap.kt');
+  const tap=read('NexaScreenLabelTap.kt');
+  const hierarchy=read('NexaMaestroAccessibilityHierarchy.kt');
+  assert.match(parser,/"inside" -> "child"/);
+  assert.match(parser,/setOf\("below","above","left","right","child"\)/);
+  assert.match(tap,/childOfText=relative.anchor.takeIf/);
+  assert.match(tap,/if\(relative\?\.direction=="child"\)[\s\S]*?NexaMaestroAccessibilityHierarchy.choose/);
+  assert.match(hierarchy,/fun choose\(/);
+  assert.match(hierarchy,/NexaMaestroTargetSelection.chooseFromTree\(/);
+  assert.doesNotMatch(hierarchy,/performAction\(|dispatchGesture\(|startActivity\(/);
+});
