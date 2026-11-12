@@ -36,35 +36,37 @@ if ($LASTEXITCODE -ne 0 -or -not (($runners -join "`n").Contains($runner))) {
     throw 'Matching instrumentation runner is not installed. No test actions performed.'
 }
 
-# Each synthetic scenario runs in isolation. The test fixture guarantees
-# zero outbound communication; real recipient/account data must never be
-# included. Only the short pass/fail result is emitted.
+# Run all three non-communicating synthetic cases in ONE instrumentation
+# process. Separate invocations can race Android's single UiAutomationService
+# registration (already registered), even when every adb process exited zero.
+# No external account, message recipient, or device permission is accessed.
 $cases = @(
     'duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader',
     'twoIdenticalChatRowsRemainAmbiguousAndAreNeverTapped',
     'uncertainSpeechVariantCanBeFoundButNotWrongAlias'
 )
+$prefix = 'dev.rilandev.personalaiassistant.NexaWhatsAppChatUiAndroidTest'
+$selection = (@($cases | ForEach-Object { "${prefix}#$_" })) -join ','
+$output = @(& $adb -s $Serial shell am instrument -w -r -e class $selection $runner 2>&1)
+$exit = $LASTEXITCODE
+$report = ($output | ForEach-Object { [string]$_ }) -join "`n"
+$summary = [regex]::Match($report, 'OK \([0-9]+ tests?\)')
+$reportedCount = if ($summary.Success) {
+    [int]($summary.Value -replace '[^0-9]', '')
+} else { 0 }
+$passed = $exit -eq 0 -and
+    $summary.Success -and $reportedCount -eq $cases.Count -and
+    $report -match 'INSTRUMENTATION_CODE:\s*-1' -and
+    $report -notmatch 'FAILURES!!!|Process crashed|INSTRUMENTATION_FAILED|shortMsg=|INSTRUMENTATION_STATUS_CODE:\s*-2|INSTRUMENTATION_CODE:\s*0'
 $failed = 0
-foreach ($case in $cases) {
-    $className = "dev.rilandev.personalaiassistant.NexaWhatsAppChatUiAndroidTest#$case"
-    $output = @(& $adb -s $Serial shell am instrument -w -r -e class $className $runner 2>&1)
-    $exit = $LASTEXITCODE
-    $report = ($output | ForEach-Object { [string]$_ }) -join "`n"
-    $passed = $exit -eq 0 -and
-        $report -match 'OK \([0-9]+ tests?\)' -and
-        $report -match 'INSTRUMENTATION_CODE:\s*-1' -and
-        $report -notmatch 'FAILURES!!!|Process crashed|INSTRUMENTATION_FAILED|shortMsg=|INSTRUMENTATION_CODE:\s*0'
-    if ($passed) {
-        Write-Output "PASS: synthetic Android accessibility case $case"
-    } else {
-        $failed++
-        # Fail closed even when adb exits with zero for failed instrumentation.
-        Write-Output "FAIL: synthetic Android accessibility case $case (adb exit $exit)"
-    }
+if ($passed) {
+    Write-Output "PASS: all $($cases.Count) synthetic physical-device cases in one session."
+} else {
+    $failed++
+    Write-Output "FAIL: physical QA did not establish all $($cases.Count) successful test outcomes (adb exit $exit, verified $reportedCount)."
 }
 if($failed -gt 0) {
-    Write-Error "$failed synthetic physical-device cases failed. No other device action attempted."
+    Write-Error 'Synthetic physical-device QA is not certified. No other device action attempted.'
     exit 1
 }
-Write-Output "PASS: all $($cases.Count) isolated synthetic device cases."
 exit 0
