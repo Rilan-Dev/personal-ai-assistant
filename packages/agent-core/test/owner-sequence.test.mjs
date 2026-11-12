@@ -200,3 +200,27 @@ test("recipient evidence is not a generic window-change or a model assertion",as
   }]);
   assert.equal(stopped.type,"clarify");
 });
+
+
+test("multi-step native continuation requires independently observed app destination",async()=>{
+  const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "Please call later"';
+  const steps=parseOwnerMultiToolRequest(request);
+  assert.equal(steps?.length,3);
+  const planner=createOwnerSequentialPlanner(androidIntentPlanner);
+  const claimed=steps[0];
+  const unverified=await planner.next(request,[{
+    call:claimed,outcome:{status:"success",data:{
+      intentDispatched:true,packageId:"com.whatsapp",
+      verification:"not_observed"}}
+  }]);
+  assert.equal(unverified.type,"clarify");
+  assert.match(unverified.question,/App destination was not observed/i);
+  const observed=await planner.next(request,[{
+    call:claimed,outcome:{status:"success",data:{
+      intentDispatched:true,packageId:"com.whatsapp",
+      verification:"destination_package_observed"}}
+  }]);
+  assert.equal(observed.type,"tool");
+  assert.equal(observed.call.toolId,"screen.open_whatsapp_chat");
+  assert.deepEqual(observed.call.input,{recipientHint:"Mom"});
+});

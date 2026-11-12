@@ -42,6 +42,8 @@ internal object NexaVoiceActionScope {
             if(direction in setOf("up","down","left","right"))
                 "scroll_"+direction else null
         }
+        command=="go_back" -> "nav_back"
+        command=="open_notification_shade" -> "nav_notifications"
         command=="open" || command.startsWith("open ") ||
             command.startsWith("chrome_search:") -> "app_launch"
         else -> null

@@ -185,6 +185,8 @@ class RealtimeVoiceService : Service() {
                     val actionPackage=pending.screenBinding?.packageName ?:
                         pending.installedApp?.packageName ?:
                         if(pending.command.startsWith("chrome_search:"))"com.android.chrome"
+                        else if(pending.command=="open_notification_shade")
+                            "com.android.systemui"
                         else ""
                     val policyStillValid=!pending.approvedBySavedPolicy ||
                         NexaVoicePermissionPolicy.canExecute(this,pending.command)

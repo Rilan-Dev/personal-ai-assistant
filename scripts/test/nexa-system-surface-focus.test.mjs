@@ -17,7 +17,7 @@ test("system shade detaches all overlay windows before dispatching Android actio
   assert.match(method,/val isNotificationShade=action=="open_notification_shade"/);
   assert.match(method,/if\(!detachOverlayForNotificationShade\(\)\)/);
   assert.ok(method.indexOf("detachOverlayForNotificationShade()") <
-    method.indexOf("NexaBrowserTaskActions.notificationsApproved(this)"));
+    method.indexOf("NexaBrowserTaskActions.notificationsApproved(this,origin=\"overlay\")"));
   assert.match(detach,/wm\.removeViewImmediate\(existing\)/);
   assert.match(detach,/view=null\s*visible=false/);
   assert.match(detach,/hideSoftInputFromWindow/);

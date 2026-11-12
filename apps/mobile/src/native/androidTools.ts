@@ -27,7 +27,6 @@ interface DeviceControlBridge {
   openCamera(): Promise<LaunchOutcome>;
   openChromeSearch(query: string): Promise<LaunchOutcome>;
   openNotificationShade(): Promise<{notificationShadeAccepted: boolean}>;
-  observeLaunchedAppPackage(expectedPackage:string): Promise<boolean>;
   performReviewedScreenTap(label:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
   }>;
@@ -214,17 +213,16 @@ export function createAndroidTools(): Tool[] {
       validateInput: appInput,
       execute: async ({app}) => {
         const result=await getBridge().openSupportedApp(String(app));
-        // The OS Intent is not verified navigation. Give Accessibility a
-        // bounded chance to report the real destination, never retry launch.
-        if(result.intentDispatched===true&&
-            typeof result.packageId==="string"&&
-            typeof getBridge().observeLaunchedAppPackage==="function"){
-          await new Promise<void>(resolve=>setTimeout(resolve,1500));
-          const visible=await getBridge().observeLaunchedAppPackage(result.packageId)
-            .catch(()=>false);
-          return {status:"success",data:{...result,
-            verification:visible?"destination_package_observed":"not_observed"}};
-        }
+        // Only the native one-shot launch receipt and same-generation
+        // Accessibility observation may assert destination_package_observed.
+        // A delayed JS read could accidentally reclassify an unverified
+        // launch after owner Pause/Resume, violating the no-replay boundary.
+        if(result.intentDispatched!==true ||
+            typeof result.packageId!=="string" ||
+            !/^[A-Za-z][A-Za-z0-9_.]{2,150}$/.test(result.packageId) ||
+            !["not_observed","destination_package_observed"]
+              .includes(result.verification))
+          throw Error("Native launch evidence was malformed or missing");
         return {status:"success",data:result};
       }
     },

@@ -42,5 +42,5 @@ test('RN receives a single-use draft and requires deliberate contact selection a
   assert.match(app,/setTab\('tools'\)/);
   assert.match(app,/Choose the real contact in Android/);
   assert.match(app,/openSelectedWhatsAppDraft/);
-  assert.match(read(base+'NexaWhatsAppComposeModule.kt'),/result\.putBoolean\("messageSent", false\)/);
+  assert.match(read(base+'NexaWhatsAppComposeModule.kt'),/result\.putBoolean\("messageSent",\s*false\)/);
 });

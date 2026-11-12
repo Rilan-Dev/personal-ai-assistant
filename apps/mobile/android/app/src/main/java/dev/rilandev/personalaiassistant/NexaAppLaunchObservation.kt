@@ -24,6 +24,25 @@ internal object NexaAppLaunchObservation {
         else "context_changed_unverified"
     }
 
+    /** Read-only current-window check for sequencing the NEXT reviewed step.
+     * Intent dispatch itself is NEVER proof of the destination. Android may
+     * place a permission prompt, resolver, lock screen or different app on top.
+     * Only the identical visible package qualifies; no screen text is read.
+     */
+    fun expectedVisibleNow(context:Context,expectedPackage:String):Boolean {
+        if(!expectedPackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))
+            return false
+        val service=ScreenAssistService.active
+        if(!ScreenAssistState.connected || service==null)return false
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+            ?:return false
+        return try{
+            classify(expectedPackage,root.packageName?.toString(),
+                root.isVisibleToUser,true)=="destination_package_observed"
+        }catch(_:Exception){false}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
     fun observeAfter(context:Context,token:String,expectedPackage:String) {
         val app=context.applicationContext
         handler.postDelayed({

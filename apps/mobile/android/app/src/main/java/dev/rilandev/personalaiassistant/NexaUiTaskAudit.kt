@@ -23,7 +23,8 @@ internal object NexaUiTaskAudit {
     const val POLICY="ui-action-audit-v1"
     private val sha=Regex("[0-9a-f]{64}")
     private val allowed=setOf("tap","scroll_up","scroll_down","scroll_left",
-        "scroll_right","message_fill","text_fill","app_launch")
+        "scroll_right","message_fill","text_fill","app_launch",
+        "nav_back","nav_notifications")
     private val observed=setOf("observed_change","scroll_event_observed",
         "window_change_observed","structural_change_observed",
         "destination_package_observed")

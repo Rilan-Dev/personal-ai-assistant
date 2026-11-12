@@ -14,6 +14,12 @@ react {
     hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
+    // Physical QA must launch without Metro and must never overwrite the
+    // owner's main, QA, or other-user debug installs.
+    if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
+        debuggableVariants = []
+    }
+
     enableBundleCompression = (findProperty('android.enableBundleCompression') ?: false).toBoolean()
     // Use Expo CLI to bundle the app, this ensures the Metro config
     // works correctly with Expo projects.
@@ -129,7 +135,12 @@ android {
         debug {
             // Local device QA can keep the signed release-test app and its
             // owner settings while installing the separately signed debug APK.
-            if ((findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()) {
+            // A distinct device-test app id. The locally disposable debug
+            // certificate is NOT compatible with a pre-existing debug install.
+            // Do not touch app data or release signing in other Android users.
+            if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
+                applicationIdSuffix '.physicalqa'
+            } else if ((findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()) {
                 applicationIdSuffix '.debug'
             }
             // Development-only: reviewed, low-risk native reads require an

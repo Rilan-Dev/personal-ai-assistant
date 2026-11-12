@@ -225,6 +225,33 @@ class DeviceControlModule(
         promise.resolve(result)
     }
 
+    /**
+     * An accepted Intent is not observed navigation. Give Accessibility
+     * one bounded, read-only observation after the external app opens; only
+     * the exact owner-approved visible package can allow a subsequent plan
+     * step. Missing Screen Assist, app switches, owner Pause or service loss
+     * return not_observed. Nothing is tapped, retried or marked delivered.
+     */
+    private fun resolveObservedAppLaunch(expectedPackage:String,
+                                         reviewGeneration:Long?,
+                                         promise:Promise,action:String?=null){
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            val observed=try{
+                reviewGeneration!=null &&
+                    NexaNativeActionSafety.approvalFenceCurrent(
+                        context,reviewGeneration) &&
+                    NexaAppLaunchObservation.expectedVisibleNow(context,expectedPackage)
+            }catch(_:Exception){false}
+            val result=Arguments.createMap()
+            result.putBoolean("intentDispatched",true)
+            result.putString("packageId",expectedPackage)
+            if(action!=null)result.putString("action",action)
+            result.putString("verification",if(observed)
+                "destination_package_observed" else "not_observed")
+            promise.resolve(result)
+        },1500L)
+    }
+
     @ReactMethod
     fun openSupportedApp(app: String, promise: Promise) {
         if(!NexaNativeActionSafety.permitsNewAction(context)){
@@ -243,14 +270,14 @@ class DeviceControlModule(
                 "No unique installed app has that visible name")
             return
         }
+        val reviewGeneration=NexaNativeActionSafety.approvalFence(context)
+            ?:run{promise.reject("OWNER_ACTIONS_PAUSED",
+                "Owner paused app control before the approved launch");return}
         when(NexaTaskCoordinator.dispatchOwnerApprovedAppLaunch(
             context,choice.label,choice.packageName,"chat")){
             "accepted" -> {
-                val result=Arguments.createMap()
-                result.putBoolean("intentDispatched",true)
-                result.putString("packageId",choice.packageName)
-                result.putString("verification","not_observed")
-                promise.resolve(result)
+                resolveObservedAppLaunch(
+                    choice.packageName,reviewGeneration,promise)
             }
             "uncertain" -> promise.reject("APP_LAUNCH_OUTCOME_UNKNOWN",
                 "Android launch outcome is uncertain. Inspect the phone; do not retry automatically.")
@@ -281,28 +308,19 @@ class DeviceControlModule(
             promise.reject("INVALID_SEARCH", "Search requires a short public text query")
             return
         }
-        val url=Uri.Builder().scheme("https").authority("www.google.com")
-            .appendPath("search").appendQueryParameter("q",clean).build()
-        val intent=Intent(Intent.ACTION_VIEW,url).apply {
-            setPackage("com.android.chrome")
-            addCategory(Intent.CATEGORY_BROWSABLE)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Do not bypass the app-launch journal: even a public browser search
+        // is an external Android action and must obey Pause/Voice Stop.
+        val reviewGeneration=NexaNativeActionSafety.approvalFence(context)
+            ?:run{promise.reject("OWNER_ACTIONS_PAUSED",
+                "Owner paused browser control before the approved search");return}
+        val outcome=NexaBrowserTaskActions.openChromeSearchApproved(
+            context,clean,origin="chat")
+        if(!outcome.startsWith("Chrome search launch requested")){
+            promise.reject("CHROME_NOT_VERIFIED",outcome)
+            return
         }
-        try {
-            context.startActivity(intent)
-            val result=Arguments.createMap()
-            result.putBoolean("intentDispatched",true)
-            result.putString("packageId","com.android.chrome")
-            result.putString("action","chrome_search")
-            result.putString("verification","not_observed")
-            promise.resolve(result)
-        } catch (_:ActivityNotFoundException) {
-            promise.reject("CHROME_UNAVAILABLE","Chrome is not installed or cannot handle a search")
-        } catch (_:SecurityException) {
-            promise.reject("CHROME_DENIED","Android denied the Chrome search")
-        } catch (_:Exception) {
-            promise.reject("CHROME_UNAVAILABLE","Android could not open Chrome")
-        }
+        resolveObservedAppLaunch(
+            "com.android.chrome",reviewGeneration,promise,"chrome_search")
     }
 
     /** One owner-approved system navigation action; no notification text is read. */
@@ -320,7 +338,7 @@ class DeviceControlModule(
             promise.reject("ACCESSIBILITY_DISABLED", "Enable Screen Assist in Android Accessibility Settings")
             return
         }
-        val result = NexaBrowserTaskActions.notificationsApproved(context)
+        val result = NexaBrowserTaskActions.notificationsApproved(context,origin="chat")
         if (!result.startsWith("Android accepted")) {
             promise.reject("NOTIFICATION_SHADE_FAILED", result)
             return
@@ -340,23 +358,29 @@ class DeviceControlModule(
             promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve camera launch")
             return
         }
-        val intent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (intent.resolveActivity(context.packageManager) == null) {
-            promise.reject("NO_CAMERA", "No compatible camera application available")
+        val intent=Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        val target=try{intent.resolveActivity(context.packageManager)}
+            catch(_:Exception){null}
+        if(target==null || target.packageName=="android"){
+            promise.reject("NO_CAMERA",
+                "No uniquely resolved camera application is available")
             return
         }
-        try {
-            context.startActivity(intent)
-            val result = Arguments.createMap()
-            result.putBoolean("intentDispatched", true)
-            result.putString("action", "camera")
-            result.putString("verification", "not_observed")
-            promise.resolve(result)
-        } catch (e: SecurityException) {
-            promise.reject("CAMERA_DENIED", "Android denied launching the camera")
-        } catch (e: ActivityNotFoundException) {
-            promise.reject("NO_CAMERA", "Camera activity missing")
+        val reviewGeneration=NexaNativeActionSafety.approvalFence(context)
+            ?:run{promise.reject("OWNER_ACTIONS_PAUSED",
+                "Owner paused camera control before the approved launch");return}
+        when(NexaApprovedExternalAction.launch(context,intent,
+                target.packageName,origin="chat")){
+            NexaApprovedExternalAction.Result.ACCEPTED->{
+                resolveObservedAppLaunch(target.packageName,
+                    reviewGeneration,promise,"camera")
+            }
+            NexaApprovedExternalAction.Result.DENIED->
+                promise.reject("CAMERA_DENIED",
+                    "A paused or changed camera target was rejected before launch")
+            NexaApprovedExternalAction.Result.UNCERTAIN->
+                promise.reject("CAMERA_OUTCOME_UNKNOWN",
+                    "Android camera launch outcome is uncertain. No automatic retry.")
         }
     }
     /**
@@ -668,27 +692,6 @@ class DeviceControlModule(
             promise.reject("MESSAGE_DRAFT_UNCERTAIN",
                 "Reviewed message preparation was not verified. No Send attempted.")
         }
-    }
-
-    /** Package-only evidence after an approved launcher Intent. */
-    @ReactMethod
-    fun observeLaunchedAppPackage(expectedPackage:String,promise:Promise) {
-        if(!expectedPackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
-            NexaPhoneVoiceTools.uniqueInstalledPackageChoice(context,expectedPackage)==null){
-            promise.resolve(false)
-            return
-        }
-        val service=ScreenAssistService.active
-        if(!ScreenAssistState.connected || service==null){
-            promise.resolve(false)
-            return
-        }
-        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
-        try{
-            promise.resolve(root?.isVisibleToUser==true &&
-                root.packageName?.toString()==expectedPackage)
-        }catch(_:Exception){promise.resolve(false)}
-        finally{try{root?.recycle()}catch(_:Exception){}}
     }
 
 }

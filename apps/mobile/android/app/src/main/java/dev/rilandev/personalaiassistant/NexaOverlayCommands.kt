@@ -159,7 +159,7 @@ internal object NexaOverlayCommands {
             "open whatsapp business" ->
                 launch(context, "com.whatsapp.w4b", "WhatsApp Business",origin)
             "find github", "find github app", "find my github app", "launcher search" ->
-                findGitHubOnHome(context)
+                findGitHubOnHome(context,origin)
             "app settings", "open app settings", "privacy settings" ->
                 openSettings(context,Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                     Uri.parse("package:" + context.packageName)))
@@ -185,7 +185,7 @@ internal object NexaOverlayCommands {
             "This phone blocked the requested Android Settings screen"
         }
 
-    private fun findGitHubOnHome(context: Context): String {
+    private fun findGitHubOnHome(context: Context,origin:String): String {
         if(!NexaNativeActionSafety.permitsNewAction(context))
             return "Nexa device actions are paused. No launcher navigation started."
         if (!installed(context, "com.github.android")) return "GitHub is not installed"
@@ -195,13 +195,18 @@ internal object NexaOverlayCommands {
         if (pkg.isBlank() || pkg == "android" || pkg == context.packageName ||
             !LauncherNavigationState.begin(pkg))
             return "Enable Nexa Launcher Navigation in Android Accessibility, then retry"
-        return try {
-            context.startActivity(home.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            "Launcher search started (max 8 horizontal swipes). " +
-                "Ask launcher status after the search. No app icon will be clicked."
-        } catch (_: Exception) {
-            LauncherNavigationState.stop("launch_failed")
-            "Android blocked navigation to the home launcher"
+        return when(NexaApprovedExternalAction.launch(context,home,pkg,origin)){
+            NexaApprovedExternalAction.Result.ACCEPTED->
+                "Launcher search started (max 8 horizontal swipes). " +
+                    "Ask launcher status after the search. No app icon will be clicked."
+            NexaApprovedExternalAction.Result.DENIED->{
+                LauncherNavigationState.stop("launch_failed")
+                "Android denied the reviewed home launcher. No navigation occurred."
+            }
+            NexaApprovedExternalAction.Result.UNCERTAIN->{
+                LauncherNavigationState.stop("launch_uncertain")
+                "Home launcher dispatch is uncertain. Inspect the phone; no retry."
+            }
         }
     }
 }

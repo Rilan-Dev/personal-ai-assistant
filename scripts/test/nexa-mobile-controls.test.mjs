@@ -29,7 +29,8 @@ test('WhatsApp draft dispatch is not an automatic send',()=>{
   assert.match(whatsapp,/appendQueryParameter\("text", message\)/);
   assert.match(whatsapp,/startsWith\("\+"\)/);
   assert.match(whatsapp,/intent\.resolveActivity\(context\.packageManager\)/);
-  assert.match(whatsapp,/result\.putBoolean\("messageSent", false\)/);
+  assert.match(whatsapp,/NexaApprovedExternalAction\.launch\(/);
+  assert.match(whatsapp,/result\.putBoolean\("messageSent",\s*false\)/);
   assert.doesNotMatch(whatsapp,/AccessibilityService|ACTION_CLICK|dispatchGesture|sendTextMessage/);
   assert.match(ui,/Open reviewed WhatsApp draft/);
   assert.match(ui,/Message was NOT sent by Nexa/);

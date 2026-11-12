@@ -34,6 +34,13 @@ class NexaAppLaunchObservationAndroidTest {
             NexaAppLaunchObservation.classify(expected,expected,true,false))
     }
 
+    @Test fun untrustedOrUnavailableWindowCannotAuthorizeTheNextAppStep(){
+        assertFalse(NexaAppLaunchObservation.expectedVisibleNow(ctx,
+            "not a package"))
+        assertFalse(NexaAppLaunchObservation.expectedVisibleNow(ctx,
+            "com.example.nonexistentdestination"))
+    }
+
     @Test fun observedDestinationRequiresConsumedLaunchClaimAndCannotReplay(){
         assumeTrue(NexaNativeActionSafety.permitsNewAction(ctx))
         val token="test-launch-"+UUID.randomUUID()
