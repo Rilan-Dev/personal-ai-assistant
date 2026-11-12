@@ -41,7 +41,7 @@ esac
 const run = (scenario, serial = '') => {
   const bin = makeFakeAdb();
   try {
-    return spawnSync('bash', ['-c', 'source "$1"; echo "GUARD_PASSED:$ANDROID_SERIAL"', '--', guard], {
+    return spawnSync('bash', ['-ec', 'source "$1"; echo "GUARD_PASSED:$ANDROID_SERIAL"', '--', guard], {
       encoding: 'utf8',
       timeout: 5000,
       env: { ...process.env, PATH: bin + ':' + process.env.PATH,
@@ -93,10 +93,13 @@ test('both destructive QA entrypoints source guard before any ADB mutation', () 
       ? source.indexOf('source "$ROOT/scripts/acceptance/require-synthetic-emulator.sh"')
       : source.indexOf('source "$root/scripts/acceptance/require-synthetic-emulator.sh"');
     assert.ok(guardIndex >= 0, `missing mandatory guard: ${path}`);
-    for (const action of ['adb uninstall', 'adb install', 'adb shell pm clear', 'adb shell am force-stop']) {
-      const index = source.indexOf(action);
-      if (index >= 0) assert.ok(index > guardIndex,
-        `${action} is reachable before the emulator guard in ${path}`);
+    // Match executable command lines, not documentation comments that mention
+    // the prohibited operations before the guard.
+    const mutations = [...source.matchAll(/^\\s*adb\\s+(?:uninstall|install|shell\\s+(?:pm\\s+clear|am\\s+force-stop))\\b/gm)];
+    assert.ok(mutations.length > 0, `Expected destructive test operations: ${path}`);
+    for (const operation of mutations) {
+      assert.ok(operation.index > guardIndex,
+        `${operation[0].trim()} is reachable before the emulator guard in ${path}`);
     }
   }
 });
