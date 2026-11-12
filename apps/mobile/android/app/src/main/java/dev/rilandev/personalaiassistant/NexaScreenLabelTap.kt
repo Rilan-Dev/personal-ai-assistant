@@ -182,6 +182,13 @@ internal object NexaScreenLabelTap {
                 ) ?:return if(candidates.size>1)
                     "Multiple controls named $label are visible. No tap performed."
                 else "The verified Maestro selector rejected $label. No tap performed."
+                // Geometry-only relations are insufficient: require the
+                // same candidate in the ACTUAL observed Accessibility tree.
+                if (relative != null &&
+                    NexaMaestroAccessibilityHierarchy.choose(
+                        root,pkg,root.windowId,rootRect,query,grounded
+                    ) != index)
+                    return "Live parent/child hierarchy could not verify the relative control. No tap performed."
                 candidates[index]
             }
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
