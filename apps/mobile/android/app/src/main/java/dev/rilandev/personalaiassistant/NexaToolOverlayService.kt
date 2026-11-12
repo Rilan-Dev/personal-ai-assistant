@@ -421,12 +421,12 @@ class NexaToolOverlayService : Service() {
                 val outcome=try {
                     when {
                         action=="open_notification_shade" ->
-                            NexaBrowserTaskActions.notificationsApproved(this,origin="overlay")
+                            NexaBrowserTaskActions.notificationsApproved(this)
                         action=="go_back" ->
-                            NexaBrowserTaskActions.goBackApproved(this,origin="overlay")
+                            NexaBrowserTaskActions.goBackApproved(this)
                         action.startsWith("chrome_search:") ->
                             NexaBrowserTaskActions.openChromeSearchApproved(
-                                this,action.removePrefix("chrome_search:"),origin="overlay")
+                                this,action.removePrefix("chrome_search:"))
                         action.startsWith("tap_visible_label:") ->
                             ScreenAssistService.active?.let {
                                 NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
