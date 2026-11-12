@@ -98,6 +98,38 @@ try {
     Write-Output ('INSTALLED_MAIN_CERT_SHA256=' + $digests[0])
     Write-Output ('PINNED_RELEASE_CERT_SHA256=' + $expected)
     if ($digests[0] -ne $expected) {
+        # A prior development install may be signed with the owner's EXISTING
+        # local debug keystore. Inspect only its public certificate fingerprint;
+        # never export, copy or upload the private key. Matching the legacy
+        # identity does NOT authorize upgrading to the different release key.
+        $legacyKeystore = Join-Path $SourceRoot 'apps\mobile\android\app\debug.keystore'
+        if (Test-Path -LiteralPath $legacyKeystore -PathType Leaf) {
+            $keytoolCommand = Get-Command keytool -ErrorAction SilentlyContinue
+            $keytoolPath = if ($keytoolCommand) { $keytoolCommand.Source }
+                else { Join-Path $env:ProgramFiles 'Android\Android Studio\jbr\bin\keytool.exe' }
+            if (Test-Path -LiteralPath $keytoolPath -PathType Leaf) {
+                $listing = @(& $keytoolPath -list -v -keystore $legacyKeystore
+                    -storepass android -alias androiddebugkey 2>&1)
+                if ($LASTEXITCODE -eq 0) {
+                    $certLines = @($listing | Where-Object {
+                        $_.ToString().TrimStart().StartsWith('SHA256:')
+                    })
+                    if ($certLines.Count -eq 1) {
+                        $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
+                        if ($legacyDigest -match '^[0-9a-f]{64}
+    Write-Output 'SIGNER_MATCH: installed Nexa main package matches the pinned permanent release identity'
+} finally {
+    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
+}
+ -and
+                            $legacyDigest -eq $digests[0]) {
+                            Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
+                            Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
+                        }
+                    }
+                }
+            }
+        }
         throw 'SIGNER_MISMATCH: in-place release upgrade NOT certified; do not uninstall or clear user data'
     }
     Write-Output 'SIGNER_MATCH: installed Nexa main package matches the pinned permanent release identity'
