@@ -148,6 +148,11 @@ internal object NexaScreenLabelTap {
             val candidates=targets.values.toList()
             // The historical search-field exception permits focus only.
             // Maestro's generic selector intentionally rejects editable nodes.
+            // The same owner-reviewed hierarchy must still hold at final
+            // dispatch, not merely at initial proposal review.
+            var reviewedHierarchyQuery:MaestroQuery?=null
+            var reviewedHierarchyCandidates:List<NexaMaestroTapCandidate> = emptyList()
+            var reviewedHierarchyIndex:Int?=null
             val found=if(candidates.any { it.isEditable }) {
                 if(relative!=null || candidates.size!=1 || !label.equals("search",ignoreCase=true))
                     return "Multiple or unsafe editable controls. No tap performed."
@@ -195,6 +200,11 @@ internal object NexaScreenLabelTap {
                         )!=geometric) null
                     else geometric
                 } ?:return "The target or its unique live hierarchy could not be verified. No tap performed."
+                if(relative!=null) {
+                    reviewedHierarchyQuery=query
+                    reviewedHierarchyCandidates=grounded
+                    reviewedHierarchyIndex=index
+                }
                 candidates[index]
             }
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
@@ -217,10 +227,19 @@ internal object NexaScreenLabelTap {
                     ?:return@dispatchWithFence false
                 try {
                     val currentBounds=Rect().also { found.getBoundsInScreen(it) }
+                    val liveHierarchyQuery=reviewedHierarchyQuery
+                    val liveHierarchyIndex=reviewedHierarchyIndex
+                    val hierarchyStillVerified=relative==null ||
+                        (liveHierarchyQuery!=null && liveHierarchyIndex!=null &&
+                            NexaMaestroAccessibilityHierarchy.choose(
+                                liveRoot,pkg,root.windowId,rootRect,
+                                liveHierarchyQuery,reviewedHierarchyCandidates
+                            )==liveHierarchyIndex)
                     if(!NexaMaestroTargetSelection.sameWindow(
                             pkg,root.windowId,
                             liveRoot.packageName?.toString().orEmpty(),liveRoot.windowId
-                        ) || !found.isVisibleToUser || !found.isEnabled ||
+                        ) || !hierarchyStillVerified ||
+                        !found.isVisibleToUser || !found.isEnabled ||
                         currentBounds!=reviewedBounds ||
                         (relative!=null && (reviewedAnchorBounds==null ||
                             !anchorStillUnique(liveRoot,relative.anchor,reviewedAnchorBounds)))) false
