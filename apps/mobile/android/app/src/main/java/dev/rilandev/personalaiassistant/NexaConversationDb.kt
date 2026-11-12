@@ -576,7 +576,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             val helper=NexaConversationDb(context)
             try {
                 helper.readableDatabase.rawQuery(
-                    "SELECT task_id,session_id,status,step_index,payload,updated_at FROM voice_task_checkpoints ORDER BY updated_at DESC LIMIT ?",
+                    "SELECT task_id,session_id,status,step_index,payload,updated_at FROM voice_task_checkpoints ORDER BY updated_at DESC,rowid DESC LIMIT ?",
                     arrayOf(limit.coerceIn(1,1000).toString())
                 ).use { c ->
                     while(c.moveToNext()) {
