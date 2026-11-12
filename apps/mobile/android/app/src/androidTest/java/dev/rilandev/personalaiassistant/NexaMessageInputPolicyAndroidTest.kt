@@ -65,13 +65,30 @@ class NexaMessageInputPolicyAndroidTest {
     }
 
     @Test fun onlySupportedManualChannelsAndNonemptyValidTextCanStage() {
-        assertFalse(NexaMessageDraftState.stage("whatsapp","com.whatsapp","Mom","Hello"))
-        assertFalse(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom",""))
-        assertFalse(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom","x".repeat(501)))
-        assertTrue(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom","I will call you later"))
-        assertNotNull(NexaMessageDraftState.peek())
-        assertNotNull(NexaMessageDraftState.take())
-        assertNull(NexaMessageDraftState.take())
+        try {
+            assertEquals("com.whatsapp",NexaMessageChannels.expectedManualPackage("whatsapp"))
+            assertEquals("com.whatsapp.w4b",NexaMessageChannels.expectedManualPackage("whatsapp-business"))
+            assertEquals("com.imo.android.imoim",NexaMessageChannels.expectedManualPackage("imo"))
+            assertEquals("im.thebot.messenger",NexaMessageChannels.expectedManualPackage("botim"))
+            assertNull(NexaMessageChannels.expectedManualPackage("sms"))
+            assertNull(NexaMessageChannels.expectedManualPackage("unknown"))
+            // WhatsApp manual drafts are now supported, but are never sent.
+            assertTrue(NexaMessageDraftState.stage("whatsapp","com.whatsapp","Mom","Hello"))
+            assertNotNull(NexaMessageDraftState.take())
+            assertNull(NexaMessageDraftState.take())
+            // A channel must not be used to stage an arbitrary other package.
+            assertFalse(NexaMessageDraftState.stage("whatsapp","com.imo.android.imoim","Mom","Hello"))
+            assertFalse(NexaMessageDraftState.stage("imo","com.whatsapp","Mom","Hello"))
+            assertFalse(NexaMessageDraftState.stage("unknown","com.whatsapp","Mom","Hello"))
+            assertFalse(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom",""))
+            assertFalse(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom","x".repeat(501)))
+            assertTrue(NexaMessageDraftState.stage("imo","com.imo.android.imoim","Mom","I will call you later"))
+            assertNotNull(NexaMessageDraftState.peek())
+            assertNotNull(NexaMessageDraftState.take())
+            assertNull(NexaMessageDraftState.take())
+        } finally {
+            NexaMessageDraftState.clear()
+        }
     }
 
     @Test fun approvalBindingRejectsAReplacedRecipientChannelOrMessage() {
