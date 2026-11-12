@@ -203,12 +203,15 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
                 assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0))
             }
         }finally{helper.close()}
-        val index=NexaUnifiedTaskTimeline.recent(ctx,60)
-        val row=(0 until index.length()).map{index.getJSONObject(it)}
-            .first{it.getString("taskId")==id}
-        assertTrue(row.getBoolean("detailsRedacted"))
+        // A privacy audit is about this exact durable task, not whether it
+        // happens to remain in the 60-row scrollable recent timeline. A busy
+        // physical phone can have hundreds of newer synthetic QA checkpoints.
+        val row=NexaUnifiedTaskTimeline.find(ctx,id)
+        assertNotNull("Exact redacted task must remain addressable by id",row)
+        assertTrue(row!!.getBoolean("detailsRedacted"))
         assertEquals("legacy_voice_checkpoint",row.getString("source"))
         assertEquals(0,row.getInt("verifiedSteps"))
+        assertNull(NexaUnifiedTaskTimeline.find(ctx,"invalid task id"))
     }
 
 
