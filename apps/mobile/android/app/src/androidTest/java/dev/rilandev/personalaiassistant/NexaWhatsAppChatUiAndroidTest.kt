@@ -59,7 +59,7 @@ class NexaWhatsAppChatUiAndroidTest {
         try {
             val initial=settledList(runId,1)
             val scan=NexaWhatsAppChatActions.inspect(initial,"Nova Forever")
-            assertEquals("One clickable chat-row target",1,scan.candidates)
+            assertEquals("Synthetic accessibility evidence: "+fixtureTree(initial),1,scan.candidates)
             assertEquals(100,scan.bestEvidence)
             assertFalse(scan.alreadyOpen)
             assertNotNull(scan.target)
