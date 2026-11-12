@@ -32,19 +32,34 @@ class NexaWhatsAppChatUiAndroidTest {
      * Wait for real, fully visible geometry; never relax production tap safety.
      */
     private fun settledList(runId:String,expectedRows:Int):AccessibilityNodeInfo {
-        repeat(100) {
+        // A single ready frame is not enough on the physical phone: Android
+        // can shift an active window during its entry animation between
+        // the first geometry read and the app's inspection. Require three
+        // consecutive identical *subsequent* visible geometry samples.
+        var previousSignature:String?=null
+        var stableFrames=0
+        repeat(120) {
             val current=root(runId)
             val window=android.graphics.Rect().also{current.getBoundsInScreen(it)}
             val rows=NexaQaAccessibilityRoot.nodes(current).filter { node ->
                 node.isClickable &&
                     node.contentDescription?.toString()?.startsWith("Nova Forever")==true
             }
-            if(rows.size==expectedRows && !window.isEmpty && rows.all { node ->
+            val valid=rows.size==expectedRows && !window.isEmpty && rows.all { node ->
                 val row=android.graphics.Rect().also{node.getBoundsInScreen(it)}
                 node.isVisibleToUser && row.width()>25 && row.height()>20 &&
                     window.contains(row)
-            })return current
-            android.os.SystemClock.sleep(80L)
+            }
+            val signature=if(valid) {
+                window.toShortString()+"|"+rows.joinToString("|") { node ->
+                    android.graphics.Rect().also{node.getBoundsInScreen(it)}.toShortString()
+                }
+            } else null
+            stableFrames=if(signature!=null && signature==previousSignature)
+                stableFrames+1 else 0
+            previousSignature=signature
+            if(stableFrames>=3)return current
+            android.os.SystemClock.sleep(120L)
         }
         throw AssertionError("Synthetic chat list was not geometrically settled")
     }
