@@ -59,7 +59,7 @@ internal object NexaUnifiedTaskTimeline {
                         "WHERE s.task_id=t.task_id AND s.status='verified')," +
                     "(SELECT COUNT(*) FROM agent_task_events e WHERE e.task_id=t.task_id " +
                         "AND e.event_kind='owner_redacted_legacy_voice') " +
-                    "FROM agent_tasks t ORDER BY t.updated_at DESC LIMIT ?",
+                    "FROM agent_tasks t ORDER BY t.updated_at DESC,t.rowid DESC LIMIT ?",
                 arrayOf(maximum.toString())
             ).use{c->
                 while(c.moveToNext()) {
@@ -86,7 +86,7 @@ internal object NexaUnifiedTaskTimeline {
                 "SELECT v.task_id,v.status,v.step_index,v.updated_at " +
                     "FROM voice_task_checkpoints v WHERE NOT EXISTS (" +
                     "SELECT 1 FROM agent_tasks t WHERE t.task_id=v.task_id) " +
-                    "ORDER BY v.updated_at DESC LIMIT ?",
+                    "ORDER BY v.updated_at DESC,v.rowid DESC LIMIT ?",
                 arrayOf(maximum.toString())
             ).use{c->
                 while(c.moveToNext()){
