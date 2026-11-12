@@ -16,10 +16,12 @@ test('different clickable rows are not coalesced by a shared unrelated parent',(
   assert.match(source,/sameRow\(it\.bounds,rect\)/);
 });
 
-test('synthetic chat list waits for three identical visible geometry samples',()=>{
+test('synthetic recipient fixture requires stable matching Accessibility observations',()=>{
   const fixture=readFileSync('apps/mobile/android/app/src/androidTest/java/dev/rilandev/personalaiassistant/NexaWhatsAppChatUiAndroidTest.kt','utf8');
-  assert.match(fixture,/var stableFrames=0/);
-  assert.match(fixture,/signature==previousSignature/);
-  assert.match(fixture,/stableFrames>=3/);
-  assert.match(fixture,/window\.contains\(row\)/);
+  assert.match(fixture,/var previousSignature:String\?=null/);
+  assert.match(fixture,/signature!=null && signature==previousSignature/);
+  assert.match(fixture,/scan\.candidates==expectedRows/);
+  assert.match(fixture,/scan\.bestEvidence==evidence/);
+  assert.match(fixture,/if\(consecutive>=3\)return Settled\(current,scan\)/);
+  assert.match(fixture,/window\.contains\(rect\)/);
 });

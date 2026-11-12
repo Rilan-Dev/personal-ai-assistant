@@ -26,18 +26,19 @@ class NexaWhatsAppChatUiAndroidTest {
         NexaQaAccessibilityRoot.ownWindow("QA run: $runId")
 
     /**
-     * On the physical Infinix, Android can publish an active Accessibility
-     * window while its activity is still sliding in from offscreen.
-     * Its chat rows then temporarily lie outside the returned root bounds.
-     * Wait for real, fully visible geometry; never relax production tap safety.
+     * Android may report a fixture marker while the window is still moving.
+     * Require four consecutive snapshots containing the expected *actual*
+     * chat-row candidates, not merely the expected number of clickable nodes.
+     * Each returned scan is computed on the same window as its row geometry.
+     * Production recipient checks are never relaxed to make a test pass.
      */
-    private fun settledList(runId:String,expectedRows:Int):AccessibilityNodeInfo {
-        // A single ready frame is not enough on the physical phone: Android
-        // can shift an active window during its entry animation between
-        // the first geometry read and the app's inspection. Require three
-        // consecutive identical *subsequent* visible geometry samples.
+    private data class Settled(val root:AccessibilityNodeInfo,
+                               val scan:NexaWhatsAppChatActions.Scan)
+
+    private fun settledScan(runId:String,expectedRows:Int,recipient:String,
+                            evidence:Int):Settled {
+        var consecutive=0
         var previousSignature:String?=null
-        var stableFrames=0
         repeat(120) {
             val current=root(runId)
             val window=android.graphics.Rect().also{current.getBoundsInScreen(it)}
@@ -45,23 +46,27 @@ class NexaWhatsAppChatUiAndroidTest {
                 node.isClickable &&
                     node.contentDescription?.toString()?.startsWith("Nova Forever")==true
             }
-            val valid=rows.size==expectedRows && !window.isEmpty && rows.all { node ->
-                val row=android.graphics.Rect().also{node.getBoundsInScreen(it)}
-                node.isVisibleToUser && row.width()>25 && row.height()>20 &&
-                    window.contains(row)
-            }
-            val signature=if(valid) {
+            val geometry=rows.size==expectedRows && !window.isEmpty &&
+                rows.all { node ->
+                    val rect=android.graphics.Rect().also{node.getBoundsInScreen(it)}
+                    node.isVisibleToUser && rect.width()>25 && rect.height()>20 &&
+                        window.contains(rect)
+                }
+            val scan=NexaWhatsAppChatActions.inspect(current,recipient)
+            val candidateReady=geometry && scan.candidates==expectedRows &&
+                scan.bestEvidence==evidence && !scan.alreadyOpen
+            val signature=if(candidateReady) {
                 window.toShortString()+"|"+rows.joinToString("|") { node ->
                     android.graphics.Rect().also{node.getBoundsInScreen(it)}.toShortString()
                 }
             } else null
-            stableFrames=if(signature!=null && signature==previousSignature)
-                stableFrames+1 else 0
+            consecutive=if(signature!=null && signature==previousSignature)
+                consecutive+1 else 0
             previousSignature=signature
-            if(stableFrames>=3)return current
-            android.os.SystemClock.sleep(120L)
+            if(consecutive>=3)return Settled(current,scan)
+            android.os.SystemClock.sleep(100L)
         }
-        throw AssertionError("Synthetic chat list was not geometrically settled")
+        throw AssertionError("Synthetic chat list never stabilized with expected candidate count")
     }
 
     private fun fixtureTree(root:AccessibilityNodeInfo)=NexaQaAccessibilityRoot.nodes(root)
@@ -72,9 +77,9 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
         try {
-            val initial=settledList(runId,1)
-            val scan=NexaWhatsAppChatActions.inspect(initial,"Nova Forever")
-            assertEquals("Synthetic accessibility evidence: "+fixtureTree(initial),1,scan.candidates)
+            val opened=settledScan(runId,1,"Nova Forever",100)
+            val scan=opened.scan
+            assertEquals("One clickable chat-row target",1,scan.candidates)
             assertEquals(100,scan.bestEvidence)
             assertFalse(scan.alreadyOpen)
             assertNotNull(scan.target)
@@ -127,8 +132,9 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun uncertainSpeechVariantCanBeFoundButNotWrongAlias() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
         try {
-            val current=settledList(runId,1)
-            val close=NexaWhatsAppChatActions.inspect(current,"Nva Forever")
+            val matched=settledScan(runId,1,"Nva Forever",85)
+            val current=matched.root
+            val close=matched.scan
             assertEquals(fixtureTree(current),1,close.candidates)
             assertEquals(85,close.bestEvidence)
             assertEquals(0,NexaWhatsAppChatActions.inspect(current,"Map Forward").candidates)
@@ -142,8 +148,9 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun twoIdenticalChatRowsRemainAmbiguousAndAreNeverTapped() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,true)
         try {
-            val current=settledList(runId,2)
-            val scan=NexaWhatsAppChatActions.inspect(current,"Nova Forever")
+            val matched=settledScan(runId,2,"Nova Forever",100)
+            val current=matched.root
+            val scan=matched.scan
             assertEquals(fixtureTree(current),2,scan.candidates)
             assertNull("Two different rows cannot become an approved target",scan.target)
             assertTrue(NexaQaAccessibilityRoot.nodes(current).any{
