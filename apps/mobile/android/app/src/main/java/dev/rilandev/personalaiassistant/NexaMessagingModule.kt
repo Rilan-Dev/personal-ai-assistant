@@ -43,6 +43,11 @@ internal object NexaMessageChannels {
 
     fun permitsManualComposer(id: String): Boolean =
         id == "imo" || id == "botim" || id == "whatsapp-business" || id == "whatsapp"
+
+    // A reviewed channel cannot be relabelled as a different installed app.
+    // The exact app id and package must remain bound through draft staging.
+    fun expectedManualPackage(id: String): String? =
+        if (permitsManualComposer(id)) known[id]?.second else null
 }
 
 /** Ephemeral and single-use; message body never enters SharedPreferences. */
@@ -58,6 +63,7 @@ internal object NexaMessageDraftState {
         synchronized(lock) {
             clear()
             if (!NexaMessageChannels.permitsManualComposer(appId) ||
+                pkg != NexaMessageChannels.expectedManualPackage(appId) ||
                 pkg.length !in 3..150 || !pkg.matches(Regex("[a-zA-Z0-9_.]+")) ||
                 !hint.matches(Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}")) ||
                 message.length !in 1..500 || message.isBlank() ||
