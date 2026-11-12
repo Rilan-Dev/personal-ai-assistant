@@ -51,10 +51,11 @@ foreach ($sdk in $sdkLocations) {
             Sort-Object FullName -Descending | Select-Object -ExpandProperty FullName)
     }
 }
-$signer = @($signers | Select-Object -Unique | Select-Object -First 1)
-if ($signer.Count -ne 1) {
+$signerList = @($signers | Select-Object -Unique | Select-Object -First 1)
+if ($signerList.Count -ne 1) {
     throw 'Android SDK apksigner.bat was not found'
 }
+$signerExecutable = $signerList[0]
 
 $basePaths = @(& $adb -s $Serial shell pm path $package |
     Where-Object {
@@ -64,7 +65,8 @@ if ($LASTEXITCODE -ne 0 -or $basePaths.Count -ne 1) {
     throw 'Exactly one installed Nexa main-package base.apk is required'
 }
 $remotePath = $basePaths[0].Trim().Substring(8)
-if ($remotePath -notmatch '^/data/app/[^' + [char]0 + ']+/base\.apk$') {
+if (-not $remotePath.StartsWith('/data/app/') -or
+    -not $remotePath.EndsWith('/base.apk')) {
     throw 'Unexpected installed APK path'
 }
 
@@ -80,7 +82,7 @@ try {
     if ($pullExit -ne 0 -or -not (Test-Path $apk -PathType Leaf)) {
         throw 'Could not inspect installed main-package APK'
     }
-    $verification = @(& $signer[0] verify --print-certs $apk 2>&1)
+    $verification = @(& $signerExecutable verify --print-certs $apk 2>&1)
     $signExit = $LASTEXITCODE
     if ($signExit -ne 0) {
         throw 'Installed APK has an invalid or unsupported signature'
