@@ -68,3 +68,12 @@ test('explicit nested controls use real Android parent paths, not flattened geom
   assert.match(hierarchy,/NexaMaestroTargetSelection.chooseFromTree\(/);
   assert.doesNotMatch(hierarchy,/performAction\(|dispatchGesture\(|startActivity\(/);
 });
+
+test('live hierarchy must be revalidated within the final Pause-fenced click',()=>{
+  const tap=read('NexaScreenLabelTap.kt');
+  assert.match(tap,/val hierarchyStillVerified=relative==null/);
+  assert.match(tap,/NexaNativeActionSafety.dispatchWithFence\([\s\S]*?NexaMaestroAccessibilityHierarchy.choose\(/);
+  assert.match(tap,/\!hierarchyStillVerified/);
+  assert.match(tap,/\!anchorStillUnique\(liveRoot,relative.anchor,reviewedAnchorBounds\)/);
+  assert.match(tap,/currentBounds!=reviewedBounds/);
+});
