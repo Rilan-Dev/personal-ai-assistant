@@ -25,6 +25,19 @@ class NexaMaestroRelativeTapAndroidTest {
         }
     }
 
+    @Test fun explicitNestedTapRequiresBoundedOwnerReviewAndRealAncestry() {
+        val parsed=NexaMaestroRelativeTap.parse("tap Open inside Recent")
+        assertNotNull(parsed)
+        assertEquals("child",parsed?.direction)
+        assertEquals(parsed,NexaMaestroRelativeTap.fromAction(parsed!!.toAction()))
+        assertTrue(NexaMaestroRelativeTap.looksRelative("tap Open inside Password"))
+        assertNull(NexaMaestroRelativeTap.parse("tap Open inside Password"))
+        assertNull(NexaMaestroRelativeTap.parse("tap Send inside Recent"))
+        assertNull(NexaMaestroRelativeTap.parse("tap Open inside Recent and pay"))
+        assertNull(NexaMaestroRelativeTap.fromAction("tap_relative:child|Open|Account"))
+        assertNull(NexaMaestroRelativeTap.fromAction("tap_relative:child|Open|Recent|extra"))
+    }
+
     @Test fun rejectsSensitiveAmbiguousAndForgedActions() {
         val rejected=listOf(
             "tap Send below Recent",
