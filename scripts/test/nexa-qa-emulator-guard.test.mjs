@@ -1,11 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, chmodSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, chmodSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const guard = resolve('scripts/acceptance/require-synthetic-emulator.sh');
+// On Windows, Git Bash may be installed without bash.exe in PATH.
+// Keep running the SAME shell guard against a fake ADB; never invoke real ADB.
+const gitBash = join(process.env.ProgramFiles || 'C:\\Program Files', 'Git', 'bin', 'bash.exe');
+const bashExecutable = process.platform === 'win32' && existsSync(gitBash) ? gitBash : 'bash';
+const bashPath = p => process.platform === 'win32'
+  ? p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive) => '/' + drive.toLowerCase())
+  : p;
 const makeFakeAdb = () => {
   const dir = mkdtempSync(join(tmpdir(), 'nexa-adb-guard-'));
   const adb = join(dir, 'adb');
@@ -41,10 +48,10 @@ esac
 const run = (scenario, serial = '') => {
   const bin = makeFakeAdb();
   try {
-    return spawnSync('bash', ['-ec', 'source "$1"; echo "GUARD_PASSED:$ANDROID_SERIAL"', '--', guard], {
+    return spawnSync(bashExecutable, ['-ec', 'export PATH="$1:$PATH"; source "$2"; echo "GUARD_PASSED:$ANDROID_SERIAL"', '--', bashPath(bin), bashPath(guard)], {
       encoding: 'utf8',
       timeout: 5000,
-      env: { ...process.env, PATH: bin + ':' + process.env.PATH,
+      env: { ...process.env,
         QA_ADB_SCENARIO: scenario, ANDROID_SERIAL: serial },
     });
   } finally { rmSync(bin, { recursive:true, force:true }); }
