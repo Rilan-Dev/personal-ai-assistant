@@ -2,8 +2,14 @@
   "name": "personal-ai-assistant",
   "version": "0.2.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*", "services/*"],
-  "engines": {"node": ">=22.13.0"},
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "test": "node --experimental-strip-types --test packages/agent-core/test/*.test.mjs scripts/test/*.test.mjs services/agent-runtime/test/*.test.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck --workspace @paa/mobile && npm run typecheck --workspace @paa/agent-runtime",
@@ -15,5 +21,11 @@
     "web": "npm run web --workspace @paa/mobile",
     "web:export": "npm run web:export --workspace @paa/mobile"
   },
-  "devDependencies": {"typescript": "~5.9.2"}
+  "devDependencies": {
+    "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "minimatch": "^11.0.8",
+    "zod": "^4.6.7"
+  }
 }
