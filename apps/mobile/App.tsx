@@ -2288,7 +2288,6 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
-        {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. For a bounded multi-tool request use: “Check battery then check storage” or “Open Calendar then tap Search”. Only fully verified steps continue; reapprove each side effect. Flashlight additionally needs Android camera permission.</Text>
@@ -2340,6 +2339,10 @@ export default function App() {
             <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
           </Pressable>}
         </View>
+        {/* Keep essential device grants above the potentially long task history.
+            This changes discoverability only; every action still requires its
+            existing one-shot approval, native journal and Android permissions. */}
+        {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
             <Text style={styles.cardHeading}>Private, one-time observations</Text>
