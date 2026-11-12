@@ -53,6 +53,20 @@ if (-not $OutputDirectory) {
         'nexa-usb-qa-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
+# Check the actual installed application's embedded BuildConfig revision before
+# any test batch. A stale APK/test pair must never be certified as a new ref.
+$identityClass = 'dev.rilandev.personalaiassistant.NexaBuildIdentityAndroidTest'
+$identityLog = Join-Path $OutputDirectory 'source-identity.log'
+$identityLines = @(& $adb -s $Serial shell am instrument -w -r -e class $identityClass -e nexaExpectedRevision $revision $runner 2>&1)
+$identityOutput = ($identityLines | Out-String)
+Set-Content -Path $identityLog -Value $identityOutput -Encoding UTF8
+$identityPassed = $identityOutput -match 'OK\s*\(1 test\)' -and
+    $identityOutput -match 'INSTRUMENTATION_CODE:\s*-1' -and
+    $identityOutput -notmatch 'FAILURES!!!|Process crashed|INSTRUMENTATION_CODE:\s*0'
+if (-not $identityPassed) {
+    throw "Installed APK/test revision did not match $revision. See $identityLog"
+}
+Write-Host "Installed Android source identity verified: $revision"
 $passed = 0
 $batches = 0
 Write-Host "Source ref: $GitRef ($revision)"
