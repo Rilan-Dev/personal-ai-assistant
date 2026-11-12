@@ -95,7 +95,7 @@ test('both destructive QA entrypoints source guard before any ADB mutation', () 
     assert.ok(guardIndex >= 0, `missing mandatory guard: ${path}`);
     // Match executable command lines, not documentation comments that mention
     // the prohibited operations before the guard.
-    const mutations = [...source.matchAll(/^\\s*adb\\s+(?:uninstall|install|shell\\s+(?:pm\\s+clear|am\\s+force-stop))\\b/gm)];
+    const mutations = [...source.matchAll(/^\s*adb\s+(?:uninstall|install|shell\s+(?:pm\s+clear|am\s+force-stop))\b/gm)];
     assert.ok(mutations.length > 0, `Expected destructive test operations: ${path}`);
     for (const operation of mutations) {
       assert.ok(operation.index > guardIndex,
