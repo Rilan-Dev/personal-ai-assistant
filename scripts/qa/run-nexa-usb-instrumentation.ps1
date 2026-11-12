@@ -22,8 +22,9 @@ $testDirectory = Join-Path $SourceRoot 'apps\mobile\android\app\src\androidTest\
 if (-not (Test-Path $testDirectory -PathType Container)) {
     throw "Android test source not found: $testDirectory"
 }
-$devices = @(& $adb devices -l | Where-Object { $_ -match '^(\S+)\s+device\b' } |
-    ForEach-Object { $Matches[1] })
+$devices = @(& $adb devices -l | ForEach-Object {
+    if ($_ -match '^(\S+)\s+device\b') { $Matches[1] }
+})
 if (-not $Serial) {
     if ($devices.Count -ne 1) { throw "Expected exactly one authorized USB device; found $($devices.Count)" }
     $Serial = $devices[0]
