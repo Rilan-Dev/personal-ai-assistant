@@ -83,8 +83,8 @@ internal object SarvamModelApiReadiness {
                             "Saaras, Bulbul, a synthetic chat turn and Nexa's live tool declarations were accepted. No phone content, microphone audio or device action was sent.")
                         else {
                             val safe=NexaSarvamChatError.classify(it.code,
-                                try{it.body?.string().orEmpty().take(5000)}
-                                catch(_:Exception){""})
+                                NexaSarvamResponseBounds.textOrNull(it,
+                                    NexaSarvamResponseBounds.MAX_ERROR_BYTES).orEmpty())
                             finish(false,"MODEL_TOOL_"+safe.code.uppercase(java.util.Locale.ROOT),
                                 "Sarvam tool-schema readiness failed: "+safe.explanation+
                                     " No device tool was executed.")
