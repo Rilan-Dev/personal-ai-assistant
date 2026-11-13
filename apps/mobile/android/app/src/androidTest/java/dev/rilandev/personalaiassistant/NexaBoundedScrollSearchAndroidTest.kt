@@ -33,14 +33,20 @@ class NexaBoundedScrollSearchAndroidTest {
         assertFalse(guide.confirmable(pkg, window, generation, 1120L))
         assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
             guide.onEvidence(first, "android_accepted", pkg, window, generation, 0, 1200L))
-        assertEquals(NexaBoundedScrollSearch.Progress.NEXT_APPROVAL,
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
             guide.onEvidence(first, "scroll_event_observed", pkg, window, generation, 0, 1450L))
-        assertTrue(guide.confirmable(pkg, window, generation, 1500L))
+        assertEquals(NexaBoundedScrollSearch.Progress.NEXT_APPROVAL,
+            guide.onEvidence(first, "scroll_event_observed", pkg, window, generation, 0, 1750L))
+        assertTrue(guide.confirmable(pkg, window, generation, 1800L))
         assertFalse(guide.onApprovedScroll(first, pkg, window, generation, 1550L))
         assertTrue(guide.onApprovedScroll(second, pkg, window, generation, 1550L))
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+            guide.onEvidence(second, "scroll_event_observed", pkg, window, generation,
+                1, 1900L, "10:20:110:60"))
         assertEquals(NexaBoundedScrollSearch.Progress.FOUND,
-            guide.onEvidence(second, "scroll_event_observed", pkg, window, generation, 1, 1600L))
-        assertFalse(guide.confirmable(pkg, window, generation, 1650L))
+            guide.onEvidence(second, "scroll_event_observed", pkg, window, generation,
+                1, 2200L, "10:20:110:60"))
+        assertFalse(guide.confirmable(pkg, window, generation, 2250L))
     }
 
     @Test fun packageWindowAndPauseChangesFailClosed() {
@@ -79,8 +85,11 @@ class NexaBoundedScrollSearchAndroidTest {
             assertTrue(guide.onApprovedScroll(token, pkg, window, generation, now))
             val expected = if (step < 4) NexaBoundedScrollSearch.Progress.NEXT_APPROVAL
                 else NexaBoundedScrollSearch.Progress.LIMIT
+            assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+                guide.onEvidence(token, "scroll_event_observed",
+                    pkg, window, generation, 0, now + 50L))
             assertEquals(expected, guide.onEvidence(token, "scroll_event_observed",
-                pkg, window, generation, 0, now + 100L))
+                pkg, window, generation, 0, now + 350L))
         }
         assertFalse(guide.active(3000L))
     }
@@ -100,4 +109,42 @@ class NexaBoundedScrollSearchAndroidTest {
             guide.onEvidence(first, "scroll_event_observed", pkg, window, generation, 2, 110_200L))
         assertFalse(guide.active(110_300L))
     }
+
+    @Test fun layoutMustSettleWithSameGroundedBoundsBeforeFound() {
+        val guide = NexaBoundedScrollSearch()
+        assertTrue(guide.start(NexaBoundedScrollSearch.parse("scroll down until Search")!!,
+            pkg, window, generation, 1000L))
+        assertTrue(guide.onApprovedScroll(first,pkg,window,generation,1100L))
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+            guide.onEvidence(first,"scroll_event_observed",pkg,window,generation,
+                1,1400L,"10:20:80:70"))
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+            guide.onEvidence(first,"scroll_event_observed",pkg,window,generation,
+                1,1500L,"10:20:80:70"))
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+            guide.onEvidence(first,"scroll_event_observed",pkg,window,generation,
+                1,1800L,"11:20:81:70"))
+        assertEquals(NexaBoundedScrollSearch.Progress.FOUND,
+            guide.onEvidence(first,"scroll_event_observed",pkg,window,generation,
+                1,2100L,"11:20:81:70"))
+        assertFalse(guide.active(2150L))
+    }
+
+    @Test fun noUnidentifiedOrExpiredTargetMayProduceSuccess() {
+        val guide=NexaBoundedScrollSearch()
+        val request=NexaBoundedScrollSearch.parse("scroll down until Settings")!!
+        assertTrue(guide.start(request,pkg,window,generation,1000L))
+        assertTrue(guide.onApprovedScroll(first,pkg,window,generation,1100L))
+        assertEquals(NexaBoundedScrollSearch.Progress.BLOCKED,
+            guide.onEvidence(first,"scroll_event_observed",pkg,window,generation,1,1400L))
+        assertFalse(guide.active(1500L))
+        assertTrue(guide.start(request,pkg,window,generation,2000L))
+        assertTrue(guide.onApprovedScroll(second,pkg,window,generation,2100L))
+        assertEquals(NexaBoundedScrollSearch.Progress.WAITING,
+            guide.onEvidence(second,"scroll_event_observed",pkg,window,generation,0,2200L))
+        assertEquals(NexaBoundedScrollSearch.Progress.BLOCKED,
+            guide.onEvidence(second,"scroll_event_observed",pkg,window,generation,
+                0,6600L))
+    }
+
 }

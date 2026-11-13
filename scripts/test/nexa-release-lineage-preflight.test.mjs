@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 
 const preflight = readFileSync(
   'scripts/acceptance/verify-installed-nexa-signer.ps1','utf8');
@@ -39,4 +40,27 @@ test('legacy Windows debug key is identified read-only but never accepted as pro
   assert.match(preflight,/Production key migration needs a separately verified Android signing lineage/);
   assert.match(preflight,/throw 'SIGNER_MISMATCH: in-place release upgrade NOT certified/);
   assert.doesNotMatch(preflight,/keytool\s+-importkeystore|keytool\s+-genkeypair|gh secret set|apksigner rotate/);
+});
+
+test('Windows PowerShell parses the actual signer preflight with zero syntax errors', {
+  skip: process.platform !== 'win32'
+}, () => {
+  const ps = [
+    '$tokens=$null; $errors=$null;',
+    "[System.Management.Automation.Language.Parser]::ParseFile('scripts/acceptance/verify-installed-nexa-signer.ps1',[ref]$tokens,[ref]$errors)|Out-Null;",
+    'if($errors.Count -gt 0) {',
+    '$errors | ForEach-Object { Write-Error $_.Message }; exit 1',
+    '}; exit 0'
+  ].join(' ');
+  const actual=spawnSync('powershell.exe', [
+    '-NoProfile','-NonInteractive','-Command',ps
+  ],{encoding:'utf8',timeout:15000});
+  assert.equal(actual.status,0,
+    'Release signer preflight must parse before any ADB usage: '+(actual.stderr||actual.error?.message||''));
+});
+
+test('legacy signer comparison has exactly one bounded digest predicate', () => {
+  assert.match(preflight,/\$legacyDigest -match '\^\[0-9a-f\]\{64\}\$' -and/);
+  assert.equal((preflight.match(/LEGACY_DEBUG_SIGNER_MATCH=true/g)||[]).length,1);
+  assert.equal((preflight.match(/SIGNER_MATCH: installed Nexa main package matches/g)||[]).length,1);
 });

@@ -112,7 +112,9 @@ internal object NexaTaskScreenObservation {
      * Distinct, enabled, visible control hitboxes count as ambiguity.
      */
     internal data class ExactVisibleControl(
-        val packageName:String,val windowId:Int,val matchingControls:Int
+        val packageName:String,val windowId:Int,val matchingControls:Int,
+        // Ephemeral geometry only: never stored or sent to a model/provider.
+        val uniqueBoundsKey:String?=null
     )
     fun exactVisibleControl(service:ScreenAssistService,requested:String):ExactVisibleControl? {
         val expected=safeLabel(requested) ?:return null
@@ -151,7 +153,8 @@ internal object NexaTaskScreenObservation {
             // If observation was truncated, missing/ambiguous counts cannot
             // authorize a target; report unavailable instead.
             if(queue.isNotEmpty())return null
-            return ExactVisibleControl(pkg,root.windowId,uniqueBounds.size)
+            return ExactVisibleControl(pkg,root.windowId,uniqueBounds.size,
+                uniqueBounds.singleOrNull())
         }catch(_:Exception){return null}
         finally{try{root.recycle()}catch(_:Exception){}}
     }

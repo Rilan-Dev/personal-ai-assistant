@@ -258,14 +258,15 @@ class NexaToolOverlayService : Service() {
             else null
             val outcome=if(request!=null && observed!=null && generation!=null)
                 boundedScrollSearch.onEvidence(token,status,observed.packageName,
-                    observed.windowId,generation,observed.matchingControls,now)
+                    observed.windowId,generation,observed.matchingControls,now,
+                    observed.uniqueBoundsKey)
             else NexaBoundedScrollSearch.Progress.BLOCKED
             when(outcome){
                 NexaBoundedScrollSearch.Progress.WAITING -> {
-                    if(attempt<2) inspectBoundedScrollOutcome(token,attempt+1)
+                    if(attempt<3) inspectBoundedScrollOutcome(token,attempt+1)
                     else {
                         cancelBoundedScrollSearch()
-                        note="No verified scroll event within the evidence window. Guide stopped; no retry."
+                        note="Scroll event or stable target geometry was not verified in time. Guide stopped; no retry."
                         render()
                     }
                 }
@@ -282,7 +283,7 @@ class NexaToolOverlayService : Service() {
                             cancelBoundedScrollSearch()
                             note="Scroll search cannot continue: $prepared"
                         }else{
-                            note="Verified one scroll event. Target not yet visible. "+
+                            note="Verified scroll event and settled target observation. Target not yet visible. "+
                                 "Confirm another ${nextRequest.direction} scroll separately "+
                                 "(attempt ${boundedScrollSearch.attempts(now)+1} of 4)."
                         }
@@ -291,7 +292,7 @@ class NexaToolOverlayService : Service() {
                 }
                 NexaBoundedScrollSearch.Progress.FOUND -> {
                     activeScrollEvidenceToken=null
-                    note="One unique safe control is visible after the verified scroll. "+
+                    note="One stable, unique safe control is visible after the verified scroll. "+
                         "Search finished without clicking it."
                     render()
                 }

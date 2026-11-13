@@ -116,12 +116,7 @@ try {
                     })
                     if ($certLines.Count -eq 1) {
                         $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
-                        if ($legacyDigest -match '^[0-9a-f]{64}
-    Write-Output 'SIGNER_MATCH: installed Nexa main package matches the pinned permanent release identity'
-} finally {
-    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
-}
- -and
+                        if ($legacyDigest -match '^[0-9a-f]{64}$' -and
                             $legacyDigest -eq $digests[0]) {
                             Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
                             Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
