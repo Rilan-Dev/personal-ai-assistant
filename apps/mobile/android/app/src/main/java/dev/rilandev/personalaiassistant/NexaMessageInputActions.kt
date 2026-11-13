@@ -195,6 +195,15 @@ internal object NexaMessageInputActions {
             return "The approved recipient, channel or exact message changed. No text was entered."
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?: return "Messaging conversation is no longer visible. No action dispatched."
+        // A durable claim may precede Binder, verifier and journal failures.
+        // Every exceptional post-claim exit must retain a non-replayable,
+        // explicitly uncertain outcome rather than a successful UI claim.
+        var unsettledClaim:String?=null
+        fun settle(token:String,outcome:String):Boolean {
+            val persisted=NexaUiActionJournal.finish(service,token,outcome)
+            if(persisted)unsettledClaim=null
+            return persisted
+        }
         try {
             if(root.packageName?.toString()!=approval.packageName ||
                 root.windowId!=approval.windowId || !root.isVisibleToUser)
@@ -211,6 +220,7 @@ internal object NexaMessageInputActions {
             if(!NexaUiActionJournal.claim(service,approval.token,"message_fill",
                     approval.packageName,approval.reviewedDigest,origin=origin))
                 return "The durable one-time action journal is unavailable. No text entered."
+            unsettledClaim=approval.token
             return try {
                 val args=Bundle().apply{
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
@@ -254,27 +264,37 @@ internal object NexaMessageInputActions {
                     }finally {try{fresh.recycle()}catch(_:Exception){}}
                 }
                 if(accepted==null) {
-                    NexaUiActionJournal.finish(service,approval.token,"android_rejected")
-                    return "Owner paused device actions since review. No message was entered."
+                    val persisted=settle(approval.token,"android_rejected")
+                    return if(persisted)
+                        "Owner paused device actions since review. No message was entered."
+                    else "Owner paused actions, but journal completion is uncertain. No retry or Send."
                 }
                 val verified=accepted &&
                     verifyCurrentDraft(service,approval,draft.recipientHint,draft.message)
-                NexaUiActionJournal.finish(service,approval.token,
+                val persisted=settle(approval.token,
                     if(outcomeUnknown)"unknown" else
                         if(accepted)"android_accepted" else "android_rejected")
-                if(verified) {
-                    NexaUiActionJournal.markObservation(service,approval.token,"observed_change")
-                    "Exact prepared text is visible in the selected message input. NOT SENT. Review the recipient and tap Send yourself."
+                if(!persisted)
+                    "Message text-entry journal outcome could not be stored. Inspect the field; no retry or Send."
+                else if(verified) {
+                    if(NexaUiActionJournal.markObservation(service,approval.token,"observed_change"))
+                        "Exact prepared text is visible in the selected message input. NOT SENT. Review the recipient and tap Send yourself."
+                    else "Text was observed in the selected field, but durable verification was not saved. Inspect it manually. NOT SENT."
                 } else if(accepted)
                     "Android accepted the text-entry request, but its contents were not verified. Review it manually. NOT SENT by Nexa."
                 else if(outcomeUnknown) "Message-input result is uncertain. Inspect the current chat; no automatic retry and no send by Nexa."
                 else if(stale) "Chat, recipient or empty composer changed before text entry. No insertion or retry."
                 else "Android refused text entry. No retry; nothing was sent by Nexa."
             }catch(_:Exception) {
-                NexaUiActionJournal.finish(service,approval.token,"unknown")
-                "Text-entry result is uncertain. Inspect the field manually; no retry and no send by Nexa."
+                try{settle(approval.token,"unknown")}catch(_:Exception){}
+                "Text-entry result is uncertain after durable claim. Inspect the field manually; no retry and no Send by Nexa."
             }
         }catch(_:Exception){
+            val token=unsettledClaim
+            if(token!=null){
+                try{settle(token,"unknown")}catch(_:Exception){}
+                return "Message composer outcome is uncertain after a durable claim. Inspect the field; no retry or Send."
+            }
             return "Messaging app changed during confirmation. No automatic retry or send."
         }finally{try{root.recycle()}catch(_:Exception){}}
     }
