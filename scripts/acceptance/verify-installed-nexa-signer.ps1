@@ -121,10 +121,7 @@ try {
                     '" -storepass android -alias androiddebugkey -noprompt'
                 $keytoolProcess = $null
                 try {
-                    $keytoolProcess = Start-Process -FilePath $keytoolPath
-                        -ArgumentList $arguments -NoNewWindow -PassThru
-                        -RedirectStandardOutput $legacyOutput
-                        -RedirectStandardError $legacyErrors
+                    $keytoolProcess = Start-Process -FilePath $keytoolPath -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $legacyOutput -RedirectStandardError $legacyErrors
                     if (-not $keytoolProcess.WaitForExit(10000)) {
                         try { $keytoolProcess.Kill() } catch {}
                         # A stuck Java child may outlive the diagnostic; the
