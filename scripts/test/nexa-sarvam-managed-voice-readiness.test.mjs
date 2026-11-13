@@ -64,3 +64,18 @@ test('read-only authorization probes STT/TTS and conversation API with a synthet
   assert.match(runtime,/SarvamModelApiReadiness\.check/);
   assert.match(ui,/Verify Sarvam API realtime connection/);
 });
+
+test('Sarvam readiness is time bounded and cancels stale handshake and chat work',()=>{
+  assert.match(probe,/val terminal=AtomicBoolean\(false\)/);
+  assert.match(probe,/nexa-sarvam-readiness-timeout/);
+  assert.match(probe,/deadline\.schedule\(\{[\s\S]*?READINESS_TIMEOUT[\s\S]*?\},45,TimeUnit\.SECONDS\)/);
+  assert.match(probe,/if\(!terminal\.compareAndSet\(false,true\)\)return/);
+  assert.match(probe,/sockets\.add\(sttSocket\)/);
+  assert.match(probe,/sockets\.add\(ttsSocket\)/);
+  assert.match(probe,/sockets\.forEach[\s\S]*?\.cancel\(\)/);
+  assert.match(probe,/http\.dispatcher\.cancelAll\(\)/);
+  assert.match(probe,/finally\s*\{[\s\S]*?deadline\.shutdownNow\(\)/);
+  assert.match(probe,/if\(!terminal\.get\(\)\)probeChat\(\)/);
+  assert.match(probe,/if\(!terminal\.get\(\)\)probeTts\(\)/);
+  assert.doesNotMatch(probe,/AudioRecord|MediaRecorder|startRecording|FileOutputStream|println\(|Log\./);
+});
