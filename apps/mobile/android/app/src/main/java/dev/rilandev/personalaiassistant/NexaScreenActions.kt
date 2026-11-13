@@ -79,6 +79,52 @@ internal object NexaScreenActions {
      * Consume the approval before attempting ACTION_CLICK. On any error, require a
      * brand-new inspect-and-approve sequence; no automatic retry after uncertainty.
      */
+    /**
+     * Reuse one conservative target resolver at review and at FINAL dispatch.
+     * It rejects ambiguous and truncated accessibility trees. A geometry-only
+     * match is never sufficient to authorize an irreversible click.
+     */
+    private fun uniqueCurrentTarget(root: AccessibilityNodeInfo, icon: ObservedIcon): AccessibilityNodeInfo? {
+        val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        nodes.add(root)
+        var examined = 0
+        var matched: AccessibilityNodeInfo? = null
+        var count = 0
+        while (nodes.isNotEmpty() && examined++ < 180) {
+            val node = nodes.removeFirst()
+            val eligible = !node.isPassword && !node.isEditable &&
+                node.isVisibleToUser && node.isEnabled
+            if (!eligible) continue
+            if (node.isClickable) {
+                val kind = ScreenIconClassifier.classify(node.contentDescription)
+                    ?: ScreenIconClassifier.classify(node.text)
+                val bounds = Rect().also { node.getBoundsInScreen(it) }
+                val sameBounds = bounds.left == icon.bounds.left &&
+                    bounds.top == icon.bounds.top &&
+                    bounds.right == icon.bounds.right &&
+                    bounds.bottom == icon.bounds.bottom
+                val sameResource = icon.resourceId.isEmpty() ||
+                    node.viewIdResourceName.orEmpty() == icon.resourceId
+                val sameClass = icon.className.isEmpty() ||
+                    node.className?.toString() == icon.className
+                if (sameBounds && sameResource && sameClass &&
+                    kind?.first == icon.semantic && kind.second == icon.label) {
+                    count++
+                    if (count != 1) return null
+                    matched = node
+                }
+            }
+            for (i in 0 until node.childCount)
+                node.getChild(i)?.let { nodes.addLast(it) }
+        }
+        return if (nodes.isEmpty() && count == 1) matched else null
+    }
+
+    /**
+     * A reviewed safe icon can move or be recycled before Android dispatch.
+     * Consume approval and journal claim once, then reacquire the same native
+     * source INSIDE the owner Pause fence. Unknown outcomes are never replayed.
+     */
     fun confirm(service: ScreenAssistService, token: String, origin:String="overlay"): String {
         val candidate: Pair<OverlayScreenSnapshot, ObservedIcon> = synchronized(lock) {
             val snap = current
@@ -93,74 +139,94 @@ internal object NexaScreenActions {
         val (snapshot, icon) = candidate
         if(!NexaNativeActionSafety.approvalFenceCurrent(service,snapshot.pauseGeneration))
             return "Owner paused device actions since inspection. Review a fresh icon."
-        if (!ScreenAssistState.connected) return "Screen Assist was disabled. No action requested."
+        if (!ScreenAssistState.connected || ScreenAssistService.active !== service)
+            return "Screen Assist was disabled. No action requested."
         val keyguard = service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        if (keyguard?.isKeyguardLocked == true) return "Screen locked. No action requested."
-        val root = service.externalWindowRoot() ?: return "External screen unavailable. No action requested."
+        if (keyguard?.isKeyguardLocked == true)
+            return "Screen locked. No action requested."
+        val root = try { service.externalWindowRoot() } catch (_: Exception) { null }
+            ?: return "External screen unavailable. No action requested."
+        var claimed = false
         try {
             if (root.packageName?.toString() != snapshot.packageName ||
-                root.windowId != snapshot.windowId) return "Screen changed. No action requested."
-            val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
-            nodes.add(root)
-            var examined = 0
-            var matched: AccessibilityNodeInfo? = null
-            var duplicate = false
-            while (nodes.isNotEmpty() && examined < 180) {
-                val node = nodes.removeFirst()
-                examined++
-                val eligible = !node.isPassword && !node.isEditable && node.isVisibleToUser
-                if (eligible) {
-                    if (node.isClickable) {
-                        val kind = ScreenIconClassifier.classify(node.contentDescription)
-                            ?: ScreenIconClassifier.classify(node.text)
-                        val bounds = Rect()
-                        node.getBoundsInScreen(bounds)
-                        val sameBounds = bounds.left == icon.bounds.left && bounds.top == icon.bounds.top &&
-                            bounds.right == icon.bounds.right && bounds.bottom == icon.bounds.bottom
-                        val sameResourceId = icon.resourceId.isEmpty() ||
-                            node.viewIdResourceName.orEmpty() == icon.resourceId
-                        val sameWidgetClass = icon.className.isEmpty() ||
-                            node.className?.toString() == icon.className
-                        if (sameBounds && sameResourceId && sameWidgetClass &&
-                            kind?.first == icon.semantic && kind.second == icon.label) {
-                            if (matched == null) matched = node else duplicate = true
-                        }
-                    }
-                    for (i in 0 until node.childCount) node.getChild(i)?.let { nodes.addLast(it) }
-                }
-            }
-            // Observed target must still have exactly one matching actionable node.
-            if (duplicate || matched == null) return "Target changed or ambiguous. No action requested."
-            val target=matched
+                root.windowId != snapshot.windowId || !root.isVisibleToUser)
+                return "Screen changed. No action requested."
+            val target = uniqueCurrentTarget(root, icon)
+                ?: return "Target changed, incomplete or ambiguous. No action requested."
             if (!NexaUiActionJournal.claim(service, snapshot.token, "tap", snapshot.packageName,
-                origin=origin))
+                    origin=origin))
                 return "Secure action journal unavailable or approval already used. No click requested."
+            claimed = true
             val before = NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(snapshot.token,"tap",snapshot.packageName,root.windowId,before)
-            val clicked=NexaNativeActionSafety.dispatchWithFence(
+            var stale = false
+            var enteredNativeAction = false
+            var outcomeUnknown = false
+            val clicked = NexaNativeActionSafety.dispatchWithFence(
                 service,snapshot.pauseGeneration) {
-                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                val fresh = try {
+                    if (!ScreenAssistState.connected || ScreenAssistService.active !== service ||
+                        keyguard?.isKeyguardLocked == true) null
+                    else service.externalWindowRoot()
+                } catch (_: Exception) { null }
+                if (fresh == null) {
+                    stale = true
+                    false
+                } else try {
+                    if (fresh.packageName?.toString() != snapshot.packageName ||
+                        fresh.windowId != snapshot.windowId || !fresh.isVisibleToUser) {
+                        stale = true
+                        false
+                    } else {
+                        val current = uniqueCurrentTarget(fresh,icon)
+                        if (current == null || current != target) {
+                            stale = true
+                            false
+                        } else {
+                            enteredNativeAction = true
+                            current.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                        }
+                    }
+                } catch (_: Exception) {
+                    if (enteredNativeAction) outcomeUnknown = true else stale = true
+                    false
+                } finally {
+                    try { fresh.recycle() } catch (_: Exception) {}
+                }
             }
-            if(clicked==null) {
+            if (clicked == null) {
                 NexaUiActionVerifier.cancel(snapshot.token)
                 NexaUiActionJournal.finish(service,snapshot.token,"android_rejected")
+                claimed = false
                 return "Owner paused actions since review. No click dispatched."
             }
             return if (clicked) {
                 NexaUiActionVerifier.observeAfter(service,snapshot.token,before)
-                if (!NexaUiActionJournal.finish(service,snapshot.token,"android_accepted"))
+                val finished=NexaUiActionJournal.finish(service,snapshot.token,"android_accepted")
+                claimed = false
+                if (!finished)
                     "Android accepted a click request; journal outcome uncertain. No retry."
                 else "Android accepted a single UI click request. Verify the result on screen."
             } else {
                 NexaUiActionVerifier.cancel(snapshot.token)
-                NexaUiActionJournal.finish(service,snapshot.token,"android_rejected")
-                "Android rejected the click. No retry attempted."
+                NexaUiActionJournal.finish(service,snapshot.token,
+                    if (outcomeUnknown) "unknown" else "android_rejected")
+                claimed = false
+                if (outcomeUnknown)
+                    "Android click outcome is uncertain. Inspect the screen manually; no automatic retry."
+                else if (stale)
+                    "Safe icon, app or window changed before dispatch. No click or retry."
+                else "Android rejected the click. No retry attempted."
             }
         } catch (_: Exception) {
             NexaUiActionVerifier.cancel(snapshot.token)
-            return "Screen action could not be verified. No retry attempted."
+            if (claimed) try {
+                NexaUiActionJournal.finish(service,snapshot.token,"unknown")
+            } catch (_: Exception) {}
+            return "Screen action outcome uncertain. Inspect manually; no retry attempted."
         } finally {
-            root.recycle()
+            try { root.recycle() } catch (_: Exception) {}
         }
     }
+
 }
