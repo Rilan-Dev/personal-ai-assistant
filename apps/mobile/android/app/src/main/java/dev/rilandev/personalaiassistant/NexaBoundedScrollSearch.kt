@@ -15,6 +15,8 @@ internal class NexaBoundedScrollSearch {
         const val MAX_SCROLLS = 4
         private const val TASK_MS = 90_000L
         private const val EVIDENCE_MS = 4_500L
+        // A single scroll event is not proof that the layout stopped moving.
+        private const val MIN_STABLE_MS = 250L
         private val grammar = Regex(
             """^(?:(?:hey\s+nexa[,!]?\s+)?(?:please\s+)?)scroll\s+(up|down|left|right)\s+until\s+(.+)$""",
             RegexOption.IGNORE_CASE
@@ -41,6 +43,9 @@ internal class NexaBoundedScrollSearch {
         var attempts: Int = 0,
         var pendingToken: String? = null,
         var evidenceExpiresAt: Long = 0L,
+        var stableCount: Int? = null,
+        var stableBoundsKey: String? = null,
+        var stableSince: Long = 0L,
         val claimedTokens: MutableSet<String> = linkedSetOf()
     )
     private var session: Session? = null
@@ -95,6 +100,9 @@ internal class NexaBoundedScrollSearch {
         s.attempts++
         s.pendingToken = token
         s.evidenceExpiresAt = minOf(s.expiresAt, now + EVIDENCE_MS)
+        s.stableCount = null
+        s.stableBoundsKey = null
+        s.stableSince = 0L
         return true
     }
 
@@ -105,7 +113,8 @@ internal class NexaBoundedScrollSearch {
      */
     fun onEvidence(token: String, status: String?, packageName: String,
                    windowId: Int, pauseGeneration: Long,
-                   matchingControls: Int, now: Long): Progress {
+                   matchingControls: Int, now: Long,
+                   uniqueBoundsKey: String? = null): Progress {
         val s = session
         if (s == null || !active(now)) return Progress.BLOCKED
         if (!sameContext(s, packageName, windowId, pauseGeneration) ||
@@ -118,6 +127,27 @@ internal class NexaBoundedScrollSearch {
             return Progress.WAITING
         if (status == "scroll_event_observed" ||
             (status == "structural_change_observed" && matchingControls == 1)) {
+            // Require two post-event, time-separated readings with identical
+            // target geometry before reporting FOUND or requesting another
+            // owner-approved scroll. This never schedules another action.
+            // Without a unique bounds key, "found" is not grounded.
+            if (matchingControls == 1 &&
+                (uniqueBoundsKey.isNullOrBlank() || uniqueBoundsKey.length > 80)) {
+                cancel()
+                return Progress.BLOCKED
+            }
+            if (matchingControls == 0 && uniqueBoundsKey != null) {
+                cancel()
+                return Progress.BLOCKED
+            }
+            if (s.stableCount != matchingControls ||
+                s.stableBoundsKey != uniqueBoundsKey) {
+                s.stableCount = matchingControls
+                s.stableBoundsKey = uniqueBoundsKey
+                s.stableSince = now
+                return Progress.WAITING
+            }
+            if (now - s.stableSince < MIN_STABLE_MS) return Progress.WAITING
             if (matchingControls == 1) {
                 cancel()
                 return Progress.FOUND
