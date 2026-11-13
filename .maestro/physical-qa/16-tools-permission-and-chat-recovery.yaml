@@ -1,0 +1,38 @@
+appId: dev.rilandev.personalaiassistant.physicalqa
+name: Nexa exposes device grants and recovers safely from denied app launch
+tags:
+  - nexa
+  - emulator
+  - owner-control
+  - no-external-action
+---
+- launchApp:
+    clearState: true
+    permissions:
+      all: deny
+- extendedWaitUntil:
+    visible: "Make your assistant yours."
+    timeout: 60000
+- tapOn: "Tools"
+- extendedWaitUntil:
+    visible: "Device controls"
+    timeout: 30000
+- assertVisible: "App launching"
+- tapOn: "Chat"
+- extendedWaitUntil:
+    visible: "How can I help today?"
+    timeout: 30000
+- tapOn: "Assistant command"
+- inputText: "Open Clock"
+- hideKeyboard
+- tapOn: "Send message"
+- extendedWaitUntil:
+    visible: "Task blocked: Permission required: apps.launch"
+    timeout: 30000
+- assertVisible: "Review device permissions in Tools"
+- tapOn: "Review device permissions in Tools"
+- extendedWaitUntil:
+    visible: "Device controls"
+    timeout: 30000
+- assertVisible: "App launching"
+- takeScreenshot: nexa-owner-device-grant-recovery
