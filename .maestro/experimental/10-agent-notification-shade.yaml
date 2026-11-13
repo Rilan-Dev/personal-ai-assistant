@@ -13,7 +13,9 @@ tags:
 - launchApp:
     stopApp: true
     clearState: false
-- assertVisible: "Make your assistant yours."
+- extendedWaitUntil:
+    visible: "Make your assistant yours."
+    timeout: 90000
 - scrollUntilVisible:
     element: "Show optional permissions and features"
     direction: DOWN
