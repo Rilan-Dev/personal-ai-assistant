@@ -164,6 +164,8 @@ internal object NexaWhatsAppChatActions {
             claimedToken(token)
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
             var stale=false
+            var outcomeUnknown=false
+            var actionEntered=false
             val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
                 // A list can recycle a clickable row after review. Only a fresh
                 // complete Accessibility tree inside the final Pause fence may
@@ -190,9 +192,12 @@ internal object NexaWhatsAppChatActions {
                     if(!same){
                         stale=true
                         false
-                    }else candidate!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    }else {
+                        actionEntered=true
+                        candidate!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    }
                 }catch(_:Exception){
-                    stale=true
+                    if(actionEntered)outcomeUnknown=true else stale=true
                     false
                 }finally {try{fresh.recycle()}catch(_:Exception){}}
             }
@@ -207,8 +212,10 @@ internal object NexaWhatsAppChatActions {
                 "Android accepted a uniquely grounded WhatsApp chat-row tap. Conversation header not yet verified."
             }else{
                 NexaUiActionVerifier.cancel(token)
-                NexaUiActionJournal.finish(service,token,"android_rejected")
-                if(stale) "WhatsApp chat row or window changed before dispatch. No tap or retry."
+                NexaUiActionJournal.finish(service,token,
+                    if(outcomeUnknown)"unknown" else "android_rejected")
+                if(outcomeUnknown) "WhatsApp tap result is uncertain. Inspect the current chat; no automatic retry."
+                else if(stale) "WhatsApp chat row or window changed before dispatch. No tap or retry."
                 else "Android refused the chat-row tap. No automatic retry."
             }
         }catch(_:Exception){return "WhatsApp changed while locating the contact. No retry."}
