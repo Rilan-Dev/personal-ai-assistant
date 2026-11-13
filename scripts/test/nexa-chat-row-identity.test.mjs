@@ -13,7 +13,9 @@ test('different clickable rows are not coalesced by a shared unrelated parent',(
   assert.match(source,/candidate\.parent/);
   assert.match(source,/ancestor==current/);
   assert.doesNotMatch(source,/commonParent|sharedParent/);
-  assert.match(source,/sameRow\(it\.bounds,rect\)/);
+  assert.doesNotMatch(source,/sameRow\(it\.bounds,rect\)/,
+    'Distinct sources may overlap; geometry alone cannot authorize contact deduplication');
+  assert.match(source,/if\(queue\.isNotEmpty\(\)\)return Scan\(0,0,null,false\)/);
 });
 
 test('synthetic recipient fixture requires stable matching Accessibility observations',()=>{
@@ -24,4 +26,11 @@ test('synthetic recipient fixture requires stable matching Accessibility observa
   assert.match(fixture,/scan\.bestEvidence==evidence/);
   assert.match(fixture,/if\(consecutive>=3\)return Settled\(current,scan\)/);
   assert.match(fixture,/window\.contains\(rect\)/);
+});
+
+test('overlapping synthetic rows retain two recipient identities',()=>{
+  const fixture=readFileSync('apps/mobile/android/app/src/androidTest/java/dev/rilandev/personalaiassistant/NexaWhatsAppChatUiAndroidTest.kt','utf8');
+  assert.match(fixture,/overlappingDistinctRowsNeverBecomeOneApprovedRecipient/);
+  assert.match(fixture,/assertEquals\("Overlapping sibling contacts remain ambiguous",2,observed\.scan\.candidates\)/);
+  assert.match(fixture,/assertNull\("No unsafe chat-row target may be chosen",observed\.scan\.target\)/);
 });
