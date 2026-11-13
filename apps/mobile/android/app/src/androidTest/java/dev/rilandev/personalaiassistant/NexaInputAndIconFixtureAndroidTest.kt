@@ -93,4 +93,32 @@ class NexaInputAndIconFixtureAndroidTest {
             NexaQaAccessibilityRoot.closeFixture()
         }
     }
+    @Test fun safeIconResolverRejectsStaleClassResourceOrBounds() {
+        val runId=NexaQaAccessibilityRoot.launchFixture(NexaInputQaActivity::class.java)
+        try {
+            val root=foregroundRoot(runId)
+            val observed=ScreenIconDetector.detect(root)
+                .single { it.semantic=="search" && it.clickable }
+            val selected=NexaScreenActions.uniqueCurrentTarget(root,observed)
+            assertNotNull("The uniquely identified search icon must be observable",selected)
+            assertEquals("Same unchanged source can be reviewed twice",
+                selected,NexaScreenActions.uniqueCurrentTarget(root,observed))
+            assertNull("A differently located icon is NOT the approved target",
+                NexaScreenActions.uniqueCurrentTarget(root,observed.copy(
+                    bounds=IconBox(observed.bounds.left+30,observed.bounds.top+30,
+                        observed.bounds.right+30,observed.bounds.bottom+30))))
+            assertNull("A changed native widget class is NOT the approved target",
+                NexaScreenActions.uniqueCurrentTarget(root,observed.copy(
+                    className="android.widget.TextView")))
+            assertNull("A changed native view identity is NOT the approved target",
+                NexaScreenActions.uniqueCurrentTarget(root,observed.copy(
+                    resourceId="dev.rilandev.personalaiassistant:id/not-the-search-icon")))
+            val send=observed.let {
+                ScreenIconDetector.detect(root).single { icon -> icon.semantic=="send" }
+            }
+            assertFalse("Send remains excluded from all safe navigation actions",
+                NexaScreenActionPolicy.permits(send))
+        } finally {NexaQaAccessibilityRoot.closeFixture()}
+    }
+
 }

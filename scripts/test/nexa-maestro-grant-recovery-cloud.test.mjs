@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
-const workflow=readFileSync('.github/workflows/maestro-cloud-manual.yml','utf8');
-const flow=readFileSync('.maestro/cloud-qa/16-owner-permission-recovery.yaml','utf8');
+// Windows checkouts may use CRLF for committed YAML; the policy is about
+// the flow structure, not Git's working-tree line ending.
+const normalized=(file)=>readFileSync(file,'utf8').replace(/\r\n/g,'\n');
+const workflow=normalized('.github/workflows/maestro-cloud-manual.yml');
+const flow=normalized('.maestro/cloud-qa/16-owner-permission-recovery.yaml');
 const app=readFileSync('apps/mobile/App.tsx','utf8');
 
 test('manual Maestro suite selects one isolated, signed-release grant-recovery flow',()=>{
