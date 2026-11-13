@@ -2160,6 +2160,60 @@ export default function App() {
         </Pressable>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
+        {/* Put app-launch and screen-action grants at the top of Tools so blocked
+            Chat requests can be resolved without scrolling past stored memory,
+            message-review forms, or an unbounded task backlog. */}
+        <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
+          <Text style={styles.cardText}>Each permission is independent. For a bounded multi-tool request use: “Check battery then check storage” or “Open Calendar then tap Search”. Only fully verified steps continue; reapprove each side effect. Flashlight additionally needs Android camera permission.</Text>
+          <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
+            onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
+            <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
+              <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
+            <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
+          </Pressable>
+          {engine.live&&<>
+            <Pressable accessibilityRole="switch"
+              accessibilityState={{checked:capabilities.includes('device.interact')}}
+              onPress={()=>toggle('device.interact')} style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={styles.settingTitle}>Reviewed multi-step screen actions</Text>
+                <Text style={styles.settingHelp}>Tap safe named controls, scroll and fill one empty named field. Each step needs its own approval and observed result. Send, Submit and payments are blocked.</Text>
+              </View>
+              <View style={[styles.toggleTrack,capabilities.includes('device.interact')&&styles.toggleOn]}>
+                <View style={[styles.toggleThumb,capabilities.includes('device.interact')&&styles.toggleThumbOn]}/>
+              </View>
+            </Pressable>
+            <Pressable accessibilityRole="switch"
+              accessibilityState={{checked:capabilities.includes('device.observe')}}
+              onPress={()=>toggle('device.observe')} style={styles.settingRow}>
+              <View style={styles.settingText}>
+                <Text style={styles.settingTitle}>Read safe visible-control metadata</Text>
+                <Text style={styles.settingHelp}>Requires enabled Screen Assist and separate one-time task approval.</Text>
+              </View>
+              <View style={[styles.toggleTrack,capabilities.includes('device.observe')&&styles.toggleOn]}>
+                <View style={[styles.toggleThumb,capabilities.includes('device.observe')&&styles.toggleThumbOn]}/>
+              </View>
+            </Pressable>
+          </>}
+          {engine.live&&nativeFlashlightAvailable()&&<>
+            <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('hardware.flashlight')}}
+              onPress={()=>toggle('hardware.flashlight')} style={styles.settingRow}>
+              <View style={styles.settingText}><Text style={styles.settingTitle}>Flashlight</Text>
+                <Text style={styles.settingHelp}>Allow approved one-time on/off changes</Text></View>
+              <View style={[styles.toggleTrack,capabilities.includes('hardware.flashlight')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('hardware.flashlight')&&styles.toggleThumbOn]}/></View>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={running||flashBusy} onPress={grantFlashlightAccess} style={styles.outlineAction}>
+              <Text style={styles.outlineActionText}>{flashBusy?'Checking…':'Grant Android flashlight permission'}</Text>
+            </Pressable>
+            {flashNotice!==''&&<Text style={styles.feedback}>{flashNotice}</Text>}
+          </>}
+          {!engine.live&&<Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('messaging.compose')}}
+            onPress={()=>toggle('messaging.compose')} style={styles.settingRow}>
+            <View style={styles.settingText}><Text style={styles.settingTitle}>Simulated message draft</Text></View>
+            <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
+          </Pressable>}
+        </View>
         {engine.live&&<View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Private recipient-app memory</Text>
           <Text style={styles.settingHelp}>Saved app choices are encrypted on this phone and only hint at a preferred channel. They do not identify a contact or authorize sending. You can forget an individual choice in a message review, or remove every saved channel preference here.</Text>
@@ -2288,60 +2342,6 @@ export default function App() {
             </Pressable>
           </View>}
         </View>}
-        <View style={styles.sectionCard}>
-          <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
-          <Text style={styles.cardText}>Each permission is independent. For a bounded multi-tool request use: “Check battery then check storage” or “Open Calendar then tap Search”. Only fully verified steps continue; reapprove each side effect. Flashlight additionally needs Android camera permission.</Text>
-          <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('apps.launch')}}
-            onPress={()=>toggle('apps.launch')} style={styles.settingRow}>
-            <View style={styles.settingText}><Text style={styles.settingTitle}>App launching</Text>
-              <Text style={styles.settingHelp}>Open camera, supported apps or an approved public Chrome search; no automatic message sending</Text></View>
-            <View style={[styles.toggleTrack,capabilities.includes('apps.launch')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('apps.launch')&&styles.toggleThumbOn]}/></View>
-          </Pressable>
-          {engine.live&&<>
-            <Pressable accessibilityRole="switch"
-              accessibilityState={{checked:capabilities.includes('device.interact')}}
-              onPress={()=>toggle('device.interact')} style={styles.settingRow}>
-              <View style={styles.settingText}>
-                <Text style={styles.settingTitle}>Reviewed multi-step screen actions</Text>
-                <Text style={styles.settingHelp}>Tap safe named controls, scroll and fill one empty named field. Each step needs its own approval and observed result. Send, Submit and payments are blocked.</Text>
-              </View>
-              <View style={[styles.toggleTrack,capabilities.includes('device.interact')&&styles.toggleOn]}>
-                <View style={[styles.toggleThumb,capabilities.includes('device.interact')&&styles.toggleThumbOn]}/>
-              </View>
-            </Pressable>
-            <Pressable accessibilityRole="switch"
-              accessibilityState={{checked:capabilities.includes('device.observe')}}
-              onPress={()=>toggle('device.observe')} style={styles.settingRow}>
-              <View style={styles.settingText}>
-                <Text style={styles.settingTitle}>Read safe visible-control metadata</Text>
-                <Text style={styles.settingHelp}>Requires enabled Screen Assist and separate one-time task approval.</Text>
-              </View>
-              <View style={[styles.toggleTrack,capabilities.includes('device.observe')&&styles.toggleOn]}>
-                <View style={[styles.toggleThumb,capabilities.includes('device.observe')&&styles.toggleThumbOn]}/>
-              </View>
-            </Pressable>
-          </>}
-          {engine.live&&nativeFlashlightAvailable()&&<>
-            <Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('hardware.flashlight')}}
-              onPress={()=>toggle('hardware.flashlight')} style={styles.settingRow}>
-              <View style={styles.settingText}><Text style={styles.settingTitle}>Flashlight</Text>
-                <Text style={styles.settingHelp}>Allow approved one-time on/off changes</Text></View>
-              <View style={[styles.toggleTrack,capabilities.includes('hardware.flashlight')&&styles.toggleOn]}><View style={[styles.toggleThumb,capabilities.includes('hardware.flashlight')&&styles.toggleThumbOn]}/></View>
-            </Pressable>
-            <Pressable accessibilityRole="button" disabled={running||flashBusy} onPress={grantFlashlightAccess} style={styles.outlineAction}>
-              <Text style={styles.outlineActionText}>{flashBusy?'Checking…':'Grant Android flashlight permission'}</Text>
-            </Pressable>
-            {flashNotice!==''&&<Text style={styles.feedback}>{flashNotice}</Text>}
-          </>}
-          {!engine.live&&<Pressable accessibilityRole="switch" accessibilityState={{checked:capabilities.includes('messaging.compose')}}
-            onPress={()=>toggle('messaging.compose')} style={styles.settingRow}>
-            <View style={styles.settingText}><Text style={styles.settingTitle}>Simulated message draft</Text></View>
-            <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
-          </Pressable>}
-        </View>
-        {/* Keep essential device grants above the potentially long task history.
-            This changes discoverability only; every action still requires its
-            existing one-shot approval, native journal and Android permissions. */}
         {engine.live && <LocalTaskProposals prefill={taskReviewPrefill}/>}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}>
