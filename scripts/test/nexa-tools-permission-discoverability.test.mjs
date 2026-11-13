@@ -5,11 +5,14 @@ import {readFileSync} from 'node:fs';
 const app=readFileSync('apps/mobile/App.tsx','utf8');
 
 test('Tools presents owner-controlled App launching grant before saved task backlog',()=>{
+  const tools=app.indexOf("{tab === 'tools' && <ScrollView");
   const controls=app.indexOf('<Text style={styles.cardHeading}>Device controls</Text>');
   const grant=app.indexOf('<Text style={styles.settingTitle}>App launching</Text>');
+  const memory=app.indexOf('<Text style={styles.cardHeading}>Private recipient-app memory</Text>');
   const proposals=app.indexOf('<LocalTaskProposals prefill={taskReviewPrefill}/>');
-  assert.ok(controls>0 && grant>controls && proposals>grant,
-    'Owner must not scroll through old task proposals to reach app-launch control');
+  assert.ok(tools>0 && controls>tools && grant>controls &&
+    memory>grant && proposals>memory,
+    'App launching must be above memory and saved tasks on the actual Tools screen');
   assert.equal(app.match(/<LocalTaskProposals prefill={taskReviewPrefill}\/>/g)?.length,1);
 });
 test('App launch grant remains explicit and does not bypass Android or action approval',()=>{
