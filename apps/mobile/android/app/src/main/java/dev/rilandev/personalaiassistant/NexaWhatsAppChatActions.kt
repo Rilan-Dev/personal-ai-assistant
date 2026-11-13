@@ -137,6 +137,14 @@ internal object NexaWhatsAppChatActions {
             ?:return "Owner paused device actions. No chat row tapped."
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?:return "WhatsApp chat list is not accessible."
+        // The action claim is durable before any UI click. Track an unsettled
+        // claim across EVERY callback and exception after it is reserved.
+        var unsettledClaim:String?=null
+        fun settle(token:String,outcome:String):Boolean {
+            val persisted=NexaUiActionJournal.finish(service,token,outcome)
+            if(persisted)unsettledClaim=null
+            return persisted
+        }
         try {
             if(root.packageName?.toString()!="com.whatsapp" ||
                 root.windowId<0 || !root.isVisibleToUser)
@@ -161,6 +169,7 @@ internal object NexaWhatsAppChatActions {
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp",origin=origin))
                 return "The encrypted action journal refused the chat tap. Nothing opened."
+            unsettledClaim=token
             claimedToken(token)
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
             var stale=false
@@ -203,23 +212,37 @@ internal object NexaWhatsAppChatActions {
             }
             if(clicked==null){
                 NexaUiActionVerifier.cancel(token)
-                NexaUiActionJournal.finish(service,token,"android_rejected")
-                return "Owner paused actions before opening chat. Nothing tapped."
+                val persisted=settle(token,"android_rejected")
+                return if(persisted) "Owner paused actions before opening chat. Nothing tapped."
+                else "Owner paused before dispatch; the one-shot journal outcome is unverified. No retry."
             }
             return if(clicked) {
                 NexaUiActionVerifier.observeAfter(service,token,before)
-                NexaUiActionJournal.finish(service,token,"android_accepted")
-                "Android accepted a uniquely grounded WhatsApp chat-row tap. Conversation header not yet verified."
+                val persisted=settle(token,"android_accepted")
+                if(persisted)
+                    "Android accepted a uniquely grounded WhatsApp chat-row tap. Conversation header not yet verified."
+                else "Android accepted the WhatsApp tap but its journal outcome is uncertain. Inspect the chat manually; no retry."
             }else{
                 NexaUiActionVerifier.cancel(token)
-                NexaUiActionJournal.finish(service,token,
+                val persisted=settle(token,
                     if(outcomeUnknown)"unknown" else "android_rejected")
-                if(outcomeUnknown) "WhatsApp tap result is uncertain. Inspect the current chat; no automatic retry."
+                if(!persisted) "WhatsApp tap outcome could not be recorded. Inspect the chat; no automatic retry."
+                else if(outcomeUnknown) "WhatsApp tap result is uncertain. Inspect the current chat; no automatic retry."
                 else if(stale) "WhatsApp chat row or window changed before dispatch. No tap or retry."
                 else "Android refused the chat-row tap. No automatic retry."
             }
-        }catch(_:Exception){return "WhatsApp changed while locating the contact. No retry."}
-        finally{try{root.recycle()}catch(_:Exception){}}
+        }catch(_:Exception){
+            val token=unsettledClaim
+            if(token!=null){
+                // Even a caller callback, UI verifier or Android Binder can
+                // throw AFTER a durable one-time claim. Never leave the
+                // failure represented as a successful/cleanly rejected tap.
+                try{NexaUiActionVerifier.cancel(token)}catch(_:Exception){}
+                try{settle(token,"unknown")}catch(_:Exception){}
+                return "WhatsApp navigation outcome is uncertain after a journal claim. Inspect the current screen; no automatic retry or Send."
+            }
+            return "WhatsApp changed while locating the contact. No retry."
+        }finally{try{root.recycle()}catch(_:Exception){}}
     }
     /** Fresh screen, matching header and message composer, no provider guess. */
     fun verifiedOpen(service:ScreenAssistService?,recipient:String):Boolean {
