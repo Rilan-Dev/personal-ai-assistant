@@ -29,6 +29,18 @@ test('reviewed revision instrumentation accepts only explicit disposable QA app 
   assert.doesNotMatch(identity,/\bBuildConfig\.APPLICATION_ID\s*==\s*"dev\.rilandev\.personalaiassistant\.debug"/);
 });
 
-test('standalone synthetic instrumentation process bundles the Kotlin runtime',()=>{
-  assert.match(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:2\.2\.10"\)/);
+test('separate-process AndroidTest fixtures use self-contained Java, without relying on Kotlin runtime',()=>{
+  const {existsSync}=requireFixtureFs();
+  for(const name of ['NexaChatListQaActivity','NexaInputQaActivity']) {
+    const base='apps/mobile/android/app/src/androidTest/java/dev/rilandev/personalaiassistant/'+name;
+    assert.equal(existsSync(base+'.kt'),false,
+      'No Kotlin fixture may crash in the independent test-app process');
+    assert.equal(existsSync(base+'.java'),true);
+    const text=readFileSync(base+'.java','utf8');
+    assert.match(text,/extends Activity/);
+  }
+  assert.doesNotMatch(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:/);
 });
+function requireFixtureFs() {return {existsSync: (name) => {
+  try { readFileSync(name); return true; } catch { return false; }
+}}; }
