@@ -12,8 +12,8 @@ test('second QA identity is explicitly opt-in and cannot downgrade an existing a
   assert.match(gradle,/applicationIdSuffix '\.physicalqa'/);
   assert.match(gradle,/findProperty\('paaInstallDebugAlongsideRelease'\)/);
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
-  assert.ok(gradle.indexOf('paaIsolatedPhysicalQaV2')<
-    gradle.indexOf('paaIsolatedPhysicalQa\''),
+  assert.ok(gradle.indexOf("findProperty('paaIsolatedPhysicalQaV2')")<
+    gradle.indexOf("findProperty('paaIsolatedPhysicalQa')"),
     'the new test-only slot must have a deterministic priority');
 });
 
