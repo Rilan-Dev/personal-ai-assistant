@@ -28,6 +28,7 @@ on:
           - message-app-chooser
           - reviewed-text-entry
           - task-proposals
+          - grant-recovery
       android_os:
         description: "Maestro Cloud Android image"
         required: true
@@ -211,6 +212,7 @@ jobs:
             message-app-chooser) target=".maestro/experimental/12-message-app-chooser.yaml" ;;
             reviewed-text-entry) target=".maestro/experimental/13-reviewed-generic-text-field.yaml" ;;
             task-proposals) target=".maestro/nexa/14-local-task-proposals.yaml" ;;
+            grant-recovery) target=".maestro/cloud-qa/16-owner-permission-recovery.yaml" ;;
             *) echo "::error::Invalid test suite"; exit 2 ;;
           esac
           # Never print the key. GitHub secret paste often includes a trailing
