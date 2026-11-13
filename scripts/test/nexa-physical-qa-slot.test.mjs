@@ -12,9 +12,13 @@ test('second QA identity is explicitly opt-in and cannot downgrade an existing a
   assert.match(gradle,/applicationIdSuffix '\.physicalqa'/);
   assert.match(gradle,/findProperty\('paaInstallDebugAlongsideRelease'\)/);
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
-  assert.ok(gradle.indexOf("findProperty('paaIsolatedPhysicalQaV2')")<
-    gradle.indexOf("findProperty('paaIsolatedPhysicalQa')"),
-    'the new test-only slot must have a deterministic priority');
+  const reactBlock=gradle.slice(gradle.indexOf('react {'),gradle.indexOf('enableBundleCompression'));
+  assert.match(reactBlock,/paaIsolatedPhysicalQaV2[\s\S]*?debuggableVariants = \[\]/,
+    'isolated QA2 must bundle JS; never require a Metro server on the device');
+  const debugBlock=gradle.slice(gradle.indexOf('buildTypes {'));
+  assert.ok(debugBlock.indexOf("findProperty('paaIsolatedPhysicalQaV2')")<
+    debugBlock.indexOf("findProperty('paaIsolatedPhysicalQa')"),
+    'the new test-only slot must have a deterministic applicationId priority');
 });
 
 test('reviewed revision instrumentation accepts only explicit disposable QA app IDs',()=>{
