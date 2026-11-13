@@ -6,6 +6,7 @@ import android.view.View
 import android.text.InputType
 import android.widget.Button
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -14,6 +15,7 @@ class NexaChatListQaActivity:Activity() {
     lateinit var messageInput:EditText
         private set
     private var duplicateContact=false
+    private var overlappingContacts=false
     private var chatRowClicks=0
     private var sendClicks=0
     private var opened=false
@@ -25,6 +27,7 @@ class NexaChatListQaActivity:Activity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         duplicateContact=intent.getBooleanExtra("duplicate",false)
+        overlappingContacts=intent.getBooleanExtra("qa_overlap",false)
         qaRunId=intent.getStringExtra("qa_run").orEmpty()
         chatRowClicks=0;sendClicks=0;opened=false
         showChatList()
@@ -38,8 +41,7 @@ class NexaChatListQaActivity:Activity() {
         })
         area.addView(status())
         area.addView(TextView(this).apply { text="Ask Meta AI or Search" })
-        fun addRow(name:String) {
-            val row=LinearLayout(this).apply{
+        fun makeRow(name:String)=LinearLayout(this).apply{
                 orientation=LinearLayout.VERTICAL
                 isClickable=true
                 isFocusable=true
@@ -56,10 +58,23 @@ class NexaChatListQaActivity:Activity() {
                 contentDescription=name
                 setPadding(0,25,0,25)
             })
-            area.addView(row)
         }
-        addRow("Nova Forever 🖤")
-        if(duplicateContact)addRow("Nova Forever 🖤")
+        if(duplicateContact && overlappingContacts) {
+            // Two DISTINCT native clickable rows overlap by more than half
+            // their height. Geometry alone must never collapse these contacts.
+            val layer=FrameLayout(this)
+            val first=makeRow("Nova Forever 🖤")
+            val second=makeRow("Nova Forever 🖤")
+            layer.addView(first,FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,140))
+            layer.addView(second,FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,140).apply { topMargin=55 })
+            area.addView(layer,LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,195))
+        } else {
+            area.addView(makeRow("Nova Forever 🖤"))
+            if(duplicateContact)area.addView(makeRow("Nova Forever 🖤"))
+        }
         area.addView(TextView(this).apply {text="Other contact"})
         setContentView(area)
     }
