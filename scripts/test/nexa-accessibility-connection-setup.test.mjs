@@ -2,15 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
 const source=(name)=>readFileSync(name,"utf8").replace(/\r\n/g,"\n");
+const normalizedSource=(name)=>source(name).replace(/\r\n/g,"\n");
 const setup=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaSetupModule.kt");
 const component=source("apps/mobile/src/components/NexaSetupScreen.tsx");
 const bridge=source("apps/mobile/src/native/nexaSetup.ts");
 const app=source("apps/mobile/App.tsx");
 const flow=source(".maestro/experimental/10-agent-notification-shade.yaml");
 const reviewFlows=[
-  source(".maestro/experimental/11-whatsapp-owner-review.yaml"),
-  source(".maestro/experimental/12-message-app-chooser.yaml"),
-  source(".maestro/experimental/13-reviewed-generic-text-field.yaml"),
+  normalizedSource(".maestro/experimental/11-whatsapp-owner-review.yaml"),
+  normalizedSource(".maestro/experimental/12-message-app-chooser.yaml"),
+  normalizedSource(".maestro/experimental/13-reviewed-generic-text-field.yaml"),
 ];
 const debugManifest=source("apps/mobile/android/app/src/debug/AndroidManifest.xml");
 const service=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/ScreenAssistService.kt");
@@ -55,6 +56,8 @@ test("Maestro grants Screen Assist in Settings; the bound service and shade are 
 });
 test("Flow 10 expands optional setup without wiping owner app state",()=>{
   assert.ok(/launchApp:\n\s+stopApp: true\n\s+clearState: false/.test(flow));
+  assert.ok(/extendedWaitUntil:\n\s+visible: "Make your assistant yours\."\n\s+timeout: 90000/.test(flow),
+    "Flow 10 must wait for the debug JS bundle and first-run Setup screen before querying it");
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
   assert.ok(flow.includes('- tapOn: "Show optional permissions and features"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
@@ -80,6 +83,25 @@ test("the ordered experimental suite targets the same current debug APK in every
     assert.doesNotMatch(reviewFlow,/clearState:\s*true/,
       "message and text review flows must preserve Android's Accessibility grant");
   }
+});
+
+test("message review flows wait for the cold-started Chat tab before tapping it",()=>{
+  for(const reviewFlow of reviewFlows) {
+    assert.ok(reviewFlow.includes('- extendedWaitUntil:\n    visible: "Chat"\n    timeout: 90000\n- tapOn: "Chat"'),
+      "the debug JS bundle may render after launchApp has returned");
+  }
+});
+
+test("generic text review scrolls the clipped exact-text row fully into view",()=>{
+  const genericFlow=reviewFlows[2];
+  assert.ok(genericFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact text: project update"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "Target input: Search"\n- assertVisible: "Exact text: project update"'),
+    "checking only the card header can leave the exact-text row clipped under the bottom navigation");
+});
+
+test("message review scrolls the exact draft fully into view before asserting it",()=>{
+  const messageFlow=reviewFlows[1];
+  assert.ok(messageFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact draft: I am in the meeting i will call you later"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "Requested recipient: Mom"\n- assertVisible: "Exact draft: I am in the meeting i will call you later"'),
+    "the contact-review heading can be visible while its exact draft remains clipped beneath bottom navigation");
 });
 
 test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{

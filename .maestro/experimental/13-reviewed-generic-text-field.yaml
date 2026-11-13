@@ -10,7 +10,7 @@ tags:
     clearState: false
 - extendedWaitUntil:
     visible: "Chat"
-    timeout: 30000
+    timeout: 90000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Assistant command"
@@ -24,6 +24,11 @@ tags:
 - scrollUntilVisible:
     element:
       text: "Review text entry into another app"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Exact text: project update"
     direction: DOWN
     timeout: 30000
 - assertVisible: "Target input: Search"

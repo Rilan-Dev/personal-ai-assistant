@@ -8,6 +8,9 @@ tags:
 ---
 - launchApp:
     clearState: false
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 90000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Assistant command"

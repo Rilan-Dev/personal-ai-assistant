@@ -8,6 +8,9 @@ tags:
 ---
 - launchApp:
     clearState: false
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 90000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Assistant command"
@@ -21,6 +24,11 @@ tags:
 - scrollUntilVisible:
     element:
       text: "Message app & recipient review"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: "Exact draft: I am in the meeting i will call you later"
     direction: DOWN
     timeout: 30000
 - assertVisible: "Requested recipient: Mom"

@@ -795,3 +795,14 @@ The Windows runner returned `PEER_UNREACHABLE` through the tailnet SOCKS5 proxy 
 **Blockers:** Android owner has not enabled Screen Assist/overlay for the actual installed debug package and may need to grant through Android Settings; do not use ADB to bypass. UI automation harness with consecutive fixture tests still exhibits device-level connection races; prefer individually verified synthetic tests and disposable emulator once memory is available. Newer Development commits keep arriving; reconcile remote refs without force pushing or replacing user-owned dirty main Windows checkout.
 
 **Promotion:** Feature PR #117 remains a draft and production/main are unchanged. A synthetic physical test is not equivalent to owner-reviewed live third-party app control. Verify exact-source compilation and real OS consent before release.
+ 
+## Latest continuation (2026-11-13)
+- The four ordered experimental Maestro flows pass on the Infinix; JS suite 420/420 and TypeScript pass. Current installed debug APK is `0.3.2026111306`.
+- Resolved the service-binding blocker: stale `dev.mobile.maestro` instrumentation retained global Ui Automation after its flow ended. Stopping that test runner caused Android to bind both Nexa Screen Assist instances; current Accessibility dump has no crashed services.
+- Remaining runtime acceptance: owner-confirmed navigation into Tools and owner-confirmed one-shot read of a safe external screen (Calculator), then return to Nexa and verify successful capture without revealing captured text. Do not send messages, use an emulator, or claim general arbitrary-app control from this single read.
+
+## Latest status — 2026-11-13 emulator continuation
+- Ready: physical Infinix Flow 10–13 batch 4/4; Node 420/420; TypeScript; debug APK `0.3.2026111306` installed on `emulator-5554` (API 37).
+- The emulator repeatedly shows Android SystemUI ANR before Maestro can interact. No additional emulator flow is green yet. The full physical batch is the successful four-flow evidence.
+- Direct one-shot Screen Assist read is still unverified. The Arm button succeeded and stock Calculator was opened on Infinix, but review status did not confirm capture; no text was emitted or sent.
+- To continue emulator QA, clear the current system dialog only after the user confirms the pending `Wait` tap. Then retry Flow 10, stop the Maestro runner, verify Screen Assist is bound, and exercise a one-shot read without exposing text. No messages.
