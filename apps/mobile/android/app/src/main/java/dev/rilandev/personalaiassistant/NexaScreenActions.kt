@@ -84,7 +84,7 @@ internal object NexaScreenActions {
      * It rejects ambiguous and truncated accessibility trees. A geometry-only
      * match is never sufficient to authorize an irreversible click.
      */
-    private fun uniqueCurrentTarget(root: AccessibilityNodeInfo, icon: ObservedIcon): AccessibilityNodeInfo? {
+    internal fun uniqueCurrentTarget(root: AccessibilityNodeInfo, icon: ObservedIcon): AccessibilityNodeInfo? {
         val nodes = java.util.ArrayDeque<AccessibilityNodeInfo>()
         nodes.add(root)
         var examined = 0
