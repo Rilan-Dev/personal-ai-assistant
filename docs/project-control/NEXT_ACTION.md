@@ -716,3 +716,25 @@ The pinned Maestro models are now wired to the **existing** Nexa label-tap path 
 The full natural-language Android agent remains incomplete. Continue in this order: (1) avoid conflicting physical-device installations and restore owner-managed Screen Assist + overlay permissions; (2) verify a single real externally approved tap from the **same exact source APK**; (3) add bounded inspect-scroll-verify with one per-gesture journal claim; (4) connect approved multi-step tool envelopes to the existing NexaTaskCoordinator without a second executor; (5) test Chat and floating overlay with safe app/field actions, preserving unsent messages and clear failure recovery.
 
 Physical test caveat: the .debug package disappeared after the focused instrumentation run while .qa and base packages were present, so a following Maestro Chat test failed at package launch. No full device-control acceptance until package state and permissions are stabilized. Do not merge to main or claim all Maestro features migrated. A host-side Maestro CLI remains separate from normal Android APK permissions.
+
+## Current continuation (2026-11-13)
+- Recovered phone ADB connection and built/installed a side-by-side debug APK on Infinix X6831.
+- Fixed the syntax error in the unfinished Nexa setup screen edit. TypeScript passes.
+- Remaining: enable/rebind Screen Assist for the installed debug package via Android Accessibility Settings, then verify read-only screen observation plus approval-gated navigation across an app. Current `dumpsys accessibility` shows no bound service, so do not claim cross-app control is working yet.
+- Debug app was force-stopped after check; emulator remains off.
+
+## 2026-11-13 continuation result
+- Infinix X6831 only; no emulator started.
+- Fixed setup screen bottom inset hiding optional setup controls under the sticky Continue footer. Typecheck passes.
+- Experimental Maestro suite passed 4/4 (3m58s) against physical device using corrected Flow 10 and permission-compatible flow setup. Owner review/message flows did not send messages.
+- Existing app-launch scenario passed on the updated debug client: owner approved `device.open_app` for Clock; “World Clock” was observed.
+- Screen Assist is enabled and bound after Maestro exits. No service crash reported.
+- Still pending: explicit external-app screen read/scroll/tap verification. Do not claim general arbitrary-app control until that evidence exists.
+
+## 2026-11-13 — Screen-read continuation
+- Physical Infinix X6831 only; no emulator used. The phone initially appeared as ADB serial `099344034S003788`, then disappeared after Settings navigation. ADB server restart and device re-enumeration found no phone; Windows only reported a USB HID/composite peripheral, not the Android ADB interface.
+- Accessibility Settings was reached. The first duplicate “Nexa Screen Assist” entry enabled `dev.rilandev.personalaiassistant.physicalqa/dev.rilandev.personalaiassistant.ScreenAssistService`; Android reported it bound with no crash. The `.debug` package service was not enabled, so this does not validate the current debug APK's screen-read path.
+- Source review confirms visible-text reading requires owner approval and returns bounded, visible, noneditable labels; password/editable nodes are excluded. No screen text was read or retained, and no message was sent.
+- Local checks: `npm test` 415/415 passed; `npm run typecheck` passed; `:app:assembleDebug :app:testDebugUnitTest` and `:app:assembleDebugAndroidTest` succeeded. Android test sources compiled, but device instrumentation and Maestro could not run after USB loss. `testDebugUnitTest` is `NO-SOURCE`.
+- Fresh local debug APK: `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`, package `dev.rilandev.personalaiassistant.debug`, version `0.3.2026111301`, SHA-256 `E50DA7EFB5E31EA246C6F3EA8766B109A53DA76DDFD9BF44EC0C947B37E3CD64`. It is built but not installed on the phone.
+- Resume when the Infinix ADB transport returns: install this APK; enable the matching `.debug` Screen Assist component in Android Settings; stop Maestro before checking `dumpsys accessibility`; open a safe external app and perform one approved, read-only screen-label observation through Nexa; then rerun the ordered four experimental Maestro flows on the same physical device. Do not send messages or use an emulator.

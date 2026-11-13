@@ -5,7 +5,14 @@ const source=(name)=>readFileSync(name,"utf8");
 const setup=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaSetupModule.kt");
 const component=source("apps/mobile/src/components/NexaSetupScreen.tsx");
 const bridge=source("apps/mobile/src/native/nexaSetup.ts");
+const app=source("apps/mobile/App.tsx");
 const flow=source(".maestro/experimental/10-agent-notification-shade.yaml");
+const reviewFlows=[
+  source(".maestro/experimental/11-whatsapp-owner-review.yaml"),
+  source(".maestro/experimental/12-message-app-chooser.yaml"),
+  source(".maestro/experimental/13-reviewed-generic-text-field.yaml"),
+];
+const debugManifest=source("apps/mobile/android/app/src/debug/AndroidManifest.xml");
 const service=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/ScreenAssistService.kt");
 const runtimeAcceptance=source("docs/qa/NEXA_SCREEN_ASSIST_RUNTIME_ACCEPTANCE_20261104.md");
 
@@ -23,11 +30,56 @@ test("user-facing Setup requires connected service before claiming native screen
   assert.match(component,/Nexa Screen Assist disconnected/);
   assert.match(component,/Toggle the service off and on/);
 });
+test("one-time local screen reading is available without configuring a live AI provider",()=>{
+  assert.ok(/\{screenAssistAvailable\(\)&&<>/.test(app),
+    "owner-armed local observation must not depend on a cloud/voice provider being live");
+  assert.ok(!/\{engine\.live&&screenAssistAvailable\(\)&&<>/.test(app));
+});
+test("WhatsApp intent is parsed into a local review even when the optional composer bridge is absent",()=>{
+  const start=app.indexOf("// Explicit owner text routes only to a local message review UI.");
+  const end=app.indexOf("// A generic message request is NOT an instruction",start);
+  const route=app.slice(start,end);
+  assert.ok(start>=0 && end>start);
+  assert.ok(/const whatsappPreview=parseReviewedWhatsAppIntent\(request\)/.test(app));
+  assert.ok(/if\s*\(!restore\s*&&\s*engine\.live\)\s*\{[\s\S]*?if\s*\(whatsappPreview\)/.test(route),
+    "the quoted request should produce its local contact review regardless of composer capability");
+  assert.ok(!route.includes("whatsAppDraftAvailable()"),
+    "optional draft-launch support must not suppress the local review preview");
+});
 test("Maestro grants Screen Assist in Settings; the bound service and shade are checked after Maestro exits",()=>{
-  assert.match(flow,/assertVisible: "Use Nexa Screen Assist"/);
+  assert.ok(flow.includes('extendedWaitUntil:\n    visible: "Use Nexa Screen Assist \\\\(Debug\\\\)"'));
+  assert.ok(flow.includes('- tapOn:\n          id: "android:id/switch_widget"\n          checked: false'));
   assert.doesNotMatch(flow,/- inputText: "open notification bar"/);
   assert.match(runtimeAcceptance,/open notification bar/);
   assert.match(runtimeAcceptance,/actual Android System UI notification shade appears/);
+});
+test("Flow 10 expands optional setup without wiping owner app state",()=>{
+  assert.ok(/launchApp:\n\s+stopApp: true\n\s+clearState: false/.test(flow));
+  assert.ok(flow.includes('element: "Show optional permissions and features"'));
+  assert.ok(flow.includes('- tapOn: "Show optional permissions and features"'));
+  assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
+  assert.ok(flow.includes('element: "Hide optional features"'));
+  assert.ok(flow.includes('element: "One-time screen assistance"'));
+  assert.ok(/element: "One-time screen assistance"\n\s+direction: UP/.test(flow));
+  assert.ok(flow.includes('text: "Open Accessibility.*One-time screen assistance.*"'));
+  assert.ok(/checked: true[\s\S]*?tapOn: "Turn off"[\s\S]*?checked: false/.test(flow),
+    "an already-enabled service must be explicitly restarted inside Android Settings");
+});
+
+test("debug Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{
+  assert.match(debugManifest,/service android:name="\.ScreenAssistService"[\s\S]*?android:label="@string\/screen_assist_label_debug"/);
+  assert.ok(flow.includes('element: "Nexa Screen Assist \\\\(Debug\\\\)"'));
+  assert.ok(flow.includes('visible: "Use Nexa Screen Assist \\\\(Debug\\\\)"'));
+  assert.ok(flow.includes('id: "android:id/switch_widget"\n        checked: false'));
+  assert.ok(flow.includes('id: "android:id/switch_widget"\n    checked: true'));
+});
+
+test("the ordered experimental suite targets the same current debug APK in every flow",()=>{
+  for(const reviewFlow of reviewFlows) {
+    assert.match(reviewFlow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
+    assert.doesNotMatch(reviewFlow,/clearState:\s*true/,
+      "message and text review flows must preserve Android's Accessibility grant");
+  }
 });
 
 test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{

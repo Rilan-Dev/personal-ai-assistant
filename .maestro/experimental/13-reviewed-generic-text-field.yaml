@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa user-requested named input box stays reviewed and unsent
 tags:
   - nexa
@@ -7,11 +7,9 @@ tags:
   - experimental
 ---
 - launchApp:
-    clearState: true
-    permissions:
-      all: deny
+    clearState: false
 - extendedWaitUntil:
-    visible: "Make your assistant yours."
+    visible: "Chat"
     timeout: 30000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"

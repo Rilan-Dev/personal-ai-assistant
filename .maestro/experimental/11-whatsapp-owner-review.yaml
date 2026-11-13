@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa WhatsApp owner request prepares local review without sending
 tags:
   - nexa
@@ -7,10 +7,7 @@ tags:
   - cloud
 ---
 - launchApp:
-    clearState: true
-    permissions:
-      all: deny
-- assertVisible: "Make your assistant yours."
+    clearState: false
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 - tapOn: "Assistant command"

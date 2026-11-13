@@ -71,6 +71,10 @@ internal object ScreenAssistState {
 }
 
 class ScreenAssistService : AccessibilityService() {
+    override fun onCreate() {
+        super.onCreate()
+        if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service created")
+    }
     /**
      * Find the topmost real third-party APPLICATION window behind Nexa's
      * floating overlay. No keyguard, Android system surface, keyboard or Nexa
@@ -111,9 +115,11 @@ class ScreenAssistService : AccessibilityService() {
     override fun onServiceConnected() {
         active = this
         ScreenAssistState.connected = true
+        if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service connected")
     }
     override fun onInterrupt() {}
     override fun onUnbind(intent: Intent?): Boolean {
+        if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service unbound; current=${active === this}")
         // A service can be unbound without onDestroy immediately following.
         // Do not retain a false Ready state; ignore callbacks from obsolete
         // instances when Android has already connected a replacement.
@@ -128,6 +134,7 @@ class ScreenAssistService : AccessibilityService() {
         return super.onUnbind(intent)
     }
     override fun onDestroy() {
+        if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service destroyed; current=${active === this}")
         // Android can destroy an old service instance after a replacement has
         // connected. Never let the old instance disconnect or clear the live one.
         if (active === this) {
@@ -161,10 +168,19 @@ class ScreenAssistService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg == packageName || pkg == "com.android.systemui") return
-        val root = rootInActiveWindow ?: return
+        val root = try { externalWindowRoot() } catch (_: Exception) { null }
+        if (root == null) {
+            if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
+                android.util.Log.d("NexaScreenAssist", "read event had no permitted external root; eventPackage=$pkg type=${event.eventType}")
+            return
+        }
         try {
         val rootPkg = root.packageName?.toString().orEmpty()
-        if (rootPkg != pkg) return
+        if (rootPkg != pkg) {
+            if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
+                android.util.Log.d("NexaScreenAssist", "read event/root package mismatch; eventPackage=$pkg rootPackage=$rootPkg type=${event.eventType}")
+            return
+        }
         if (ScreenIconScanState.isArmed()) {
             val box = android.graphics.Rect()
             root.getBoundsInScreen(box)
@@ -194,12 +210,19 @@ class ScreenAssistService : AccessibilityService() {
                 if (clean.isNotBlank() && text.length + clean.length + 1 <= 2000) {
                     text.append(clean).append('\n')
                 }
+            }
+            // Some OEM apps wrap their visible content under non-visible
+            // container nodes. Inspect descendants, but preserve the field
+            // filter above so editable/password values are never retained.
+            if (!node.isPassword && !node.isEditable) {
                 for (i in 0 until node.childCount) {
                     node.getChild(i)?.let { pending.add(it) }
                 }
             }
         }
         if (text.isNotBlank()) ScreenAssistState.capture(pkg, text.toString())
+        if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
+            android.util.Log.d("NexaScreenAssist", "read event inspected external root; package=$pkg nodes=$visited captured=${text.isNotBlank()} length=${text.length}")
         } finally { try { root.recycle() } catch (_: Exception) {} }
     }
 }

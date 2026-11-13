@@ -95,6 +95,7 @@ export default function NexaSetupScreen(props: Props) {
           </Pressable>
         </View>
         <Text style={styles.title}>Make your assistant yours.</Text>
+
         <Text style={styles.subtitle}>Choose which Android features Nexa can use. All grants remain under your control.</Text>
         <View style={styles.progressHead}>
           <Text style={styles.progressText}>{s ? `${readyCount} of 8 ready` : 'Checking permissions…'}</Text>
@@ -308,7 +309,8 @@ export default function NexaSetupScreen(props: Props) {
 
 const styles=StyleSheet.create({
   scroll:{flex:1,backgroundColor:'#0D1017'},
-  content:{padding:16,paddingTop:14,paddingBottom:30,gap:12},
+  // Keep the final setup controls scrollable above the fixed Continue footer.
+  content:{padding:16,paddingTop:14,paddingBottom:160,gap:12},
   hero:{backgroundColor:'#171D2B',borderWidth:1,borderColor:'#303A50',borderRadius:22,padding:17,gap:9},
   topLine:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',gap:8},
   topKicker:{color:'#B0BCEC',fontSize:10,fontWeight:'700',letterSpacing:1.2},

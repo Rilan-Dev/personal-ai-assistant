@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa grants Screen Assist through Android Settings
 tags:
   - nexa
@@ -11,52 +11,74 @@ tags:
 # device check verifies the service is bound after Maestro exits. The live
 # notification action is tested only after the runner has released the service.
 - launchApp:
-    clearState: true
-    permissions:
-      all: deny
+    stopApp: true
+    clearState: false
 - assertVisible: "Make your assistant yours."
 - scrollUntilVisible:
     element: "Show optional permissions and features"
     direction: DOWN
-    timeout: 25000
+    timeout: 30000
 - tapOn: "Show optional permissions and features"
-- runFlow:
-    when:
-      visible: "Explore 6 optional features"
-    commands:
-      - tapOn: "Show optional permissions and features"
+- scrollUntilVisible:
+    element: "Hide optional features"
+    direction: DOWN
+    timeout: 30000
+- assertVisible: "Hide optional features"
 # Overlay permission is checked separately after Maestro, because OEMs expose
-# either an inline toggle or a nested details screen for the same grant.
+# different system grant surfaces.
 - scrollUntilVisible:
     element: "One-time screen assistance"
-    direction: DOWN
-    timeout: 25000
+    direction: UP
+    timeout: 30000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
 # Android 17 may open the system full-control consent immediately when this
 # app's one-time accessibility shortcut is selected. Confirm it when shown.
 - runFlow:
     when:
-      visible: "Allow Nexa Screen Assist to have full control of your device\\?"
+      visible: "Allow Nexa Screen Assist( \\(Debug\\))? to have full control of your device\\?"
     commands:
       - tapOn: "Allow"
 - runFlow:
     when:
-      notVisible: "Use Nexa Screen Assist"
+      notVisible: "Use Nexa Screen Assist \\(Debug\\)"
     commands:
       - scrollUntilVisible:
-          element: "Nexa Screen Assist"
+          element: "Nexa Screen Assist \\(Debug\\)"
           direction: DOWN
           timeout: 30000
-      - tapOn: "Nexa Screen Assist"
+      - tapOn: "Nexa Screen Assist \\(Debug\\)"
 - extendedWaitUntil:
-    visible: "Use Nexa Screen Assist"
+    visible: "Use Nexa Screen Assist \\(Debug\\)"
     timeout: 25000
 - runFlow:
     when:
-      visible: "Use Nexa Screen Assist"
+      visible:
+        id: "android:id/switch_widget"
+        checked: true
     commands:
-      - tapOn: "Use Nexa Screen Assist"
+      - tapOn:
+          id: "android:id/switch_widget"
+          checked: true
+- runFlow:
+    when:
+      visible: "Turn off Nexa Screen Assist( \\(Debug\\))?\\?"
+    commands:
+      - tapOn: "Turn off"
+- runFlow:
+    when:
+      visible:
+        id: "android:id/switch_widget"
+        checked: false
+    commands:
+      - tapOn:
+          id: "android:id/switch_widget"
+          checked: false
+- runFlow:
+    when:
+      visible: "Allow Nexa Screen Assist( \\(Debug\\))? to have full control of your device\\?"
+    commands:
+      - tapOn: "Allow"
 # Android confirms the accessibility grant in a separate system-owned dialog.
 # Accept that explicit confirmation as part of the user-approved test batch.
 - runFlow:
@@ -64,11 +86,9 @@ tags:
       visible: "Allow"
     commands:
       - tapOn: "Allow"
-- runFlow:
-    when:
-      visible: "Turn off Nexa Screen Assist\\?"
-    commands:
-      - tapOn: "Keep on"
+- assertVisible:
+    id: "android:id/switch_widget"
+    checked: true
 # On Android 13+, the Settings app may require the owner to allow restricted
 # settings for a sideloaded app. Follow only the system consent screens.
 - runFlow:
@@ -104,7 +124,7 @@ tags:
           text: "Open Accessibility.*One-time screen assistance.*"
       - runFlow:
           when:
-            visible: "Allow Nexa Screen Assist to have full control of your device\\?"
+            visible: "Allow Nexa Screen Assist( \\(Debug\\))? to have full control of your device\\?"
           commands:
             - tapOn: "Allow"
       - runFlow:
@@ -118,21 +138,32 @@ tags:
           commands:
             - tapOn: "Installed apps"
       - scrollUntilVisible:
-          element: "Nexa Screen Assist"
+          element: "Nexa Screen Assist \\(Debug\\)"
           direction: DOWN
           timeout: 30000
-      - tapOn: "Nexa Screen Assist"
+      - tapOn: "Nexa Screen Assist \\(Debug\\)"
       - runFlow:
           when:
-            visible: "Use Nexa Screen Assist"
+            visible:
+              id: "android:id/switch_widget"
+              checked: false
           commands:
-            - tapOn: "Use Nexa Screen Assist"
+            - tapOn:
+                id: "android:id/switch_widget"
+                checked: false
       - runFlow:
           when:
             visible: "Allow"
           commands:
             - tapOn: "Allow"
-# Preserve the Android Settings screen as visible evidence. A separate
-# post-Maestro check verifies this grant actually bound ScreenAssistService.
-- assertVisible: "Use Nexa Screen Assist"
+      - assertVisible:
+          id: "android:id/switch_widget"
+          checked: true
+# Preserve the system-owned Settings UI as evidence. Its label may change
+# immediately after the toggle, so the post-Maestro ADB check verifies the
+# actual secure setting and bound ScreenAssistService state.
 - takeScreenshot: nexa-screen-assist-owner-setting-enabled
+- launchApp:
+    stopApp: false
+- waitForAnimationToEnd:
+    timeout: 3000

@@ -1496,6 +1496,7 @@ export default function App() {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    const whatsappPreview=parseReviewedWhatsAppIntent(request);
     // Explicit owner device-fact questions use the ONE Kotlin task authority.
     // No model call, Accessibility action or external message can enter here.
     if(!restore && engine.live && (ownerDeviceFactKind(request)||ownerReadOnlyPlanKinds(request))){
@@ -1527,13 +1528,12 @@ export default function App() {
     }
     // Explicit owner text routes only to a local message review UI.
     // The contact hint cannot resolve an address book or send a message.
-    if (!restore && engine.live && whatsAppDraftAvailable()) {
-      const preview = parseReviewedWhatsAppIntent(request);
-      if (preview) {
+    if (!restore && engine.live) {
+      if (whatsappPreview) {
         setInput(""); setEvents([]); append("user", request);
-        setWhatsAppDraft(preview.message);
+        setWhatsAppDraft(whatsappPreview.message);
         setSelectedContact(null);
-        setWhatsAppDraftNotice("Requested contact: " + preview.contactHint +
+        setWhatsAppDraftNotice("Requested contact: " + whatsappPreview.contactHint +
           ". Choose the correct contact using the Android picker. Nothing was sent.");
         append("assistant", "I prepared the exact WhatsApp text locally. Select the intended contact, review the recipient and message, then open the draft. You still tap Send in WhatsApp.");
         setTab("tools");
@@ -2419,7 +2419,7 @@ export default function App() {
             </Text>
           </View>
           <Text style={styles.cardText}>Screen Assist offers separately armed, one-time text, icon metadata, and local icon-image observations. It excludes editable/password fields from metadata and never uploads screen data automatically. The floating Nexa Tools panel can request limited navigation taps or scrolls, but each requires an explicit on-screen confirmation.</Text>
-          {engine.live&&screenAssistAvailable()&&<>
+          {screenAssistAvailable()&&<>
             <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={openScreenSettings}>
               <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
             </Pressable>
