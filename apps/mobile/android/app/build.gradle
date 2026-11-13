@@ -217,6 +217,11 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test:core:1.7.0")
+    // Synthetic UI fixture activities execute in the *instrumentation APK's*
+    // private process, not Nexa's main process. Android does not share the
+    // target APK's Kotlin runtime with that process. Explicitly bundle the
+    // resolved stdlib into the test APK so test-only rows can launch safely.
+    androidTestImplementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.20")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
