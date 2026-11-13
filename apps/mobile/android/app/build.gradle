@@ -221,7 +221,7 @@ dependencies {
     // private process, not Nexa's main process. Android does not share the
     // target APK's Kotlin runtime with that process. Explicitly bundle the
     // resolved stdlib into the test APK so test-only rows can launch safely.
-    androidTestImplementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.20")
+    androidTestImplementation("org.jetbrains.kotlin:kotlin-stdlib:2.2.10")
 
     def isGifEnabled = (findProperty('expo.gif.enabled') ?: "") == "true";
     def isWebpEnabled = (findProperty('expo.webp.enabled') ?: "") == "true";
