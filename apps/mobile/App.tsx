@@ -1941,6 +1941,12 @@ export default function App() {
               {message.speaker==='assistant' && <View style={styles.messageAvatar}><Text style={styles.avatarText}>✦</Text></View>}
               <View style={[styles.messageCard,message.speaker==='user' ? styles.messageUser : styles.messageAssistant]}>
                 <Text style={styles.messageText}>{message.text}</Text>
+                {message.speaker==='assistant' &&
+                  /^Task blocked: Permission required: (apps\\.launch|device\\.interact|device\\.observe|hardware\\.flashlight)$/.test(message.text) &&
+                  <Pressable accessibilityRole="button" accessibilityLabel="Review device action permissions in Tools"
+                    style={styles.outlineInline} onPress={()=>navigate('tools')}>
+                    <Text style={styles.outlineInlineText}>Review device permissions in Tools</Text>
+                  </Pressable>}
               </View>
             </View>)}
           {running && <View style={styles.loadingLine}><ActivityIndicator color="#a5b4fc"/><Text style={styles.statusText}>Thinking and checking permissions…</Text></View>}
