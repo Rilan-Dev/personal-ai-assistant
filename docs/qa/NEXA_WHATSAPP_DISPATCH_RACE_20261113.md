@@ -46,3 +46,29 @@ The windows runner is `nextjs-ssh-runner`, isolated checkout `D:\\RiluRaafu\\per
 4. Separately complete real Sarvam voice/wake task flow, canonical Chat/Voice/overlay executor integration, signing lineage, recovery and rollback before production.
 
 **No consumer release certification or general WhatsApp E2E completion is claimed.**
+
+
+## Verified emulator re-acceptance — 13 November 2026 (supersedes pending gates above)
+
+The complete source tree at Git commit `747258d8f9ec12958f9853c5332e9af2f429903e` was fetched cleanly in the isolated Windows worktree. The Android APK embeds that same full SHA, independently asserted by the instrumented revision test.
+
+| Gate | Actual evidence | Result |
+|---|---|---|
+| Full Node regression | `%TEMP%\\nexa-full-node-747258d.log` | **474 passed, 0 failed** |
+| TypeScript | `npm run typecheck`, `%TEMP%\\nexa-typecheck-747258d.log` | **PASS** |
+| Web static export | `npm run web:export`, `%TEMP%\\nexa-web-export-747258d.log` | **PASS**, 382 bundled modules, exported `dist` |
+| Android Gradle | `:maestro-portable:testDebugUnitTest :app:assembleDebug :app:assembleAndroidTest`, offline, x86_64, QA2, `%TEMP%\\nexa-qa2-emulator-747258d.log` | **BUILD SUCCESSFUL**, 258 actionable tasks (28 executed, 230 up to date) |
+| APK/AndroidTest SHA256 | `74145BB253F2C7D2664679A49D683149FFBC93E2CEF3CC5E0B2509608EF38F74` / `400EF06C0F79A76A90B878F6F3D9C4AF39F5F5CDDEABC47D69AC62142DD165A7` | Verified exact installed artifacts |
+| Emulator revision identity | `NexaBuildIdentityAndroidTest`, parameter `nexaExpectedRevision=747258d8f9ec12958f9853c5332e9af2f429903e` | **OK (1 test)** |
+| Synthetic WhatsApp, message input, icon, isolation and intent | `%TEMP%\\nexa-emulator-synthetic-747258d.log` | **OK (18 tests)** |
+| Maestro portable bridge / relative hierarchy / scroll | `%TEMP%\\nexa-emulator-maestro-747258d.log` | **OK (23 tests)** |
+| Emergency Pause, durable no-replay journal, recovery, timeline | `%TEMP%\\nexa-emulator-safety-747258d.log` | **OK (17 tests)** |
+| Total selected emulator Android instrumentation | Four independent runs with explicit `OK (N tests)` | **59 passed, 0 failed** |
+
+The first emulator attempt to run UI automation **did not** pass: the emulator had an orphaned `dev.mobile.maestro.test` active instrumentation session holding Android's `Ui Automation` service. The second instrumentation session raised `UiAutomationService already registered!`. The existing background Maestro test had no active host-side Maestro process or ADB forward. The test-only `dev.mobile.maestro` process was force-stopped **without uninstalling apps, clearing data, granting permissions, altering the host OS or touching any production user app**. This released the test service. A fresh synthetic overlapping-row test then reported `OK (1 test)`, and all 59 selected emulator tests above subsequently passed.
+
+The earlier Kotlin-only isolated fixture had failed with `NoClassDefFoundError: kotlin.Unit` in a different APK process; this is resolved by the Java-only synthetic fixtures. The normal Android app's Kotlin runtime was not changed.
+
+**Remaining explicit acceptance limits:** The physical Infinix X6831 disconnected from ADB before these exact-source tests, so its current on-device acceptance remains unverified. No genuine WhatsApp recipient/chat, real outbound Send, Sarvam realtime provider, overlay permission grant, release signing lineage or rollback has been exercised or certified. The emulated tests prove the bounded synthetic behavior, not general autonomous execution or production readiness. Promotion to `Development` can safely include this guarded source fix without implying consumer release approval.
+
+The remainder of the old pending table above describes the **earlier pre-fix moment**; this section supersedes the corresponding development/test statuses. All tests above were run against the pre-documentation code SHA `747258d`; documentation-only Git commits do not change that compiled source.
