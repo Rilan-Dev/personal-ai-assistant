@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="099344034S003788" tests="1" failures="0" time="89.911" timestamp="2026-11-14T01:22:21">
+    <testcase id="Nexa grants Screen Assist through Android Settings" name="Nexa grants Screen Assist through Android Settings" classname="Nexa grants Screen Assist through Android Settings" file=".qa-results\maestro-physicalqa2-flows\10-agent-notification-shade.yaml" time="89.872" timestamp="2026-11-14T01:22:21" status="SUCCESS">
+      <properties>
+        <property name="tags" value="nexa, agent, notification, experimental"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

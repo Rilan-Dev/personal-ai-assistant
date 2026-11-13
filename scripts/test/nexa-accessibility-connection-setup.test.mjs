@@ -67,6 +67,8 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
   assert.ok(flow.includes('text: "Open Accessibility.*One-time screen assistance.*"'));
   assert.ok(/checked: true[\s\S]*?tapOn: "Turn off"[\s\S]*?checked: false/.test(flow),
     "an already-enabled service must be explicitly restarted inside Android Settings");
+  assert.match(flow,/visible: "Stop Nexa Screen Assist[\s\S]*?tapOn: "Stop"/,
+    "OEM Accessibility settings may require an explicit Stop confirmation before restarting the service");
 });
 
 test("debug Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{
@@ -102,6 +104,12 @@ test("message review scrolls the exact draft fully into view before asserting it
   const messageFlow=reviewFlows[1];
   assert.ok(messageFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact draft: I am in the meeting i will call you later"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "Requested recipient: Mom"\n- assertVisible: "Exact draft: I am in the meeting i will call you later"'),
     "the contact-review heading can be visible while its exact draft remains clipped beneath bottom navigation");
+});
+
+test("WhatsApp owner preview allows dynamic scrolling through the full Tools page",()=>{
+  const whatsappFlow=reviewFlows[0];
+  assert.ok(whatsappFlow.includes('text: "Requested contact: mom.*Nothing was sent.*"\n    direction: DOWN\n    timeout: 90000'),
+    "the preview is below the long Screen Assist cards on the physical phone");
 });
 
 test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{

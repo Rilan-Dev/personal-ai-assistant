@@ -29,7 +29,7 @@ tags:
     element:
       text: "Requested contact: mom.*Nothing was sent.*"
     direction: DOWN
-    timeout: 30000
+    timeout: 90000
 - assertVisible:
     text: "Requested contact: mom.*Nothing was sent.*"
 - takeScreenshot: nexa-owner-whatsapp-local-preview-no-send

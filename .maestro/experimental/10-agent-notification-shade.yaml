@@ -69,6 +69,11 @@ tags:
       - tapOn: "Turn off"
 - runFlow:
     when:
+      visible: "Stop Nexa Screen Assist( \\(Debug\\))?\\?"
+    commands:
+      - tapOn: "Stop"
+- runFlow:
+    when:
       visible:
         id: "android:id/switch_widget"
         checked: false
