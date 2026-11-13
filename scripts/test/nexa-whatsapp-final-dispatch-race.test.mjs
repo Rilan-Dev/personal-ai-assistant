@@ -50,3 +50,13 @@ test('post-action message claim requires recipient, unique composer and exact ob
   assert.match(message,/NOT SENT/);
   assert.doesNotMatch(message,/ACTION_CLICK[\s\S]*?Send/);
 });
+
+test('exceptions after entering a native side-effect remain unknown, never safe to replay',()=>{
+  for(const code of [whatsapp,message]) {
+    assert.match(code,/var actionEntered=false/);
+    assert.match(code,/actionEntered=true\s*\n\s*candidate!!\.performAction/);
+    assert.match(code,/if\(actionEntered\)outcomeUnknown=true else stale=true/);
+    assert.match(code,/if\(outcomeUnknown\)"unknown" else "android_rejected"/m);
+    assert.match(code,/no automatic retry|no retry/);
+  }
+});
