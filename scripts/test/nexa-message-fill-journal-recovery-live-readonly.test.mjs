@@ -39,7 +39,7 @@ test('live WhatsApp audit is strictly read-only and redacts all text',()=>{
   assert.match(live,/OWNER_ACCESSIBILITY_REQUIRED/);
   assert.doesNotMatch(live,/\bgetUiAutomation\s*\(|\bautomation\.windows\b|\brootInActiveWindow\b/);
   assert.match(live,/nexaRecipientHint/);
-  assert.match(live,/NexaWhatsAppChatActions\.inspect\(current,recipient\)/);
+  assert.match(live,/NexaWhatsAppChatActions\.inspect\(root,recipient\)/);
   assert.match(live,/scan\.alreadyOpen \|\| scan\.candidates==1/);
   assert.doesNotMatch(live,/performAction|ACTION_SET_TEXT|ACTION_CLICK|dispatchWithFence|startActivity|sendMessage|takeScreenshot|pressSend|am start|ACTION_SEND/);
   assert.doesNotMatch(live,/println\([^)]*(?:recipient|node\.text|contentDescription|hintText)/);
