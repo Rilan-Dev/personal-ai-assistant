@@ -17,17 +17,6 @@ internal object NexaWhatsAppChatActions {
             node.contentDescription?.toString().orEmpty())
         return labels.maxOfOrNull{NexaWhatsAppChatMatch.evidence(recipient,it)} ?:0
     }
-    /** Android can expose one chat row through both a clickable row and a
-     * clickable accessibility wrapper with slightly different bounds. Merge
-     * those overlapping targets, while keeping adjacent rows independent. */
-    private fun sameRow(a:Rect,b:Rect):Boolean {
-        val overlap=Rect(a)
-        if(!overlap.intersect(b))return false
-        val minWidth=minOf(a.width(),b.width())
-        val minHeight=minOf(a.height(),b.height())
-        return minWidth>0 && minHeight>0 &&
-            overlap.width()*5>=minWidth*4 && overlap.height()*2>=minHeight
-    }
     /**
      * Accessibility can report one visible chat row through both its clickable
      * wrapper and clickable descendant. These are one semantic target only
@@ -65,6 +54,7 @@ internal object NexaWhatsAppChatActions {
     private fun messageComposerPresent(root:AccessibilityNodeInfo):Boolean {
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>();queue.add(root)
         var seen=0
+        var composers=0
         while(queue.isNotEmpty()&&seen++<220) {
             val n=queue.removeFirst()
             if(!n.isVisibleToUser || n.isPassword)continue
@@ -72,14 +62,15 @@ internal object NexaWhatsAppChatActions {
                 val hints=listOf(n.hintText?.toString().orEmpty(),
                     n.viewIdResourceName.orEmpty(),n.contentDescription?.toString().orEmpty())
                     .joinToString(" ").lowercase(java.util.Locale.ROOT)
-                if(Regex("""(^|[^a-z])(type a message|message input|message_input|chat_input|composer|message)([^a-z]|$)""")
+                if(n.actionList.any { it.id==AccessibilityNodeInfo.ACTION_SET_TEXT } &&
+                    Regex("""(^|[^a-z])(type a message|message input|message_input|chat_input|composer|message)([^a-z]|$)""")
                         .containsMatchIn(hints) &&
                     !Regex("""search|recipient|password|payment""").containsMatchIn(hints))
-                    return true
+                    composers++
             }
             for(i in 0 until n.childCount)n.getChild(i)?.let{queue.addLast(it)}
         }
-        return false
+        return queue.isEmpty() && composers==1
     }
     /** A row may have a TextView and an accessibility label; count only its
      * unique clickable ancestor. Two distinct rows are always ambiguous. */
@@ -112,8 +103,7 @@ internal object NexaWhatsAppChatActions {
                     val rect=visibleTargetBounds(rawRect,window)
                     if(rect!=null && rect.width()>25 && rect.height()>20) {
                         val previousIndex=rows.indexOfFirst{
-                            sameSourceOrAncestor(it.target,candidate) ||
-                                sameRow(it.bounds,rect)
+                            sameSourceOrAncestor(it.target,candidate)
                         }
                         if(previousIndex<0)rows.add(Row(candidate,score,Rect(rect)))
                         else {
@@ -129,6 +119,9 @@ internal object NexaWhatsAppChatActions {
             }
             for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
         }
+        // The visibility walk must finish. Otherwise an unseen second row
+        // could make a seemingly unique match unsafe.
+        if(queue.isNotEmpty())return Scan(0,0,null,false)
         val open=headerName && messageComposerPresent(root)
         val eligible=rows.filter{it.evidence>=85}
         return Scan(eligible.size,eligible.maxOfOrNull{it.evidence}?:0,
@@ -145,8 +138,9 @@ internal object NexaWhatsAppChatActions {
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?:return "WhatsApp chat list is not accessible."
         try {
-            if(root.packageName?.toString()!="com.whatsapp")
-                return "The current app is not WhatsApp. No chat was opened."
+            if(root.packageName?.toString()!="com.whatsapp" ||
+                root.windowId<0 || !root.isVisibleToUser)
+                return "The current accessible window is not a permitted WhatsApp chat. No chat was opened."
             val scan=inspect(root,recipient)
             if(scan.alreadyOpen)
                 return "Matching chat header and composer are already visible. No tap necessary."
@@ -159,14 +153,48 @@ internal object NexaWhatsAppChatActions {
             if(scan.bestEvidence<85)
                 return "Chat contact could not be grounded. No tap performed."
             val target=scan.target ?:return "The matched chat row is no longer available."
+            val expectedWindow=root.windowId
+            val expectedClass=target.className?.toString().orEmpty()
+            val expectedResource=target.viewIdResourceName.orEmpty()
+            val expectedBounds=Rect().also {target.getBoundsInScreen(it)}
             val token=UUID.randomUUID().toString()
             val before=NexaUiActionVerifier.fingerprint(root)
             if(!NexaUiActionJournal.claim(service,token,"tap","com.whatsapp",origin=origin))
                 return "The encrypted action journal refused the chat tap. Nothing opened."
             claimedToken(token)
             NexaUiActionVerifier.begin(token,"tap","com.whatsapp",root.windowId,before)
+            var stale=false
             val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
-                target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                // A list can recycle a clickable row after review. Only a fresh
+                // complete Accessibility tree inside the final Pause fence may
+                // authorize this exact native click. Never reuse a stale node.
+                val fresh=try {
+                    if(!ScreenAssistState.connected || ScreenAssistService.active!==service)
+                        null else service.externalWindowRoot()
+                }catch(_:Exception){null}
+                if(fresh==null){
+                    stale=true
+                    false
+                }else try {
+                    val freshScan=if(fresh.packageName?.toString()=="com.whatsapp" &&
+                        fresh.windowId==expectedWindow && fresh.isVisibleToUser)
+                        inspect(fresh,recipient) else Scan(0,0,null,false)
+                    val candidate=freshScan.target
+                    val rect=Rect().also { candidate?.getBoundsInScreen(it) }
+                    val same=freshScan.candidates==1 && !freshScan.alreadyOpen &&
+                        freshScan.bestEvidence==scan.bestEvidence &&
+                        candidate!=null && candidate==target &&
+                        candidate.className?.toString().orEmpty()==expectedClass &&
+                        candidate.viewIdResourceName.orEmpty()==expectedResource &&
+                        rect==expectedBounds
+                    if(!same){
+                        stale=true
+                        false
+                    }else candidate!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                }catch(_:Exception){
+                    stale=true
+                    false
+                }finally {try{fresh.recycle()}catch(_:Exception){}}
             }
             if(clicked==null){
                 NexaUiActionVerifier.cancel(token)
@@ -180,7 +208,8 @@ internal object NexaWhatsAppChatActions {
             }else{
                 NexaUiActionVerifier.cancel(token)
                 NexaUiActionJournal.finish(service,token,"android_rejected")
-                "Android refused the chat-row tap. No automatic retry."
+                if(stale) "WhatsApp chat row or window changed before dispatch. No tap or retry."
+                else "Android refused the chat-row tap. No automatic retry."
             }
         }catch(_:Exception){return "WhatsApp changed while locating the contact. No retry."}
         finally{try{root.recycle()}catch(_:Exception){}}
@@ -192,6 +221,7 @@ internal object NexaWhatsAppChatActions {
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}?:return false
         return try {
             root.packageName?.toString()=="com.whatsapp" &&
+                root.windowId>=0 && root.isVisibleToUser &&
                 inspect(root,recipient).alreadyOpen
         }catch(_:Exception){false}
         finally{try{root.recycle()}catch(_:Exception){}}
