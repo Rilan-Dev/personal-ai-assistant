@@ -217,6 +217,8 @@ internal object NexaMessageInputActions {
                         draft.message)
                 }
                 var stale=false
+                var outcomeUnknown=false
+                var actionEntered=false
                 val accepted=NexaNativeActionSafety.dispatchWithFence(
                     service,approval.pauseGeneration) {
                     // An Android composer may be recycled, replaced or
@@ -242,10 +244,12 @@ internal object NexaMessageInputActions {
                         if(!same) {
                             stale=true
                             false
-                        } else candidate!!.performAction(
-                            AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                        } else {
+                            actionEntered=true
+                            candidate!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                        }
                     }catch(_:Exception){
-                        stale=true
+                        if(actionEntered)outcomeUnknown=true else stale=true
                         false
                     }finally {try{fresh.recycle()}catch(_:Exception){}}
                 }
@@ -256,12 +260,14 @@ internal object NexaMessageInputActions {
                 val verified=accepted &&
                     verifyCurrentDraft(service,approval,draft.recipientHint,draft.message)
                 NexaUiActionJournal.finish(service,approval.token,
-                    if(accepted)"android_accepted" else "android_rejected")
+                    if(outcomeUnknown)"unknown" else
+                        if(accepted)"android_accepted" else "android_rejected")
                 if(verified) {
                     NexaUiActionJournal.markObservation(service,approval.token,"observed_change")
                     "Exact prepared text is visible in the selected message input. NOT SENT. Review the recipient and tap Send yourself."
                 } else if(accepted)
                     "Android accepted the text-entry request, but its contents were not verified. Review it manually. NOT SENT by Nexa."
+                else if(outcomeUnknown) "Message-input result is uncertain. Inspect the current chat; no automatic retry and no send by Nexa."
                 else if(stale) "Chat, recipient or empty composer changed before text entry. No insertion or retry."
                 else "Android refused text entry. No retry; nothing was sent by Nexa."
             }catch(_:Exception) {
