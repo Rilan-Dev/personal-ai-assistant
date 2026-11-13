@@ -28,3 +28,7 @@ test('reviewed revision instrumentation accepts only explicit disposable QA app 
   assert.match(identity,/"dev\.rilandev\.personalaiassistant\.physicalqa2"/);
   assert.doesNotMatch(identity,/\bBuildConfig\.APPLICATION_ID\s*==\s*"dev\.rilandev\.personalaiassistant\.debug"/);
 });
+
+test('standalone synthetic instrumentation process bundles the Kotlin runtime',()=>{
+  assert.match(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:2\.2\.20"\)/);
+});
