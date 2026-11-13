@@ -11,17 +11,19 @@ The owner-tapped `SarvamModelApiReadiness.check` performed STT and TTS WebSocket
 - Synthetic requests still say only `Reply OK only`, use no phone screen content, run no tool, and record no audio. Unsupported or malformed HTTP 200 now produces `MODEL_RESPONSE` or `MODEL_TOOL_RESPONSE` instead of `AUTHORIZED`.
 - The successful readiness copy distinguishes WebSocket handshake success from real audio acceptance. It does **not** claim a live STS conversation, wake-word or overlay acceptance.
 
-## Test record
+## Verified test record
 
-- Native implementation source revision: `af5289a843c46bfa95f6aa2681f130e073d008d0` (later `b906cd8` updates only a legacy Node source assertion).
-- Focused Node source tests: **3/3 passed** at native source SHA.
-- Initial full Node suite: **498/499 passed**, one legacy source-regex test required a now-obsolete `if(it.isSuccessful)probeToolSchema()`. Its test was updated in subsequent commit `b906cd8` to require validation before the next probe; **fresh full regression after that commit still requires a recorded run**.
-- TypeScript check was completed in the isolated worktree; confirm final execution log when reconnecting.
-- Android arm64 Gradle build for native implementation source was in progress when BridgeHead's Windows tailnet connection became `PEER_UNREACHABLE`; **do not claim native compile or physical Android tests as passed without checking the complete build log**.
-- Physical Infinix has Android 13, WhatsApp installed and an independently managed Maestro test session that may occupy Android's single global UiAutomation slot. Do not terminate that session automatically or change Android security permissions.
+- Native source/build revision: `af5289a843c46bfa95f6aa2681f130e073d008d0`. Commits `b906cd8` and `f707814` changed only a legacy Node source-regex test and this document: GitHub compare verified **no Android source/test blob changes**.
+- Focused Node source regressions: **8/8 PASS** after the stronger probe assertion replaced the stale HTTP-200-only expectation.
+- Complete Node suite at feature head `f707814`: **499/499 PASS**; Windows isolated log `%TEMP%\\nexa-readiness-full-f707814.log`.
+- TypeScript at feature head: **PASS**, `%TEMP%\\nexa-readiness-typecheck-f707814.log`.
+- Arm64 isolated QA2 Android app + AndroidTest APK assembly and portable Maestro JUnit: **BUILD SUCCESSFUL** (2m), `%TEMP%\\nexa-readiness-gradle-af5289a.log`. BridgeHead disconnected *after* the command began; direct inspection of the completed local Gradle log after reconnect confirmed success.
+- Isolated QA2 package: `dev.rilandev.personalaiassistant.physicalqa2`, versionCode **2026111406**, updated **in place** after matching the existing signer. App SHA-256 `759CE602105C3458978B27FF140F677B59D7F38720733A5C2342C8233DF5FA8E`; AndroidTest APK SHA-256 `F9890702AF86C516B48212366A08F1D62F34FD4E05428543D85022764173BD16`. Signing certificate fingerprint `a5e79669a9e741284375d3a8d9bf78c26887d32590699565a07bd942676fc1f2`, matching prior QA2 signer.
+- Physical Infinix X6831 / Android 13 instrumentation: **OK (5 tests)** — exact installed Git SHA identity (1) plus synthetic Sarvam response structure/fail-closed cases (4). Log `%TEMP%\\nexa-readiness-physical-af5289a.log`.
+- The initial 498/499 Node run on the previous test revision was caused by one outdated assertion expecting the old behavior; the replacement is now tested in the **499/499 PASS** run above.
 
-## Acceptance
+## Remaining release acceptance
 
-Once BridgeHead reconnects: fetch latest feature branch into the clean detached isolated worktree, rerun complete Node suite, verify native source blobs match the built APK, finish/redo Android Gradle assembly if needed, run `NexaSarvamProbeResponseAndroidTest` plus source-identity in the separately signed `.physicalqa2` package. Real Sarvam BYOK/authenticated voice, wake and overlay remain separate owner-consented checks.
+The tests used synthetic HTTP response objects. They did **not** authenticate to Sarvam, call a paid/remote conversation endpoint, capture microphone audio, enable wake listening, send a model-proposed phone tool, access a real WhatsApp chat or validate the actual OEM overlay.
 
-No production services, main branch, real provider key, consumer app or platform permission changed.
+Real owner-mediated Sarvam API credentials, WebSocket audio and barge-in, on-device wake-to-live auto-start, Android Accessibility permission, exact recipient/composer verification and consumer signing/rollback **remain unverified**. The primary app, `main` branch, provider keys, Android permission settings and production services were unchanged.
