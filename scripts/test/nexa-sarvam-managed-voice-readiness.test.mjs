@@ -58,7 +58,11 @@ test('read-only authorization probes STT/TTS and conversation API with a synthet
   assert.match(probe,/Reply OK only/);
   assert.match(probe,/fun probeToolSchema\(\)/);
   assert.match(probe,/NexaSarvamActionTools\.definitions\(\)/);
-  assert.match(probe,/if\(it\.isSuccessful\)probeToolSchema\(\)/);
+  // HTTP 200 alone is insufficient: inspect a bounded text-only assistant
+  // completion before proceeding to the native tool-schema probe.
+  assert.match(probe,/if\(NexaSarvamProbeResponse\.hasNonExecutingAssistantCompletion\(reply\)\)\s+probeToolSchema\(\)/);
+  assert.match(probe,/finish\(false,"MODEL_RESPONSE"/);
+  assert.match(probe,/finish\(false,"MODEL_TOOL_RESPONSE"/);
   assert.match(probe,/NexaSarvamChatError\.classify/);
   assert.doesNotMatch(probe,/AudioRecord|MediaRecorder|startRecording|FileOutputStream|println\(|Log\./);
   assert.match(runtime,/SarvamModelApiReadiness\.check/);
