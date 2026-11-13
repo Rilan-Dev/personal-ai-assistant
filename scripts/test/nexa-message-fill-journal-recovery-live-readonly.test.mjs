@@ -33,7 +33,11 @@ test('physical no-replay test records unknown and refuses replay even after veri
   assert.doesNotMatch(policy,/performAction|ACTION_SET_TEXT|ACTION_CLICK|adb shell input|pm grant/);
 });
 test('live WhatsApp audit is strictly read-only and redacts all text',()=>{
-  assert.match(live,/UiAutomation\.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES/);
+  assert.match(live,/ScreenAssistState\.connected/);
+  assert.match(live,/ScreenAssistService\.active/);
+  assert.match(live,/service!!\.externalWindowRoot\(\)/);
+  assert.match(live,/OWNER_ACCESSIBILITY_REQUIRED/);
+  assert.doesNotMatch(live,/\bgetUiAutomation\s*\(|\bautomation\.windows\b|\brootInActiveWindow\b/);
   assert.match(live,/nexaRecipientHint/);
   assert.match(live,/NexaWhatsAppChatActions\.inspect\(current,recipient\)/);
   assert.match(live,/scan\.alreadyOpen \|\| scan\.candidates==1/);
