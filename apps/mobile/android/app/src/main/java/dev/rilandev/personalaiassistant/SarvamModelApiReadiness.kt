@@ -79,9 +79,15 @@ internal object SarvamModelApiReadiness {
                 }
                 override fun onResponse(call:Call,response:Response) {
                     response.use {
-                        if(it.isSuccessful)finish(true,"AUTHORIZED",
-                            "Saaras, Bulbul, a synthetic chat turn and Nexa's live tool declarations were accepted. No phone content, microphone audio or device action was sent.")
-                        else {
+                        if(it.isSuccessful) {
+                            val reply=NexaSarvamResponseBounds.textOrNull(it,
+                                NexaSarvamResponseBounds.MAX_CHAT_BYTES)
+                            if(NexaSarvamProbeResponse.hasNonExecutingAssistantCompletion(reply))
+                                finish(true,"AUTHORIZED",
+                                    "Saaras and Bulbul WebSocket handshakes and two synthetic text-only model completions were accepted. Live audio and phone tools were not tested.")
+                            else finish(false,"MODEL_TOOL_RESPONSE",
+                                "Sarvam returned HTTP success but no valid non-executing tool-schema probe completion. No phone tool was executed.")
+                        }else {
                             val safe=NexaSarvamChatError.classify(it.code,
                                 NexaSarvamResponseBounds.textOrNull(it,
                                     NexaSarvamResponseBounds.MAX_ERROR_BYTES).orEmpty())
@@ -108,8 +114,14 @@ internal object SarvamModelApiReadiness {
                 override fun onResponse(call:Call,response:Response) {
                     response.use {
                         if(terminal.get())return
-                        if(it.isSuccessful)probeToolSchema()
-                        else finish(false,"MODEL_AUTH",
+                        if(it.isSuccessful) {
+                            val reply=NexaSarvamResponseBounds.textOrNull(it,
+                                NexaSarvamResponseBounds.MAX_CHAT_BYTES)
+                            if(NexaSarvamProbeResponse.hasNonExecutingAssistantCompletion(reply))
+                                probeToolSchema()
+                            else finish(false,"MODEL_RESPONSE",
+                                "Sarvam returned HTTP success without a valid synthetic assistant completion. Voice model not verified.")
+                        }else finish(false,"MODEL_AUTH",
                             "Sarvam Conversations returned HTTP ${it.code}; verify the Model API key, quota or model access.")
                     }
                 }
