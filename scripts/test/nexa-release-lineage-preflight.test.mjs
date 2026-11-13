@@ -34,7 +34,11 @@ test('preflight is fixed to the Nexa main identity; no unrelated package inspect
 
 test('legacy Windows debug key is identified read-only but never accepted as production signer', () => {
   assert.match(preflight,/apps\\mobile\\android\\app\\debug\.keystore/);
-  assert.match(preflight,/keytoolPath -list -v -keystore \$legacyKeystore/);
+  assert.match(preflight,/Start-Process -FilePath \$keytoolPath -ArgumentList \$arguments/);
+  assert.match(preflight,/\$keytoolProcess\.WaitForExit\(10000\)/);
+  assert.match(preflight,/\$keytoolProcess\.Kill\(\)/);
+  assert.match(preflight,/LEGACY_DEBUG_KEYTOOL_TIMEOUT=true/);
+  assert.match(preflight,/-RedirectStandardOutput \$legacyOutput -RedirectStandardError \$legacyErrors/);
   assert.match(preflight,/legacyDigest -eq \$digests\[0\]/);
   assert.match(preflight,/LEGACY_DEBUG_SIGNER_MATCH=true/);
   assert.match(preflight,/Production key migration needs a separately verified Android signing lineage/);

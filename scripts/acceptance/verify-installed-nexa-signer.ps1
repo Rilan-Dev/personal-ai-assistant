@@ -108,19 +108,41 @@ try {
             $keytoolPath = if ($keytoolCommand) { $keytoolCommand.Source }
                 else { Join-Path $env:ProgramFiles 'Android\Android Studio\jbr\bin\keytool.exe' }
             if (Test-Path -LiteralPath $keytoolPath -PathType Leaf) {
-                $listing = @(& $keytoolPath -list -v -keystore $legacyKeystore
-                    -storepass android -alias androiddebugkey 2>&1)
-                if ($LASTEXITCODE -eq 0) {
-                    $certLines = @($listing | Where-Object {
-                        $_.ToString().TrimStart().StartsWith('SHA256:')
-                    })
-                    if ($certLines.Count -eq 1) {
-                        $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
-                        if ($legacyDigest -match '^[0-9a-f]{64}$' -and
-                            $legacyDigest -eq $digests[0]) {
-                            Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
-                            Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
+                # The optional local debug-key classification does not
+                # authorize a release. An unresponsive keytool must never
+                # block the already-established certificate mismatch verdict.
+                $legacyOutput = Join-Path $temporary 'legacy-cert-public.txt'
+                $legacyErrors = Join-Path $temporary 'legacy-cert-diagnostics.txt'
+                $arguments = '-list -v -keystore "' + $legacyKeystore +
+                    '" -storepass android -alias androiddebugkey -noprompt'
+                $keytoolProcess = $null
+                try {
+                    $keytoolProcess = Start-Process -FilePath $keytoolPath -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $legacyOutput -RedirectStandardError $legacyErrors
+                    if (-not $keytoolProcess.WaitForExit(10000)) {
+                        try { $keytoolProcess.Kill() } catch {}
+                        Write-Output 'LEGACY_DEBUG_KEYTOOL_TIMEOUT=true'
+                    } elseif ($keytoolProcess.ExitCode -eq 0) {
+                        $listing = @(Get-Content -LiteralPath $legacyOutput -ErrorAction SilentlyContinue)
+                        $certLines = @($listing | Where-Object {
+                            $_.ToString().TrimStart().StartsWith('SHA256:')
+                        })
+                        if ($certLines.Count -eq 1) {
+                            $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
+                            if ($legacyDigest -match '^[0-9a-f]{64}$' -and
+                                $legacyDigest -eq $digests[0]) {
+                                Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
+                                Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
+                            }
                         }
+                    }
+                } catch {
+                    Write-Output 'LEGACY_DEBUG_KEYTOOL_UNAVAILABLE=true'
+                } finally {
+                    if ($null -ne $keytoolProcess) {
+                        if (-not $keytoolProcess.HasExited) {
+                            try { $keytoolProcess.Kill() } catch {}
+                        }
+                        $keytoolProcess.Dispose()
                     }
                 }
             }
