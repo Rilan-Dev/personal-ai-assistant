@@ -92,10 +92,14 @@ internal object NexaScreenActions {
         var count = 0
         while (nodes.isNotEmpty() && examined++ < 180) {
             val node = nodes.removeFirst()
-            val eligible = !node.isPassword && !node.isEditable &&
-                node.isVisibleToUser && node.isEnabled
-            if (!eligible) continue
-            if (node.isClickable) {
+            // A structural Accessibility root/container may report disabled
+            // even while its descendants are independent, enabled buttons.
+            // Never prune such a container: enforce enabled on the actual
+            // clicked control, while still excluding sensitive/editable/
+            // invisible subtrees from traversal.
+            if (!node.isVisibleToUser || node.isPassword || node.isEditable)
+                continue
+            if (node.isClickable && node.isEnabled) {
                 val kind = ScreenIconClassifier.classify(node.contentDescription)
                     ?: ScreenIconClassifier.classify(node.text)
                 val bounds = Rect().also { node.getBoundsInScreen(it) }
