@@ -28,6 +28,25 @@ internal object NexaWhatsAppChatActions {
         return minWidth>0 && minHeight>0 &&
             overlap.width()*5>=minWidth*4 && overlap.height()*2>=minHeight
     }
+    /**
+     * Accessibility can report one visible chat row through both its clickable
+     * wrapper and clickable descendant. These are one semantic target only
+     * when their source identity or a short direct ancestry path proves it.
+     * Never merge two sibling contact rows merely because they share a parent.
+     */
+    private fun sameSourceOrAncestor(a:AccessibilityNodeInfo,b:AccessibilityNodeInfo):Boolean {
+        if(a==b)return true
+        fun above(ancestor:AccessibilityNodeInfo,candidate:AccessibilityNodeInfo):Boolean {
+            var current=try { candidate.parent } catch (_:Exception) { null }
+            var steps=0
+            while(current!=null && steps++<5) {
+                if(ancestor==current)return true
+                current=try { current.parent } catch (_:Exception) { null }
+            }
+            return false
+        }
+        return above(a,b) || above(b,a)
+    }
     /** Return the on-screen portion only when most of the semantic target is
      * actually visible. Android can report decor bounds slightly outside the
      * app window during edge-to-edge/instrumented windows; rejecting every
@@ -92,7 +111,10 @@ internal object NexaWhatsAppChatActions {
                     val rawRect=Rect().also{candidate.getBoundsInScreen(it)}
                     val rect=visibleTargetBounds(rawRect,window)
                     if(rect!=null && rect.width()>25 && rect.height()>20) {
-                        val previousIndex=rows.indexOfFirst{sameRow(it.bounds,rect)}
+                        val previousIndex=rows.indexOfFirst{
+                            sameSourceOrAncestor(it.target,candidate) ||
+                                sameRow(it.bounds,rect)
+                        }
                         if(previousIndex<0)rows.add(Row(candidate,score,Rect(rect)))
                         else {
                             val previous=rows[previousIndex]

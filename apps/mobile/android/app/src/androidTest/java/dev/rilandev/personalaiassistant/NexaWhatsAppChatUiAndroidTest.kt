@@ -38,7 +38,8 @@ class NexaWhatsAppChatUiAndroidTest {
     private fun settledScan(runId:String,expectedRows:Int,recipient:String,
                             evidence:Int):Settled {
         var consecutive=0
-        repeat(100) {
+        var previousSignature:String?=null
+        repeat(120) {
             val current=root(runId)
             val window=android.graphics.Rect().also{current.getBoundsInScreen(it)}
             val rows=NexaQaAccessibilityRoot.nodes(current).filter { node ->
@@ -52,12 +53,18 @@ class NexaWhatsAppChatUiAndroidTest {
                         window.contains(rect)
                 }
             val scan=NexaWhatsAppChatActions.inspect(current,recipient)
-            if(geometry && scan.candidates==expectedRows &&
-                scan.bestEvidence==evidence && !scan.alreadyOpen) {
-                consecutive++
-                if(consecutive>=4)return Settled(current,scan)
-            } else consecutive=0
-            android.os.SystemClock.sleep(80L)
+            val candidateReady=geometry && scan.candidates==expectedRows &&
+                scan.bestEvidence==evidence && !scan.alreadyOpen
+            val signature=if(candidateReady) {
+                window.toShortString()+"|"+rows.joinToString("|") { node ->
+                    android.graphics.Rect().also{node.getBoundsInScreen(it)}.toShortString()
+                }
+            } else null
+            consecutive=if(signature!=null && signature==previousSignature)
+                consecutive+1 else 0
+            previousSignature=signature
+            if(consecutive>=3)return Settled(current,scan)
+            android.os.SystemClock.sleep(100L)
         }
         throw AssertionError("Synthetic chat list never stabilized with expected candidate count")
     }

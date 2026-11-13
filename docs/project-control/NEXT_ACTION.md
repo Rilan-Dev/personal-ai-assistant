@@ -732,3 +732,45 @@ The pinned Maestro models are now wired to the **existing** Nexa label-tap path 
 The full natural-language Android agent remains incomplete. Continue in this order: (1) avoid conflicting physical-device installations and restore owner-managed Screen Assist + overlay permissions; (2) verify a single real externally approved tap from the **same exact source APK**; (3) add bounded inspect-scroll-verify with one per-gesture journal claim; (4) connect approved multi-step tool envelopes to the existing NexaTaskCoordinator without a second executor; (5) test Chat and floating overlay with safe app/field actions, preserving unsent messages and clear failure recovery.
 
 Physical test caveat: the .debug package disappeared after the focused instrumentation run while .qa and base packages were present, so a following Maestro Chat test failed at package launch. No full device-control acceptance until package state and permissions are stabilized. Do not merge to main or claim all Maestro features migrated. A host-side Maestro CLI remains separate from normal Android APK permissions.
+
+## 2026-11-07 — Bounded scroll search follow-up gates
+
+Feature `feature/nexa-bounded-scrollsearch-20261107` adds a finite local owner scroll-search guide, a unique-container requirement, and an existing-journal-only confirmation/evidence loop in floating Tools/Chat. There is no unattended tap, voice automation, messaging, or new Android permission authority.
+
+**Before merging this feature to Development:** finish the unique-container/stale-approval Node checks, run complete `npm test`, `npm run typecheck`, `npm run web:export`, pinned Maestro portable JUnit, Android app plus test APK compilation/instrumentation, and exact APK/signer verification. On a physically connected Infinix with user-granted Accessibility/overlay permissions, test a real unique target, absent target, duplicate label, wrong window/container, Pause during acceptance, cancel, max four scrolls, and no accidental Send. Preserve owner data; never clear app storage or grant OS permissions behind the owner's back.
+
+BridgeHead Windows Tailscale connection was interrupted during submodule checkout; ADB had no attached device. No physical-device acceptance can be claimed from source tests or a compiled APK alone. Existing unrelated general dynamic task executor, cross-interface Voice/overlay planner and fully verified WhatsApp messaging remain separate release gates; no automatic outbound send.
+
+## 2026-11-07 — Updated release gate after on-device tests
+
+Completed since the previous note: npm **420/420**, TypeScript checks, Expo web export, Maestro portable JUnit **9/9**, arm64 debug APK plus instrumentation APK assembly, same-app in-place debug upgrade, and **11/11 synthetic tests running on the physical Infinix**. The approved Android Accessibility and overlay grants persisted. See WORKLOG for exact evidence.
+
+**Only the live screen-control acceptance remains unresolved for this bounded-scrolling milestone:** the phone was asleep and securely locked (`deviceLocked=1`, NotificationShade foreground), so the external Maestro CLI could not find Nexa's Chat control. Unlocking must occur through the normal owner-controlled device flow; do not bypass the lock or weaken Android security. With a freely accessible phone, verify the actual floating Chat/Tools screen, request `scroll down until [safe label]`, accept each native scroll separately, confirm observed target after real scrolling, and exercise failure/cancel/Pause/no-send cases. Until successful, PR #117 remains open and **live floating/third-party scrolling is NO-GO**, despite compiled code and synthetic instrumentation.
+
+Full general-purpose agentic multi-app execution, richer Maestro command portability and voice/overlay continuity are separate engineering milestones; the entire desktop Maestro CLI cannot execute inside a non-root Android AccessibilityService.
+
+## 2026-11-08 — Precise pending implementation and acceptance gates (PR #117)
+
+New source milestones are committed but **not yet native-compiled**: scoped owner-relative tap grammar and overlay approval, native anchor-based target selection and final current-window revalidation, and pure Maestro `above/left/right/childOf` plus 1–100% viewport selection. The existing owner-native journal/Pause fence and no-send policy remain mandatory.
+
+**Immediate execution once Windows BridgeHead is reachable:**
+1. Refresh remote `Development` and PR #117 heads, reconcile concurrently landed changes without overwriting existing work or force-pushing another developer's branch. Preserve existing debug signer, installed app data, untracked tests and private host logs.
+2. Fast-forward the isolated Windows worktree; `git submodule update --init`, verify pinned SHA, `npm ci --ignore-scripts` in isolated directory where required, then run all new/old Node tests, `npm run typecheck`, web export and `:maestro-portable:testDebugUnitTest`.
+3. Compile exact-source arm64 `:app:assembleDebug :app:assembleAndroidTest`; prove APK package/signing identity; install with `adb install -r -t` only when safe, never `uninstall` or `pm clear`.
+4. Run `NexaMaestroRelativeTapAndroidTest`, `NexaMaestroTargetSelectionAndroidTest`, `NexaBoundedScrollSearchAndroidTest` and all other related synthetic instrumentation on the same actual installed APK.
+5. With the owner normally unlocking the Infinix, run read-only Maestro CLI inspection plus approved floating Chat actions: `tap Open below Recent` in a controlled external test screen, ambiguity, anchor movement, app/window switch, Pause, and no automatic messaging; verify actual outcome after each action. A lock-screen scenario must explicitly fail closed.
+6. Merge to `Development` only after passing the above exact-head gates, with documented build, rollback and reviewed PR diff; keep `main` release unchanged until independent acceptance.
+
+**Remaining higher-level work after this milestone:** ephemeral full Accessibility hierarchy and scoped `childOf` in the live tap path (currently only in pure selector), motion-stable nested scrolling in actual apps, one canonical durable Chat/Voice/overlay multi-step executor, realistic messaging recipient/composer verification without automatic Send, screenshot-assisted confidence under explicit consent, and real-provider/release acceptance.
+
+The Windows runner returned `PEER_UNREACHABLE` through the tailnet SOCKS5 proxy during this feature revision. The previous 420/420 Node and 11/11 on-device passes were from an *older* feature commit and **must not be reported as verification of the new 2026-11-08 changes**. Later `Development` commits also arrived concurrently during a proposed merge; the merge was **aborted before Git mutation** instead of overwriting their updates.
+
+## 2026-11-13 — Updated no-go gates after physical Nexa/Maestro testing
+
+**Verified for the feature revision at `3f681bb`:** 438/438 Node tests; latest arm64 debug and AndroidTest Gradle build pass; synthetic physical Chat/WhatsApp-style navigation and text-entry tests passed individually (three cases) without Send; previous 17/17 physical Maestro selector and bounded-scroll instrumentation passes; real Maestro CLI read-only Chat/battery flow passed on earlier compatible debug build. App/source references and exact logs are in the Windows `work` folder and this Worklog.
+
+**Unverified:** live floating overlay controlling third-party apps, scoped parent/descendant selectors in the actual Accessibility service (only portable-library pure selector implements `childOfText`), stable nested `scrollUntilVisible` over third-party lists, one canonical durable Chat/Voice/overlay multi-step executor, real WhatsApp recipient selection and unsent composer checks, vision/occlusion acceptance, installer signer/release rollback and production certification.
+
+**Blockers:** Android owner has not enabled Screen Assist/overlay for the actual installed debug package and may need to grant through Android Settings; do not use ADB to bypass. UI automation harness with consecutive fixture tests still exhibits device-level connection races; prefer individually verified synthetic tests and disposable emulator once memory is available. Newer Development commits keep arriving; reconcile remote refs without force pushing or replacing user-owned dirty main Windows checkout.
+
+**Promotion:** Feature PR #117 remains a draft and production/main are unchanged. A synthetic physical test is not equivalent to owner-reviewed live third-party app control. Verify exact-source compilation and real OS consent before release.

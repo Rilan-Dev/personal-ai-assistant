@@ -55,4 +55,28 @@ class NexaMaestroTargetSelectionAndroidTest {
         assertNull(choose(query, listOf(candidate("Search", 10, 20, visible = false))))
         assertNull(choose(query, listOf(candidate("Search", 10, 20, enabled = false))))
     }
+    @Test fun parentContextDisambiguatesTwoVisibleButtons() {
+        val targets=listOf(candidate("Open",120,80),candidate("Open",120,290))
+        val anchors=listOf(candidate("Recent",10,240).copy(clickable=false))
+        assertEquals(1,NexaMaestroTargetSelection.choose(
+            "com.example",9,"com.example",9,viewport,
+            MaestroQuery(text="Open",belowText="Recent"),targets,anchors))
+        assertNull(NexaMaestroTargetSelection.choose(
+            "com.example",9,"com.example",9,viewport,
+            MaestroQuery(text="Open"),targets,anchors))
+    }
+
+    @Test fun repeatedOrOffscreenContextNeverGuesses() {
+        val targets=listOf(candidate("Open",120,290))
+        val anchors=listOf(candidate("Recent",10,110).copy(clickable=false),
+            candidate("Recent",10,200).copy(clickable=false))
+        assertNull(NexaMaestroTargetSelection.choose(
+            "com.example",9,"com.example",9,viewport,
+            MaestroQuery(text="Open",belowText="Recent"),targets,anchors))
+        assertNull(NexaMaestroTargetSelection.choose(
+            "com.example",9,"com.example",9,viewport,
+            MaestroQuery(text="Open",belowText="Recent"),targets,
+            listOf(candidate("Recent",10,850).copy(clickable=false))))
+    }
+
 }
