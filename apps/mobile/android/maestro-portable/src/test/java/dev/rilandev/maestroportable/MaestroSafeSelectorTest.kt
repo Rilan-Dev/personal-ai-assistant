@@ -103,4 +103,70 @@ class MaestroSafeSelectorTest {
             s, "com.example.messaging", 17, MaestroQuery(text = "Open")
         ))
     }
+    @Test fun relativeAboveAndRightResolveOnlyOneControl() {
+        val s = screen(
+            node("Footer", "[100,500][300,530]", clickable=false),
+            node("Open", "[110,420][180,460]"),
+            node("Open", "[110,550][180,590]"),
+            node("Folder", "[20,430][70,460]", clickable=false)
+        )
+        assertEquals(listOf(1), MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(
+                text="Open",aboveText="Footer"))?.path)
+        assertEquals(listOf(1), MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(
+                text="Open",rightOfText="Folder"))?.path)
+    }
+
+    @Test fun hierarchyScopedChildSelectionRequiresUniqueVisibleParent() {
+        val menu = node("Account", "[5,60][370,240]", clickable=false)
+            .copy(children=listOf(node("Edit", "[40,100][125,145]")))
+        val profile = node("Profile", "[5,290][370,460]", clickable=false)
+            .copy(children=listOf(node("Edit", "[40,330][125,375]")))
+        val s = screen(menu,profile)
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Edit")))
+        assertEquals(listOf(0,0),MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Edit",childOfText="Account"))?.path)
+        assertEquals(listOf(1,0),MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Edit",childOfText="Profile"))?.path)
+    }
+
+    @Test fun duplicateOrSensitiveRelativeAnchorsFailClosed() {
+        val s=screen(
+            node("Options","[10,10][140,40]",clickable=false),
+            node("Options","[10,50][140,80]",clickable=false),
+            node("Open","[160,90][250,140]"),
+            node("Secret","[10,180][140,210]",clickable=false,password=true)
+        )
+        assertNull(MaestroSafeSelector.findUnique(s,"com.example.messaging",17,
+            MaestroQuery(text="Open",belowText="Options")))
+        assertNull(MaestroSafeSelector.findUnique(s,"com.example.messaging",17,
+            MaestroQuery(text="Open",rightOfText="Secret")))
+        assertNull(MaestroSafeSelector.findUnique(s,"com.example.messaging",17,
+            MaestroQuery(text="Open",childOfText="Missing")))
+    }
+
+    @Test fun minimumVisibilityThresholdIsExplicitAndBounded() {
+        val s=screen(node("Open","[50,770][150,830]"))
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Open")))
+        assertNotNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Open",minVisiblePercent=50)))
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Open",minVisiblePercent=51)))
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Open",minVisiblePercent=0)))
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(text="Open",minVisiblePercent=101)))
+    }
+
+    @Test fun conflictingRelationsCannotProduceAnActionTarget() {
+        val s=screen(node("Top","[10,100][90,130]",clickable=false),
+            node("Open","[120,160][200,200]"))
+        assertNull(MaestroSafeSelector.findUnique(
+            s,"com.example.messaging",17,MaestroQuery(
+                text="Open",belowText="Top",aboveText="Top")))
+    }
+
 }

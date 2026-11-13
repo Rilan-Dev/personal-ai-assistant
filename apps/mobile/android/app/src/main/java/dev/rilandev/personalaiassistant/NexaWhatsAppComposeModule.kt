@@ -60,15 +60,21 @@ class NexaWhatsAppComposeModule(private val context: ReactApplicationContext) :
             p.reject("NO_HANDLER", "WhatsApp cannot handle the requested draft link")
             return
         }
-        try {
-            context.startActivity(intent)
-            val result = Arguments.createMap()
-            result.putBoolean("intentDispatched", true)
-            result.putBoolean("messageSent", false)
-            result.putString("verification", "not_observed")
-            p.resolve(result)
-        } catch (_: Exception) {
-            p.reject("DRAFT_FAILED", "Android could not open the WhatsApp draft")
+        when(NexaApprovedExternalAction.launch(context,intent,
+                "com.whatsapp","chat")){
+            NexaApprovedExternalAction.Result.ACCEPTED->{
+                val result=Arguments.createMap()
+                result.putBoolean("intentDispatched",true)
+                result.putBoolean("messageSent",false)
+                result.putString("verification","not_observed")
+                p.resolve(result)
+            }
+            NexaApprovedExternalAction.Result.DENIED->
+                p.reject("DRAFT_DENIED",
+                    "WhatsApp draft target changed or device actions were paused. No draft opened.")
+            NexaApprovedExternalAction.Result.UNCERTAIN->
+                p.reject("DRAFT_UNCERTAIN",
+                    "WhatsApp draft handoff is uncertain. Inspect the phone; do not automatically retry or send.")
         }
     }
 }

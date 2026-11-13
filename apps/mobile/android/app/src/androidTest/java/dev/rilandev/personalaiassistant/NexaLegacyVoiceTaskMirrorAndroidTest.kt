@@ -62,12 +62,17 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
                 }
             }
         }finally{helper.close()}
+        // A capped 60-item recent list is not a reliable exact-id query after
+        // repeated physical QA batches. The canonical ledger must still hold
+        // only one durable task identity regardless of scroll-list truncation.
+        val exact=NexaUnifiedTaskTimeline.find(ctx,taskId)
+        assertNotNull("Voice checkpoint remains addressable by exact task id",exact)
+        assertEquals("legacy_voice_checkpoint",exact!!.getString("source"))
+        assertEquals(0,exact.getInt("verifiedSteps"))
         val index=NexaUnifiedTaskTimeline.recent(ctx,60)
         val found=(0 until index.length()).map{index.getJSONObject(it)}
             .filter{it.optString("taskId")==taskId}
-        assertEquals("No duplicate Voice and native records",1,found.size)
-        assertEquals("legacy_voice_checkpoint",found.first().getString("source"))
-        assertEquals(0,found.first().getInt("verifiedSteps"))
+        assertTrue("Recent list must never duplicate a Voice checkpoint",found.size<=1)
     }
 
     @Test fun oldOrForgedVoiceWritesCannotGoBackwardsOrReplaceCompletedTask() {
@@ -203,12 +208,15 @@ class NexaLegacyVoiceTaskMirrorAndroidTest {
                 assertTrue(c.moveToFirst());assertEquals(0,c.getInt(0))
             }
         }finally{helper.close()}
-        val index=NexaUnifiedTaskTimeline.recent(ctx,60)
-        val row=(0 until index.length()).map{index.getJSONObject(it)}
-            .first{it.getString("taskId")==id}
-        assertTrue(row.getBoolean("detailsRedacted"))
+        // A privacy audit is about this exact durable task, not whether it
+        // happens to remain in the 60-row scrollable recent timeline. A busy
+        // physical phone can have hundreds of newer synthetic QA checkpoints.
+        val row=NexaUnifiedTaskTimeline.find(ctx,id)
+        assertNotNull("Exact redacted task must remain addressable by id",row)
+        assertTrue(row!!.getBoolean("detailsRedacted"))
         assertEquals("legacy_voice_checkpoint",row.getString("source"))
         assertEquals(0,row.getInt("verifiedSteps"))
+        assertNull(NexaUnifiedTaskTimeline.find(ctx,"invalid task id"))
     }
 
 

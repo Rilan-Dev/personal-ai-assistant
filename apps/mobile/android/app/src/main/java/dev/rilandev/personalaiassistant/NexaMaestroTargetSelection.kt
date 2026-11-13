@@ -42,13 +42,16 @@ internal object NexaMaestroTargetSelection {
         expectedPackage: String, expectedWindow: Int,
         observedPackage: String, observedWindow: Int,
         viewport: Rect, query: MaestroQuery,
-        targets: List<NexaMaestroTapCandidate>
+        targets: List<NexaMaestroTapCandidate>,
+        anchors: List<NexaMaestroTapCandidate> = emptyList()
     ): Int? {
         if (!sameWindow(expectedPackage, expectedWindow, observedPackage, observedWindow) ||
             viewport.width() <= 0 || viewport.height() <= 0 ||
-            targets.isEmpty() || targets.size > MAX_CANDIDATES) return null
+            targets.isEmpty() || targets.size + anchors.size > MAX_CANDIDATES) return null
 
-        val observed = TreeNode(children = targets.map { target ->
+        // Anchor nodes are observation-only and cannot become action targets.
+        // Their positions are compared by the verified Maestro selector.
+        val observed = TreeNode(children = (targets + anchors).map { target ->
             val box = target.bounds
             TreeNode(
                 attributes = mutableMapOf(
@@ -70,5 +73,35 @@ internal object NexaMaestroTargetSelection {
         )
         return MaestroSafeSelector.findUnique(screen, expectedPackage, expectedWindow, query)
             ?.path?.singleOrNull()?.takeIf { it in targets.indices }
+    }
+
+    /**
+     * A second, hierarchy-aware read-only gate. The caller supplies a real
+     * parent/child tree; only already-reviewed native candidates may be
+     * returned, and a coordinate match must be unique. A hierarchy match
+     * cannot itself authorize an Accessibility click.
+     */
+    fun chooseFromTree(
+        expectedPackage: String, expectedWindow: Int,
+        observedPackage: String, observedWindow: Int,
+        viewport: Rect, query: MaestroQuery,
+        targets: List<NexaMaestroTapCandidate>, tree: TreeNode
+    ): Int? {
+        if (!sameWindow(expectedPackage, expectedWindow, observedPackage, observedWindow) ||
+            viewport.isEmpty || targets.isEmpty() || targets.size > MAX_CANDIDATES)
+            return null
+        val selected = MaestroSafeSelector.findUnique(
+            MaestroScreen(observedPackage, observedWindow,
+                Bounds(viewport.left, viewport.top, viewport.width(), viewport.height()), tree),
+            expectedPackage, expectedWindow, query
+        ) ?: return null
+        return targets.withIndex().filter { (_, candidate) ->
+            candidate.visible && candidate.clickable && candidate.enabled &&
+                !candidate.editable && !candidate.password &&
+                candidate.bounds.left == selected.bounds.x &&
+                candidate.bounds.top == selected.bounds.y &&
+                candidate.bounds.width() == selected.bounds.width &&
+                candidate.bounds.height() == selected.bounds.height
+        }.singleOrNull()?.index
     }
 }

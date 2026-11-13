@@ -15,16 +15,24 @@ def portablePaths = [
     'maestro/ScrollDirection.kt'
 ]
 
-def syncPortable = tasks.register('syncMaestroPortableSources', Copy) {
-    from(upstreamSources) { include portablePaths }
-    into(layout.buildDirectory.dir('generated/maestro-portable'))
-    doFirst {
+// A Copy task with absent inputs is NO-SOURCE, which SKIPS doFirst and
+// previously produced misleading unresolved Kotlin imports on fresh Linux
+// checkouts. Run an independent preflight even when the submodule is empty.
+def verifyPortable = tasks.register('verifyMaestroPortableInputs') {
+    doLast {
         portablePaths.each { source ->
             if (!new File(upstreamSources, source).isFile()) {
-                throw new GradleException("Maestro submodule missing the required file: " + source + ". Run git submodule update --init")
+                throw new GradleException("Pinned Maestro submodule is not initialized: " +
+                    source + ". Run: git submodule update --init --depth 1 third_party/maestro-upstream")
             }
         }
     }
+}
+
+def syncPortable = tasks.register('syncMaestroPortableSources', Copy) {
+    dependsOn(verifyPortable)
+    from(upstreamSources) { include portablePaths }
+    into(layout.buildDirectory.dir('generated/maestro-portable'))
 }
 
 android {

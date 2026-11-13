@@ -175,6 +175,8 @@ class NexaLauncherNavigationService : AccessibilityService() {
             LauncherNavigationState.stop("wrong_screen")
             return
         }
+        val fence=NexaNativeActionSafety.approvalFence(this)
+            ?:run { LauncherNavigationState.stop("owner_paused");return }
         val index = LauncherNavigationState.beginSwipe()
         if (index < 0) return
         val metrics = resources.displayMetrics
@@ -199,7 +201,17 @@ class NexaLauncherNavigationService : AccessibilityService() {
             return
         }
         try {
-            val accepted=dispatchGesture(gesture,object:GestureResultCallback(){
+            val accepted=NexaNativeActionSafety.dispatchWithFence(this,fence) {
+                val current=rootInActiveWindow
+                    ?:return@dispatchWithFence false
+                val stillOnHome=try{
+                    current.packageName?.toString()==homePackage &&
+                        current.isVisibleToUser &&
+                        LauncherNavigationState.allows(homePackage)
+                }catch(_:Exception){false}
+                finally{try{current.recycle()}catch(_:Exception){}}
+                if(!stillOnHome)return@dispatchWithFence false
+                dispatchGesture(gesture,object:GestureResultCallback(){
                 override fun onCompleted(gestureDescription:GestureDescription?) {
                     Thread({
                         val saved=NexaUiActionJournal.finish(
@@ -220,9 +232,12 @@ class NexaLauncherNavigationService : AccessibilityService() {
                         handler.post{LauncherNavigationState.swipeFinished(false)}
                     },"nexa-launcher-gesture-rejected").start()
                 }
-            },handler)
-            if(!accepted){
+                },handler)
+            }
+            if(accepted!=true){
                 NexaUiActionJournal.finish(this,token,"android_rejected")
+                LauncherNavigationState.stop(
+                    if(accepted==null)"owner_paused" else "gesture_blocked")
                 LauncherNavigationState.swipeFinished(false)
             }
         }catch(_:Exception){
@@ -277,12 +292,19 @@ class NexaLauncherModule(private val context: ReactApplicationContext) :
             p.reject("NAVIGATION_UNAVAILABLE", "Enable Nexa Launcher Navigation in Android Accessibility settings")
             return
         }
-        try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            p.resolve(true) // Navigation requested, result must be checked later.
-        } catch (_: Exception) {
-            LauncherNavigationState.stop("launch_failed")
-            p.reject("HOME_FAILED", "Android denied opening the home screen")
+        when(NexaApprovedExternalAction.launch(context,intent,expected,"chat")){
+            NexaApprovedExternalAction.Result.ACCEPTED->
+                p.resolve(true) // The launcher still must be visually checked.
+            NexaApprovedExternalAction.Result.DENIED->{
+                LauncherNavigationState.stop("launch_failed")
+                p.reject("HOME_FAILED",
+                    "The home launcher changed or Nexa actions were paused. No launch.")
+            }
+            NexaApprovedExternalAction.Result.UNCERTAIN->{
+                LauncherNavigationState.stop("launch_uncertain")
+                p.reject("HOME_UNCERTAIN",
+                    "The launcher handoff is uncertain. No automatic retry.")
+            }
         }
     }
     @ReactMethod fun cancelNavigation(p: Promise) {

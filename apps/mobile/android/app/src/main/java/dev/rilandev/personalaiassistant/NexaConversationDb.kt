@@ -192,7 +192,8 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             if(!tokenDigest.matches(Regex("[0-9a-f]{64}")) ||
                 !packageDigest.matches(Regex("[0-9a-f]{64}")) ||
                 kind !in setOf("tap","scroll_up","scroll_down","scroll_left",
-                    "scroll_right","message_fill","text_fill","app_launch") ||
+                    "scroll_right","message_fill","text_fill","app_launch",
+                    "nav_back","nav_notifications") ||
                 origin !in setOf("chat","live-voice","assistant-role","overlay") ||
                 (kind in setOf("message_fill","text_fill") &&
                     !Regex("[0-9a-f]{64}").matches(reviewedInputDigest.orEmpty())) ||
@@ -575,7 +576,7 @@ internal class NexaConversationDb(context: Context, databaseName: String = "cust
             val helper=NexaConversationDb(context)
             try {
                 helper.readableDatabase.rawQuery(
-                    "SELECT task_id,session_id,status,step_index,payload,updated_at FROM voice_task_checkpoints ORDER BY updated_at DESC LIMIT ?",
+                    "SELECT task_id,session_id,status,step_index,payload,updated_at FROM voice_task_checkpoints ORDER BY updated_at DESC,rowid DESC LIMIT ?",
                     arrayOf(limit.coerceIn(1,1000).toString())
                 ).use { c ->
                     while(c.moveToNext()) {

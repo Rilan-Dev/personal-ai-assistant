@@ -55,6 +55,8 @@ class NexaToolOverlayService : Service() {
     private val history = ArrayDeque<String>()
     private var inspectedScreen: OverlayScreenSnapshot? = null
     private val guidedNavigation = NexaGuidedNavigation()
+    private val boundedScrollSearch = NexaBoundedScrollSearch()
+    private var activeScrollEvidenceToken: String? = null
     private val evidenceHandler=Handler(Looper.getMainLooper())
     private var activeEvidenceToken: String? = null
     private fun inspectGuidedOutcome(token: String, attempt: Int = 0) {
@@ -147,7 +149,170 @@ class NexaToolOverlayService : Service() {
         render()
     }
 
+
+    private fun cancelBoundedScrollSearch() {
+        boundedScrollSearch.cancel()
+        activeScrollEvidenceToken=null
+        NexaScreenScroll.cancel()
+    }
+
+    /**
+     * The owner named a safe control. Start only a finite UI guide; the
+     * existing journaled scroll controller remains the sole gesture executor.
+     */
+    private fun startBoundedScrollSearch(query:String) {
+        cancelBoundedScrollSearch()
+        guidedNavigation.cancel()
+        activeEvidenceToken=null
+        NexaScreenActions.reset()
+        inspectedScreen=null
+        NexaMessageInputActions.cancel()
+        NexaTextInputActions.cancel()
+        section="tools"
+        val request=NexaBoundedScrollSearch.parse(query)
+        val service=ScreenAssistService.active
+        val generation=service?.let{NexaNativeActionSafety.approvalFence(it)}
+        val observation=if(service!=null && generation!=null && request!=null)
+            NexaTaskScreenObservation.exactVisibleControl(service,request.label)
+        else null
+        if(request==null || service==null || generation==null || observation==null){
+            note="Screen Assist, owner action access, or a fresh external window is unavailable. No scroll proposed."
+            render()
+            return
+        }
+        if(observation.matchingControls>1){
+            note="Multiple visible controls match the target. No scroll proposed."
+            render()
+            return
+        }
+        if(observation.matchingControls==1){
+            note="Exactly one safe control named ${request.label} is already visible. No tap or scroll performed."
+            render()
+            return
+        }
+        val now=android.os.SystemClock.elapsedRealtime()
+        if(!boundedScrollSearch.start(request,observation.packageName,
+                observation.windowId,generation,now)){
+            note="Scroll target is unsafe or the task expired. No gesture proposed."
+            render()
+            return
+        }
+        val prepared=NexaScreenScroll.prepare(service,request.direction,requireUniqueContainer=true)
+        if(!NexaScreenScroll.isPending()){
+            cancelBoundedScrollSearch()
+            note="Scroll search stopped: $prepared"
+        }else{
+            note="Scroll until ${request.label} (maximum 4). $prepared "+
+                "Every scroll requires a new owner confirmation and verified Android result."
+        }
+        render()
+    }
+
+    private fun confirmBoundedScrollSearch() {
+        val now=android.os.SystemClock.elapsedRealtime()
+        val request=boundedScrollSearch.request(now)
+        val service=ScreenAssistService.active
+        val generation=service?.let{NexaNativeActionSafety.approvalFence(it)}
+        val observation=if(request!=null && service!=null && generation!=null)
+            NexaTaskScreenObservation.exactVisibleControl(service,request.label)
+        else null
+        if(request==null || service==null || generation==null || observation==null ||
+            !boundedScrollSearch.confirmable(observation.packageName,
+                observation.windowId,generation,now) ||
+            observation.matchingControls!=0 || !NexaScreenScroll.isPending()){
+            cancelBoundedScrollSearch()
+            note="Scroll review expired, app changed or target became ambiguous. No gesture requested."
+            render()
+            return
+        }
+        var claimed:String?=null
+        val result=NexaScreenScroll.confirm(service,origin="overlay",
+            claimedToken={claimed=it})
+        val token=claimed
+        if(token==null || !result.startsWith("Android accepted one scroll request.") ||
+            !boundedScrollSearch.onApprovedScroll(token,observation.packageName,
+                observation.windowId,generation,android.os.SystemClock.elapsedRealtime())){
+            cancelBoundedScrollSearch()
+            note="Scroll stopped: $result No automatic retry."
+            render()
+            return
+        }
+        activeScrollEvidenceToken=token
+        note="Android accepted one owner-approved scroll. Verifying its result before any further action."
+        render()
+        inspectBoundedScrollOutcome(token)
+    }
+
+    private fun inspectBoundedScrollOutcome(token:String,attempt:Int=0) {
+        evidenceHandler.postDelayed({
+            if(activeScrollEvidenceToken!=token)return@postDelayed
+            val now=android.os.SystemClock.elapsedRealtime()
+            val request=boundedScrollSearch.request(now)
+            val service=ScreenAssistService.active
+            val generation=service?.let{NexaNativeActionSafety.approvalFence(it)}
+            val observed=if(request!=null && service!=null && generation!=null)
+                NexaTaskScreenObservation.exactVisibleControl(service,request.label)
+            else null
+            val status=if(request!=null)
+                NexaUiActionJournal.outcomeFor(this,token,"scroll_"+request.direction)
+            else null
+            val outcome=if(request!=null && observed!=null && generation!=null)
+                boundedScrollSearch.onEvidence(token,status,observed.packageName,
+                    observed.windowId,generation,observed.matchingControls,now,
+                    observed.uniqueBoundsKey)
+            else NexaBoundedScrollSearch.Progress.BLOCKED
+            when(outcome){
+                NexaBoundedScrollSearch.Progress.WAITING -> {
+                    if(attempt<3) inspectBoundedScrollOutcome(token,attempt+1)
+                    else {
+                        cancelBoundedScrollSearch()
+                        note="Scroll event or stable target geometry was not verified in time. Guide stopped; no retry."
+                        render()
+                    }
+                }
+                NexaBoundedScrollSearch.Progress.NEXT_APPROVAL -> {
+                    activeScrollEvidenceToken=null
+                    val nextRequest=boundedScrollSearch.request(now)
+                    val nextService=ScreenAssistService.active
+                    if(nextRequest==null || nextService==null){
+                        cancelBoundedScrollSearch()
+                        note="Scroll task changed. No additional action performed."
+                    }else{
+                        val prepared=NexaScreenScroll.prepare(nextService,nextRequest.direction,requireUniqueContainer=true)
+                        if(!NexaScreenScroll.isPending()){
+                            cancelBoundedScrollSearch()
+                            note="Scroll search cannot continue: $prepared"
+                        }else{
+                            note="Verified scroll event and settled target observation. Target not yet visible. "+
+                                "Confirm another ${nextRequest.direction} scroll separately "+
+                                "(attempt ${boundedScrollSearch.attempts(now)+1} of 4)."
+                        }
+                    }
+                    render()
+                }
+                NexaBoundedScrollSearch.Progress.FOUND -> {
+                    activeScrollEvidenceToken=null
+                    note="One stable, unique safe control is visible after the verified scroll. "+
+                        "Search finished without clicking it."
+                    render()
+                }
+                NexaBoundedScrollSearch.Progress.LIMIT -> {
+                    activeScrollEvidenceToken=null
+                    note="Four reviewed scrolls used. Target not found; no further action."
+                    render()
+                }
+                NexaBoundedScrollSearch.Progress.BLOCKED -> {
+                    cancelBoundedScrollSearch()
+                    note="Screen, permissions, owner Pause or outcome changed. "+
+                        "Scroll search cancelled without retry."
+                    render()
+                }
+            }
+        },1_050L)
+    }
+
     private fun startGuidedNavigation(raw: String) {
+        cancelBoundedScrollSearch()
         inspectedScreen = null
         NexaScreenActions.reset()
         NexaScreenScroll.cancel()
@@ -172,7 +337,8 @@ class NexaToolOverlayService : Service() {
         // Avoid offering a dead approval button if Android did not actually
         // connect the user-enabled screen-assistance service.
         if((action=="open_notification_shade" || action=="go_back" ||
-            action.startsWith("tap_visible_label:")) &&
+            action.startsWith("tap_visible_label:") ||
+            action.startsWith("tap_relative:")) &&
             (ScreenAssistService.active==null || !ScreenAssistState.connected)) {
             proposedDeviceAction=null
             proposedDeviceActionExpiresAt=0L
@@ -256,16 +422,24 @@ class NexaToolOverlayService : Service() {
                 val outcome=try {
                     when {
                         action=="open_notification_shade" ->
-                            NexaBrowserTaskActions.notificationsApproved(this)
+                            NexaBrowserTaskActions.notificationsApproved(this,origin="overlay")
                         action=="go_back" ->
-                            NexaBrowserTaskActions.goBackApproved(this)
+                            NexaBrowserTaskActions.goBackApproved(this,origin="overlay")
                         action.startsWith("chrome_search:") ->
                             NexaBrowserTaskActions.openChromeSearchApproved(
-                                this,action.removePrefix("chrome_search:"))
+                                this,action.removePrefix("chrome_search:"),origin="overlay")
                         action.startsWith("tap_visible_label:") ->
                             ScreenAssistService.active?.let {
                                 NexaScreenLabelTap.approved(it,action.removePrefix("tap_visible_label:"))
                             } ?: "Screen Assist is disabled. No tap performed."
+                        action.startsWith("tap_relative:") -> {
+                            val relative=NexaMaestroRelativeTap.fromAction(action)
+                            if(relative==null) "Relative tap review was malformed. Nothing tapped."
+                            else ScreenAssistService.active?.let {
+                                NexaScreenLabelTap.approvedRelative(
+                                    it,relative.target,relative,origin="overlay")
+                            } ?: "Screen Assist is disabled. No tap performed."
+                        }
                         else -> "Invalid device action. No operation performed."
                     }
                 } catch (_:Exception) { "Android action was refused or became uncertain." }
@@ -317,6 +491,16 @@ class NexaToolOverlayService : Service() {
     }
 
     private fun sendLocal(raw: String) {
+        if(raw.isBlank())return
+        // New owner speech/text cancels prior pending UI goals and unconfirmed
+        // overlay device actions before routing task reviews or local tools.
+        cancelBoundedScrollSearch()
+        guidedNavigation.cancel()
+        activeEvidenceToken=null
+        inspectedScreen=null
+        NexaScreenActions.reset()
+        proposedDeviceAction=null
+        proposedDeviceActionExpiresAt=0L
         // The overlay can only propose an owner-visible task draft; it cannot
         // create executable work or substitute for the Save review action.
         val task=NexaOwnerTaskReview.parse(raw.trim())
@@ -332,9 +516,11 @@ class NexaToolOverlayService : Service() {
         }
         val query = raw.trim().take(150)
         if (query.isEmpty()) return
-        // A newer owner request invalidates an older unconfirmed proposal.
-        proposedDeviceAction=null
-        proposedDeviceActionExpiresAt=0L
+        val scrollRequest=NexaBoundedScrollSearch.parse(query)
+        if(scrollRequest!=null){
+            startBoundedScrollSearch(query)
+            return
+        }
         val search=NexaPhoneVoiceTools.chromeSearchQuery(query)
         if(search!=null) {
             proposeOwnerDeviceAction("chrome_search:$search",
@@ -348,6 +534,20 @@ class NexaToolOverlayService : Service() {
         }
         if(NexaPhoneVoiceTools.wantsGoBack(query)) {
             proposeOwnerDeviceAction("go_back","Navigate Back once")
+            return
+        }
+        val relative=NexaMaestroRelativeTap.parse(query)
+        if(relative!=null) {
+            proposeOwnerDeviceAction(
+                "tap_relative:${relative.direction}|${relative.target}|${relative.anchor}",
+                "Tap the uniquely grounded ${relative.target} control "+
+                    "${relative.direction} ${relative.anchor}; no generic coordinate tap")
+            return
+        }
+        if(NexaMaestroRelativeTap.looksRelative(query)) {
+            section="tools"
+            note="Relative target/anchor is invalid, sensitive or ambiguous. No generic tap proposed."
+            render()
             return
         }
         val requestedLabel=NexaPhoneVoiceTools.tapVisibleLabelIntent(query)
@@ -568,6 +768,7 @@ class NexaToolOverlayService : Service() {
 
 
     private fun proposeScroll(direction: String) {
+        cancelBoundedScrollSearch()
         inspectedScreen = null
         NexaScreenActions.reset()
         note = ScreenAssistService.active?.let { NexaScreenScroll.prepare(it,direction) }
@@ -575,12 +776,16 @@ class NexaToolOverlayService : Service() {
         render()
     }
     private fun confirmScroll() {
+        if(boundedScrollSearch.active(android.os.SystemClock.elapsedRealtime())){
+            confirmBoundedScrollSearch()
+            return
+        }
         note = ScreenAssistService.active?.let { NexaScreenScroll.confirm(it) }
             ?: "Screen Assist unavailable; no scroll performed."
         render()
     }
     private fun cancelScroll() {
-        NexaScreenScroll.cancel()
+        cancelBoundedScrollSearch()
         note = "Scroll cancelled."
         render()
     }
@@ -643,7 +848,7 @@ class NexaToolOverlayService : Service() {
         if (name != "tools") {
             inspectedScreen = null
             NexaScreenActions.reset()
-            NexaScreenScroll.cancel()
+            cancelBoundedScrollSearch()
             guidedNavigation.cancel()
             activeEvidenceToken=null
         }
@@ -841,12 +1046,26 @@ class NexaToolOverlayService : Service() {
                         addView(button("Action journal summary") { showActionJournalSummary() })
                         addView(text("The action log stores encrypted approval fingerprints and result categories, not screen contents.",11f,true))
                         addView(text("Safe owner-confirmed scrolling of the currently visible app.",11f,true))
-                        if (NexaScreenScroll.isPending()) {
+                        val scrollGoal=boundedScrollSearch.request(now)
+                        if(scrollGoal!=null){
+                            addView(text("Find ${scrollGoal.label} with up to "+
+                                "4 individually approved ${scrollGoal.direction} scrolls. "+
+                                "Current steps: ${boundedScrollSearch.attempts(now)}.",11f,true))
+                            addView(button("Cancel scroll search") {
+                                cancelBoundedScrollSearch()
+                                note="Scroll search cancelled. No further gesture will be requested."
+                                render()
+                            })
+                        }
+                        if(scrollGoal!=null && activeScrollEvidenceToken!=null){
+                            addView(text("Waiting for verified Android scroll evidence. "+
+                                "No next gesture or retry is authorized.",12f,true))
+                        } else if (NexaScreenScroll.isPending()) {
                             addView(row(
                                 button("Confirm scroll") { confirmScroll() },
                                 button("Cancel scroll") { cancelScroll() }
                             ))
-                        } else {
+                        } else if(scrollGoal==null) {
                             addView(row(
                                 button("Scroll up") { proposeScroll("up") },
                                 button("Scroll down") { proposeScroll("down") }
@@ -925,7 +1144,7 @@ class NexaToolOverlayService : Service() {
                         val ok=NexaNativeActionSafety.setPaused(this@NexaToolOverlayService,true)
                         if(ok){
                             NexaScreenActions.reset()
-                            NexaScreenScroll.cancel()
+                            cancelBoundedScrollSearch()
                             NexaMessageInputActions.cancel()
                             NexaTextInputActions.cancel()
                             note="Nexa device actions paused. Resume in full Nexa Settings."
@@ -1013,7 +1232,7 @@ class NexaToolOverlayService : Service() {
         proposedDeviceActionExpiresAt=0L
         inspectedScreen = null
         NexaScreenActions.reset()
-        NexaScreenScroll.cancel()
+        cancelBoundedScrollSearch()
         guidedNavigation.cancel()
         activeEvidenceToken=null
         super.onDestroy()

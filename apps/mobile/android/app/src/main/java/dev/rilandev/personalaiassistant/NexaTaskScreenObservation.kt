@@ -107,4 +107,56 @@ internal object NexaTaskScreenObservation {
         }catch (_:Exception){return null}
         finally {try{root.recycle()}catch(_:Exception){}}
     }
+    /** Read-only exact matching metadata for a reviewed scroll target.
+     * Never reads fields, exposes screen content or chooses an action.
+     * Distinct, enabled, visible control hitboxes count as ambiguity.
+     */
+    internal data class ExactVisibleControl(
+        val packageName:String,val windowId:Int,val matchingControls:Int,
+        // Ephemeral geometry only: never stored or sent to a model/provider.
+        val uniqueBoundsKey:String?=null
+    )
+    fun exactVisibleControl(service:ScreenAssistService,requested:String):ExactVisibleControl? {
+        val expected=safeLabel(requested) ?:return null
+        if(!ScreenAssistState.connected || ScreenAssistService.active!==service)return null
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null} ?:return null
+        try{
+            val pkg=root.packageName?.toString().orEmpty()
+            if(root.windowId<0 || !root.isVisibleToUser ||
+                pkg==service.packageName || pkg=="android" ||
+                pkg=="com.android.systemui" ||
+                !pkg.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))return null
+            val viewport=Rect().also{root.getBoundsInScreen(it)}
+            if(viewport.isEmpty)return null
+            val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+            queue.add(root)
+            val uniqueBounds=linkedSetOf<String>()
+            var visited=0
+            while(queue.isNotEmpty() && visited++<MAX_NODES &&
+                uniqueBounds.size<2){
+                val node=queue.removeFirst()
+                if(!node.isVisibleToUser || node.isPassword || node.isEditable)continue
+                if(safeControl(node.className?.toString(),node.isClickable,
+                        node.isEnabled,node.isVisibleToUser,node.isEditable,node.isPassword)){
+                    val controlLabel=safeLabel(node.contentDescription?.toString())
+                        ?:safeLabel(node.text?.toString())
+                    if(controlLabel?.equals(expected,ignoreCase=true)==true){
+                        val rect=Rect().also{node.getBoundsInScreen(it)}
+                        if(!rect.isEmpty && viewport.contains(rect))
+                            uniqueBounds.add(
+                                "${rect.left}:${rect.top}:${rect.right}:${rect.bottom}")
+                    }
+                }
+                for(i in 0 until node.childCount)
+                    node.getChild(i)?.let{queue.addLast(it)}
+            }
+            // If observation was truncated, missing/ambiguous counts cannot
+            // authorize a target; report unavailable instead.
+            if(queue.isNotEmpty())return null
+            return ExactVisibleControl(pkg,root.windowId,uniqueBounds.size,
+                uniqueBounds.singleOrNull())
+        }catch(_:Exception){return null}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
 }

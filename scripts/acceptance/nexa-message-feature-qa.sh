@@ -2,6 +2,9 @@
 # Disposable GitHub emulator only; no production release key or real phone.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+# Source check precedes any Gradle build, adb install, force-stop or pm clear.
+# The Android emulator runner's synthetic data is the only allowed target.
+source "$ROOT/scripts/acceptance/require-synthetic-emulator.sh"
 ANDROID_DIR="$ROOT/apps/mobile/android"
 cd "$ANDROID_DIR"
 echo "Native feature source: $(git -C "$ROOT" rev-parse HEAD)"

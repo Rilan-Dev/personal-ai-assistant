@@ -1,6 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.UiAutomation
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,6 +13,15 @@ import java.util.UUID
  * Never inspect any non-app window's text or return its nodes to the tests.
  */
 internal object NexaQaAccessibilityRoot {
+    // All tests in one instrumentation process share a single Accessibility
+    // UiAutomation client. Preserve the owner's enabled services explicitly;
+    // never silently disable them or alter Android security settings.
+    private val testAutomation:UiAutomation by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        val instrument=InstrumentationRegistry.getInstrumentation()
+        instrument.getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+            ?: error("QA automation unavailable; no fixture interaction allowed")
+    }
+    private fun qaAutomation():UiAutomation=testAutomation
     fun nodes(root:AccessibilityNodeInfo):List<AccessibilityNodeInfo> {
         val result=mutableListOf<AccessibilityNodeInfo>()
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -40,7 +50,7 @@ internal object NexaQaAccessibilityRoot {
     }
     fun ownWindow(marker:String):AccessibilityNodeInfo {
         val instrument=InstrumentationRegistry.getInstrumentation()
-        val automation=instrument.uiAutomation
+        val automation=qaAutomation()
         val fixturePackage=instrument.context.packageName
         try {
             val info=automation.serviceInfo
@@ -82,8 +92,7 @@ internal object NexaQaAccessibilityRoot {
         val component="$packageName/${activity.name}"
         val extra=duplicate?.let { " --ez duplicate $it" }.orEmpty()
         val runId=UUID.randomUUID().toString().replace("-","")
-        val descriptor=InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("am start -n $component -f 0x10008000$extra --es qa_run $runId")
+        val descriptor=qaAutomation().executeShellCommand("am start -n $component -f 0x10008000$extra --es qa_run $runId")
         val output=FileInputStream(descriptor.fileDescriptor).bufferedReader().use{it.readText()}
         check(!output.contains("Error",ignoreCase=true)) { "Could not launch synthetic test fixture" }
         return runId
@@ -99,8 +108,7 @@ internal object NexaQaAccessibilityRoot {
     }
 
     fun closeFixture() {
-        val descriptor=InstrumentationRegistry.getInstrumentation().uiAutomation
-            .executeShellCommand("input keyevent 4")
+        val descriptor=qaAutomation().executeShellCommand("input keyevent 4")
         FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
     }
 }
