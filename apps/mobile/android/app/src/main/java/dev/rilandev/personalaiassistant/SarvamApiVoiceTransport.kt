@@ -356,8 +356,8 @@ internal class SarvamApiVoiceTransport(
                         // The exported phone logs only showed an opaque HTTP
                         // 400. Classify the bounded provider error body but
                         // never expose its free-form message or any keys.
-                        val detail=try{it.body?.string().orEmpty().take(5000)}
-                            catch(_:Exception){""}
+                        val detail=NexaSarvamResponseBounds.textOrNull(it,
+                            NexaSarvamResponseBounds.MAX_ERROR_BYTES).orEmpty()
                         val diagnosis=NexaSarvamChatError.classify(it.code,detail)
                         if(it.code==400 && diagnosis.safeTextOnlyRetry &&
                             round==0 && body.has("tools")) {
@@ -374,7 +374,11 @@ internal class SarvamApiVoiceTransport(
                             " [code="+diagnosis.code+"]")
                         return
                     }
-                    val raw=it.body?.string().orEmpty()
+                    // Enforce the limit on bytes BEFORE decoding or parsing the
+                    // untrusted provider reply; a huge/chunked response must
+                    // never allocate an unlimited String on a small phone.
+                    val raw=NexaSarvamResponseBounds.textOrNull(it,
+                        NexaSarvamResponseBounds.MAX_CHAT_BYTES).orEmpty()
                     if(raw.length !in 2..140000) {
                         callbacks.failed("Sarvam conversation response was invalid");return
                     }
