@@ -30,5 +30,5 @@ test('reviewed revision instrumentation accepts only explicit disposable QA app 
 });
 
 test('standalone synthetic instrumentation process bundles the Kotlin runtime',()=>{
-  assert.match(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:2\.2\.20"\)/);
+  assert.match(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:2\.2\.10"\)/);
 });
