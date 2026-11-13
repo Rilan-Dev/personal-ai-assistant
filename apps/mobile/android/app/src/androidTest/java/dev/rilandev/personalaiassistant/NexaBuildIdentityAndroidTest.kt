@@ -23,9 +23,10 @@ class NexaBuildIdentityAndroidTest {
                 expected.matches(Regex("[a-f0-9]{40}")))
             assertEquals("USB QA APK was not assembled from the selected source",
                 expected,actual)
-            assertEquals("Physical QA may not run against a release or regular debug app",
-                "dev.rilandev.personalaiassistant.physicalqa",
-                BuildConfig.APPLICATION_ID)
+            assertTrue("Physical QA may not run against a release or regular debug app",
+                BuildConfig.APPLICATION_ID in setOf(
+                    "dev.rilandev.personalaiassistant.physicalqa",
+                    "dev.rilandev.personalaiassistant.physicalqa2"))
         }
         assertEquals(BuildConfig.APPLICATION_ID,
             InstrumentationRegistry.getInstrumentation().targetContext.packageName)
