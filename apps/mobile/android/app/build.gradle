@@ -138,7 +138,12 @@ android {
             // A distinct device-test app id. The locally disposable debug
             // certificate is NOT compatible with a pre-existing debug install.
             // Do not touch app data or release signing in other Android users.
-            if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
+            // An older physicalqa app may belong to a different debug signer.
+            // Use a NEW, separate disposable package rather than downgrading,
+            // uninstalling, or replacing the owner's existing QA installation.
+            if ((findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()) {
+                applicationIdSuffix '.physicalqa2'
+            } else if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
                 applicationIdSuffix '.physicalqa'
             } else if ((findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()) {
                 applicationIdSuffix '.debug'
