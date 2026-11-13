@@ -64,3 +64,23 @@ test('a fresh owner message cancels old bounded-search approvals before any task
   assert.ok(guided > begin && guided < review && selected > begin && selected < review,
     'new owner goals must invalidate older guided navigation and selected icons');
 });
+
+test('reviewed scroll requires two stable target readings and fresh dispatch-window verification', () => {
+  const policy=read('NexaBoundedScrollSearch.kt');
+  const observation=read('NexaTaskScreenObservation.kt');
+  const overlay=read('NexaToolOverlayService.kt');
+  const scroll=read('NexaScreenScroll.kt');
+  assert.match(policy,/MIN_STABLE_MS\s*=\s*250L/);
+  assert.match(policy,/stableBoundsKey/);
+  assert.match(policy,/uniqueBoundsKey\.isNullOrBlank\(\)/);
+  assert.match(observation,/val uniqueBoundsKey:String\?=null/);
+  assert.match(observation,/uniqueBounds\.singleOrNull\(\)/);
+  assert.match(overlay,/observed\.uniqueBoundsKey/);
+  assert.match(overlay,/if\(attempt<3\) inspectBoundedScrollOutcome\(token,attempt\+1\)/);
+  assert.match(scroll,/private fun reviewedTarget\(/);
+  assert.match(scroll,/queue\.isEmpty\(\) && matching==1/);
+  assert.match(scroll,/NexaNativeActionSafety\.dispatchWithFence\([\s\S]*?val freshRoot=safeRoot\(service\)/);
+  assert.match(scroll,/freshRoot\.windowId!=approved\.windowId/);
+  assert.match(scroll,/reviewedTarget\(freshRoot,approved\)\?\.performAction\(action\)/);
+  assert.doesNotMatch(scroll,/scrollTarget\.performAction\(action\)/);
+});
