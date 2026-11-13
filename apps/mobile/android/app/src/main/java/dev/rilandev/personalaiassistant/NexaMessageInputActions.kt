@@ -77,7 +77,8 @@ internal object NexaMessageInputActions {
             false
         } else true
     }
-    private fun inspect(root:AccessibilityNodeInfo, hint:String):Inspection {
+    private fun inspect(root:AccessibilityNodeInfo, hint:String,
+                        requireEmpty:Boolean=true):Inspection {
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited=0
@@ -104,7 +105,7 @@ internal object NexaMessageInputActions {
                 if(NexaMessageInputPolicy.isMessageField(desc,true,node.isPassword,
                     node.isEnabled,node.isVisibleToUser,
                     node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_SET_TEXT},
-                    !NexaEditableNode.isEmpty(node))) {
+                    requireEmpty && !NexaEditableNode.isEmpty(node))) {
                     val bounds=Rect().also{node.getBoundsInScreen(it)}
                     if(bounds.width()>0 && bounds.height()>0 && bounds.left>=0 && bounds.top>=0) {
                         count++
@@ -114,7 +115,31 @@ internal object NexaMessageInputActions {
             }
             for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
         }
+        // A truncated Accessibility tree might conceal a second composer or
+        // a competing recipient header. Never authorize a partial scan.
+        if(queue.isNotEmpty())return Inspection(0,null,false)
         return Inspection(count,target,recipientSeen)
+    }
+
+    /** Post-action reading must be from the currently active chat and field,
+     * never from the stale node used at review. This does not resend text.
+     */
+    private fun verifyCurrentDraft(service:ScreenAssistService,p:Prepared,
+                                   recipient:String,expected:String):Boolean {
+        if(!ScreenAssistState.connected || ScreenAssistService.active!==service)return false
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}?:return false
+        return try {
+            if(!root.isVisibleToUser || root.packageName?.toString()!=p.packageName ||
+                root.windowId!=p.windowId)return false
+            val visible=inspect(root,recipient,requireEmpty=false)
+            val field=visible.candidate
+            if(!visible.recipientVisible || visible.matches!=1 || field==null ||
+                field.className?.toString().orEmpty()!=p.fieldClass ||
+                field.viewIdResourceName.orEmpty()!=p.fieldId ||
+                Rect().also { field.getBoundsInScreen(it) }!=p.bounds)return false
+            NexaEditableNode.containsExactTextAfterDispatch(field,expected)
+        }catch(_:Exception){false}
+        finally{try{root.recycle()}catch(_:Exception){}}
     }
 
     fun prepare(service:ScreenAssistService):String {
@@ -126,8 +151,9 @@ internal object NexaMessageInputActions {
         val root=try{service.externalWindowRoot()}catch(_:Exception){null}
             ?: return "Open the chosen chat and keep the overlay visible."
         try {
-            if(root.packageName?.toString()!=draft.packageName)
-                return "Wrong messaging application is visible. No text entered."
+            if(root.packageName?.toString()!=draft.packageName ||
+                root.windowId<0 || !root.isVisibleToUser)
+                return "Wrong or unavailable messaging window. No text entered."
             val scanned=inspect(root,draft.recipientHint)
             if(!scanned.recipientVisible)
                 return "Recipient title is not visibly identical to the requested contact. Open that chat and retry."
@@ -171,7 +197,7 @@ internal object NexaMessageInputActions {
             ?: return "Messaging conversation is no longer visible. No action dispatched."
         try {
             if(root.packageName?.toString()!=approval.packageName ||
-                root.windowId!=approval.windowId)
+                root.windowId!=approval.windowId || !root.isVisibleToUser)
                 return "The chat window changed. No text was entered."
             val scanned=inspect(root,draft.recipientHint)
             if(!scanned.recipientVisible || scanned.matches!=1)
@@ -190,23 +216,59 @@ internal object NexaMessageInputActions {
                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
                         draft.message)
                 }
+                var stale=false
+                var outcomeUnknown=false
+                var actionEntered=false
                 val accepted=NexaNativeActionSafety.dispatchWithFence(
                     service,approval.pauseGeneration) {
-                    node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                    // An Android composer may be recycled, replaced or
+                    // populated after the owner approves it. Reacquire and
+                    // recheck the exact empty field INSIDE the Pause fence.
+                    val fresh=try {
+                        if(!ScreenAssistState.connected || ScreenAssistService.active!==service)
+                            null else service.externalWindowRoot()
+                    }catch(_:Exception){null}
+                    if(fresh==null) {
+                        stale=true
+                        false
+                    }else try {
+                        val visible=if(fresh.packageName?.toString()==approval.packageName &&
+                            fresh.windowId==approval.windowId && fresh.isVisibleToUser)
+                            inspect(fresh,draft.recipientHint) else Inspection(0,null,false)
+                        val candidate=visible.candidate
+                        val same=visible.recipientVisible && visible.matches==1 &&
+                            candidate!=null && candidate==node &&
+                            candidate.className?.toString().orEmpty()==approval.fieldClass &&
+                            candidate.viewIdResourceName.orEmpty()==approval.fieldId &&
+                            Rect().also { candidate.getBoundsInScreen(it) }==approval.bounds
+                        if(!same) {
+                            stale=true
+                            false
+                        } else {
+                            actionEntered=true
+                            candidate!!.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args)
+                        }
+                    }catch(_:Exception){
+                        if(actionEntered)outcomeUnknown=true else stale=true
+                        false
+                    }finally {try{fresh.recycle()}catch(_:Exception){}}
                 }
                 if(accepted==null) {
                     NexaUiActionJournal.finish(service,approval.token,"android_rejected")
                     return "Owner paused device actions since review. No message was entered."
                 }
                 val verified=accepted &&
-                    NexaEditableNode.containsExactTextAfterDispatch(node,draft.message)
+                    verifyCurrentDraft(service,approval,draft.recipientHint,draft.message)
                 NexaUiActionJournal.finish(service,approval.token,
-                    if(accepted)"android_accepted" else "android_rejected")
+                    if(outcomeUnknown)"unknown" else
+                        if(accepted)"android_accepted" else "android_rejected")
                 if(verified) {
                     NexaUiActionJournal.markObservation(service,approval.token,"observed_change")
                     "Exact prepared text is visible in the selected message input. NOT SENT. Review the recipient and tap Send yourself."
                 } else if(accepted)
                     "Android accepted the text-entry request, but its contents were not verified. Review it manually. NOT SENT by Nexa."
+                else if(outcomeUnknown) "Message-input result is uncertain. Inspect the current chat; no automatic retry and no send by Nexa."
+                else if(stale) "Chat, recipient or empty composer changed before text entry. No insertion or retry."
                 else "Android refused text entry. No retry; nothing was sent by Nexa."
             }catch(_:Exception) {
                 NexaUiActionJournal.finish(service,approval.token,"unknown")

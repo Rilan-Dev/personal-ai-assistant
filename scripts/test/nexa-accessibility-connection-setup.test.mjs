@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
-const source=(name)=>readFileSync(name,"utf8");
+const source=(name)=>readFileSync(name,"utf8").replace(/\r\n/g,"\n");
 const normalizedSource=(name)=>source(name).replace(/\r\n/g,"\n");
 const setup=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaSetupModule.kt");
 const component=source("apps/mobile/src/components/NexaSetupScreen.tsx");

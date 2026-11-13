@@ -160,4 +160,23 @@ class NexaWhatsAppChatUiAndroidTest {
             NexaQaAccessibilityRoot.closeFixture()
         }
     }
+
+    @Test fun overlappingDistinctRowsNeverBecomeOneApprovedRecipient() {
+        val runId=NexaQaAccessibilityRoot.launchFixture(
+            NexaChatListQaActivity::class.java,true,overlap=true)
+        try {
+            val observed=settledScan(runId,2,"Nova Forever",100)
+            val rows=NexaQaAccessibilityRoot.nodes(observed.root).filter {
+                it.isClickable &&
+                    it.contentDescription?.toString()?.startsWith("Nova Forever")==true
+            }
+            assertEquals("Two native source identities must be visible",2,rows.size)
+            val a=android.graphics.Rect().also{rows[0].getBoundsInScreen(it)}
+            val b=android.graphics.Rect().also{rows[1].getBoundsInScreen(it)}
+            assertTrue("Test fixture must truly overlap",android.graphics.Rect(a).intersect(b))
+            assertEquals("Overlapping sibling contacts remain ambiguous",2,observed.scan.candidates)
+            assertNull("No unsafe chat-row target may be chosen",observed.scan.target)
+        } finally {NexaQaAccessibilityRoot.closeFixture()}
+    }
+
 }
