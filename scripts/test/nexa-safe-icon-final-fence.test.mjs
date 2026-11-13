@@ -8,8 +8,10 @@ const tests=readFileSync("apps/mobile/android/app/src/androidTest/java/dev/rilan
 
 test("safe navigation resolves exactly one complete, non-sensitive native source",()=>{
   assert.match(source,/internal fun uniqueCurrentTarget\(root: AccessibilityNodeInfo, icon: ObservedIcon\)/);
-  assert.match(source,/val eligible = !node\.isPassword && !node\.isEditable &&/);
-  assert.match(source,/node\.isVisibleToUser && node\.isEnabled/);
+  assert.match(source,/if \(!node\.isVisibleToUser \|\| node\.isPassword \|\| node\.isEditable\)/);
+  assert.match(source,/if \(node\.isClickable && node\.isEnabled\)/);
+  assert.doesNotMatch(source,/if \(!eligible\) continue/,
+    'A disabled structural container must not hide an enabled descendant from the resolver');
   assert.match(source,/if \(count != 1\) return null/);
   assert.match(source,/return if \(nodes\.isEmpty\(\) && count == 1\) matched else null/);
   assert.match(source,/sameResource && sameClass &&/);
