@@ -16,7 +16,8 @@ react {
 
     // Physical QA must launch without Metro and must never overwrite the
     // owner's main, QA, or other-user debug installs.
-    if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
+    if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean() ||
+        (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()) {
         debuggableVariants = []
     }
 
