@@ -15,7 +15,7 @@ import org.junit.runner.RunWith
  * Opt-in READ-ONLY physical QA. Invoke only with an explicit nexaRecipientHint
  * while ordinary WhatsApp is foreground. Never logs contact names, chat text,
  * node labels, screenshots, phone IDs, field contents, or transcript text.
- * No window is clicked, no ACTION_SET_TEXT, gesture, search, send or grant.
+ * No click, text entry, gesture, search, send or permission change.
  *
  * This demonstrates whether the production matcher has a UNIQUE visible
  * candidate; it is NOT a recipient-opening / composer-typing acceptance test.
