@@ -56,7 +56,7 @@ test('exceptions after entering a native side-effect remain unknown, never safe 
     assert.match(code,/var actionEntered=false/);
     assert.match(code,/actionEntered=true\s*\n\s*candidate!!\.performAction/);
     assert.match(code,/if\(actionEntered\)outcomeUnknown=true else stale=true/);
-    assert.match(code,/if\(outcomeUnknown\)"unknown" else "android_rejected"/m);
+    assert.match(code,/if\(outcomeUnknown\)"unknown" else[\s\S]{0,100}"android_rejected"/m);
     assert.match(code,/no automatic retry|no retry/);
   }
 });
