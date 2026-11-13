@@ -41,18 +41,17 @@ class NexaChatListQaActivity:Activity() {
         })
         area.addView(status())
         area.addView(TextView(this).apply { text="Ask Meta AI or Search" })
-        fun makeRow(name:String)=LinearLayout(this).apply{
-                orientation=LinearLayout.VERTICAL
-                isClickable=true
-                isFocusable=true
-                contentDescription=name
-                setOnClickListener {
-                    chatRowClicks++
-                    opened=true
-                    showConversation()
-                }
+        fun makeRow(name:String)=LinearLayout(this).apply {
+            orientation=LinearLayout.VERTICAL
+            isClickable=true
+            isFocusable=true
+            contentDescription=name
+            setOnClickListener {
+                chatRowClicks++
+                opened=true
+                showConversation()
             }
-            row.addView(TextView(this).apply {
+            addView(TextView(this@NexaChatListQaActivity).apply {
                 text=name
                 textSize=19f
                 contentDescription=name
