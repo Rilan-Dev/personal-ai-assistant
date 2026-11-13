@@ -108,19 +108,62 @@ try {
             $keytoolPath = if ($keytoolCommand) { $keytoolCommand.Source }
                 else { Join-Path $env:ProgramFiles 'Android\Android Studio\jbr\bin\keytool.exe' }
             if (Test-Path -LiteralPath $keytoolPath -PathType Leaf) {
-                $listing = @(& $keytoolPath -list -v -keystore $legacyKeystore
-                    -storepass android -alias androiddebugkey 2>&1)
-                if ($LASTEXITCODE -eq 0) {
-                    $certLines = @($listing | Where-Object {
-                        $_.ToString().TrimStart().StartsWith('SHA256:')
-                    })
-                    if ($certLines.Count -eq 1) {
-                        $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
-                        if ($legacyDigest -match '^[0-9a-f]{64}$' -and
-                            $legacyDigest -eq $digests[0]) {
-                            Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
-                            Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
+                # The optional local legacy-debug classification is NEVER
+                # needed to decide the already-proven release signer mismatch.
+                # Some Windows keytool/JBR launches wait indefinitely in SSH
+                # sessions. Bound this subprocess to 10 seconds and preserve
+                # the mandatory signer-mismatch rejection even on timeout.
+                # Redirect only the certificate listing to temporary files,
+                # deleted by the outer finally; do not export a private key.
+                $legacyOutput = Join-Path $temporary 'legacy-cert-public.txt'
+                $legacyErrors = Join-Path $temporary 'legacy-cert-diagnostics.txt'
+                $arguments = '-list -v -keystore "' + $legacyKeystore +
+                    '" -storepass android -alias androiddebugkey -noprompt'
+                $keytoolProcess = $null
+                try {
+                    $keytoolProcess = Start-Process -FilePath $keytoolPath
+                        -ArgumentList $arguments -NoNewWindow -PassThru
+                        -RedirectStandardOutput $legacyOutput
+                        -RedirectStandardError $legacyErrors
+                    if (-not $keytoolProcess.WaitForExit(10000)) {
+                        try { $keytoolProcess.Kill() } catch {}
+                        # A stuck Java child may outlive the diagnostic; the
+                        # release verdict must never wait for optional output.
+                        Write-Output 'LEGACY_DEBUG_KEYTOOL_TIMEOUT=true'
+                    } elseif ($keytoolProcess.ExitCode -eq 0) {
+                        $listing = @(Get-Content -LiteralPath $legacyOutput
+                            -ErrorAction SilentlyContinue)
+                        $certLines = @($listing | Where-Object {
+                            $_.ToString().TrimStart().StartsWith('SHA256:')
+                        })
+                        if ($certLines.Count -eq 1) {
+                            $legacyDigest = ($certLines[0].ToString().Split(':',2)[1] -replace ':','').Trim().ToLowerInvariant()
+                            if ($legacyDigest -match '^[0-9a-f]{64}
+            }
+        }
+        throw 'SIGNER_MISMATCH: in-place release upgrade NOT certified; do not uninstall or clear user data'
+    }
+    Write-Output 'SIGNER_MATCH: installed Nexa main package matches the pinned permanent release identity'
+} finally {
+    Remove-Item -LiteralPath $temporary -Recurse -Force -ErrorAction SilentlyContinue
+}
+ -and
+                                $legacyDigest -eq $digests[0]) {
+                                Write-Output 'LEGACY_DEBUG_SIGNER_MATCH=true'
+                                Write-Output 'Legacy owner debug keystore can be inspected for non-production in-place upgrades. Production key migration needs a separately verified Android signing lineage.'
+                            }
                         }
+                    }
+                } catch {
+                    # This is an optional diagnostic only. A mismatch always
+                    # stays a hard NO-GO whether keytool runs or fails.
+                    Write-Output 'LEGACY_DEBUG_KEYTOOL_UNAVAILABLE=true'
+                } finally {
+                    if ($null -ne $keytoolProcess) {
+                        if (-not $keytoolProcess.HasExited) {
+                            try { $keytoolProcess.Kill() } catch {}
+                        }
+                        $keytoolProcess.Dispose()
                     }
                 }
             }
