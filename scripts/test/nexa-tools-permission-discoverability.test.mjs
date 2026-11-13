@@ -21,3 +21,11 @@ test('App launch grant remains explicit and does not bypass Android or action ap
   assert.match(app,/no automatic message sending/);
   assert.match(app,/reapprove each side effect/i);
 });
+
+test('a blocked Chat device action links to Tools without changing any grant',()=>{
+  assert.match(app, /message\.speaker==='assistant'[\s\S]*?\^Task blocked: Permission required:/);
+  assert.match(app,/accessibilityLabel="Review device action permissions in Tools"/);
+  assert.match(app,/Review device permissions in Tools/);
+  assert.match(app,/onPress=\{\(\)=>navigate\('tools'\)\}/);
+  assert.doesNotMatch(app,/Review device permissions in Tools[\s\S]{0,200}toggle\('apps\.launch'\)/);
+});
