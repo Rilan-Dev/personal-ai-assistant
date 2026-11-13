@@ -50,7 +50,7 @@ const run = (scenario, serial = '') => {
   try {
     return spawnSync(bashExecutable, ['-ec', 'export PATH="$1:$PATH"; source "$2"; echo "GUARD_PASSED:$ANDROID_SERIAL"', '--', bashPath(bin), bashPath(guard)], {
       encoding: 'utf8',
-      timeout: 5000,
+      // Git Bash startup competes with parallel native/TS workers on Windows.\n      // The fake-ADB script cannot touch a real device; allow startup slack.\n      timeout: 15000,
       env: { ...process.env,
         QA_ADB_SCENARIO: scenario, ANDROID_SERIAL: serial },
     });
