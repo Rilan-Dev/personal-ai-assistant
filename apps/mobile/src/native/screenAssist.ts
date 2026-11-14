@@ -7,6 +7,7 @@ interface AccessibilityBridge {
   armOneScreen(): Promise<boolean>;
   takeCapturedText(): Promise<{text:string;packageName:string;ownerArmed:boolean}|null>;
   clear(): Promise<boolean>;
+  inspectFiveHomeApps(): Promise<string>;
 }
 function bridge(): AccessibilityBridge {
   const module=NativeModules.PAAScreenAssist;
@@ -26,4 +27,15 @@ export async function takeScreenReadOnce():Promise<{text:string;packageName:stri
   if (!snap?.ownerArmed || typeof snap.text!=='string' || snap.text.length>2000 ||
       typeof snap.packageName!=='string' || snap.packageName.length>100) return null;
   return {text:snap.text,packageName:snap.packageName};
+}
+
+/** Five target-app icon counts only. No raw screen data or app navigation. */
+export async function inspectFiveHomeApps():Promise<string>{
+  const instance=bridge();
+  if(typeof instance.inspectFiveHomeApps!=='function')
+    throw Error('Update Nexa to enable the bounded five-app home inspection');
+  const report=await instance.inspectFiveHomeApps();
+  if(typeof report!=='string'||report.length>950||
+    !report.startsWith('HOME_PILOT'))throw Error('Invalid Android launcher evidence');
+  return report;
 }
