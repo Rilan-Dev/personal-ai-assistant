@@ -49,9 +49,9 @@ class NexaUnifiedOverlayPermissionAndroidTest {
     }
 
     @Test fun fiveHomeAppsHaveExactSafeLabelsNotMessageOrContactData() {
-        for(pair in listOf("WhatsApp" to "WhatsApp","imo" to "IMO",
-            "Contacts" to "Contacts","Phone" to "Calls",
-            "Clock" to "Clock/Alarm")){
+        for(pair in listOf("WhatsApp" to "WhatsApp","IMO" to "imo",
+            "Contacts" to "Contacts","Calls" to "Phone",
+            "Clock/Alarm" to "Clock")){
             assertEquals(pair.first,NexaHomeFiveAppObservation.match(pair.second))
         }
         for(s in listOf("John +971 501234567","Message body",
