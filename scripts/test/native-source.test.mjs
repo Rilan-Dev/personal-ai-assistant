@@ -47,7 +47,13 @@ test("Android secure journal uses Keystore AES-GCM and synchronous claims", () =
 test("Android UI cannot run live tools without the native secure journal", () => {
   const ui = read("apps/mobile/App.tsx");
   assert.match(ui,/nativeDeviceAvailable\(\) && androidJournalAvailable\(\)/);
-  assert.match(ui,/journal: engine\.live \? androidActionJournal : undefined/);
+  // The persisted-trust adapter must delegate to the SAME encrypted native
+  // journal, not introduce an in-memory or independent authorization source.
+  assert.match(ui,/withTrustedOwnerNavigation\(\s*androidActionJournal,request/);
+  assert.match(ui,/journal: engine\.live \? sharedJournal : undefined/);
+  const wrapper=read("packages/agent-core/src/trusted-navigation.ts");
+  assert.match(wrapper,/loadSession:\(id\)=>journal\.loadSession\(id\)/);
+  assert.match(wrapper,/claimAction:\(id,call,fingerprint,requiresApproval\)=>/);
   assert.match(ui,/resume: Boolean\(restore\)/);
 });
 test("Android push-to-talk is foreground-only, requires runtime microphone grant and on-device STT", () => {

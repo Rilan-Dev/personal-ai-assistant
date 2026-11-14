@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageAppForDays,
@@ -22,6 +22,7 @@ import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/nati
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
+  completeSharedOverlayChat, NEXA_SHARED_OVERLAY_CHAT_EVENT, canAutoApproveTrustedNavigation,
   consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
@@ -45,7 +46,7 @@ import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, cle
 import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, authorizedAcaSelection, AcaRequestError, parseAcaMailSummaryIntent } from './src/native/acaEmail';
 import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
-  armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
+  armScreenReadOnce, takeScreenReadOnce, clearScreenRead, inspectFiveHomeApps } from './src/native/screenAssist';
 import {iconRecognitionAvailable, armIconRecognition, takeIconRecognition, clearIconRecognition} from './src/native/androidIconRecognition';
 import {appCatalogueAvailable, findLaunchableApps} from './src/native/androidAppCatalogue';
 import {visualIconCaptureAvailable, armVisualIcons, takeVisualIcons, discardVisualIcons} from './src/native/androidVisualIcons';
@@ -132,6 +133,9 @@ export default function App() {
     return ()=>sub.remove();
   },[tab]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // A floating-chat prompt is linked to ONE assistant reply and cannot be
+  // replayed after a JS restart or foreground/background transition.
+  const overlayReplyToken=useRef<string|null>(null);
   const chatLogSession=useRef('chat-'+Date.now());
   const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
   const [taskHistoryEntries,setTaskHistoryEntries]=useState<NexaTaskHistoryEntry[]>([]);
@@ -1389,6 +1393,11 @@ export default function App() {
   };
   const append = (speaker: ChatMessage['speaker'], text: string) => {
     setMessages(prev => [...prev, { id: counter.current++, speaker, text }]);
+    if(speaker==='assistant' && overlayReplyToken.current!==null){
+      const token=overlayReplyToken.current;
+      overlayReplyToken.current=null;
+      void completeSharedOverlayChat(token,text).catch(()=>{});
+    }
     if(historyAvailable()) void appendConversation(chatLogSession.current,'chat',
       activeProvider?.provider??'local',speaker,text).catch(()=>{});
   };
@@ -1523,6 +1532,17 @@ export default function App() {
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
     const whatsappPreview=parseReviewedWhatsAppIntent(request);
+    // The five-app home pilot is an owner-requested, read-only assessment.
+    // It cannot trigger a model-specified click, enumerate unrelated apps,
+    // open WhatsApp/IMO/Contacts/Phone/Clock or change an alarm.
+    if(!restore && engine.live &&
+        /^(?:please\s+)?(?:inspect|check|show|scan)\s+(?:the\s+)?(?:five|5)\s+(?:home\s+)?apps(?:\s+on\s+(?:my\s+)?home\s+screen)?[.!?]*$/i.test(request)){
+      setInput('');setEvents([]);append('user',request);
+      try{append('assistant',await inspectFiveHomeApps());}
+      catch{append('assistant',
+        'Home pilot inspection unavailable. Enable Nexa Accessibility in Android Settings and open your home screen, then retry. No app was opened.');}
+      return;
+    }
     // Explicit owner device-fact questions use the ONE Kotlin task authority.
     // No model call, Accessibility action or external message can enter here.
     if(!restore && engine.live && (ownerDeviceFactKind(request)||ownerReadOnlyPlanKinds(request))){
@@ -1708,13 +1728,28 @@ export default function App() {
               throw Error('Native coordinator refused the proposed plan');
           }
         });
+      // A previously selected persistent mode avoids repetitive IN-APP
+      // approval taps for explicitly requested low-risk navigation only.
+      // It never bypasses Android Accessibility, owner Pause, encrypted
+      // claim/replay checks or review for a consequential device action.
+      const trustedMode=restore ? 'ask_every_time' :
+        await getVoicePermissionMode().catch(()=>'ask_every_time' as VoicePermissionMode);
+      const localGrants=new Set(capabilities);
+      if(trustedMode!=='ask_every_time'){
+        localGrants.add('apps.launch');
+        localGrants.add('device.interact');
+      }
+      const sharedJournal=withTrustedOwnerNavigation(
+        androidActionJournal,request,canAutoApproveTrustedNavigation,
+        trustedMode!=='ask_every_time' && !restore
+      );
       const harness=new AgentHarness(engine.registry,admittedPlanner);
       const result = await harness.run({
         request,
         sessionId,
-        journal: engine.live ? androidActionJournal : undefined,
+        journal: engine.live ? sharedJournal : undefined,
         resume: Boolean(restore),
-        grantedCapabilities: new Set(capabilities),
+        grantedCapabilities: localGrants,
         signal: controller.signal,
         maxSteps: (parseOwnerMultiToolRequest(request)?.length ?? 5) + 1,
         onEvent: event => setEvents(prev => [...prev, event])
@@ -1734,6 +1769,42 @@ export default function App() {
       append('assistant', 'Secure task initialization failed; no device action was executed.');
     } finally { setRunning(false); activeAbort.current = null; }
   };
+  // Floating Chat uses this EXACT send() code path, not a second model,
+  // independent tool executor or trusted background owner. No OS grant or
+  // native approval is inferred from a React event. The visible overlay
+  // owns the originating one-shot request and will timeout on JS suspension.
+  useEffect(()=>{
+    if(Platform.OS!=='android'||!toolOverlayAvailable())return;
+    const sub=DeviceEventEmitter.addListener(NEXA_SHARED_OVERLAY_CHAT_EVENT,
+      (event:unknown)=>{
+        if(event===null||typeof event!=='object')return;
+        const value=event as Record<string,unknown>;
+        const id=value.id,request=value.request;
+        if(typeof id!=='string'||!/^[-0-9a-f]{36}$/.test(id)||
+          typeof request!=='string'||!request.trim()||request.length>500)return;
+        if(!engine.live||running||listening||speaking||voiceInProgress.current||
+          activeAbort.current!==null||overlayReplyToken.current!==null){
+          void completeSharedOverlayChat(id,
+            'Shared Chat is busy or unavailable. No new AI task was started.').catch(()=>{});
+          return;
+        }
+        overlayReplyToken.current=id;
+        void send(request).then(()=>{
+          if(overlayReplyToken.current===id){
+            overlayReplyToken.current=null;
+            void completeSharedOverlayChat(id,
+              'Shared Chat did not produce a verified reply. Inspect the task journal before retrying.').catch(()=>{});
+          }
+        }).catch(()=>{
+          if(overlayReplyToken.current===id){
+            overlayReplyToken.current=null;
+            void completeSharedOverlayChat(id,
+              'Shared Chat failed unexpectedly. No automatic replay.').catch(()=>{});
+          }
+        });
+      });
+    return ()=>sub.remove();
+  },[engine.live,running,listening,speaking,activeProvider,remoteActive,capabilities,voicePermissionMode]);
   const stop = () => activeAbort.current?.abort();
   const listenForCommand = async () => {
     if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current ||

@@ -262,6 +262,7 @@ class ScreenAssistService : AccessibilityService() {
             ScreenIconScanState.clear()
             NexaVisualIconCapture.clear()
             NexaScreenActions.reset()
+            NexaSafeContextCache.clear()
         }
         return super.onUnbind(intent)
     }
@@ -277,6 +278,7 @@ class ScreenAssistService : AccessibilityService() {
             ScreenIconScanState.clear()
             NexaVisualIconCapture.clear()
             NexaScreenActions.reset()
+            NexaSafeContextCache.clear()
         }
         super.onDestroy()
     }
@@ -296,7 +298,8 @@ class ScreenAssistService : AccessibilityService() {
 
     private fun handleScreenEvent(event: AccessibilityEvent) {
         NexaUiActionVerifier.onAccessibilityEvent(event)
-        if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) return
+        if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() &&
+            !NexaVisualIconCapture.isArmed() && !NexaSafeContextCache.active(this))return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
@@ -326,6 +329,11 @@ class ScreenAssistService : AccessibilityService() {
             if (ScreenAssistState.isArmed()) scheduleScreenReadRetry(pkg, 0)
             return
         }
+        // Owner opted in while the floating panel is visible. A short,
+        // sanitised control-only snapshot is kept in RAM for at most 8s.
+        // Never use an Accessibility event as permission to execute a tool.
+        if(NexaSafeContextCache.active(this))
+            NexaSafeContextCache.capture(this,pkg)
         if (ScreenIconScanState.isArmed()) {
             val box = android.graphics.Rect()
             root.getBoundsInScreen(box)
@@ -355,6 +363,20 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         value.putBoolean("iconScanArmed", ScreenIconScanState.isArmed())
         value.putBoolean("visualScanArmed", NexaVisualIconCapture.isArmed())
         p.resolve(value)
+    }
+
+    /** Only the five user-selected launcher app labels are classified.
+     * The actual system-installed Accessibility grant remains mandatory,
+     * and the current window must independently be the Android home screen.
+     */
+    @ReactMethod fun inspectFiveHomeApps(p:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true &&
+            !NexaToolOverlayService.visible){
+            p.reject("NOT_OWNER_VISIBLE",
+                "Inspect the home screen from visible Nexa or its floating chat.")
+            return
+        }
+        p.resolve(NexaHomeFiveAppObservation.observe(context))
     }
 
     @ReactMethod fun openAccessibilitySettings(p: Promise) {

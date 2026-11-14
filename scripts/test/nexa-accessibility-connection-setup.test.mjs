@@ -62,7 +62,8 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
   assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
-  assert.ok(flow.includes('element: "Hide optional features"'));
+  assert.ok(/element: "Hide optional features"\n\s+direction: UP/.test(flow),
+    "the expanded accordion moves above the viewport, so scroll up to its new label");
   assert.ok(flow.includes('element: "One-time screen assistance"'));
   assert.ok(/element: "One-time screen assistance"\n\s+direction: UP/.test(flow));
   assert.ok(flow.includes('text: "Open Accessibility.*One-time screen assistance.*"'));

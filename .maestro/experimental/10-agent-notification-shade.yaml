@@ -39,7 +39,7 @@ tags:
     point: "50%,50%"
 - scrollUntilVisible:
     element: "Hide optional features"
-    direction: DOWN
+    direction: UP
     timeout: 30000
 - assertVisible: "Hide optional features"
 # Overlay permission is checked separately after Maestro, because OEMs expose
