@@ -70,6 +70,16 @@ test("Accessibility reads only one explicitly armed bounded text snapshot",()=>{
   assert.doesNotMatch(code,/performGlobalAction|dispatchGesture|performAction\(/);
   assert.doesNotMatch(code,/SharedPreferences|ContentResolver|openFileOutput|Retrofit|OkHttpClient|fetch\(/);
 });
+test("armed screen reads retry unavailable roots briefly and accept scroll events",()=>{
+  const code=read(path+"ScreenAssistService.kt");
+  assert.match(code,/AccessibilityEvent\.TYPE_VIEW_SCROLLED/);
+  assert.match(code,/private fun scheduleScreenReadRetry\(/);
+  assert.match(code,/private fun cancelScreenReadRetry\(\)/);
+  assert.match(code,/MAX_SCREEN_READ_RETRIES/);
+  assert.match(code,/if \(root == null\)[\s\S]*?scheduleScreenReadRetry\(pkg,\s*0\)/);
+  assert.match(code,/rootPackage != expectedPackage/);
+  assert.match(code,/if \(!ScreenAssistState\.isArmed\(\)\)[\s\S]*?return/);
+});
 test("UI provides live voice controls and explicit screen-read review",()=>{
   const code=read("apps/mobile/App.tsx");
   assert.match(code,/startOwnerLiveVoice\(/);

@@ -5,6 +5,7 @@ const read=path=>readFileSync(path,'utf8');
 const app=read('apps/mobile/App.tsx');
 const setup=read('apps/mobile/src/components/NexaSetupScreen.tsx');
 const native=read('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaSetupModule.kt');
+const screenAssist=read('apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/ScreenAssistService.kt');
 const gradle=read('apps/mobile/android/app/build.gradle');
 const workflow=read('.github/workflows/android-main-promotion.yml');
 const releaseWorkflow=read('.github/workflows/android-release-test.yml');
@@ -18,7 +19,10 @@ test('old Personal AI header replaced with Nexa compact permission center',()=>{
 });
 test('first run is opt-in and status refreshes after Android settings',()=>{
   assert.match(app,/engine\.live\?'setup':'chat'/);
-  assert.match(app,/if \(status\.setupAcknowledged\) setTab/);
+  assert.match(app,/const initialSetupAutoRoutePending = useRef\(engine\.live\)/);
+  assert.match(app,/if \(status\.setupAcknowledged && initialSetupAutoRoutePending\.current\)/);
+  assert.match(app,/initialSetupAutoRoutePending\.current = false/);
+  assert.doesNotMatch(app,/if \(status\.setupAcknowledged\) setTab/);
   assert.match(app,/AppState\.addEventListener\('change',state/);
   assert.match(app,/await acknowledgeNexaSetup\(\)/);
   assert.match(setup,/Continue to Nexa/);
@@ -43,6 +47,9 @@ test('setup exposes each real Android permission independently and cannot grant 
   assert.match(setup,/All grants remain under your control/);
   assert.match(setup,/One-time screen assistance/);
   assert.match(setup,/Home-screen app search/);
+});
+test('Accessibility Settings replaces a stale Android Settings task before opening',()=>{
+  assert.match(screenAssist,/Intent\(Settings\.ACTION_ACCESSIBILITY_SETTINGS\)[\s\S]*?addFlags\(Intent\.FLAG_ACTIVITY_NEW_TASK or Intent\.FLAG_ACTIVITY_CLEAR_TASK\)/);
 });
 test('APK embeds its real commit and uses comparable Android version codes',()=>{
   assert.match(gradle,/PAA_SOURCE_REVISION/);

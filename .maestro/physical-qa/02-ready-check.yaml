@@ -1,0 +1,31 @@
+appId: dev.rilandev.personalaiassistant.physicalqa2
+name: Verify Nexa QA2 in-app controls are preconfigured
+tags:
+  - nexa
+  - physical
+  - qa-preflight
+  - no-external-action
+---
+- launchApp:
+    stopApp: true
+    clearState: false
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Tools tab"
+    timeout: 60000
+- tapOn: "Tools tab"
+- extendedWaitUntil:
+    visible: "Nexa · Tools"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Screen assistant"
+    direction: DOWN
+    timeout: 20000
+- assertVisible: "Screen assistant"
+- scrollUntilVisible:
+    element: "Open Android Accessibility Settings button"
+    direction: DOWN
+    visibilityPercentage: 50
+    timeout: 60000
+- assertVisible: "Open Android Accessibility Settings button"

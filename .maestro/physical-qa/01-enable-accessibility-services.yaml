@@ -1,0 +1,122 @@
+appId: dev.rilandev.personalaiassistant.physicalqa2
+name: Enable Nexa QA2 Accessibility services in Android Settings
+tags:
+  - nexa
+  - physical
+  - qa-preflight
+  - no-external-action
+---
+- launchApp:
+    stopApp: false
+    clearState: false
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Tools tab"
+    timeout: 60000
+- tapOn: "Chat tab"
+- extendedWaitUntil:
+    visible: "Nexa AI"
+    timeout: 10000
+- tapOn: "Tools tab"
+- extendedWaitUntil:
+    visible: "Nexa · Tools"
+    timeout: 10000
+- scrollUntilVisible:
+    element: "Open Android Accessibility Settings button"
+    direction: DOWN
+    timeout: 30000
+    visibilityPercentage: 50
+- tapOn: "Open Android Accessibility Settings button"
+# Infinix Settings remembers the last service detail. Return to the list before
+# looking for Downloaded Apps regardless of which QA2 service opened directly.
+- runFlow:
+    when:
+      visible: "Use Nexa Screen Assist QA2"
+    commands:
+      - pressKey: BACK
+- runFlow:
+    when:
+      visible: "Use Nexa Launcher Navigation QA2"
+    commands:
+      - pressKey: BACK
+- runFlow:
+    when:
+      visible: "Use Nexa.*"
+    commands:
+      - pressKey: BACK
+- extendedWaitUntil:
+    visible: "Accessibility.*"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Downloaded Apps"
+    commands:
+      - tapOn: "Downloaded Apps"
+- scrollUntilVisible:
+    element: "Nexa Screen Assist QA2"
+    direction: DOWN
+    timeout: 20000
+- tapOn: "Nexa Screen Assist QA2"
+- runFlow:
+    when:
+      visible: "Allow Nexa Screen Assist QA2 to have full control of your device.*"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible: "Use Nexa Screen Assist QA2"
+    timeout: 20000
+- runFlow:
+    when:
+      visible:
+        id: "android:id/switch_widget"
+        checked: false
+    commands:
+      - tapOn:
+          id: "android:id/switch_widget"
+          checked: false
+- runFlow:
+    when:
+      visible: "Allow Nexa Screen Assist QA2 to have full control of your device.*"
+    commands:
+      - tapOn: "Allow"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- assertVisible:
+    id: "android:id/switch_widget"
+    checked: true
+- pressKey: BACK
+- scrollUntilVisible:
+    element: "Nexa Launcher Navigation QA2"
+    direction: UP
+    timeout: 20000
+- tapOn: "Nexa Launcher Navigation QA2"
+- extendedWaitUntil:
+    visible: "Use Nexa Launcher Navigation QA2"
+    timeout: 20000
+- runFlow:
+    when:
+      visible:
+        id: "android:id/switch_widget"
+        checked: false
+    commands:
+      - tapOn:
+          id: "android:id/switch_widget"
+          checked: false
+- runFlow:
+    when:
+      visible: "Allow Nexa Launcher Navigation QA2 to have full control of your device.*"
+    commands:
+      - tapOn: "Allow"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- assertVisible:
+    id: "android:id/switch_widget"
+    checked: true
+- pressKey: BACK

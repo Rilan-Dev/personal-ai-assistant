@@ -1,5 +1,5 @@
 appId: dev.rilandev.personalaiassistant.physicalqa2
-name: Prepare Nexa physical-device QA permissions and screen controls
+name: Grant QA2 runtime permissions, controls, and overlay
 tags:
   - nexa
   - physical
@@ -7,17 +7,20 @@ tags:
   - no-external-action
 ---
 # Keep QA2 data intact. Maestro grants declared runtime permissions. Android
-# owns overlay and Accessibility controls, so this flow changes them only via
-# the visible Settings UI and verifies them again in Nexa before finishing.
+# owns the overlay control, so this flow changes it only through visible Settings.
 - launchApp:
     stopApp: true
     clearState: false
     permissions:
       all: allow
 - extendedWaitUntil:
-    visible: "Chat"
+    visible: "Tools tab"
     timeout: 60000
-- tapOn: "Tools"
+- tapOn:
+    text: "Tools tab"
+- extendedWaitUntil:
+    visible: "Nexa · Tools"
+    timeout: 10000
 - extendedWaitUntil:
     visible: "Device controls"
     timeout: 30000
@@ -34,32 +37,51 @@ tags:
     when:
       visible:
         text: "Reviewed multi-step screen actions, Tap safe named controls.*"
-        checked: false
     commands:
-      - tapOn: "Reviewed multi-step screen actions"
+      - runFlow:
+          when:
+            visible:
+              text: "Reviewed multi-step screen actions, Tap safe named controls.*"
+              checked: false
+          commands:
+            - tapOn: "Reviewed multi-step screen actions"
+      - assertVisible:
+          text: "Reviewed multi-step screen actions, Tap safe named controls.*"
+          checked: true
 - runFlow:
     when:
       visible:
         text: "Read safe visible-control metadata, Requires enabled Screen Assist.*"
-        checked: false
     commands:
-      - tapOn: "Read safe visible-control metadata"
+      - runFlow:
+          when:
+            visible:
+              text: "Read safe visible-control metadata, Requires enabled Screen Assist.*"
+              checked: false
+          commands:
+            - tapOn: "Read safe visible-control metadata"
+      - assertVisible:
+          text: "Read safe visible-control metadata, Requires enabled Screen Assist.*"
+          checked: true
 - assertVisible:
     text: "App launching, Open camera.*"
     checked: true
-- assertVisible:
-    text: "Reviewed multi-step screen actions, Tap safe named controls.*"
-    checked: true
-- assertVisible:
-    text: "Read safe visible-control metadata, Requires enabled Screen Assist.*"
-    checked: true
+- scrollUntilVisible:
+    element: "Open permission setup"
+    direction: UP
+    timeout: 20000
 - tapOn: "Open permission setup"
 - extendedWaitUntil:
-    visible: "Make your assistant yours."
+    visible: "Nexa · Setup"
     timeout: 30000
+- scrollUntilVisible:
+    element: "Make your assistant yours."
+    direction: UP
+    timeout: 10000
+- assertVisible: "Make your assistant yours."
 - tapOn: "Show optional permissions and features"
 - scrollUntilVisible:
-    element: "Floating quick tools"
+    element: "(Show|Refresh) floating bubble|Allow display over apps.*"
     direction: DOWN
     timeout: 20000
 - runFlow:
@@ -95,151 +117,8 @@ tags:
       - launchApp:
           stopApp: false
           clearState: false
-- tapOn: "Tools"
-- scrollUntilVisible:
-    element: "Arm one screen read"
-    direction: DOWN
-    timeout: 30000
-    visibilityPercentage: 50
-- tapOn: "Open Android Accessibility Settings"
-- runFlow:
-    when:
-      visible: "Use Nexa.*"
-    commands:
-      - pressKey: BACK
+- tapOn:
+    text: "Tools tab"
 - extendedWaitUntil:
-    visible: "Accessibility.*"
-    timeout: 20000
-- runFlow:
-    when:
-      visible: "Downloaded Apps"
-    commands:
-      - tapOn: "Downloaded Apps"
-- scrollUntilVisible:
-    element: "Nexa Screen Assist QA2"
-    direction: DOWN
-    timeout: 20000
-- tapOn: "Nexa Screen Assist QA2"
-- runFlow:
-    when:
-      visible: "Allow Nexa Screen Assist QA2 to have full control of your device.*"
-    commands:
-      - tapOn: "Allow"
-- extendedWaitUntil:
-    visible: "Use Nexa Screen Assist QA2"
-    timeout: 20000
-- runFlow:
-    when:
-      visible:
-        id: "android:id/switch_widget"
-        checked: false
-    commands:
-      - tapOn:
-          id: "android:id/switch_widget"
-          checked: false
-- runFlow:
-    when:
-      visible: "Allow Nexa Screen Assist QA2 to have full control of your device.*"
-    commands:
-      - tapOn: "Allow"
-- runFlow:
-    when:
-      visible: "Allow"
-    commands:
-      - tapOn: "Allow"
-- assertVisible:
-    id: "android:id/switch_widget"
-    checked: true
-- pressKey: BACK
-- scrollUntilVisible:
-    element: "Nexa Launcher Navigation QA2"
-    direction: DOWN
-    timeout: 20000
-- tapOn: "Nexa Launcher Navigation QA2"
-- extendedWaitUntil:
-    visible: "Use Nexa Launcher Navigation QA2"
-    timeout: 20000
-- runFlow:
-    when:
-      visible:
-        id: "android:id/switch_widget"
-        checked: false
-    commands:
-      - tapOn:
-          id: "android:id/switch_widget"
-          checked: false
-- runFlow:
-    when:
-      visible: "Allow Nexa Launcher Navigation QA2 to have full control of your device.*"
-    commands:
-      - tapOn: "Allow"
-- runFlow:
-    when:
-      visible: "Allow"
-    commands:
-      - tapOn: "Allow"
-- assertVisible:
-    id: "android:id/switch_widget"
-    checked: true
-- pressKey: BACK
-- launchApp:
-    stopApp: false
-    clearState: false
-- waitForAnimationToEnd:
-    timeout: 3000
-- tapOn: "Tools"
-- scrollUntilVisible:
-    element: "Open permission setup"
-    direction: UP
-    timeout: 20000
-- tapOn: "Open permission setup"
-- extendedWaitUntil:
-    visible: "Make your assistant yours."
-    timeout: 20000
-- tapOn: "Show optional permissions and features"
-- scrollUntilVisible:
-    element: "One-time screen assistance"
-    direction: DOWN
-    timeout: 20000
-- tapOn: "Why One-time screen assistance is needed"
-- scrollUntilVisible:
-    element: "↻ Refresh status"
-    direction: DOWN
-    timeout: 20000
-- tapOn: "↻ Refresh status"
-- waitForAnimationToEnd:
-    timeout: 3000
-- scrollUntilVisible:
-    element: "One-time screen assistance"
-    direction: UP
-    timeout: 20000
-- extendedWaitUntil:
-    visible: "Nexa Screen Assist connected."
-    timeout: 20000
-- scrollUntilVisible:
-    element: "Floating quick tools"
-    direction: DOWN
-    timeout: 20000
-- assertVisible:
-    text: "(Show|Refresh) floating bubble"
-- tapOn: "Tools"
-- scrollUntilVisible:
-    element: "Arm one screen read"
-    direction: DOWN
-    timeout: 20000
-- assertVisible:
-    text: "Enabled"
-    rightOf:
-      text: "Screen assistant"
-- assertVisible:
-    text: "App launching, Open camera.*"
-    checked: true
-- assertVisible:
-    text: "Reviewed multi-step screen actions, Tap safe named controls.*"
-    checked: true
-- assertVisible:
-    text: "Read safe visible-control metadata, Requires enabled Screen Assist.*"
-    checked: true
-- assertVisible: "Review captured text"
-- assertVisible: "Screen assistant"
-- takeScreenshot: nexa-physical-device-preflight-ready
+    visible: "Nexa · Tools"
+    timeout: 10000

@@ -63,6 +63,50 @@ const INSTRUCTIONS = [
   "Keep output under 1200 characters; use simple plain text."
 ].join("\n");
 
+/** Sarvam's OpenAI-compatible endpoint needs native function declarations;
+ * prose telling the model about pseudo-tools is not sufficient to trigger a
+ * tool call. Map public JSON-schema function names back to phone-side IDs. */
+const SARVAM_FUNCTIONS: Readonly<Record<string,{
+  id:string;description:string;parameters:Record<string,unknown>
+}>> = Object.freeze({
+  device_status:{id:"device.status",description:"Check Android bridge status. Read-only.",parameters:{type:"object",properties:{},required:[],additionalProperties:false}},
+  device_battery_status:{id:"device.battery_status",description:"Read current battery level and charging state.",parameters:{type:"object",properties:{},required:[],additionalProperties:false}},
+  device_set_flashlight:{id:"device.set_flashlight",description:"Turn the flashlight on or off only when explicitly requested.",parameters:{type:"object",properties:{enabled:{type:"boolean"}},required:["enabled"],additionalProperties:false}},
+  device_open_camera:{id:"device.open_camera",description:"Open the camera only; do not capture.",parameters:{type:"object",properties:{},required:[],additionalProperties:false}},
+  device_open_app:{id:"device.open_app",description:"Open one exact installed application requested by the owner.",parameters:{type:"object",properties:{app:{type:"string",minLength:2,maxLength:64}},required:["app"],additionalProperties:false}},
+  device_browser_search:{id:"device.browser_search",description:"Open public Chrome search results for the owner's exact query.",parameters:{type:"object",properties:{query:{type:"string",minLength:3,maxLength:90}},required:["query"],additionalProperties:false}},
+  device_open_notification_shade:{id:"device.open_notification_shade",description:"Open Android's notification shade without reading its contents.",parameters:{type:"object",properties:{},required:[],additionalProperties:false}},
+  device_visible_controls:{id:"device.visible_controls",description:"After owner approval, list only safe visible control labels in the current external app. Never read messages, contacts, editable values, notifications, or app content.",parameters:{type:"object",properties:{},required:[],additionalProperties:false}},
+  screen_scroll:{id:"screen.scroll",description:"After owner approval, perform one semantic scroll in the exact requested direction on the current external screen.",parameters:{type:"object",properties:{direction:{type:"string",enum:["up","down","left","right"]}},required:["direction"],additionalProperties:false}},
+  screen_tap_label:{id:"screen.tap_label",description:"After owner approval, tap the exact harmless control label explicitly named by the owner. Do not infer a target.",parameters:{type:"object",properties:{label:{type:"string",minLength:2,maxLength:45}},required:["label"],additionalProperties:false}}
+});
+
+function sarvamToolsFor(ids:readonly string[]):Array<Record<string,unknown>> {
+  return Object.entries(SARVAM_FUNCTIONS)
+    .filter(([,tool])=>ids.includes(tool.id))
+    .map(([name,tool])=>({type:"function",function:{name,description:tool.description,parameters:tool.parameters}}));
+}
+
+function parseSarvamToolCalls(value:unknown,ids:Set<string>,request:string):PlannerDecision|null {
+  if(!Array.isArray(value)) return null;
+  if(value.length!==1) return {type:"clarify",question:"Sarvam proposed more than one device action. Nothing was executed."};
+  const call=value[0];
+  if(!call||typeof call!=="object"||Array.isArray(call))
+    return {type:"clarify",question:"Sarvam proposed an invalid action. Nothing was executed."};
+  const toolCall=call as Record<string,unknown>;
+  const fn=toolCall.function;
+  if(toolCall.type!=="function"||!fn||typeof fn!=="object"||Array.isArray(fn))
+    return {type:"clarify",question:"Sarvam proposed an unsupported action. Nothing was executed."};
+  const functionCall=fn as Record<string,unknown>;
+  const definition=typeof functionCall.name==="string"?SARVAM_FUNCTIONS[functionCall.name]:undefined;
+  if(!definition||typeof functionCall.arguments!=="string"||functionCall.arguments.length>3000)
+    return {type:"clarify",question:"Sarvam proposed an unsupported action. Nothing was executed."};
+  let input:unknown;
+  try { input=JSON.parse(functionCall.arguments); }
+  catch { return {type:"clarify",question:"Sarvam returned invalid action arguments. Nothing was executed."}; }
+  return parseDecision({type:"tool",toolId:definition.id,input},ids,request);
+}
+
 type Fetcher = typeof fetch;
 export type DirectProviderOptions = {
   settings: DirectProviderSettings;
@@ -76,7 +120,7 @@ function explicitlyRequestedScreenAction(
 ):boolean {
   const q=request.trim();
   if(toolId==="device.visible_controls")
-    return /^(?:please\s+)?(?:inspect|show|list|check) (?:the )?(?:visible )?(?:screen )?controls(?: on (?:the|this) (?:current )?(?:home )?screen)?[.!?]*$/i.test(q);
+    return /^(?:please\s+)?(?:inspect|show|list|check) (?:the )?(?:safe )?(?:visible )?(?:screen )?controls(?: on (?:the|this) (?:current )?(?:home )?screen)?[.!?]*$/i.test(q);
   if(toolId==="screen.scroll") {
     const direction=input.direction;
     return typeof direction==="string" &&
@@ -187,12 +231,15 @@ export function createDirectProviderPlanner(options: DirectProviderOptions): Pla
             : {"content-type":"application/json",Authorization:"Bearer "+cfg.apiKey},
           body:JSON.stringify({
             model:cfg.model,
-            // Sarvam V1 supports JSON mode, useful for explicit bounded
-            // tool proposals. The native Android policy still validates
-            // the output and never trusts LLM-generated calls directly.
-            ...(cfg.provider==="sarvam"
-              ? {response_format:{type:"json_object"},max_tokens:2048}
-              : {}),
+            // Sarvam's documented function-calling protocol is required for
+            // real device tools; instructions that merely describe fake tools
+            // produce refusals instead of machine-readable calls.
+            ...(cfg.provider==="sarvam" ? {
+              max_tokens:2048,
+              ...(sarvamToolsFor(ids).length
+                ? {tools:sarvamToolsFor(ids),tool_choice:"auto"}
+                : {})
+            } : {}),
             messages:[
               {role:"system",content:INSTRUCTIONS + "\nAvailable tools on this phone: " + ids.join(", ")},
               {role:"user",content:request}
@@ -206,7 +253,15 @@ export function createDirectProviderPlanner(options: DirectProviderOptions): Pla
         let outer: {choices?:Array<{message?:{content?:unknown}}>};
         try { outer = JSON.parse(body) as typeof outer; }
         catch { throw new Error("INVALID_RESPONSE"); }
-        const content = outer?.choices?.[0]?.message?.content;
+        const choice=outer?.choices?.[0];
+        const message=choice?.message;
+        if(cfg.provider==="sarvam"&&message&&typeof message==="object"&&
+            "tool_calls" in message) {
+          const decision=parseSarvamToolCalls((message as Record<string,unknown>).tool_calls,allowed,request);
+          if(decision)return decision;
+        }
+        const content = message&&typeof message==="object"
+          ? (message as Record<string,unknown>).content : undefined;
         if (typeof content !== "string" || content.length > 8000) throw new Error("INVALID_RESPONSE");
         let json: unknown;
         const trimmed = content.trim();

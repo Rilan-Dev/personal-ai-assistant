@@ -81,6 +81,89 @@ internal object ScreenAssistSourcePolicy {
 }
 
 class ScreenAssistService : AccessibilityService() {
+    private val screenReadRetryHandler = Handler(Looper.getMainLooper())
+    private var screenReadRetry: Runnable? = null
+    private var screenReadRetryPackage: String? = null
+
+    private fun cancelScreenReadRetry() {
+        screenReadRetry?.let { screenReadRetryHandler.removeCallbacks(it) }
+        screenReadRetry = null
+        screenReadRetryPackage = null
+    }
+
+    /** Retry a transiently unavailable window only within the owner's one-shot arm. */
+    private fun scheduleScreenReadRetry(expectedPackage: String, attempt: Int) {
+        if (attempt > MAX_SCREEN_READ_RETRIES || active !== this ||
+            !ScreenAssistState.isArmed() || !isPermittedExternalWindow(expectedPackage)) return
+        if (screenReadRetry != null) {
+            if (screenReadRetryPackage == expectedPackage) return
+            cancelScreenReadRetry()
+        }
+        lateinit var retry: Runnable
+        retry = Runnable {
+            if (screenReadRetry === retry) {
+                screenReadRetry = null
+                screenReadRetryPackage = null
+            }
+            if (active !== this || !ScreenAssistState.isArmed()) return@Runnable
+            val root = try { externalWindowRoot() } catch (_: Exception) { null }
+            if (root == null) {
+                if (attempt < MAX_SCREEN_READ_RETRIES)
+                    scheduleScreenReadRetry(expectedPackage, attempt + 1)
+                return@Runnable
+            }
+            try {
+                val rootPackage = root.packageName?.toString().orEmpty()
+                if (rootPackage != expectedPackage) {
+                    if (BuildConfig.DEBUG)
+                        android.util.Log.d("NexaScreenAssist", "screen read retry package mismatch; expected=$expectedPackage actual=$rootPackage")
+                    if (attempt < MAX_SCREEN_READ_RETRIES)
+                        scheduleScreenReadRetry(expectedPackage, attempt + 1)
+                    return@Runnable
+                }
+                captureVisibleScreenText(expectedPackage, root)
+                if (ScreenAssistState.isArmed() && attempt < MAX_SCREEN_READ_RETRIES)
+                    scheduleScreenReadRetry(expectedPackage, attempt + 1)
+            } finally { try { root.recycle() } catch (_: Exception) {} }
+        }
+        screenReadRetry = retry
+        screenReadRetryPackage = expectedPackage
+        screenReadRetryHandler.postDelayed(retry, READ_ROOT_RETRY_DELAY_MS * (attempt + 1))
+    }
+
+    private fun captureVisibleScreenText(pkg: String, root: AccessibilityNodeInfo) {
+        if (!ScreenAssistState.isArmed()) return
+        val text = StringBuilder()
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(root)
+        var visited = 0
+        while (pending.isNotEmpty() && visited < 120 && text.length < 2000) {
+            val node = pending.removeFirst()
+            visited++
+            // Never capture passwords or editable fields, including chat input,
+            // OTP inputs and text-entry editors. Still treat visible text as untrusted.
+            if (!node.isPassword && !node.isEditable && node.isVisibleToUser) {
+                val label = node.text?.toString() ?: node.contentDescription?.toString().orEmpty()
+                val clean = label.replace(Regex("[\\p{Cntrl}]+"), " ").trim().take(160)
+                if (clean.isNotBlank() && text.length + clean.length + 1 <= 2000) {
+                    text.append(clean).append('\n')
+                }
+            }
+            // Some OEM apps wrap visible content under non-visible containers.
+            if (!node.isPassword && !node.isEditable) {
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { pending.add(it) }
+                }
+            }
+        }
+        if (text.isNotBlank()) {
+            ScreenAssistState.capture(pkg, text.toString())
+            if (!ScreenAssistState.isArmed()) cancelScreenReadRetry()
+        }
+        if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
+            android.util.Log.d("NexaScreenAssist", "read event inspected external root; package=$pkg nodes=$visited captured=${text.isNotBlank()} length=${text.length}")
+    }
+
     override fun onCreate() {
         super.onCreate()
         if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service created")
@@ -145,6 +228,8 @@ class ScreenAssistService : AccessibilityService() {
     }
 
     companion object {
+        private const val MAX_SCREEN_READ_RETRIES = 5
+        private const val READ_ROOT_RETRY_DELAY_MS = 250L
         @Volatile internal var active: ScreenAssistService? = null
             private set
     }
@@ -160,6 +245,7 @@ class ScreenAssistService : AccessibilityService() {
         // Do not retain a false Ready state; ignore callbacks from obsolete
         // instances when Android has already connected a replacement.
         if (active === this) {
+            cancelScreenReadRetry()
             active = null
             ScreenAssistState.connected = false
             ScreenAssistState.clear()
@@ -174,6 +260,7 @@ class ScreenAssistService : AccessibilityService() {
         // Android can destroy an old service instance after a replacement has
         // connected. Never let the old instance disconnect or clear the live one.
         if (active === this) {
+            cancelScreenReadRetry()
             active = null
             ScreenAssistState.connected = false
             ScreenAssistState.clear()
@@ -193,7 +280,7 @@ class ScreenAssistService : AccessibilityService() {
             handleScreenEvent(event)
         } catch (_: Exception) {
             // Leave one-shot consent/expiry intact for a later valid event.
-            // No automatic action, retry, screen text or crash detail is sent.
+            // No automatic action, screen text or crash detail is sent.
         }
     }
 
@@ -201,7 +288,8 @@ class ScreenAssistService : AccessibilityService() {
         NexaUiActionVerifier.onAccessibilityEvent(event)
         if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
-            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
+            event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
+            event.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
         val pkg = event.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg == packageName || pkg == "com.android.systemui") return
         val root = (try { externalWindowRoot() } catch (_: Exception) { null })
@@ -217,6 +305,7 @@ class ScreenAssistService : AccessibilityService() {
                 val activePackage = try { rootInActiveWindow?.packageName?.toString().orEmpty() } catch (_: Exception) { "unavailable" }
                 android.util.Log.d("NexaScreenAssist", "read event had no permitted external root; eventPackage=$pkg type=${event.eventType} source=${event.source?.packageName} active=$activePackage windows=$windowSummary")
             }
+            if (ScreenAssistState.isArmed()) scheduleScreenReadRetry(pkg, 0)
             return
         }
         try {
@@ -224,6 +313,7 @@ class ScreenAssistService : AccessibilityService() {
         if (rootPkg != pkg) {
             if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
                 android.util.Log.d("NexaScreenAssist", "read event/root package mismatch; eventPackage=$pkg rootPackage=$rootPkg type=${event.eventType}")
+            if (ScreenAssistState.isArmed()) scheduleScreenReadRetry(pkg, 0)
             return
         }
         if (ScreenIconScanState.isArmed()) {
@@ -238,36 +328,8 @@ class ScreenAssistService : AccessibilityService() {
             NexaVisualIconCapture.capture(this,pkg,ScreenIconDetector.detect(root),
                 root.windowId, IconBox(bounds.left,bounds.top,bounds.right,bounds.bottom))
         }
-        if (!ScreenAssistState.isArmed()) return
-        val text = StringBuilder()
-        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
-        pending.add(root)
-        var visited = 0
-        while (pending.isNotEmpty() && visited < 120 && text.length < 2000) {
-            val node = pending.removeFirst()
-            visited++
-            // Never capture passwords or editable fields, including chat input,
-            // OTP inputs and text-entry editors. Still treat any captured
-            // visible text as sensitive and potentially untrusted.
-            if (!node.isPassword && !node.isEditable && node.isVisibleToUser) {
-                val label = node.text?.toString() ?: node.contentDescription?.toString().orEmpty()
-                val clean = label.replace(Regex("[\\p{Cntrl}]+"), " ").trim().take(160)
-                if (clean.isNotBlank() && text.length + clean.length + 1 <= 2000) {
-                    text.append(clean).append('\n')
-                }
-            }
-            // Some OEM apps wrap their visible content under non-visible
-            // container nodes. Inspect descendants, but preserve the field
-            // filter above so editable/password values are never retained.
-            if (!node.isPassword && !node.isEditable) {
-                for (i in 0 until node.childCount) {
-                    node.getChild(i)?.let { pending.add(it) }
-                }
-            }
-        }
-        if (text.isNotBlank()) ScreenAssistState.capture(pkg, text.toString())
-        if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
-            android.util.Log.d("NexaScreenAssist", "read event inspected external root; package=$pkg nodes=$visited captured=${text.isNotBlank()} length=${text.length}")
+        captureVisibleScreenText(pkg, root)
+        if (ScreenAssistState.isArmed()) scheduleScreenReadRetry(pkg, 0)
         } finally { try { root.recycle() } catch (_: Exception) {} }
     }
 }
@@ -292,7 +354,7 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         }
         try {
             val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             context.startActivity(intent)
             p.resolve(true)
         } catch (_: Exception) {

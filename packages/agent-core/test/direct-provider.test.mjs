@@ -139,6 +139,9 @@ test("connection test uses no available native tools",async()=>{
       assert.match(payload.messages[0].content,/Available tools on this phone: /);
       assert.match(payload.messages[0].content,/Available tools on this phone: $/);
       assert.doesNotMatch(payload.messages[1].content,/device.set_flashlight/);
+      assert.equal(payload.tools,undefined);
+      assert.equal(payload.tool_choice,undefined);
+      assert.equal(payload.response_format,undefined);
     }
   ));
   assert.equal(success,true);
@@ -232,18 +235,59 @@ test("Sarvam uses an official API subscription key and no cross-provider bearer 
   const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
   let requests=0;
   const planner=createDirectProviderPlanner({
-    settings:sarvam,availableToolIds:allowed,
+    settings:sarvam,availableToolIds:["device.visible_controls","screen.scroll","screen.tap_label"],
     fetchImpl:fakeDecision({type:"done",response:"Namaste!"},(url,opts)=>{
       requests++;
       assert.equal(url,"https://api.sarvam.ai/v1/chat/completions");
       assert.equal(opts.headers["api-subscription-key"],sarvam.apiKey);
       assert.equal(opts.headers.Authorization,undefined);
       assert.equal(JSON.parse(opts.body).model,"sarvam-105b");
-      assert.deepEqual(JSON.parse(opts.body).response_format,{type:"json_object"});
-      assert.equal(JSON.parse(opts.body).max_tokens,2048);
+      assert.equal(JSON.parse(opts.body).tool_choice,"auto");
+      const payload=JSON.parse(opts.body);
+      assert.equal(payload.tools.length,3);
+      assert.deepEqual(payload.tools.map(x=>x.function.name),[
+        "device_visible_controls","screen_scroll","screen_tap_label"]);
+      assert.equal(payload.response_format,undefined);
       assert.doesNotMatch(opts.body,/test-secret-key-not-real/);
     })
   });
   assert.deepEqual(await planner.next("Say hello",[]),{type:"done",response:"Namaste!"});
   assert.equal(requests,1);
+});
+
+test("Sarvam native function calls are parsed and still constrained to the exact owner request",async()=>{
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  const screenTools=[...allowed,"device.visible_controls","screen.scroll","screen.tap_label"];
+  const toolCall=(name,args)=>async()=>new Response(JSON.stringify({choices:[{
+    finish_reason:"tool_calls",message:{role:"assistant",content:null,tool_calls:[{
+      id:"call_screen_1",type:"function",function:{name,arguments:JSON.stringify(args)}
+    }]}
+  }]}),{status:200});
+  const cases=[
+    ["Inspect visible controls on the current home screen","device_visible_controls",{},
+      "device.visible_controls",{}],
+    ["Inspect the safe visible controls on the current home screen","device_visible_controls",{},
+      "device.visible_controls",{}],
+    ["Scroll left on the home screen","screen_scroll",{direction:"left"},
+      "screen.scroll",{direction:"left"}],
+    ["Tap Alarm on the current screen","screen_tap_label",{label:"Alarm"},
+      "screen.tap_label",{label:"Alarm"}]
+  ];
+  for(const [request,name,args,toolId,input] of cases){
+    const planner=createDirectProviderPlanner({settings:sarvam,availableToolIds:screenTools,
+      fetchImpl:toolCall(name,args)});
+    const result=await planner.next(request,[]);
+    assert.equal(result.type,"tool",request);
+    assert.equal(result.call.toolId,toolId);
+    assert.deepEqual(result.call.input,input);
+  }
+  for(const [request,name,args] of [
+    ["Scroll left on the home screen","screen_scroll",{direction:"right"}],
+    ["Tap Alarm on the current screen","screen_tap_label",{label:"Send"}],
+    ["Scroll left on the home screen","device_open_camera",{}]
+  ]){
+    const planner=createDirectProviderPlanner({settings:sarvam,availableToolIds:screenTools,
+      fetchImpl:toolCall(name,args)});
+    assert.equal((await planner.next(request,[])).type,"clarify",request);
+  }
 });

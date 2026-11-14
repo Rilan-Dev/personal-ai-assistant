@@ -91,11 +91,13 @@ export default function App() {
     return ()=>{listener.remove();screenGrant.revoke();iconReviews.clear();};
   },[screenGrant,iconReviews]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
+  const initialSetupAutoRoutePending = useRef(engine.live);
   const [keyboardVisible,setKeyboardVisible]=useState(false);
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const voiceShortcutRequested = useRef(false);
   const navigate=(destination:'chat'|'voice'|'tools'|'setup'|'settings')=>{
+    initialSetupAutoRoutePending.current = false;
     Keyboard.dismiss();
     setTab(destination);
   };
@@ -311,7 +313,10 @@ export default function App() {
         const generation=connectionPollGeneration;
         connectionPollTimer=setTimeout(()=>{void pollScreenAssistConnection(8,generation);},750);
       }
-      if (status.setupAcknowledged) setTab(prev=>prev==='setup'&&!voiceShortcutRequested.current?'chat':prev);
+      if (status.setupAcknowledged && initialSetupAutoRoutePending.current) {
+        initialSetupAutoRoutePending.current = false;
+        if (!voiceShortcutRequested.current) setTab('chat');
+      }
       // Explicit overlay navigation is consumed once. No background AI action.
       if (toolOverlayAvailable()) void consumeToolOverlayNavigation()
         .then(target=>{
@@ -2251,7 +2256,8 @@ export default function App() {
           </View>
           <Text style={styles.cardText}>Screen Assist offers separately armed, one-time text, icon metadata, and local icon-image observations. It excludes editable/password fields from metadata and never uploads screen data automatically. The floating Nexa Tools panel can request limited navigation taps or scrolls, but each requires an explicit on-screen confirmation.</Text>
           {screenAssistAvailable()&&<>
-            <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={openScreenSettings}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Open Android Accessibility Settings button"
+              style={styles.outlineAction} onPress={openScreenSettings}>
               <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
             </Pressable>
             <Pressable accessibilityRole="button" style={styles.primaryInline}
