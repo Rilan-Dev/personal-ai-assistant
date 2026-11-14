@@ -16,6 +16,10 @@ internal object NexaSafeContextCache {
     private const val TTL_MS=8_000L
     private const val THROTTLE_MS=1_500L
     private val lock=Any()
+    private val worker=java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+        Thread(task,"nexa-ephemeral-safe-context").apply { isDaemon=true }
+    }
+    private var epoch=0L
     private var lastAttempt=0L
     private var snapshot:String?=null
     private var expiresAt=0L
@@ -44,6 +48,7 @@ internal object NexaSafeContextCache {
     }
 
     fun clear()=synchronized(lock){
+        epoch++
         snapshot=null;expiresAt=0L;lastAttempt=0L
     }
 
@@ -55,18 +60,26 @@ internal object NexaSafeContextCache {
         if(!eventPackage.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))
             return
         val now=SystemClock.elapsedRealtime()
-        synchronized(lock){
+        val generation=synchronized(lock){
             if(now-lastAttempt in 0 until THROTTLE_MS)return
             lastAttempt=now
+            epoch
         }
-        val observed=NexaTaskScreenObservation.observe(context) ?:return
-        // The window may change while read-only observation is in progress.
-        if(!observed.startsWith("Visible non-sensitive controls in $eventPackage: "))
-            return
-        synchronized(lock){
-            snapshot=observed.take(750)
-            expiresAt=SystemClock.elapsedRealtime()+TTL_MS
-        }
+        // OEM Binder traversal on the Accessibility callback's MAIN thread
+        // can ANR Android SystemUI. Serialize bounded metadata reads on one
+        // private worker, without blocking event delivery or spawning a thread
+        // per event. Owner revocation/overlay removal cancels stale results.
+        try{worker.execute {
+            val observed=try{NexaTaskScreenObservation.observe(context)}
+                catch(_:Exception){null} ?:return@execute
+            if(!observed.startsWith("Visible non-sensitive controls in $eventPackage: ") ||
+                !active(context))return@execute
+            synchronized(lock){
+                if(generation!=epoch)return@synchronized
+                snapshot=observed.take(750)
+                expiresAt=SystemClock.elapsedRealtime()+TTL_MS
+            }
+        }}catch(_:Exception){clear()}
     }
 
     fun peek(context:Context):String? {
