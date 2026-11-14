@@ -166,6 +166,7 @@ class ScreenAssistService : AccessibilityService() {
             ScreenIconScanState.clear()
             NexaVisualIconCapture.clear()
             NexaScreenActions.reset()
+            NexaSafeContextCache.clear()
         }
         return super.onUnbind(intent)
     }
@@ -180,6 +181,7 @@ class ScreenAssistService : AccessibilityService() {
             ScreenIconScanState.clear()
             NexaVisualIconCapture.clear()
             NexaScreenActions.reset()
+            NexaSafeContextCache.clear()
         }
         super.onDestroy()
     }
@@ -199,7 +201,8 @@ class ScreenAssistService : AccessibilityService() {
 
     private fun handleScreenEvent(event: AccessibilityEvent) {
         NexaUiActionVerifier.onAccessibilityEvent(event)
-        if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() && !NexaVisualIconCapture.isArmed()) return
+        if (!ScreenAssistState.isArmed() && !ScreenIconScanState.isArmed() &&
+            !NexaVisualIconCapture.isArmed() && !NexaSafeContextCache.active(this))return
         if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
@@ -226,6 +229,11 @@ class ScreenAssistService : AccessibilityService() {
                 android.util.Log.d("NexaScreenAssist", "read event/root package mismatch; eventPackage=$pkg rootPackage=$rootPkg type=${event.eventType}")
             return
         }
+        // Owner opted in while the floating panel is visible. A short,
+        // sanitised control-only snapshot is kept in RAM for at most 8s.
+        // Never use an Accessibility event as permission to execute a tool.
+        if(NexaSafeContextCache.active(this))
+            NexaSafeContextCache.capture(this,pkg)
         if (ScreenIconScanState.isArmed()) {
             val box = android.graphics.Rect()
             root.getBoundsInScreen(box)
