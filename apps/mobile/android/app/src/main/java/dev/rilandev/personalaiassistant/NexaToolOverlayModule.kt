@@ -68,6 +68,19 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
             "Overlay request expired or its one-time response was already delivered")
     }
 
+    /** Not an approval by itself: safe per-tool policy inspection used
+     * ONLY after the shared agent has matched a tool to the exact owner
+     * request and prepared its durable one-time approval fingerprint.
+     */
+    @ReactMethod fun canAutoApproveNavigation(command:String,p:Promise) {
+        if(command !in setOf("open","scroll_screen:up","scroll_screen:down",
+                "scroll_screen:left","scroll_screen:right")){
+            p.resolve(false)
+            return
+        }
+        p.resolve(NexaVoicePermissionPolicy.canExecute(context,command))
+    }
+
     @ReactMethod fun getStatus(p: Promise) {
         val result = Arguments.createMap()
         result.putBoolean("granted", Settings.canDrawOverlays(context))
