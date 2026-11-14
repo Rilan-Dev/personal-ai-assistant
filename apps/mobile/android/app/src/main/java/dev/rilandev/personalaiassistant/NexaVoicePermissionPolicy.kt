@@ -63,9 +63,16 @@ internal object NexaVoicePermissionPolicy {
     }
     fun clearGrants(context:Context):Boolean =
         context.getSharedPreferences(STORE,Context.MODE_PRIVATE).edit().clear().commit()
-    fun canExecute(context:Context,command:String):Boolean =
-        alwaysAllowed(context,command) &&
-            (category(command) !in setOf("screen.read","screen.scroll","screen.navigate",
-                "screen.tap_label") ||
-                ScreenAssistState.connected && ScreenAssistService.active!=null)
+    /** Used by voice, floating Chat/Tools and any future common harness.
+     * This is an in-app preference, NEVER a substitute for Android's grants.
+     * Even trusted low-risk navigation must obey current owner Pause and
+     * a connected user-enabled AccessibilityService for screen actions.
+     */
+    fun canExecute(context:Context,command:String):Boolean {
+        if(!NexaNativeActionSafety.permitsNewAction(context) ||
+            !alwaysAllowed(context,command))return false
+        return category(command) !in setOf(
+            "screen.scroll","screen.navigate","screen.tap_label","screen.read") ||
+            ScreenAssistState.connected && ScreenAssistService.active!=null
+    }
 }
