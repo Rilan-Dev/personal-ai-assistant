@@ -1288,7 +1288,7 @@ class NexaToolOverlayService : Service() {
                     },
                     button("Action safety settings") { openTab("settings") }
                 ))
-                addView(text("Screen access requires permission. Saved safe-navigation trust still obeys Android grants, owner Pause and one-shot journal. High-impact actions need review.",11f,true))
+                addView(text("Actions need approval for high-impact steps. Screen access requires permission. Safe-navigation trust still obeys Android grants, owner Pause and the one-shot journal.",11f,true))
                 addView(text(note,11f,true))
                 if (section == "tools") {
                     addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
