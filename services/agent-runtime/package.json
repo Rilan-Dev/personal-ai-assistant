@@ -5,7 +5,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "start": "node --experimental-strip-types src/start.ts",
+    "start": "node init && node --experimental-strip-types src/start.ts",
     "test": "node --experimental-strip-types --test test/*.test.mjs",
     "typecheck": "tsc --noEmit --project tsconfig.json"
   },
@@ -16,5 +16,7 @@
     "@langchain/openai": "^1.0.0",
     "zod": "^4.0.0"
   },
-  "devDependencies": { "@types/node": "^24.0.0" }
+  "devDependencies": {
+    "@types/node": "^24.0.0"
+  }
 }
