@@ -13,6 +13,7 @@ type OverlayNative = {
   consumePendingMessageRequest(): Promise<unknown>;
   consumePendingTextEntry(): Promise<unknown>;
   completeChatRequest(id:string,response:string):Promise<boolean>;
+  canAutoApproveNavigation(command:string):Promise<boolean>;
 };
 function bridge(): OverlayNative {
   const value = NativeModules.PAANexaToolOverlay;
@@ -32,6 +33,18 @@ export async function completeSharedOverlayChat(id:string,response:string):Promi
   if(typeof value.completeChatRequest!=='function')
     throw Error('Overlay Chat bridge not present in this APK');
   return value.completeChatRequest(id,response);
+}
+
+/** Rechecks saved owner-selected navigation trust in native Android.
+ * OS Accessibility and owner Pause are consulted at the time of the call.
+ * This is not a request for Android runtime/system permission.
+ */
+export async function canAutoApproveTrustedNavigation(
+  command:'open'|'scroll_screen:up'|'scroll_screen:down'|'scroll_screen:left'|'scroll_screen:right'
+):Promise<boolean>{
+  const value=bridge();
+  if(typeof value.canAutoApproveNavigation!=='function')return false;
+  return value.canAutoApproveNavigation(command);
 }
 
 export const toolOverlayAvailable = () => Platform.OS === 'android' &&
