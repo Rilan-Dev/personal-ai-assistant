@@ -30,10 +30,10 @@ import android.widget.TextView
 import kotlin.math.abs
 
 /**
- * User-controlled small Android overlay with local Chat/Tools/Voice panels.
- * Does not display RN's full app, read the current screen, call a model,
- * grant permissions, send messages, or execute arbitrary agent instructions.
- * Full Nexa navigation is explicitly separate from the compact panels.
+ * User-controlled Android floating panel. Its Chat tab relays to the SAME
+ * React agent as the full application when JS is alive; local Tools and Voice
+ * remain available when the shared AI engine is suspended. This service is
+ * not a permission grant or a second unrestricted native executor.
  */
 class NexaToolOverlayService : Service() {
     companion object {
@@ -41,6 +41,18 @@ class NexaToolOverlayService : Service() {
         const val ACTION_HIDE = "dev.rilandev.personalaiassistant.OVERLAY_HIDE"
         @Volatile var visible = false
             private set
+        @Volatile private var activeOverlay:NexaToolOverlayService?=null
+        /** One in-memory response to the exact outstanding shared Chat turn. */
+        fun showSharedChatReply(reply:String) {
+            Handler(Looper.getMainLooper()).post {
+                val service=activeOverlay ?:return@post
+                if(!visible || service.view==null)return@post
+                service.history.addLast("NEXA AI · "+reply.take(1200))
+                while(service.history.size>12)service.history.removeFirst()
+                service.note="Shared Chat result received. Android tool approvals remain independent."
+                service.render()
+            }
+        }
     }
     private lateinit var wm: WindowManager
     private var view: View? = null
@@ -124,6 +136,7 @@ class NexaToolOverlayService : Service() {
         if (view == null) {
             wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         }
+        activeOverlay=this
         render()
         return START_NOT_STICKY
     }
@@ -488,6 +501,30 @@ class NexaToolOverlayService : Service() {
             // before Android processes GLOBAL_ACTION_NOTIFICATIONS / BACK.
             Handler(Looper.getMainLooper()).postDelayed({dispatch()},240L)
         } else dispatch()
+    }
+
+    /** No duplicate planner: owner-entered floating Chat uses the exact
+     * provider, agent registry, journal and approval policy of main Chat.
+     * If JS is suspended, fail visibly rather than execute a different task.
+     */
+    private fun sendSharedChat(raw:String) {
+        val query=raw.trim()
+        if(query.isEmpty())return
+        if(query.length>500){
+            note="Chat request is too long (maximum 500 characters). No task started."
+            render()
+            return
+        }
+        if(!NexaOverlayChatRelay.offer(query)){
+            note="Shared AI Chat unavailable or another task is pending. Open full Chat or retry after reviewing task status. No fallback action executed."
+            render()
+            return
+        }
+        history.addLast("YOU · "+query.take(300))
+        history.addLast("NEXA AI · Working through the shared Chat agent…")
+        while(history.size>12)history.removeFirst()
+        note="Shared Chat request accepted once. Check its result before another task; no automatic retries."
+        render()
     }
 
     private fun sendLocal(raw: String) {
@@ -934,18 +971,18 @@ class NexaToolOverlayService : Service() {
                 ))
                 when(section) {
                     "chat" -> {
-                        addView(text("Ask Nexa to check, find or open an app.",12f,true))
+                        addView(text("Nexa AI · same provider, planner and journal as main Chat.\nTasks run only while the shared React engine is available.",12f,true))
                         val transcript = ScrollView(this@NexaToolOverlayService).apply {
                             background = NexaOverlayTheme.inset(this@NexaToolOverlayService,
                                 NexaOverlayTheme.palette(this@NexaToolOverlayService))
                             addView(text(
-                                if(history.isEmpty()) "Try: open Brave, device status, check GitHub."
+                                if(history.isEmpty()) "Try: check battery, find installed apps, or plan safe navigation."
                                 else history.takeLast(4).joinToString("\n\n"),12f))
                         }
                         addView(transcript, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
                         val input = EditText(this@NexaToolOverlayService).apply {
-                            hint = "Ask a local tool…"
+                            hint = "Ask the same Nexa AI as main Chat…"
                             setHintTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).secondary)
                             setTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).title)
                             textSize=13f
@@ -958,10 +995,10 @@ class NexaToolOverlayService : Service() {
                         addView(input, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(46)))
                         input.setOnEditorActionListener { _,_,_ ->
-                            sendLocal(input.text.toString());true
+                            sendSharedChat(input.text.toString());true
                         }
                         addView(row(
-                            button("Send") { sendLocal(input.text.toString()) },
+                            button("Send to Nexa AI") { sendSharedChat(input.text.toString()) },
                             button("Open full Chat") { openTab("chat") }
                         ))
                     }
@@ -1228,6 +1265,7 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        if(activeOverlay===this)activeOverlay=null
         proposedDeviceAction=null
         proposedDeviceActionExpiresAt=0L
         inspectedScreen = null
