@@ -42,3 +42,6 @@ export {normalizePlannerTaskDecision,normalizeMultiStepPlannerProposal,createTas
 export type {TrustedPlannerTaskContext,TaskAdmissionPlannerOptions} from "./task-admission.ts";
 
 export {parseOwnerMultiToolRequest,evidenceForOwnerStep,createOwnerSequentialPlanner} from './owner-sequence.ts';
+
+export {HOME_PILOT_TARGETS,runFiveAppHomePilot} from './home-pilot.ts';
+export type {HomePilotTarget,HomePilotView,HomePilotProposal,HomePilotReceipt,HomePilotPort,HomePilotResult} from './home-pilot.ts';
