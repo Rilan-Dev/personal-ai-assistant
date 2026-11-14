@@ -43,6 +43,7 @@ test("trusted navigation is device-local, revocable and restricted to safe categ
   assert.match(policy,/TRUST_NAVIGATION="trusted_navigation"/);
   assert.match(policy,/fun clearGrants\(context:Context\)/);
   assert.match(policy,/NexaNativeActionSafety\.permitsNewAction\(context\)/);
+  assert.match(policy,/keyguard\?\.isKeyguardLocked == false/);
   assert.match(policy,/ScreenAssistState\.connected && ScreenAssistService\.active!=null/);
   assert.match(policy,/fun isSafeCategory\(category:String\):Boolean=category in setOf\(\s*"screen\.scroll","screen\.navigate","apps\.open"\)/);
   assert.match(service,/Always allow safe navigation/);
