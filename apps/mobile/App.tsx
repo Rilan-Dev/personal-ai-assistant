@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageAppForDays,
@@ -22,7 +22,7 @@ import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/nati
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
-  completeSharedOverlayChat, NEXA_SHARED_OVERLAY_CHAT_EVENT,
+  completeSharedOverlayChat, NEXA_SHARED_OVERLAY_CHAT_EVENT, canAutoApproveTrustedNavigation,
   consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
@@ -1723,13 +1723,28 @@ export default function App() {
               throw Error('Native coordinator refused the proposed plan');
           }
         });
+      // A previously selected persistent mode avoids repetitive IN-APP
+      // approval taps for explicitly requested low-risk navigation only.
+      // It never bypasses Android Accessibility, owner Pause, encrypted
+      // claim/replay checks or review for a consequential device action.
+      const trustedMode=restore ? 'ask_every_time' :
+        await getVoicePermissionMode().catch(()=>'ask_every_time' as VoicePermissionMode);
+      const localGrants=new Set(capabilities);
+      if(trustedMode!=='ask_every_time'){
+        localGrants.add('apps.launch');
+        localGrants.add('device.interact');
+      }
+      const sharedJournal=withTrustedOwnerNavigation(
+        androidActionJournal,request,canAutoApproveTrustedNavigation,
+        trustedMode!=='ask_every_time' && !restore
+      );
       const harness=new AgentHarness(engine.registry,admittedPlanner);
       const result = await harness.run({
         request,
         sessionId,
-        journal: engine.live ? androidActionJournal : undefined,
+        journal: engine.live ? sharedJournal : undefined,
         resume: Boolean(restore),
-        grantedCapabilities: new Set(capabilities),
+        grantedCapabilities: localGrants,
         signal: controller.signal,
         maxSteps: (parseOwnerMultiToolRequest(request)?.length ?? 5) + 1,
         onEvent: event => setEvents(prev => [...prev, event])
@@ -1784,7 +1799,7 @@ export default function App() {
         });
       });
     return ()=>sub.remove();
-  },[engine.live,running,listening,speaking,activeProvider,remoteActive]);
+  },[engine.live,running,listening,speaking,activeProvider,remoteActive,capabilities,voicePermissionMode]);
   const stop = () => activeAbort.current?.abort();
   const listenForCommand = async () => {
     if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current ||
