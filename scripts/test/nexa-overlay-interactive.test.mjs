@@ -12,7 +12,11 @@ test('the expanded overlay has its own Chat, Tools and Voice panels without auto
   assert.match(overlay,/button\("Tools"\) \{ showSection\("tools"\) \}/);
   assert.match(overlay,/button\("Voice"\) \{ showSection\("voice"\) \}/);
   assert.match(overlay,/EditText\(/);
-  assert.match(overlay,/sendLocal\(input\.text\.toString\(\)\)/);
+  // Floating Chat now routes through the same React AI tool registry and
+  // approval journal as the main Chat, rather than the legacy local grammar.
+  assert.match(overlay,/sendSharedChat\(input\.text\.toString\(\)\)/);
+  assert.match(overlay,/NexaOverlayChatRelay\.offer\(query\)/);
+  assert.match(read(path+'NexaOverlayChatRelay.kt'),/NexaOverlayChatRequest/);
   assert.match(overlay,/button\("Open full Chat"\)/);
   assert.match(overlay,/button\("Full Tools"\)/);
   assert.match(overlay,/button\("Full Voice"\)/);
