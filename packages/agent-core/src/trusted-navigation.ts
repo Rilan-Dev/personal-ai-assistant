@@ -55,7 +55,15 @@ export function withTrustedOwnerNavigation(
   active:boolean
 ):DurableActionJournal {
   return {
-    ...journal,
+    // Do not object-spread a class-based journal: prototype methods would
+    // disappear, and every request would be blocked before planning.
+    loadSession:(id)=>journal.loadSession(id),
+    saveSession:(snapshot)=>journal.saveSession(snapshot),
+    approveAction:(id,call,fingerprint)=>
+      journal.approveAction(id,call,fingerprint),
+    claimAction:(id,call,fingerprint,requiresApproval)=>
+      journal.claimAction(id,call,fingerprint,requiresApproval),
+    finishAction:(id,call,uncertain)=>journal.finishAction(id,call,uncertain),
     async prepareApproval(sessionId,callId,fingerprint){
       const prepared=await journal.prepareApproval(sessionId,callId,fingerprint);
       if(!prepared)return false;
