@@ -1106,6 +1106,23 @@ class NexaToolOverlayService : Service() {
                             }
                         ))
                         addView(text("Calls, messages, contacts, alarms, arbitrary taps, private screen text, payments and system permissions are NOT covered by Always allow. Android's consent controls remain independent.",11f,true))
+                        addView(row(
+                            button(if(NexaSafeContextCache.ownerEnabled(this@NexaToolOverlayService))
+                                "Stop safe screen context" else "Enable safe screen context") {
+                                val requested=!NexaSafeContextCache.ownerEnabled(this@NexaToolOverlayService)
+                                val saved=NexaSafeContextCache.setOwnerEnabled(
+                                    this@NexaToolOverlayService,requested)
+                                note=if(!saved) "Android Nexa Accessibility and overlay permission must both be enabled before safe context can be armed."
+                                    else if(requested) "Safe-context mode ON while Nexa floats: only short nonsensitive control labels, kept in RAM for 8 seconds. Never shared with a provider automatically."
+                                    else "Safe-context mode OFF. Ephemeral screen observations discarded."
+                                render()
+                            },
+                            button("View safe context") {
+                                note=NexaSafeContextCache.peek(this@NexaToolOverlayService)
+                                    ?:"No fresh opt-in safe-control snapshot. Leave the overlay visible over the home screen and use Refresh."
+                                render()
+                            }
+                        ))
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
                         val requestedAction=proposedDeviceAction
                         if(requestedAction!=null &&
@@ -1346,6 +1363,7 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        NexaSafeContextCache.clear()
         if(activeOverlay===this)activeOverlay=null
         proposedDeviceAction=null
         proposedDeviceActionExpiresAt=0L
