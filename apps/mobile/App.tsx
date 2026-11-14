@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner } from '@paa/agent-core';
@@ -22,6 +22,7 @@ import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/nati
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
+  completeSharedOverlayChat, NEXA_SHARED_OVERLAY_CHAT_EVENT,
   consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
@@ -130,6 +131,9 @@ export default function App() {
     return ()=>sub.remove();
   },[tab]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // A floating-chat prompt is linked to ONE assistant reply and cannot be
+  // replayed after a JS restart or foreground/background transition.
+  const overlayReplyToken=useRef<string|null>(null);
   const chatLogSession=useRef('chat-'+Date.now());
   const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
   const [taskHistoryEntries,setTaskHistoryEntries]=useState<NexaTaskHistoryEntry[]>([]);
@@ -1384,6 +1388,11 @@ export default function App() {
   };
   const append = (speaker: ChatMessage['speaker'], text: string) => {
     setMessages(prev => [...prev, { id: counter.current++, speaker, text }]);
+    if(speaker==='assistant' && overlayReplyToken.current!==null){
+      const token=overlayReplyToken.current;
+      overlayReplyToken.current=null;
+      void completeSharedOverlayChat(token,text).catch(()=>{});
+    }
     if(historyAvailable()) void appendConversation(chatLogSession.current,'chat',
       activeProvider?.provider??'local',speaker,text).catch(()=>{});
   };
@@ -1729,6 +1738,42 @@ export default function App() {
       append('assistant', 'Secure task initialization failed; no device action was executed.');
     } finally { setRunning(false); activeAbort.current = null; }
   };
+  // Floating Chat uses this EXACT send() code path, not a second model,
+  // independent tool executor or trusted background owner. No OS grant or
+  // native approval is inferred from a React event. The visible overlay
+  // owns the originating one-shot request and will timeout on JS suspension.
+  useEffect(()=>{
+    if(Platform.OS!=='android'||!toolOverlayAvailable())return;
+    const sub=DeviceEventEmitter.addListener(NEXA_SHARED_OVERLAY_CHAT_EVENT,
+      (event:unknown)=>{
+        if(event===null||typeof event!=='object')return;
+        const value=event as Record<string,unknown>;
+        const id=value.id,request=value.request;
+        if(typeof id!=='string'||!/^[-0-9a-f]{36}$/.test(id)||
+          typeof request!=='string'||!request.trim()||request.length>500)return;
+        if(!engine.live||running||listening||speaking||voiceInProgress.current||
+          activeAbort.current!==null||overlayReplyToken.current!==null){
+          void completeSharedOverlayChat(id,
+            'Shared Chat is busy or unavailable. No new AI task was started.').catch(()=>{});
+          return;
+        }
+        overlayReplyToken.current=id;
+        void send(request).then(()=>{
+          if(overlayReplyToken.current===id){
+            overlayReplyToken.current=null;
+            void completeSharedOverlayChat(id,
+              'Shared Chat did not produce a verified reply. Inspect the task journal before retrying.').catch(()=>{});
+          }
+        }).catch(()=>{
+          if(overlayReplyToken.current===id){
+            overlayReplyToken.current=null;
+            void completeSharedOverlayChat(id,
+              'Shared Chat failed unexpectedly. No automatic replay.').catch(()=>{});
+          }
+        });
+      });
+    return ()=>sub.remove();
+  },[engine.live,running,listening,speaking,activeProvider,remoteActive]);
   const stop = () => activeAbort.current?.abort();
   const listenForCommand = async () => {
     if (!voiceEnabled || running || speaking || voiceInProgress.current || activeAbort.current ||
