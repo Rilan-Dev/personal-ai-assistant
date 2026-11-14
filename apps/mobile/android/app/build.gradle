@@ -189,8 +189,14 @@ android {
     }
     externalNativeBuild {
         cmake {
-            // Keep CMake/Ninja build output on a short Windows path.
-            buildStagingDirectory 'D:/paa-cxx'
+            // The short D: staging path is a Windows-specific optimization.
+            // A Windows drive notation becomes a literal D: folder inside the
+            // Linux checkout, polluting the source tree with native outputs.
+            // Keep the Android Gradle Plugin's default staging location on
+            // non-Windows hosts, including the isolated Linux QA builder.
+            if (System.getProperty('os.name').toLowerCase(java.util.Locale.ROOT).contains('windows')) {
+                buildStagingDirectory 'D:/paa-cxx'
+            }
         }
     }
 
