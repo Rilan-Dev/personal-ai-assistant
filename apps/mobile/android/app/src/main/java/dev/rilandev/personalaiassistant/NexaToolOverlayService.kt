@@ -1121,6 +1121,11 @@ class NexaToolOverlayService : Service() {
                             button("Battery") { sendLocal("battery") },
                             button("Permissions") { sendLocal("device status") }
                         ))
+                        addView(button("Inspect 5 home apps (read-only)") {
+                            // Works only when the owner's Android home launcher
+                            // is visible behind the overlay.
+                            sendLocal("inspect five home apps")
+                        })
                         addView(row(
                             button("Check GitHub") { sendLocal("check github") },
                             button("Find GitHub") { sendLocal("find my github app") }
