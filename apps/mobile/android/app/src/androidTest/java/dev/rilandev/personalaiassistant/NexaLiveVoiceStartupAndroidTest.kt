@@ -37,10 +37,21 @@ class NexaLiveVoiceStartupAndroidTest {
         }
         assertEquals(PackageManager.PERMISSION_GRANTED,
             app.checkSelfPermission(Manifest.permission.RECORD_AUDIO))
-        assertTrue("Without an active wake FGS, the microphone is released",
-            NexaWakeWordService.liveMicReleased())
-        val activity = ActivityScenario.launch(NexaVoiceTestHostActivity::class.java)
+        val wakeMicWasReleased=NexaWakeWordService.liveMicReleased()
+        if(!wakeMicWasReleased) {
+            // A physical owner device may already have opted into Hey Nexa.
+            // Temporarily yield that existing microphone, then restore its
+            // previous listening state after this no-credentials test.
+            NexaWakeWordService.pauseForLiveVoice()
+            val releaseDeadline=SystemClock.elapsedRealtime()+3000L
+            while(!NexaWakeWordService.liveMicReleased() &&
+                SystemClock.elapsedRealtime()<releaseDeadline) SystemClock.sleep(50L)
+        }
         try {
+            assertTrue("The wake service must release its microphone before live voice",
+                NexaWakeWordService.liveMicReleased())
+            val activity = ActivityScenario.launch(NexaVoiceTestHostActivity::class.java)
+            try {
             activity.onActivity { owner ->
                 owner.startForegroundService(Intent(owner,
                     RealtimeVoiceService::class.java).apply {
@@ -62,9 +73,12 @@ class NexaLiveVoiceStartupAndroidTest {
             SystemClock.sleep(180L)
             assertNotEquals("listening", RealtimeVoiceService.status)
             assertTrue(NexaWakeWordService.liveMicReleased())
+            } finally {
+                app.stopService(Intent(app, RealtimeVoiceService::class.java))
+                activity.close()
+            }
         } finally {
-            app.stopService(Intent(app, RealtimeVoiceService::class.java))
-            activity.close()
+            if(!wakeMicWasReleased) NexaWakeWordService.resumeAfterLiveVoice()
         }
     }
 }

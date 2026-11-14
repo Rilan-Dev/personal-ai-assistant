@@ -100,7 +100,7 @@ test("older Android versions cannot start unsupported voice notification service
 test("returning from Android Accessibility Settings refreshes actual service status",()=>{
   const ui=read("apps/mobile/App.tsx");
   assert.match(ui,/AppState\.addEventListener\('change'/);
-  assert.match(ui,/if\(next==='active'\)refresh\(\)/);
+  assert.match(ui,/if\(next==='active'\)refreshAfterResume\(\)/);
 });
 
 test("live audio remains interruptible with VAD and stops on audio focus loss",()=>{

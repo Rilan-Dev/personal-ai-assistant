@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, AppState, BackHandler, Keyboard, Platform, Pressable, ScrollView,
+  ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView,
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -91,6 +91,7 @@ export default function App() {
     return ()=>{listener.remove();screenGrant.revoke();iconReviews.clear();};
   },[screenGrant,iconReviews]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
+  const [keyboardVisible,setKeyboardVisible]=useState(false);
   const [showTrace, setShowTrace] = useState(false);
   const chatScroll = useRef<React.ElementRef<typeof ScrollView>>(null);
   const voiceShortcutRequested = useRef(false);
@@ -98,6 +99,11 @@ export default function App() {
     Keyboard.dismiss();
     setTab(destination);
   };
+  useEffect(()=>{
+    const show=Keyboard.addListener(Platform.OS==='ios'?'keyboardWillShow':'keyboardDidShow',()=>setKeyboardVisible(true));
+    const hide=Keyboard.addListener(Platform.OS==='ios'?'keyboardWillHide':'keyboardDidHide',()=>setKeyboardVisible(false));
+    return ()=>{show.remove();hide.remove();};
+  },[]);
   // A Google Assistant App Action or Android launcher shortcut navigates
   // to Voice only. Receiving a deep link never starts a microphone; the
   // owner still uses Start live voice or the system assistant gesture.
@@ -1048,14 +1054,29 @@ export default function App() {
   useEffect(()=>{
     if(!engine.live||!screenAssistAvailable())return;
     let enabled=true;
-    const refresh=()=>getScreenAssistStatus().then(value=>{
-      if(enabled){setScreenAssistEnabled(value.enabled);setScreenArmed(value.armed);}
+    let connectionPollTimer:ReturnType<typeof setTimeout>|null=null;
+    const refresh=(remaining=8)=>getScreenAssistStatus().then(value=>{
+      if(!enabled)return;
+      setScreenAssistEnabled(value.enabled);setScreenArmed(value.armed);
+      // Android may return to Nexa before it has finished rebinding the
+      // AccessibilityService. Keep the Tools badge in sync with the real
+      // connection instead of leaving a stale Off state after Settings.
+      if(!value.enabled&&remaining>0)
+        connectionPollTimer=setTimeout(()=>{void refresh(remaining-1);},750);
     }).catch(()=>{});
-    refresh();
+    const refreshAfterResume=()=>{
+      if(connectionPollTimer!==null){clearTimeout(connectionPollTimer);connectionPollTimer=null;}
+      void refresh();
+    };
+    refreshAfterResume();
     const appState=AppState.addEventListener('change',next=>{
-      if(next==='active')refresh();
+      if(next==='active')refreshAfterResume();
     });
-    return ()=>{enabled=false;appState.remove();};
+    return ()=>{
+      enabled=false;
+      if(connectionPollTimer!==null)clearTimeout(connectionPollTimer);
+      appState.remove();
+    };
   },[engine.live,tab]);
   useEffect(()=>{
     if(!engine.live||!sarvamVoiceConfigAvailable())return;
@@ -1917,7 +1938,8 @@ export default function App() {
         onRefresh={()=>void refreshSetupStatus()}
         onFinish={()=>void finishSetup()}
       />}
-      {tab === 'chat' && <>
+      {tab === 'chat' && <KeyboardAvoidingView style={styles.chatArea}
+        behavior={Platform.OS==='ios'?'padding':'height'}>
         <ScrollView style={styles.chatScroll} contentContainerStyle={styles.chatContent}
           ref={chatScroll} onContentSizeChange={() => messages.length ? chatScroll.current?.scrollToEnd({animated: true}) : chatScroll.current?.scrollTo({y:0,animated:false})}
           keyboardShouldPersistTaps="handled">
@@ -1995,7 +2017,7 @@ export default function App() {
           </View>
           <Text style={styles.composerNote}>Actions require your permission. AI can make mistakes.</Text>
         </View>
-      </>}
+      </KeyboardAvoidingView>}
 
       {tab === 'voice' && <ScrollView style={styles.pageScroll} contentContainerStyle={styles.pageContent}>
         <View style={styles.voiceHero}>
@@ -2220,6 +2242,138 @@ export default function App() {
             <View style={[styles.toggleTrack,capabilities.includes('messaging.compose')&&styles.toggleOn]}><View style={styles.toggleThumb}/></View>
           </Pressable>}
         </View>
+        <View style={styles.sectionCard}>
+          <View style={styles.cardHeadingRow}>
+            <Text style={styles.cardHeading}>Screen assistant</Text>
+            <Text style={[styles.sectionTag,screenAssistEnabled&&styles.sectionTagActive]}>
+              {screenAssistEnabled?'Enabled':'Off'}
+            </Text>
+          </View>
+          <Text style={styles.cardText}>Screen Assist offers separately armed, one-time text, icon metadata, and local icon-image observations. It excludes editable/password fields from metadata and never uploads screen data automatically. The floating Nexa Tools panel can request limited navigation taps or scrolls, but each requires an explicit on-screen confirmation.</Text>
+          {screenAssistAvailable()&&<>
+            <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={openScreenSettings}>
+              <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" style={styles.primaryInline}
+              onPress={armScreenRead} disabled={running||screenArmed||iconScanArmed||visualArmed}>
+              <Text style={styles.primaryInlineText}>{screenArmed?'Capture armed · switch apps':'Arm one screen read'}</Text>
+            </Pressable>
+            <View style={styles.buttonRow}>
+              <Pressable accessibilityRole="button" style={styles.outlineInline}
+                onPress={reviewScreenRead}><Text style={styles.outlineInlineText}>Review captured text</Text></Pressable>
+              <Pressable accessibilityRole="button" style={styles.outlineInline}
+                onPress={discardScreenRead}><Text style={styles.outlineInlineText}>Discard</Text></Pressable>
+            </View>
+            {screenAssistNotice!==''&&<Text style={styles.feedback}>{screenAssistNotice}</Text>}
+            {screenSnapshot&&<View style={styles.configContents}>
+              <Text style={styles.groupLabel}>Captured from {screenSnapshot.packageName}</Text>
+              <Text style={styles.cardText} numberOfLines={12}>{screenSnapshot.text}</Text>
+              <Pressable accessibilityRole="button" style={styles.primaryInline} onPress={composeScreenQuestion}>
+                <Text style={styles.primaryInlineText}>Review question in Chat</Text>
+              </Pressable>
+            </View>}
+          </>}
+          {engine.live&&iconRecognitionAvailable()&&<>
+             <Text style={styles.groupLabel}>Read-only icon inspector</Text>
+             <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This read-only inspector does not take screenshots or click anything. Use the separate floating Tools panel to approve supported navigation actions.</Text>
+             <View style={styles.buttonRow}>
+               <Pressable accessibilityRole="button" style={styles.primaryInline}
+                 disabled={running||screenArmed||iconScanArmed||visualArmed} onPress={armIconScanOnce}>
+                 <Text style={styles.primaryInlineText}>{iconScanArmed?'Scan armed':'Arm icon scan'}</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewIcons}>
+                 <Text style={styles.outlineInlineText}>Review icons</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={discardIcons}>
+                 <Text style={styles.outlineInlineText}>Discard icons</Text>
+               </Pressable>
+             </View>
+             {iconScanNotice!==''&&<Text style={styles.feedback}>{iconScanNotice}</Text>}
+             {iconScan&&<View style={styles.configContents}>
+               <Text style={styles.groupLabel}>{iconScan.icons.length} visible controls in {iconScan.packageName}</Text>
+               <Text style={styles.cardText}>Local summary: {summarizeScreenControls(iconScan,Date.now()).safeNavigationCount} navigation controls, {summarizeScreenControls(iconScan,Date.now()).unknownCount} unlabeled icons. Position descriptions use the captured app-window bounds.</Text>
+               <TextInput style={styles.settingInput} value={iconQuestion} maxLength={100}
+                 onChangeText={v=>{setIconQuestion(v);setIconLocalAnswer('');setGuidedPlanNotice('');}}
+                 accessibilityLabel="Ask where a visible icon is"
+                 placeholder="Where is the search icon?" placeholderTextColor="#7f8ba5"/>
+               <Pressable accessibilityRole="button" style={styles.outlineAction}
+                 disabled={iconQuestion.trim().length<5} onPress={askLocalScreenQuestion}>
+                 <Text style={styles.outlineActionText}>Find icon locally · no AI upload</Text>
+               </Pressable>
+               {iconLocalAnswer!==''&&<Text style={styles.feedback}>{iconLocalAnswer}</Text>}
+               <Pressable accessibilityRole="button" style={styles.outlineInline}
+                 onPress={previewGuidedNavigation}>
+                 <Text style={styles.outlineInlineText}>Preview owner-approved navigation steps</Text>
+               </Pressable>
+               {guidedPlanNotice!==''&&<Text style={styles.feedback}>{guidedPlanNotice}</Text>}
+               {iconScan.icons.map(icon=>(
+                 <Text key={icon.id} style={styles.cardText}>
+                   {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
+                 </Text>
+               ))}
+               <Pressable accessibilityRole="button" style={styles.outlineInline}
+                 onPress={releaseIconsToAgent}>
+                 <Text style={styles.outlineInlineText}>Release icon metadata to agent (20s)</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={askAboutIcons}>
+                 <Text style={styles.outlineInlineText}>Explain icon metadata in Chat</Text>
+               </Pressable>
+             </View>}
+           </>}
+           {engine.live&&visualIconCaptureAvailable()&&<>
+             <Text style={styles.groupLabel}>Visual fallback — unknown icons only</Text>
+             <Text style={styles.cardText}>Arm a one-time screenshot for up to six unlabeled icon crops. Nexa also reads matching accessibility icon metadata from the same app window and capture event for evidence checks. Only selected crops can be uploaded to AI.</Text>
+             <View style={styles.buttonRow}>
+               <Pressable accessibilityRole="button" style={styles.primaryInline}
+                 disabled={running||visualArmed||screenArmed||iconScanArmed} onPress={armVisualScan}>
+                 <Text style={styles.primaryInlineText}>{visualArmed?'Capture armed':'Arm visual icons'}</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewVisualScan}>
+                 <Text style={styles.outlineInlineText}>Review images</Text>
+               </Pressable>
+               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={clearVisualScan}>
+                 <Text style={styles.outlineInlineText}>Discard images</Text>
+               </Pressable>
+             </View>
+             {visualNotice!==''&&<Text style={styles.feedback}>{visualNotice}</Text>}
+             {visualPreview&&<View style={styles.configContents}>
+               <Text style={styles.groupLabel}>Local images · {visualPreview.packageName}</Text>
+               <View style={{flexDirection:'row',flexWrap:'wrap'}}>
+                 {visualPreview.crops.map(crop=>(
+                   <Pressable key={crop.iconId} accessibilityRole="button"
+                     accessibilityLabel={'Select '+crop.iconId+' for visual identification'}
+                     onPress={()=>{setSelectedVisionCrop(crop.iconId);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');}}
+                     style={{alignItems:'center',padding:6,borderWidth:selectedVisionCrop===crop.iconId?2:0,
+                       borderColor:'#9daeff',borderRadius:12}}>
+                     <Image source={{uri:crop.dataUri}} style={{width:64,height:64,borderRadius:12}}/>
+                     <Text style={styles.settingHelp}>{crop.iconId}</Text>
+                   </Pressable>
+                 ))}
+               </View>
+               {selectedVisionCrop&&<>
+                 <Text style={styles.cardText}>Optional AI identification sends ONLY the selected cropped icon image to your configured AI provider. The provider may process or retain that image under its terms. AI guesses never authorize screen actions.</Text>
+                 <Pressable accessibilityRole="button" style={styles.primaryInline}
+                   onPress={identifySelectedIcon} disabled={visionBusy}>
+                   <Text style={styles.primaryInlineText}>{visionBusy?'Identifying…':'Send selected icon to AI for identification'}</Text>
+                 </Pressable>
+               </>}
+               {visionResult!==''&&<Text style={styles.feedback}>{visionResult}</Text>}
+               {visionFeedbackTarget&&<View style={styles.buttonRow}>
+                 <Pressable accessibilityRole="button" style={styles.outlineInline}
+                   onPress={()=>reviewVisualGuess('accurate')}>
+                   <Text style={styles.outlineInlineText}>Label looks correct</Text>
+                 </Pressable>
+                 <Pressable accessibilityRole="button" style={styles.outlineInline}
+                   onPress={()=>reviewVisualGuess('inaccurate')}>
+                   <Text style={styles.outlineInlineText}>Label looks incorrect</Text>
+                 </Pressable>
+               </View>}
+               {visionFeedbackNotice!==''&&<Text style={styles.feedback}>{visionFeedbackNotice}</Text>}
+               <Text style={styles.settingHelp}>Local owner reviews this session: {visionFeedbackCounts.reviewed} · accepted {visionFeedbackCounts.accepted} · rejected {visionFeedbackCounts.rejected}. Not a calibrated confidence probability or permission to tap.</Text>
+             </View>}
+           </>}
+           <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. The visual fallback is a single owner-armed screenshot, not continuous recording. Protected apps may refuse inspection. Only the chosen icon crop is sent to an AI provider after you approve that upload.</Text>
+        </View>
         {engine.live&&<View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Private recipient-app memory</Text>
           <Text style={styles.settingHelp}>Saved app choices are encrypted on this phone and only hint at a preferred channel. They do not identify a contact or authorize sending. You can forget an individual choice in a message review, or remove every saved channel preference here.</Text>
@@ -2419,138 +2573,6 @@ export default function App() {
           {privacyToolNotice!==''&&<Text style={styles.feedback}>{privacyToolNotice}</Text>}
           {whatsAppDraftNotice!==''&&<Text style={styles.feedback}>{whatsAppDraftNotice}</Text>}
           <Text style={styles.settingHelp}>No background contact tracking, address-book scraping or continuous location access. Voice agents cannot invoke these private tools.</Text>
-        </View>
-        <View style={styles.sectionCard}>
-          <View style={styles.cardHeadingRow}>
-            <Text style={styles.cardHeading}>Screen assistant</Text>
-            <Text style={[styles.sectionTag,screenAssistEnabled&&styles.sectionTagActive]}>
-              {screenAssistEnabled?'Enabled':'Off'}
-            </Text>
-          </View>
-          <Text style={styles.cardText}>Screen Assist offers separately armed, one-time text, icon metadata, and local icon-image observations. It excludes editable/password fields from metadata and never uploads screen data automatically. The floating Nexa Tools panel can request limited navigation taps or scrolls, but each requires an explicit on-screen confirmation.</Text>
-          {screenAssistAvailable()&&<>
-            <Pressable accessibilityRole="button" style={styles.outlineAction} onPress={openScreenSettings}>
-              <Text style={styles.outlineActionText}>Open Android Accessibility Settings</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" style={styles.primaryInline}
-              onPress={armScreenRead} disabled={running||screenArmed||iconScanArmed||visualArmed}>
-              <Text style={styles.primaryInlineText}>{screenArmed?'Capture armed · switch apps':'Arm one screen read'}</Text>
-            </Pressable>
-            <View style={styles.buttonRow}>
-              <Pressable accessibilityRole="button" style={styles.outlineInline}
-                onPress={reviewScreenRead}><Text style={styles.outlineInlineText}>Review captured text</Text></Pressable>
-              <Pressable accessibilityRole="button" style={styles.outlineInline}
-                onPress={discardScreenRead}><Text style={styles.outlineInlineText}>Discard</Text></Pressable>
-            </View>
-            {screenAssistNotice!==''&&<Text style={styles.feedback}>{screenAssistNotice}</Text>}
-            {screenSnapshot&&<View style={styles.configContents}>
-              <Text style={styles.groupLabel}>Captured from {screenSnapshot.packageName}</Text>
-              <Text style={styles.cardText} numberOfLines={12}>{screenSnapshot.text}</Text>
-              <Pressable accessibilityRole="button" style={styles.primaryInline} onPress={composeScreenQuestion}>
-                <Text style={styles.primaryInlineText}>Review question in Chat</Text>
-              </Pressable>
-            </View>}
-          </>}
-          {engine.live&&iconRecognitionAvailable()&&<>
-             <Text style={styles.groupLabel}>Read-only icon inspector</Text>
-             <Text style={styles.cardText}>Recognizes a bounded set of visible actions and unlabeled image buttons. This read-only inspector does not take screenshots or click anything. Use the separate floating Tools panel to approve supported navigation actions.</Text>
-             <View style={styles.buttonRow}>
-               <Pressable accessibilityRole="button" style={styles.primaryInline}
-                 disabled={running||screenArmed||iconScanArmed||visualArmed} onPress={armIconScanOnce}>
-                 <Text style={styles.primaryInlineText}>{iconScanArmed?'Scan armed':'Arm icon scan'}</Text>
-               </Pressable>
-               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewIcons}>
-                 <Text style={styles.outlineInlineText}>Review icons</Text>
-               </Pressable>
-               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={discardIcons}>
-                 <Text style={styles.outlineInlineText}>Discard icons</Text>
-               </Pressable>
-             </View>
-             {iconScanNotice!==''&&<Text style={styles.feedback}>{iconScanNotice}</Text>}
-             {iconScan&&<View style={styles.configContents}>
-               <Text style={styles.groupLabel}>{iconScan.icons.length} visible controls in {iconScan.packageName}</Text>
-               <Text style={styles.cardText}>Local summary: {summarizeScreenControls(iconScan,Date.now()).safeNavigationCount} navigation controls, {summarizeScreenControls(iconScan,Date.now()).unknownCount} unlabeled icons. Position descriptions use the captured app-window bounds.</Text>
-               <TextInput style={styles.settingInput} value={iconQuestion} maxLength={100}
-                 onChangeText={v=>{setIconQuestion(v);setIconLocalAnswer('');setGuidedPlanNotice('');}}
-                 accessibilityLabel="Ask where a visible icon is"
-                 placeholder="Where is the search icon?" placeholderTextColor="#7f8ba5"/>
-               <Pressable accessibilityRole="button" style={styles.outlineAction}
-                 disabled={iconQuestion.trim().length<5} onPress={askLocalScreenQuestion}>
-                 <Text style={styles.outlineActionText}>Find icon locally · no AI upload</Text>
-               </Pressable>
-               {iconLocalAnswer!==''&&<Text style={styles.feedback}>{iconLocalAnswer}</Text>}
-               <Pressable accessibilityRole="button" style={styles.outlineInline}
-                 onPress={previewGuidedNavigation}>
-                 <Text style={styles.outlineInlineText}>Preview owner-approved navigation steps</Text>
-               </Pressable>
-               {guidedPlanNotice!==''&&<Text style={styles.feedback}>{guidedPlanNotice}</Text>}
-               {iconScan.icons.map(icon=>(
-                 <Text key={icon.id} style={styles.cardText}>
-                   {icon.label} · {icon.semantic} · [{icon.boundsPx.left}, {icon.boundsPx.top}] · {icon.clickable?'clickable':'not clickable'}
-                 </Text>
-               ))}
-               <Pressable accessibilityRole="button" style={styles.outlineInline}
-                 onPress={releaseIconsToAgent}>
-                 <Text style={styles.outlineInlineText}>Release icon metadata to agent (20s)</Text>
-               </Pressable>
-               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={askAboutIcons}>
-                 <Text style={styles.outlineInlineText}>Explain icon metadata in Chat</Text>
-               </Pressable>
-             </View>}
-           </>}
-           {engine.live&&visualIconCaptureAvailable()&&<>
-             <Text style={styles.groupLabel}>Visual fallback — unknown icons only</Text>
-             <Text style={styles.cardText}>Arm a one-time screenshot for up to six unlabeled icon crops. Nexa also reads matching accessibility icon metadata from the same app window and capture event for evidence checks. Only selected crops can be uploaded to AI.</Text>
-             <View style={styles.buttonRow}>
-               <Pressable accessibilityRole="button" style={styles.primaryInline}
-                 disabled={running||visualArmed||screenArmed||iconScanArmed} onPress={armVisualScan}>
-                 <Text style={styles.primaryInlineText}>{visualArmed?'Capture armed':'Arm visual icons'}</Text>
-               </Pressable>
-               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={reviewVisualScan}>
-                 <Text style={styles.outlineInlineText}>Review images</Text>
-               </Pressable>
-               <Pressable accessibilityRole="button" style={styles.outlineInline} onPress={clearVisualScan}>
-                 <Text style={styles.outlineInlineText}>Discard images</Text>
-               </Pressable>
-             </View>
-             {visualNotice!==''&&<Text style={styles.feedback}>{visualNotice}</Text>}
-             {visualPreview&&<View style={styles.configContents}>
-               <Text style={styles.groupLabel}>Local images · {visualPreview.packageName}</Text>
-               <View style={{flexDirection:'row',flexWrap:'wrap'}}>
-                 {visualPreview.crops.map(crop=>(
-                   <Pressable key={crop.iconId} accessibilityRole="button"
-                     accessibilityLabel={'Select '+crop.iconId+' for visual identification'}
-                     onPress={()=>{setSelectedVisionCrop(crop.iconId);setVisionResult('');setVisionFeedbackTarget(null);setVisionFeedbackNotice('');}}
-                     style={{alignItems:'center',padding:6,borderWidth:selectedVisionCrop===crop.iconId?2:0,
-                       borderColor:'#9daeff',borderRadius:12}}>
-                     <Image source={{uri:crop.dataUri}} style={{width:64,height:64,borderRadius:12}}/>
-                     <Text style={styles.settingHelp}>{crop.iconId}</Text>
-                   </Pressable>
-                 ))}
-               </View>
-               {selectedVisionCrop&&<>
-                 <Text style={styles.cardText}>Optional AI identification sends ONLY the selected cropped icon image to your configured AI provider. The provider may process or retain that image under its terms. AI guesses never authorize screen actions.</Text>
-                 <Pressable accessibilityRole="button" style={styles.primaryInline}
-                   onPress={identifySelectedIcon} disabled={visionBusy}>
-                   <Text style={styles.primaryInlineText}>{visionBusy?'Identifying…':'Send selected icon to AI for identification'}</Text>
-                 </Pressable>
-               </>}
-               {visionResult!==''&&<Text style={styles.feedback}>{visionResult}</Text>}
-               {visionFeedbackTarget&&<View style={styles.buttonRow}>
-                 <Pressable accessibilityRole="button" style={styles.outlineInline}
-                   onPress={()=>reviewVisualGuess('accurate')}>
-                   <Text style={styles.outlineInlineText}>Label looks correct</Text>
-                 </Pressable>
-                 <Pressable accessibilityRole="button" style={styles.outlineInline}
-                   onPress={()=>reviewVisualGuess('inaccurate')}>
-                   <Text style={styles.outlineInlineText}>Label looks incorrect</Text>
-                 </Pressable>
-               </View>}
-               {visionFeedbackNotice!==''&&<Text style={styles.feedback}>{visionFeedbackNotice}</Text>}
-               <Text style={styles.settingHelp}>Local owner reviews this session: {visionFeedbackCounts.reviewed} · accepted {visionFeedbackCounts.accepted} · rejected {visionFeedbackCounts.rejected}. Not a calibrated confidence probability or permission to tap.</Text>
-             </View>}
-           </>}
-           <Text style={styles.settingHelp}>The Accessibility service needs separate Android Settings consent. The visual fallback is a single owner-armed screenshot, not continuous recording. Protected apps may refuse inspection. Only the chosen icon crop is sent to an AI provider after you approve that upload.</Text>
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Find an app icon</Text>
@@ -2821,7 +2843,7 @@ export default function App() {
         </View>
       </ScrollView>}
 
-      <View style={styles.bottomNav}>
+      {!(tab==='chat'&&keyboardVisible)&&<View style={styles.bottomNav}>
         {([{id:'chat',glyph:'✦',label:'Chat'},
            {id:'voice',glyph:'◉',label:'Voice'},
            {id:'tools',glyph:'▦',label:'Tools'}] as const).map(item=>
@@ -2833,7 +2855,7 @@ export default function App() {
             <Text style={[styles.tabGlyph,tab===item.id&&styles.tabGlyphActive]}>{item.glyph}</Text>
             <Text style={[styles.tabLabel,tab===item.id&&styles.tabLabelActive]}>{item.label}</Text>
           </Pressable>)}
-      </View>
+      </View>}
     </SafeAreaView>
   );
 }
@@ -2853,6 +2875,7 @@ const styles = StyleSheet.create({
   statusDot:{width:7,height:7,borderRadius:5,backgroundColor:'#64748B'},statusDotOn:{backgroundColor:'#34D399'},
   statusLabel:{fontFamily:'sans-serif',fontSize:11,color:'#B6C4D9',fontWeight:'600'},
   chatScroll:{flex:1},chatContent:{paddingHorizontal:18,paddingVertical:20,gap:18,paddingBottom:28},
+  chatArea:{flex:1},
   welcome:{alignItems:'center',paddingTop:55,paddingBottom:28},
   welcomeGlow:{width:60,height:60,borderRadius:22,backgroundColor:'#272D48',alignItems:'center',justifyContent:'center',marginBottom:20},
   welcomeIcon:{fontSize:35,color:'#C8CAFF'},

@@ -14,6 +14,7 @@ const reviewFlows=[
   normalizedSource(".maestro/experimental/13-reviewed-generic-text-field.yaml"),
 ];
 const debugManifest=source("apps/mobile/android/app/src/debug/AndroidManifest.xml");
+const gradle=source("apps/mobile/android/app/build.gradle");
 const service=source("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/ScreenAssistService.kt");
 const runtimeAcceptance=source("docs/qa/NEXA_SCREEN_ASSIST_RUNTIME_ACCEPTANCE_20261104.md");
 
@@ -72,7 +73,9 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
 });
 
 test("debug Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{
-  assert.match(debugManifest,/service android:name="\.ScreenAssistService"[\s\S]*?android:label="@string\/screen_assist_label_debug"/);
+  assert.match(debugManifest,/service android:name="\.ScreenAssistService"[\s\S]*?android:label="\$\{screenAssistServiceLabel\}"/);
+  assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist \(Debug\)'/);
+  assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist QA2'/);
   assert.ok(flow.includes('element: "Nexa Screen Assist \\\\(Debug\\\\)"'));
   assert.ok(flow.includes('visible: "Use Nexa Screen Assist \\\\(Debug\\\\)"'));
   assert.ok(flow.includes('id: "android:id/switch_widget"\n        checked: false'));

@@ -1,0 +1,18 @@
+appId: dev.rilandev.personalaiassistant.physicalqa2
+name: QA2 screen assistant controls are reachable from Tools
+tags:
+  - nexa
+  - screen-assist
+  - qa2
+---
+- launchApp:
+    stopApp: true
+- tapOn: "Chat"
+- tapOn: "Tools"
+- assertVisible: "Device controls"
+- scrollUntilVisible:
+    element: "Arm one screen read"
+    direction: DOWN
+    timeout: 15000
+    visibilityPercentage: 50
+- assertVisible: "Review captured text"

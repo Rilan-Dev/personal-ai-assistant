@@ -9,6 +9,23 @@ import org.junit.runner.RunWith
 /** Safe, synthetic Accessibility callbacks. No third-party app is read or touched. */
 @RunWith(AndroidJUnit4::class)
 class NexaScreenAssistEventSafetyAndroidTest {
+    @Test fun eventSourceFallbackAcceptsOnlyTheMatchingPermittedExternalPackage() {
+        org.junit.Assert.assertTrue(ScreenAssistSourcePolicy.matches(
+            "com.android.settings", "com.android.settings", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "com.android.settings", "dev.nexa.owner", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "com.android.settings", "com.android.contacts", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "android", "android", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "com.android.systemui", "com.android.systemui", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "com.google.android.inputmethod.latin", "com.google.android.inputmethod.latin", "dev.nexa.owner"))
+        org.junit.Assert.assertFalse(ScreenAssistSourcePolicy.matches(
+            "", "", "dev.nexa.owner"))
+    }
+
     @Test fun detachedServiceCannotCrashOverlayScrollOrLeaveAnApprovalPending() {
         val service = ScreenAssistService()
         val initialConnection = ScreenAssistState.connected

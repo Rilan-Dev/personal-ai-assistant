@@ -33,12 +33,14 @@ class NexaWakePersistenceAndroidTest {
 
     @Test fun rebootRecoveryDoesNotEnableWakeWithoutPriorOptIn() {
         val original = NexaWakeWordService.enabled(ctx)
+        val wasListening = NexaWakeWordService.listening
         try {
             NexaWakeWordService.persistEnabled(ctx, false)
             NexaWakeBootReceiver().onReceive(ctx,
                 Intent(Intent.ACTION_BOOT_COMPLETED))
             assertFalse(NexaWakeWordService.enabled(ctx))
-            assertFalse(NexaWakeWordService.listening)
+            assertEquals("A boot receiver call must not start or stop an existing session",
+                wasListening,NexaWakeWordService.listening)
         } finally {
             NexaWakeWordService.persistEnabled(ctx, original)
         }

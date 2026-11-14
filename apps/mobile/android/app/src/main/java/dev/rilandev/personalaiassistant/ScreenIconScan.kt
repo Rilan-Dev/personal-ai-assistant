@@ -82,7 +82,7 @@ internal object ScreenIconDetector {
         val matches = ArrayList<ObservedIcon>()
         queue.add(root)
         var scanned = 0
-        while (queue.isNotEmpty() && scanned < 180 && matches.size < 64) {
+        while (queue.isNotEmpty() && scanned < 512 && matches.size < 64) {
             val node = queue.removeFirst()
             scanned++
             // Password and editable subtrees are excluded, not just their labels.

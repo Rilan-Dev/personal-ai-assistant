@@ -806,3 +806,19 @@ The Windows runner returned `PEER_UNREACHABLE` through the tailnet SOCKS5 proxy 
 - The emulator repeatedly shows Android SystemUI ANR before Maestro can interact. No additional emulator flow is green yet. The full physical batch is the successful four-flow evidence.
 - Direct one-shot Screen Assist read is still unverified. The Arm button succeeded and stock Calculator was opened on Infinix, but review status did not confirm capture; no text was emitted or sent.
 - To continue emulator QA, clear the current system dialog only after the user confirms the pending `Wait` tap. Then retry Flow 10, stop the Maestro runner, verify Screen Assist is bound, and exercise a one-shot read without exposing text. No messages.
+
+## Latest status — 2026-11-14 physical-device continuation
+- Completed on physical Infinix X6831 / Android 13, serial `099344034S003788`; no emulator target was used.
+- Ordered experimental Maestro suite: **4/4 passed** (Flows 10–13), results `.qa-results/maestro-physicalqa2-ordered-final/2026-11-14_005223`.
+- Direct Screen Assist one-shot read: **passed** on OEM Calculator package `com.transsion.calculator`; Android Accessibility reports the QA2 Screen Assist service enabled and bound with no crashed services. Captured contents stay private and are not sent automatically.
+- Installed isolated QA2 app is version `0.3.2026111406`, package `dev.rilandev.personalaiassistant.physicalqa2`, SHA-256 `759CE602105C3458978B27FF140F677B59D7F38720733A5C2342C8233DF5FA8E`. This is a debug QA artifact, not a public release APK.
+- Repo checks: `npm ci` passed (0 audit findings); `npm test` **489/489**; `npm run typecheck` passed (root, mobile, agent runtime); `npm run web:export` passed.
+- The previous 2026-11-13 emulator and unverified-read entries above are historical and superseded by this result. Current remaining live acceptance: one individually approved scroll in Calculator; get a separate approval before every tap. No messages were sent and no Sarvam credential was used.
+
+## Follow-up after approved Calculator scroll — 2026-11-14
+- The approved one-swipe Calculator check was executed, but the displayed Calculator screen did not move; do not count this as a dynamic scroll pass.
+- Android Accessibility is currently off (`accessibility_enabled=0`) and no enabled service is listed. The installed app still reports QA2 version `0.3.2026111406`; no current binding is claimed.
+- Maestro CLI is unavailable on this host, so the existing Flow 10 cannot be rerun from this workspace right now. Next: restore Screen Assist using the established Maestro/Android Settings consent flow, then use a safe scrollable third-party screen for the approved single-scroll observation. Obtain separate confirmation before any tap.
+
+## Next physical-device action (2026-11-14)
+Current state: QA2 `0.3.2026111407` is installed on the Infinix; Flow 10 and ordered experimental Flows 10–13 pass; Screen Assist is currently enabled and bound with no crash. The app's `SYSTEM_ALERT_WINDOW` grant is not enabled. Before testing floating Chat scroll: open Android's overlay-access screen for the QA2 package, obtain the owner's individual approval before enabling that setting, then use a scrollable safe external screen and request approval for each scroll. The previous approved Calculator swipe caused no visible scroll. Do not claim dynamic scroll is accepted until a visible external-screen change is verified. No messages were sent and no Sarvam key was used.

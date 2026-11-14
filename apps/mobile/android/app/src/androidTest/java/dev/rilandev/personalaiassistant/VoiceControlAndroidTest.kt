@@ -53,7 +53,7 @@ class VoiceControlAndroidTest {
         assertNull(result.second)
         val data=result.first as ReadableMap
         assertTrue(data.getBoolean("offlineOnly"))
-        assertFalse(data.getBoolean("wakeWord"))
+        assertEquals(NexaWakeWordModule.modelReady(app),data.getBoolean("wakeWord"))
         assertTrue(data.getInt("androidApi") >= 31)
     }
 

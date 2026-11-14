@@ -28,7 +28,7 @@ test('settings controls and credential entry are separate from conversation',()=
   assert.match(app,/secureTextEntry editable=/);
   assert.match(app,/saveProviderToVault\(config\)/);
   assert.match(app,/clearProviderFromVault\(\)/);
-  assert.match(app,/\{tab === 'chat' && <>/);
+  assert.match(app,/\{tab === 'chat' && <KeyboardAvoidingView/);
   assert.match(app,/styles\.composerRow/);
 });
 

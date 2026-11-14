@@ -22,7 +22,8 @@ export type DirectProviderSettings = {
 export const DIRECT_TOOL_IDS = Object.freeze([
   "device.status", "device.battery_status", "device.set_flashlight",
   "device.open_camera", "device.open_app", "device.browser_search",
-  "device.open_notification_shade"
+  "device.open_notification_shade", "device.visible_controls",
+  "screen.scroll", "screen.tap_label"
 ]);
 
 export function validateProviderSettings(value: unknown): DirectProviderSettings {
@@ -43,7 +44,7 @@ const INSTRUCTIONS = [
   "Respond with exactly ONE valid JSON object. No Markdown, code fences or extra text.",
   'For general questions: {"type":"done","response":"helpful plain-text answer"}.',
   'If clarification is needed: {"type":"clarify","question":"brief question"}.',
-  'For an explicitly requested, supported SINGLE device action only: {"type":"tool","toolId":"device.battery_status","input":{}}.',
+  'For one explicitly requested, supported device action only: {"type":"tool","toolId":"device.battery_status","input":{}}.',
   "Allowed native tool IDs and exact inputs:",
   "- device.status {} (check device bridge status)",
   "- device.battery_status {} (check battery level/charging)",
@@ -52,9 +53,12 @@ const INSTRUCTIONS = [
   '- device.open_app {"app":"calendar"} (use the exact visible installed app name from the owner request; launch ONLY)',
   '- device.set_flashlight {"enabled":true} OR {"enabled":false} (one-time approval + CAMERA grant)',
   '- device.open_notification_shade {} (one-time approval; never read notification contents)',
-  "NEVER claim that you can send messages, read contacts, listen in the background, or interact with app screens.",
+  '- device.visible_controls {} (owner-approved read-only list of safe visible control labels; never read messages, contacts, editable text or notification contents)',
+  '- screen.scroll {"direction":"up"|"down"|"left"|"right"} (one owner-approved scroll on a currently scrollable screen)',
+  '- screen.tap_label {"label":"Settings"} (one owner-approved tap on an exact harmless label explicitly named by the owner)',
+  "NEVER claim that you can send messages, read contacts, place calls, change alarms, or perform an action before the phone confirms it.",
   "NEVER invent tool observations or claim an action succeeded before the phone confirms it.",
-  "A multi-step, ambiguous or unsupported phone-control request must be a clarify answer, never a partial tool action.",
+  "A multi-step, ambiguous or unsupported phone-control request must be a clarify answer, never a partial tool action. Multi-step tasks use the separate exact owner sequence policy and require a fresh approval for each step.",
   "Only select a device tool when requested explicitly. The phone rejects unapproved/invalid calls.",
   "Keep output under 1200 characters; use simple plain text."
 ].join("\n");
@@ -67,6 +71,38 @@ export type DirectProviderOptions = {
   timeoutMs?: number;
 };
 
+function explicitlyRequestedScreenAction(
+  request:string,toolId:string,input:Record<string,unknown>
+):boolean {
+  const q=request.trim();
+  if(toolId==="device.visible_controls")
+    return /^(?:please\s+)?(?:inspect|show|list|check) (?:the )?(?:visible )?(?:screen )?controls(?: on (?:the|this) (?:current )?(?:home )?screen)?[.!?]*$/i.test(q);
+  if(toolId==="screen.scroll") {
+    const direction=input.direction;
+    return typeof direction==="string" &&
+      new RegExp("^(?:please\\s+)?(?:scroll|swipe) "+direction+
+        "(?: on (?:the|this) (?:current )?(?:home )?screen)?[.!?]*$","i").test(q);
+  }
+  if(toolId==="screen.tap_label") {
+    const label=input.label;
+    if(typeof label!=="string" || label.length<2 || label.length>45 ||
+        !/^[A-Za-z0-9][A-Za-z0-9 _.-]{1,44}$/.test(label) ||
+        /\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\b/i.test(label))
+      return false;
+    const escaped=label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    return new RegExp("^(?:please\\s+)?(?:tap|click|press) (?:on )?(?:the )?"+
+      escaped+"(?: on (?:the|this) (?:current )?screen)?[.!?]*$","i").test(q);
+  }
+  return false;
+}
+
+function isScreenActionRequest(request:string):boolean {
+  const q=request.trim();
+  return /^(?:please\s+)?(?:scroll|swipe)\s+(?:up|down|left|right)\b/i.test(q) ||
+    /^(?:please\s+)?(?:tap|click|press)\s+(?:on\s+)?(?:the\s+)?[A-Za-z0-9][A-Za-z0-9 _.-]{1,44}(?:\b|$)/i.test(q) ||
+    /^(?:please\s+)?(?:inspect|show|list|check)\s+(?:the\s+)?(?:visible\s+)?(?:screen\s+)?controls\b/i.test(q);
+}
+
 function parseDecision(value: unknown, ids: Set<string>, request: string): PlannerDecision {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new Error("INVALID_RESPONSE");
@@ -76,7 +112,8 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
     // A model must never falsely claim it executed a native action,
     // sent a message or read private data merely by answering in prose.
     const exactDeviceRead = parseNativeOwnerIntent(request) !== null;
-    if (exactDeviceRead || /^(?:please\s+)?(?:open|launch|start|turn|switch|send|text|call|dial|read|delete|toggle)\b/i.test(request.trim()))
+    if (exactDeviceRead || isScreenActionRequest(request) ||
+        /^(?:please\s+)?(?:open|launch|start|turn|switch|send|text|call|dial|read|delete|toggle)\b/i.test(request.trim()))
       return {type:"clarify",question:"No device action was executed. Use a single supported command and confirm permissions."};
     return {type:"done",response:d.response.trim()};
   }
@@ -87,7 +124,16 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
       !d.input || typeof d.input !== "object" || Array.isArray(d.input) || Object.keys(d).length !== 3)
     return {type:"clarify",question:"The provider proposed an unsupported or invalid action. Nothing was executed."};
   const input = d.input as Record<string,unknown>;
-  const valid = d.toolId === "device.browser_search"
+  const valid = d.toolId === "device.visible_controls"
+    ? Object.keys(input).length === 0
+    : d.toolId === "screen.scroll"
+    ? Object.keys(input).length===1 && typeof input.direction==="string" &&
+      ["up","down","left","right"].includes(input.direction)
+    : d.toolId === "screen.tap_label"
+    ? Object.keys(input).length===1 && typeof input.label==="string" &&
+      input.label.length>=2 && input.label.length<=45 &&
+      /^[A-Za-z0-9][A-Za-z0-9 _.-]{1,44}$/.test(input.label)
+    : d.toolId === "device.browser_search"
     ? Object.keys(input).length === 1 && typeof input.query === "string" &&
       input.query.length >= 3 && input.query.length <= 90
     : d.toolId === "device.open_app"
@@ -95,7 +141,8 @@ function parseDecision(value: unknown, ids: Set<string>, request: string): Plann
     : d.toolId === "device.set_flashlight"
       ? Object.keys(input).length === 1 && typeof input.enabled === "boolean"
       : Object.keys(input).length === 0;
-  if (!valid || !requestAllowsNativeTool(request,d.toolId,input))
+  if (!valid || !(requestAllowsNativeTool(request,d.toolId,input) ||
+      explicitlyRequestedScreenAction(request,d.toolId,input)))
     return {type:"clarify",question:"The provider suggested an action outside your exact request. Nothing was executed."};
   return {type:"tool",call:{callId:"direct-1",toolId:d.toolId,input}};
 }

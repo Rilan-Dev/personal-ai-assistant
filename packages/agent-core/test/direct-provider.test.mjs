@@ -71,6 +71,35 @@ test("only exact owner-requested device tool can be proposed",async()=>{
   const rejected=await planner.next("Send a message to my friend",[]);
   assert.equal(rejected.type,"clarify");
 });
+test("Sarvam can propose one explicitly requested dynamic screen action, never an unrelated or unsafe action",async()=>{
+  const screenTools=[...allowed,"device.visible_controls","screen.scroll","screen.tap_label"];
+  const cases=[
+    ["Inspect visible controls on the current home screen",
+      {type:"tool",toolId:"device.visible_controls",input:{}},"device.visible_controls",{}],
+    ["Scroll left on the home screen",
+      {type:"tool",toolId:"screen.scroll",input:{direction:"left"}},"screen.scroll",{direction:"left"}],
+    ["Tap Alarm on the current screen",
+      {type:"tool",toolId:"screen.tap_label",input:{label:"Alarm"}},"screen.tap_label",{label:"Alarm"}]
+  ];
+  for(const [request,decision,toolId,input] of cases){
+    const planner=createDirectProviderPlanner({settings,availableToolIds:screenTools,
+      fetchImpl:fakeDecision(decision)});
+    const result=await planner.next(request,[]);
+    assert.equal(result.type,"tool",request);
+    assert.equal(result.call.toolId,toolId);
+    assert.deepEqual(result.call.input,input);
+  }
+  for(const [request,decision] of [
+    ["Scroll left on the home screen",{type:"tool",toolId:"screen.scroll",input:{direction:"right"}}],
+    ["Tap Alarm on the current screen",{type:"tool",toolId:"screen.tap_label",input:{label:"Settings"}}],
+    ["Tap Send on the current screen",{type:"tool",toolId:"screen.tap_label",input:{label:"Send"}}],
+    ["Scroll left then tap Alarm",{type:"tool",toolId:"screen.tap_label",input:{label:"Alarm"}}]
+  ]){
+    const planner=createDirectProviderPlanner({settings,availableToolIds:screenTools,
+      fetchImpl:fakeDecision(decision)});
+    assert.equal((await planner.next(request,[])).type,"clarify",request);
+  }
+});
 test("invalid, non-allowlisted and multi-action model tool outputs never execute",async()=>{
   for(const choice of [
     {type:"tool",toolId:"contacts.read",input:{}},
@@ -168,6 +197,22 @@ test("provider prose cannot claim that it executed a hardware or messaging actio
     const r=await planner.next(question,[]);
     assert.equal(r.type,"tool");
     assert.equal(r.call.toolId,toolId);
+  }
+});
+
+test("provider prose cannot claim screen actions or observations without an approved native tool",async()=>{
+  const planner=createDirectProviderPlanner({settings,availableToolIds:[...allowed,
+    "device.visible_controls","screen.scroll","screen.tap_label"],
+    fetchImpl:fakeDecision({type:"done",response:"I completed the screen action."})});
+  for(const request of [
+    "Scroll down on the current home screen",
+    "Tap Alarm on the current screen",
+    "Inspect visible controls on the current home screen",
+    "Scroll down then tap Alarm"
+  ]) {
+    const result=await planner.next(request,[]);
+    assert.equal(result.type,"clarify",request);
+    assert.match(result.question,/No device action was executed/);
   }
 });
 

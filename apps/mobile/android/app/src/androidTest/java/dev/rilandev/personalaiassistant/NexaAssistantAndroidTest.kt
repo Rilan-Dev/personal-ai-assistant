@@ -74,13 +74,14 @@ class NexaAssistantAndroidTest {
         assertTrue(speech.exported)
     }
 
-    @Test fun roleStatusCannotClaimHotwordAvailable() {
+    @Test fun roleStatusReportsInstalledOfflineModelReadiness() {
         val result = invoke {
             NexaAssistantRoleModule(BridgeReactContext(app)).getAssistantRoleStatus(it)
         }
         assertNull(result.second)
         val status = result.first as ReadableMap
-        assertFalse(status.getBoolean("wakeWordReady"))
+        assertEquals(NexaWakeWordModule.modelReady(app),
+            status.getBoolean("wakeWordReady"))
         assertTrue(status.hasKey("selected"))
         assertTrue(status.hasKey("available"))
     }

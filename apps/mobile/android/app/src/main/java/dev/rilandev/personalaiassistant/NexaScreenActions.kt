@@ -90,7 +90,10 @@ internal object NexaScreenActions {
         var examined = 0
         var matched: AccessibilityNodeInfo? = null
         var count = 0
-        while (nodes.isNotEmpty() && examined++ < 180) {
+        // Real OEM application trees commonly include far more than 180
+        // nodes. Keep a firm bound, but allow complete uniqueness checks on
+        // larger screens instead of rejecting every target as truncated.
+        while (nodes.isNotEmpty() && examined++ < 512) {
             val node = nodes.removeFirst()
             // A structural Accessibility root/container may report disabled
             // even while its descendants are independent, enabled buttons.

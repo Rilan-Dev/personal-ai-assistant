@@ -7,7 +7,10 @@
         tools:ignore="GoogleAppIndexingWarning" tools:replace="android:usesCleartextTraffic">
         <!-- Distinguish this side-by-side service from QA/release variants in Android Settings. -->
         <service android:name=".ScreenAssistService"
-            android:label="@string/screen_assist_label_debug"
+            android:label="${screenAssistServiceLabel}"
+            tools:replace="android:label" />
+        <service android:name=".NexaLauncherNavigationService"
+            android:label="${launcherNavigationServiceLabel}"
             tools:replace="android:label" />
         <!-- Native non-React foreground activity for emulator instrumentation.
              This is debug-only, nonexported and excluded from release APKs. -->

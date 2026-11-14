@@ -53,6 +53,7 @@ class NexaWakeWordAndroidTest {
         assertFalse(ambiguous.observe("hey next", 7400, complete = true))
     }
     @Test fun serviceIsNotStartedWithoutVisibleOwner() {
+        val wasListening=NexaWakeWordService.listening
         val module = NexaWakeWordModule(BridgeReactContext(ctx))
         val (data,error)=invoke {module.getStatus(it)}
         assertNull(error)
@@ -62,6 +63,7 @@ class NexaWakeWordAndroidTest {
         assertTrue(status.hasKey("permissionGranted"))
         assertEquals("NOT_FOREGROUND",invoke {module.startListening(it)}.second)
         assertEquals("NOT_FOREGROUND",invoke {module.installModel(it)}.second)
-        assertFalse(NexaWakeWordService.listening)
+        assertEquals("A denied background request must not change an existing wake session",
+            wasListening,NexaWakeWordService.listening)
     }
 }

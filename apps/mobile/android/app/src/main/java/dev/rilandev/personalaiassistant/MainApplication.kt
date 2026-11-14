@@ -23,7 +23,8 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // Packages that cannot be autolinked yet can be added manually here, for example:
           add(DeviceControlPackage())
-        }
+        },
+      useDevSupport = BuildConfig.DEBUG && !BuildConfig.PAA_USE_EMBEDDED_JS_BUNDLE
     )
   }
 

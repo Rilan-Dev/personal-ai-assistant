@@ -1,6 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.content.Context
+import android.provider.Settings
 import android.content.pm.PackageManager
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -36,6 +37,10 @@ class NexaSetupAndroidTest {
         return Pair(data.get(),error.get())
     }
     @Test fun setupStatusReportsNativeBuildAndRealPermissions() {
+        val enabledServicesBefore=Settings.Secure.getString(app.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        val accessibilityBefore=Settings.Secure.getInt(app.contentResolver,
+            Settings.Secure.ACCESSIBILITY_ENABLED,0)
         val bridge=NexaSetupModule(BridgeReactContext(app))
         val (value,error)=invoke { bridge.getSetupStatus(it) }
         assertNull(error)
@@ -46,9 +51,19 @@ class NexaSetupAndroidTest {
         assertTrue(details.getInt("sdkLevel")>=29)
         assertEquals(app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)==
             PackageManager.PERMISSION_GRANTED,details.getBoolean("microphone"))
-        assertFalse("No test should silently enable accessibility", details.getBoolean("screenAssist"))
-        assertFalse("No test should silently enable launcher gestures",
+        assertEquals("Setup status must reflect Android's actual Screen Assist setting",
+            NexaAccessibilityServiceStatus.isEnabled(enabledServicesBefore,
+                android.content.ComponentName(app,ScreenAssistService::class.java)),
+            details.getBoolean("screenAssist"))
+        assertEquals("Setup status must reflect Android's actual launcher setting",
+            NexaAccessibilityServiceStatus.isEnabled(enabledServicesBefore,
+                android.content.ComponentName(app,NexaLauncherNavigationService::class.java)),
             details.getBoolean("launcherNavigation"))
+        assertEquals("Reading setup status must not change enabled services",enabledServicesBefore,
+            Settings.Secure.getString(app.contentResolver,
+                Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES))
+        assertEquals("Reading setup status must not enable global Accessibility",accessibilityBefore,
+            Settings.Secure.getInt(app.contentResolver,Settings.Secure.ACCESSIBILITY_ENABLED,0))
     }
     @Test fun setupAcknowledgementRequiresForegroundOwner() {
         val bridge=NexaSetupModule(BridgeReactContext(app))

@@ -2,18 +2,26 @@ package dev.rilandev.personalaiassistant
 
 import android.Manifest
 import android.app.role.RoleManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.view.accessibility.AccessibilityManager
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
+
+/** Exact, package-scoped match for Android's colon-separated enabled-service setting. */
+internal object NexaAccessibilityServiceStatus {
+    fun isEnabled(services: String?, expected: ComponentName): Boolean =
+        services.orEmpty().split(':').any { flattened ->
+            ComponentName.unflattenFromString(flattened.trim()) == expected
+        }
+}
 
 /**
  * Read-only Android setup diagnostics and explicit links to system Settings.
@@ -26,16 +34,14 @@ class NexaSetupModule(private val context: ReactApplicationContext) :
     private fun granted(permission: String): Boolean =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
 
-    private fun serviceEnabled(target: Class<*>): Boolean = try {
-        val manager = context.getSystemService(Context.ACCESSIBILITY_SERVICE)
-            as AccessibilityManager
-        manager.getEnabledAccessibilityServiceList(
-            android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-        ).any { it.resolveInfo?.serviceInfo?.let { info ->
-            info.packageName == context.packageName &&
-                info.name == target.name
-        } == true }
-    } catch (_: Exception) { false }
+    private fun serviceEnabled(target: Class<*>): Boolean {
+        val expected = ComponentName(context, target)
+        return try {
+            NexaAccessibilityServiceStatus.isEnabled(
+                Settings.Secure.getString(context.contentResolver,
+                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES), expected)
+        } catch (_: Exception) { false }
+    }
 
     @ReactMethod fun getSetupStatus(p: Promise) {
         try {

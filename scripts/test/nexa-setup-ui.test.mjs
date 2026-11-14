@@ -33,7 +33,9 @@ test('setup exposes each real Android permission independently and cannot grant 
     'screenAssist','launcherNavigation','assistantSelected','sourceRevision','versionCode'])
     assert.match(native,new RegExp(term));
   assert.match(native,/checkSelfPermission/);
-  assert.match(native,/getEnabledAccessibilityServiceList/);
+  assert.match(native,/Settings\.Secure\.ENABLED_ACCESSIBILITY_SERVICES/);
+  assert.match(native,/NexaAccessibilityServiceStatus\.isEnabled/);
+  assert.match(native,/ScreenAssistState\.connected && ScreenAssistService\.active != null/);
   assert.match(native,/currentActivity\?\.hasWindowFocus\(\) != true/);
   assert.match(native,/getSharedPreferences\("nexa_setup"/);
   assert.doesNotMatch(native,/requestPermissions\(|dispatchGesture\(|startForegroundService\(/);
@@ -65,6 +67,7 @@ test('Expo identity and Android screen permission name use the new Nexa brand',(
   assert.equal(config.expo.web.name,'Nexa AI');
   assert.equal(config.expo.android.package,'dev.rilandev.personalaiassistant');
   const manifest=read('apps/mobile/android/app/src/main/AndroidManifest.xml');
-  assert.match(manifest,/Nexa Screen Assist/);
+  assert.match(manifest,/android:label="\$\{screenAssistServiceLabel\}"/);
+  assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist/);
   assert.doesNotMatch(manifest,/Personal AI Screen Assist/);
 });

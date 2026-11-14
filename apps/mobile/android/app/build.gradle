@@ -112,6 +112,9 @@ android {
 
         // Planned task execution remains disabled in all normal APKs.
         buildConfigField "boolean", "NEXA_REVIEWED_READ_PLAN_ENABLED", "false"
+        // Physical/emulator QA APKs must execute the bundle compiled into this
+        // artifact, even when another developer's Metro server is reachable.
+        buildConfigField "boolean", "PAA_USE_EMBEDDED_JS_BUNDLE", "${(findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()}"
         buildConfigField "String", "PAA_SOURCE_REVISION", "\"${System.getenv('PAA_BUILD_SOURCE_REVISION') ?: 'development'}\""
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -134,6 +137,14 @@ android {
     }
     buildTypes {
         debug {
+            manifestPlaceholders += [screenAssistServiceLabel: (
+                (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
+                    ? 'Nexa Screen Assist QA2'
+                    : 'Nexa Screen Assist (Debug)'),
+                launcherNavigationServiceLabel: (
+                    (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
+                        ? 'Nexa Launcher Navigation QA2'
+                        : 'Nexa Launcher Navigation (Debug)')]
             // Local device QA can keep the signed release-test app and its
             // owner settings while installing the separately signed debug APK.
             // A distinct device-test app id. The locally disposable debug
@@ -155,6 +166,8 @@ android {
             signingConfig signingConfigs.debug
         }
         release {
+            manifestPlaceholders += [screenAssistServiceLabel: 'Nexa Screen Assist',
+                launcherNavigationServiceLabel: 'Nexa Launcher Navigation']
             // Never sign release variants with Android's debug identity.
             // Without a dedicated CI key, assembleRelease stays unsigned.
             if (file('testing-release.keystore').exists()) {

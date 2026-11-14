@@ -70,6 +70,16 @@ internal object ScreenAssistState {
     }
 }
 
+/** Package-boundary checks for AccessibilityEvent source-node fallback. */
+internal object ScreenAssistSourcePolicy {
+    fun matches(eventPackage: String, sourcePackage: String, ownerPackage: String): Boolean =
+        eventPackage.isNotBlank() && eventPackage == sourcePackage &&
+            eventPackage != ownerPackage && eventPackage != "android" &&
+            eventPackage != "com.android.systemui" &&
+            !eventPackage.startsWith("com.google.android.inputmethod") &&
+            !eventPackage.startsWith("com.android.inputmethod")
+}
+
 class ScreenAssistService : AccessibilityService() {
     override fun onCreate() {
         super.onCreate()
@@ -103,10 +113,36 @@ class ScreenAssistService : AccessibilityService() {
     }
 
     private fun isPermittedExternalWindow(pkg: String): Boolean =
-        pkg.isNotBlank() && pkg != packageName && pkg != "android" &&
-        pkg != "com.android.systemui" &&
-        !pkg.startsWith("com.google.android.inputmethod") &&
-        !pkg.startsWith("com.android.inputmethod")
+        ScreenAssistSourcePolicy.matches(pkg, pkg, packageName)
+
+    /**
+     * Some Android builds deliver a content event before the service's
+     * interactive-window snapshot is ready. In that case the event source is
+     * the only current, app-scoped node we can safely inspect. Walk to its
+     * highest same-package ancestor so one-shot reads still cover the screen.
+     */
+    private fun externalEventSourceRoot(
+        event: AccessibilityEvent,
+        eventPackage: String
+    ): AccessibilityNodeInfo? {
+        if (!isPermittedExternalWindow(eventPackage)) return null
+        var node = try { event.source } catch (_: Exception) { null } ?: return null
+        if (!ScreenAssistSourcePolicy.matches(eventPackage, node.packageName?.toString().orEmpty(), packageName)) {
+            try { node.recycle() } catch (_: Exception) {}
+            return null
+        }
+        var depth = 0
+        while (depth++ < 32) {
+            val parent = try { node.parent } catch (_: Exception) { null } ?: break
+            if (!ScreenAssistSourcePolicy.matches(eventPackage, parent.packageName?.toString().orEmpty(), packageName)) {
+                try { parent.recycle() } catch (_: Exception) {}
+                break
+            }
+            try { node.recycle() } catch (_: Exception) {}
+            node = parent
+        }
+        return node
+    }
 
     companion object {
         @Volatile internal var active: ScreenAssistService? = null
@@ -168,10 +204,19 @@ class ScreenAssistService : AccessibilityService() {
             event.eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) return
         val pkg = event.packageName?.toString().orEmpty()
         if (pkg.isBlank() || pkg == packageName || pkg == "com.android.systemui") return
-        val root = try { externalWindowRoot() } catch (_: Exception) { null }
+        val root = (try { externalWindowRoot() } catch (_: Exception) { null })
+            ?: try { externalEventSourceRoot(event, pkg) } catch (_: Exception) { null }
         if (root == null) {
-            if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
-                android.util.Log.d("NexaScreenAssist", "read event had no permitted external root; eventPackage=$pkg type=${event.eventType}")
+            if (BuildConfig.DEBUG && ScreenAssistState.isArmed()) {
+                val windowSummary = try {
+                    windows.orEmpty().take(8).joinToString(",") { window ->
+                        val windowPackage = try { window.root?.packageName?.toString().orEmpty() } catch (_: Exception) { "?" }
+                        "${window.type}:$windowPackage"
+                    }
+                } catch (_: Exception) { "unavailable" }
+                val activePackage = try { rootInActiveWindow?.packageName?.toString().orEmpty() } catch (_: Exception) { "unavailable" }
+                android.util.Log.d("NexaScreenAssist", "read event had no permitted external root; eventPackage=$pkg type=${event.eventType} source=${event.source?.packageName} active=$activePackage windows=$windowSummary")
+            }
             return
         }
         try {

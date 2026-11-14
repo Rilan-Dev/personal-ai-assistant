@@ -94,16 +94,16 @@ public final class NexaChatListQaActivity extends Activity {
             FrameLayout layer = new FrameLayout(this);
             FrameLayout.LayoutParams first = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, 140);
-            layer.addView(makeRow("Nova Forever 🖤"), first);
+            layer.addView(makeRow("Mah Forever 🖤"), first);
             FrameLayout.LayoutParams second = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, 140);
             second.topMargin = 55;
-            layer.addView(makeRow("Nova Forever 🖤"), second);
+            layer.addView(makeRow("Mah Forever 🖤"), second);
             area.addView(layer, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 195));
         } else {
-            area.addView(makeRow("Nova Forever 🖤"));
-            if (duplicateContact) area.addView(makeRow("Nova Forever 🖤"));
+            area.addView(makeRow("Mah Forever 🖤"));
+            if (duplicateContact) area.addView(makeRow("Mah Forever 🖤"));
         }
         area.addView(label("Other contact", 14f));
         setContentView(area);
@@ -116,8 +116,8 @@ public final class NexaChatListQaActivity extends Activity {
         marker.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         area.addView(marker);
         area.addView(status());
-        TextView header = label("Nova Forever 🖤", 19f);
-        header.setContentDescription("Nova Forever 🖤");
+        TextView header = label("Mah Forever 🖤", 19f);
+        header.setContentDescription("Mah Forever 🖤");
         area.addView(header);
 
         messageInput = new EditText(this);

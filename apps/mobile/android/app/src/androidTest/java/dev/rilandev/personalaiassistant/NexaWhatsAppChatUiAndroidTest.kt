@@ -44,7 +44,7 @@ class NexaWhatsAppChatUiAndroidTest {
             val window=android.graphics.Rect().also{current.getBoundsInScreen(it)}
             val rows=NexaQaAccessibilityRoot.nodes(current).filter { node ->
                 node.isClickable &&
-                    node.contentDescription?.toString()?.startsWith("Nova Forever")==true
+                    node.contentDescription?.toString()?.startsWith("Mah Forever")==true
             }
             val geometry=rows.size==expectedRows && !window.isEmpty &&
                 rows.all { node ->
@@ -77,7 +77,7 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun duplicatedLabelNodesResolveToOneRealChatRowAndVerifyHeader() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
         try {
-            val opened=settledScan(runId,1,"Nova Forever",100)
+            val opened=settledScan(runId,1,"Mah Forever",100)
             val scan=opened.scan
             assertEquals("One clickable chat-row target",1,scan.candidates)
             assertEquals(100,scan.bestEvidence)
@@ -92,7 +92,7 @@ class NexaWhatsAppChatUiAndroidTest {
             NexaQaAccessibilityRoot.waitForText(runId,openedStatus).let { current ->
                 assertTrue("New chat header + message composer must both be present: "+
                     fixtureTree(current),
-                    NexaWhatsAppChatActions.inspect(current,"Nova Forever").alreadyOpen)
+                    NexaWhatsAppChatActions.inspect(current,"Mah Forever").alreadyOpen)
                 val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
                 queue.add(current)
                 val composers=mutableListOf<AccessibilityNodeInfo>()
@@ -148,7 +148,7 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun twoIdenticalChatRowsRemainAmbiguousAndAreNeverTapped() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,true)
         try {
-            val matched=settledScan(runId,2,"Nova Forever",100)
+            val matched=settledScan(runId,2,"Mah Forever",100)
             val current=matched.root
             val scan=matched.scan
             assertEquals(fixtureTree(current),2,scan.candidates)
@@ -165,10 +165,10 @@ class NexaWhatsAppChatUiAndroidTest {
         val runId=NexaQaAccessibilityRoot.launchFixture(
             NexaChatListQaActivity::class.java,true,overlap=true)
         try {
-            val observed=settledScan(runId,2,"Nova Forever",100)
+            val observed=settledScan(runId,2,"Mah Forever",100)
             val rows=NexaQaAccessibilityRoot.nodes(observed.root).filter {
                 it.isClickable &&
-                    it.contentDescription?.toString()?.startsWith("Nova Forever")==true
+                    it.contentDescription?.toString()?.startsWith("Mah Forever")==true
             }
             assertEquals("Two native source identities must be visible",2,rows.size)
             val a=android.graphics.Rect().also{rows[0].getBoundsInScreen(it)}

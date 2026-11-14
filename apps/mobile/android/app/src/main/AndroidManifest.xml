@@ -94,7 +94,7 @@
     <!-- Owner-enabled Accessibility service: approved visible text, semantic clicks,
          and bounded scroll actions. Android Settings must explicitly enable it. -->
     <service android:name=".ScreenAssistService"
-        android:label="Nexa Screen Assist"
+        android:label="${screenAssistServiceLabel}"
         android:description="@string/screen_assist_description"
         android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
         android:exported="true">
@@ -106,7 +106,7 @@
     </service>
     <!-- Owner-enabled launcher-only assist. It cannot click or operate other apps. -->
     <service android:name=".NexaLauncherNavigationService"
-        android:label="Nexa Launcher Navigation"
+        android:label="${launcherNavigationServiceLabel}"
         android:description="@string/nexa_launcher_accessibility_description"
         android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
         android:exported="true">
