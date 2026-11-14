@@ -285,6 +285,20 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
         p.resolve(value)
     }
 
+    /** Only the five user-selected launcher app labels are classified.
+     * The actual system-installed Accessibility grant remains mandatory,
+     * and the current window must independently be the Android home screen.
+     */
+    @ReactMethod fun inspectFiveHomeApps(p:Promise) {
+        if(context.currentActivity?.hasWindowFocus()!=true &&
+            !NexaToolOverlayService.visible){
+            p.reject("NOT_OWNER_VISIBLE",
+                "Inspect the home screen from visible Nexa or its floating chat.")
+            return
+        }
+        p.resolve(NexaHomeFiveAppObservation.observe(context))
+    }
+
     @ReactMethod fun openAccessibilitySettings(p: Promise) {
         if (context.currentActivity?.hasWindowFocus() != true) {
             p.reject("NOT_FOREGROUND", "Open the app to configure accessibility")
