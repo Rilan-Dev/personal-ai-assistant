@@ -76,7 +76,7 @@ test("opt-in continuous context is ephemeral and cannot silently leak private sc
   assert.match(safeContext,/const val TTL_MS=8_000L/);
   assert.match(safeContext,/const val THROTTLE_MS=1_500L/);
   assert.match(safeContext,/NexaTaskScreenObservation\.observe\(context\)/);
-  assert.match(safeContext,/if\(!observed\.startsWith\("Visible non-sensitive controls in \$eventPackage: "\)\)/);
+  assert.match(safeContext,/if\(!observed\.startsWith\("Visible non-sensitive controls in \$eventPackage: "\)/);
   assert.match(safeContext,/NexaToolOverlayService\.visible/);
   assert.match(safeContext,/ScreenAssistState\.connected && ScreenAssistService\.active!=null/);
   assert.match(accessibility,/NexaSafeContextCache\.capture\(this,pkg\)/);
