@@ -80,6 +80,13 @@ test("armed screen reads retry unavailable roots briefly and accept scroll event
   assert.match(code,/rootPackage != expectedPackage/);
   assert.match(code,/if \(!ScreenAssistState\.isArmed\(\)\)[\s\S]*?return/);
 });
+test("Screen Assist reasserts external-window retrieval and retries within the owner's arm",()=>{
+  const code=read(path+"ScreenAssistService.kt");
+  assert.match(code,/override fun onServiceConnected\(\)[\s\S]*?serviceInfo\s*=\s*serviceInfo\.apply[\s\S]*?FLAG_RETRIEVE_INTERACTIVE_WINDOWS/);
+  assert.match(code,/FLAG_INCLUDE_NOT_IMPORTANT_VIEWS/);
+  assert.match(code,/MAX_SCREEN_READ_RETRIES\s*=\s*40/);
+  assert.match(code,/postDelayed\(retry,\s*READ_ROOT_RETRY_DELAY_MS\)/);
+});
 test("UI provides live voice controls and explicit screen-read review",()=>{
   const code=read("apps/mobile/App.tsx");
   assert.match(code,/startOwnerLiveVoice\(/);

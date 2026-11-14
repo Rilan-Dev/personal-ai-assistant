@@ -12,9 +12,9 @@ tags:
     permissions:
       all: allow
 - extendedWaitUntil:
-    visible: "Tools tab"
+    visible: "Tools"
     timeout: 60000
-- tapOn: "Tools tab"
+- tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 10000

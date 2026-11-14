@@ -14,10 +14,10 @@ tags:
     permissions:
       all: allow
 - extendedWaitUntil:
-    visible: "Tools tab"
+    visible: "Tools"
     timeout: 60000
 - tapOn:
-    text: "Tools tab"
+    text: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 10000
@@ -118,7 +118,7 @@ tags:
           stopApp: false
           clearState: false
 - tapOn:
-    text: "Tools tab"
+    text: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 10000

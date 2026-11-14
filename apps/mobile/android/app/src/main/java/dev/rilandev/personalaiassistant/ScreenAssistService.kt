@@ -1,6 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.content.Intent
 import android.os.Handler
@@ -41,15 +42,16 @@ internal object ScreenAssistState {
         expiryHandler.postDelayed(expire,20_000L)
         true
     }
-    fun capture(packageName: String, text: String) = synchronized(lock) {
+    fun capture(packageName: String, text: String): Boolean = synchronized(lock) {
         if (armedUntil <= android.os.SystemClock.elapsedRealtime() ||
-            snapshot != null || text.isBlank()) return@synchronized
+            snapshot != null || text.isBlank()) return@synchronized false
         snapshot = text.take(2000)
         sourcePackage = packageName.take(100)
         capturedAt = android.os.SystemClock.elapsedRealtime()
         armedUntil = 0
         expiryHandler.removeCallbacks(expire)
         expiryHandler.postDelayed(expire,60_000L)
+        true
     }
     fun consume(): Triple<String,String,Boolean>? = synchronized(lock) {
         val current = snapshot ?: return@synchronized null
@@ -108,6 +110,8 @@ class ScreenAssistService : AccessibilityService() {
             if (active !== this || !ScreenAssistState.isArmed()) return@Runnable
             val root = try { externalWindowRoot() } catch (_: Exception) { null }
             if (root == null) {
+                if (BuildConfig.DEBUG)
+                    android.util.Log.d("NexaScreenAssist", "read retry has no external root; package=$expectedPackage attempt=$attempt")
                 if (attempt < MAX_SCREEN_READ_RETRIES)
                     scheduleScreenReadRetry(expectedPackage, attempt + 1)
                 return@Runnable
@@ -128,7 +132,7 @@ class ScreenAssistService : AccessibilityService() {
         }
         screenReadRetry = retry
         screenReadRetryPackage = expectedPackage
-        screenReadRetryHandler.postDelayed(retry, READ_ROOT_RETRY_DELAY_MS * (attempt + 1))
+        screenReadRetryHandler.postDelayed(retry, READ_ROOT_RETRY_DELAY_MS)
     }
 
     private fun captureVisibleScreenText(pkg: String, root: AccessibilityNodeInfo) {
@@ -156,11 +160,9 @@ class ScreenAssistService : AccessibilityService() {
                 }
             }
         }
-        if (text.isNotBlank()) {
-            ScreenAssistState.capture(pkg, text.toString())
-            if (!ScreenAssistState.isArmed()) cancelScreenReadRetry()
-        }
-        if (BuildConfig.DEBUG && ScreenAssistState.isArmed())
+        val captured = text.isNotBlank() && ScreenAssistState.capture(pkg, text.toString())
+        if (captured) cancelScreenReadRetry()
+        if (BuildConfig.DEBUG && (captured || ScreenAssistState.isArmed()))
             android.util.Log.d("NexaScreenAssist", "read event inspected external root; package=$pkg nodes=$visited captured=${text.isNotBlank()} length=${text.length}")
     }
 
@@ -228,15 +230,23 @@ class ScreenAssistService : AccessibilityService() {
     }
 
     companion object {
-        private const val MAX_SCREEN_READ_RETRIES = 5
-        private const val READ_ROOT_RETRY_DELAY_MS = 250L
+        private const val MAX_SCREEN_READ_RETRIES = 40
+        private const val READ_ROOT_RETRY_DELAY_MS = 400L
         @Volatile internal var active: ScreenAssistService? = null
             private set
     }
     override fun onServiceConnected() {
+        serviceInfo = serviceInfo.apply {
+            flags = flags or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
+                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
+        }
         active = this
         ScreenAssistState.connected = true
-        if (BuildConfig.DEBUG) android.util.Log.d("NexaScreenAssistLifecycle", "service connected")
+        if (BuildConfig.DEBUG) android.util.Log.d(
+            "NexaScreenAssistLifecycle",
+            "service connected; interactiveWindows=${serviceInfo.flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS != 0} includeUnimportantViews=${serviceInfo.flags and AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS != 0}"
+        )
     }
     override fun onInterrupt() {}
     override fun onUnbind(intent: Intent?): Boolean {

@@ -14,9 +14,9 @@ tags:
     stopApp: true
     clearState: false
 - extendedWaitUntil:
-    visible: "Tools tab"
-    timeout: 90000
-- tapOn: "Tools tab"
+    visible: "How can I help today?"
+    timeout: 180000
+- tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 30000
@@ -24,7 +24,9 @@ tags:
     element: "Open permission setup"
     direction: UP
     timeout: 30000
-- tapOn: "Open permission setup"
+- tapOn:
+    text: "Open permission setup"
+    point: "50%,50%"
 - extendedWaitUntil:
     visible: "Make your assistant yours."
     timeout: 90000
@@ -32,7 +34,9 @@ tags:
     element: "Show optional permissions and features"
     direction: DOWN
     timeout: 30000
-- tapOn: "Show optional permissions and features"
+- tapOn:
+    text: "Show optional permissions and features"
+    point: "50%,50%"
 - scrollUntilVisible:
     element: "Hide optional features"
     direction: DOWN
@@ -46,6 +50,7 @@ tags:
     timeout: 30000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
+    point: "50%,50%"
 # Android 17 may open the system full-control consent immediately when this
 # app's one-time accessibility shortcut is selected. Confirm it when shown.
 - runFlow:
@@ -122,7 +127,9 @@ tags:
           element: "Open Nexa app info (restricted settings)"
           direction: DOWN
           timeout: 25000
-      - tapOn: "Open Nexa app info (restricted settings)"
+      - tapOn:
+          text: "Open Nexa app info (restricted settings)"
+          point: "50%,50%"
       - extendedWaitUntil:
           visible: "App info"
           timeout: 25000
@@ -141,6 +148,7 @@ tags:
           timeout: 25000
       - tapOn:
           text: "Open Accessibility.*One-time screen assistance.*"
+          point: "50%,50%"
       - runFlow:
           when:
             visible: "Allow Nexa Screen Assist QA2 to have full control of your device\\?"

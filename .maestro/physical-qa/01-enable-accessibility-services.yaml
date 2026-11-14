@@ -12,13 +12,13 @@ tags:
     permissions:
       all: allow
 - extendedWaitUntil:
-    visible: "Tools tab"
+    visible: "Tools"
     timeout: 60000
-- tapOn: "Chat tab"
+- tapOn: "Chat"
 - extendedWaitUntil:
     visible: "Nexa AI"
     timeout: 10000
-- tapOn: "Tools tab"
+- tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 10000

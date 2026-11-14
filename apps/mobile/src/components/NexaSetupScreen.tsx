@@ -159,7 +159,8 @@ export default function NexaSetupScreen(props: Props) {
             </View>}
         </View>
       ))}
-      <Pressable accessibilityRole="button" accessibilityLabel="Show optional permissions and features"
+      <Pressable accessibilityRole="button"
+        accessibilityLabel={showOptional ? 'Hide optional features' : 'Show optional permissions and features'}
         accessibilityState={{expanded:showOptional}} onPress={()=>setShowOptional(v=>!v)}
         style={styles.expandCard}>
         <Text style={styles.expandTitle}>{showOptional?'Hide optional features':'Explore 6 optional features'}</Text>

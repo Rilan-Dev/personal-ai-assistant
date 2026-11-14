@@ -60,12 +60,13 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
   assert.ok(/extendedWaitUntil:\n\s+visible: "Make your assistant yours\."\n\s+timeout: 90000/.test(flow),
     "Flow 10 must wait for the QA2 JS bundle and explicitly opened Setup screen before querying it");
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
-  assert.ok(flow.includes('- tapOn: "Show optional permissions and features"'));
+  assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
   assert.ok(flow.includes('element: "Hide optional features"'));
   assert.ok(flow.includes('element: "One-time screen assistance"'));
   assert.ok(/element: "One-time screen assistance"\n\s+direction: UP/.test(flow));
   assert.ok(flow.includes('text: "Open Accessibility.*One-time screen assistance.*"'));
+  assert.match(flow,/text: "Open Accessibility\.\*One-time screen assistance\.\*"\n\s+point: "50%,50%"/);
   assert.ok(/checked: true[\s\S]*?tapOn: "Turn off"[\s\S]*?checked: false/.test(flow),
     "an already-enabled service must be explicitly restarted inside Android Settings");
   assert.match(flow,/visible: "Stop Nexa Screen Assist[\s\S]*?tapOn: "Stop"/,
@@ -74,10 +75,35 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
 
 test("Flow 10 enters Setup explicitly on an already-configured QA2 install",()=>{
   assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.physicalqa2$/m);
-  assert.ok(flow.includes('visible: "Tools tab"'));
-  assert.ok(flow.includes('- tapOn: "Tools tab"'));
+  assert.ok(flow.includes('visible: "How can I help today?"'));
+  assert.ok(flow.includes('timeout: 180000'));
+  assert.ok(flow.includes('- tapOn: "Tools"'));
   assert.ok(flow.includes('element: "Open permission setup"'));
-  assert.ok(flow.includes('- tapOn: "Open permission setup"'));
+  assert.ok(flow.includes('- tapOn:\n    text: "Open permission setup"\n    point: "50%,50%"'),
+    "tap the live card's center by bounds instead of blocking on Android's accessibility click action");
+  assert.match(flow,/text: "Open Nexa app info \(restricted settings\)"\n\s+point: "50%,50%"/);
+});
+
+test("Maestro navigation selectors match the rendered Chat and Tools labels",()=>{
+  const navigationFlows=[
+    flow,
+    source(".maestro/nexa/16-qa2-screen-assist-reachable.yaml"),
+    source(".maestro/physical-qa/00-device-preflight.yaml"),
+    source(".maestro/physical-qa/01-enable-accessibility-services.yaml"),
+    source(".maestro/physical-qa/02-ready-check.yaml"),
+  ];
+  assert.ok(flow.includes('visible: "How can I help today?"'));
+  assert.ok(flow.includes('- tapOn: "Tools"'));
+  for(const navigationFlow of navigationFlows) {
+    assert.doesNotMatch(navigationFlow,/"(?:Chat|Tools) tab"/,
+      "the rendered accessible hierarchy exposes the visible labels Chat and Tools without a tab suffix");
+  }
+});
+
+test("Setup optional-feature accordion exposes its current action label to accessibility",()=>{
+  assert.match(component,/accessibilityLabel=\{showOptional \? 'Hide optional features' : 'Show optional permissions and features'\}/,
+    "the expanded label must match visible text so assistive tools can verify the disclosure state");
+  assert.match(component,/accessibilityState=\{\{expanded:showOptional\}\}/);
 });
 
 test("QA2 Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{
