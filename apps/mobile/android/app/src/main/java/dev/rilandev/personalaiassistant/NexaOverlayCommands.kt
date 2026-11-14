@@ -74,7 +74,9 @@ internal object NexaOverlayCommands {
             " · Wake listener: " + NexaWakeWordService.state +
             "\nLive voice: " + RealtimeVoiceService.status +
             " · Launcher: $launcher ($swipes swipes)" +
-            "\nBattery background policy: $batteryPolicy"
+            "\nBattery background policy: $batteryPolicy" +
+            "\nNavigation trust: "+NexaVoicePermissionPolicy.mode(context)+
+            " · Accessibility: "+(if(ScreenAssistState.connected) "enabled" else "off")
     }
 
     fun handle(context: Context, raw: String, origin: String = "overlay"): String {
@@ -135,6 +137,9 @@ internal object NexaOverlayCommands {
             "help", "commands", "what can you do" ->
                 "Try: device status, battery, check github, check whatsapp, open github, " +
                 "open whatsapp, open brave, find my github app, launcher status, task status. Messages require review."
+            "inspect five home apps", "inspect 5 home apps",
+            "check five home apps", "check 5 home apps" ->
+                NexaHomeFiveAppObservation.observe(context)
             "status", "permissions", "device status", "check device status", "privacy",
             "background status", "background voice status", "hey nexa status" -> status(context)
             "check github", "is github installed", "search github app" ->

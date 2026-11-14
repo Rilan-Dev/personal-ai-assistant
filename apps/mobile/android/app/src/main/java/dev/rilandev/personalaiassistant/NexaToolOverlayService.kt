@@ -30,10 +30,10 @@ import android.widget.TextView
 import kotlin.math.abs
 
 /**
- * User-controlled small Android overlay with local Chat/Tools/Voice panels.
- * Does not display RN's full app, read the current screen, call a model,
- * grant permissions, send messages, or execute arbitrary agent instructions.
- * Full Nexa navigation is explicitly separate from the compact panels.
+ * User-controlled Android floating panel. Its Chat tab relays to the SAME
+ * React agent as the full application when JS is alive; local Tools and Voice
+ * remain available when the shared AI engine is suspended. This service is
+ * not a permission grant or a second unrestricted native executor.
  */
 class NexaToolOverlayService : Service() {
     companion object {
@@ -41,6 +41,18 @@ class NexaToolOverlayService : Service() {
         const val ACTION_HIDE = "dev.rilandev.personalaiassistant.OVERLAY_HIDE"
         @Volatile var visible = false
             private set
+        @Volatile private var activeOverlay:NexaToolOverlayService?=null
+        /** One in-memory response to the exact outstanding shared Chat turn. */
+        fun showSharedChatReply(reply:String) {
+            Handler(Looper.getMainLooper()).post {
+                val service=activeOverlay ?:return@post
+                if(!visible || service.view==null)return@post
+                service.history.addLast("NEXA AI · "+reply.take(1200))
+                while(service.history.size>12)service.history.removeFirst()
+                service.note="Shared Chat result received. Android tool approvals remain independent."
+                service.render()
+            }
+        }
     }
     private lateinit var wm: WindowManager
     private var view: View? = null
@@ -124,6 +136,7 @@ class NexaToolOverlayService : Service() {
         if (view == null) {
             wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         }
+        activeOverlay=this
         render()
         return START_NOT_STICKY
     }
@@ -490,6 +503,30 @@ class NexaToolOverlayService : Service() {
         } else dispatch()
     }
 
+    /** No duplicate planner: owner-entered floating Chat uses the exact
+     * provider, agent registry, journal and approval policy of main Chat.
+     * If JS is suspended, fail visibly rather than execute a different task.
+     */
+    private fun sendSharedChat(raw:String) {
+        val query=raw.trim()
+        if(query.isEmpty())return
+        if(query.length>500){
+            note="Chat request is too long (maximum 500 characters). No task started."
+            render()
+            return
+        }
+        if(!NexaOverlayChatRelay.offer(query)){
+            note="Shared AI Chat unavailable or another task is pending. Open full Chat or retry after reviewing task status. No fallback action executed."
+            render()
+            return
+        }
+        history.addLast("YOU · "+query.take(300))
+        history.addLast("NEXA AI · Working through the shared Chat agent…")
+        while(history.size>12)history.removeFirst()
+        note="Shared Chat request accepted once. Check its result before another task; no automatic retries."
+        render()
+    }
+
     private fun sendLocal(raw: String) {
         if(raw.isBlank())return
         // New owner speech/text cancels prior pending UI goals and unconfirmed
@@ -726,6 +763,25 @@ class NexaToolOverlayService : Service() {
         val item = if (snap != null) NexaScreenActions.select(snap.token, id) else null
         note = if (item == null) "Icon selection expired. Inspect again."
             else "Confirm one tap on ${item.label} in ${snap?.packageName}? This action cannot be undone."
+        // Safe navigation is the ONLY tap class eligible for persisted trust.
+        // Never automate arbitrary labels, message controls or coordinates.
+        val service=ScreenAssistService.active
+        if(item!=null && snap!=null && service!=null &&
+            NexaScreenActionPolicy.permits(item) &&
+            NexaVoicePermissionPolicy.canExecute(this,"tap_safe_icon:"+item.semantic)){
+            note="Trusted safe navigation: one ${item.label} tap requested. No automatic replay."
+            Thread({
+                val result=try{NexaScreenActions.confirm(service,snap.token,origin="overlay")}
+                    catch(_:Exception){"Safe navigation outcome uncertain. No retry."}
+                Handler(Looper.getMainLooper()).post{
+                    if(view!=null && visible){
+                        inspectedScreen=null
+                        note=result
+                        render()
+                    }
+                }
+            },"nexa-trusted-one-safe-tap").start()
+        }
         render()
     }
 
@@ -771,8 +827,24 @@ class NexaToolOverlayService : Service() {
         cancelBoundedScrollSearch()
         inspectedScreen = null
         NexaScreenActions.reset()
-        note = ScreenAssistService.active?.let { NexaScreenScroll.prepare(it,direction) }
-            ?: "Enable Screen Assist before requesting a scroll."
+        val service=ScreenAssistService.active
+        note=service?.let{NexaScreenScroll.prepare(it,direction)}
+            ?: "Enable Nexa Screen Assist in Android Accessibility settings first."
+        // Only a direct owner overlay command in the previously selected
+        // persistent TRUST_NAVIGATION mode can skip this extra prompt.
+        // Native prepare/confirm still requires a unique visible target,
+        // same window, owner Pause fence and one-shot encrypted journal.
+        if(service!=null && NexaScreenScroll.isPending() &&
+            NexaVoicePermissionPolicy.canExecute(this,"scroll_screen:$direction")){
+            note="Trusted routine navigation: one $direction scroll requested. Checking Android evidence; no retry."
+            Thread({
+                val answer=try{NexaScreenScroll.confirm(service,origin="overlay")}
+                    catch(_:Exception){"Scroll result uncertain. Inspect the screen; no retry."}
+                Handler(Looper.getMainLooper()).post{
+                    if(view!=null && visible){note=answer;render()}
+                }
+            },"nexa-trusted-one-scroll").start()
+        }
         render()
     }
     private fun confirmScroll() {
@@ -934,18 +1006,18 @@ class NexaToolOverlayService : Service() {
                 ))
                 when(section) {
                     "chat" -> {
-                        addView(text("Ask Nexa to check, find or open an app.",12f,true))
+                        addView(text("Nexa AI · same provider, planner and journal as main Chat.\nTasks run only while the shared React engine is available.",12f,true))
                         val transcript = ScrollView(this@NexaToolOverlayService).apply {
                             background = NexaOverlayTheme.inset(this@NexaToolOverlayService,
                                 NexaOverlayTheme.palette(this@NexaToolOverlayService))
                             addView(text(
-                                if(history.isEmpty()) "Try: open Brave, device status, check GitHub."
+                                if(history.isEmpty()) "Try: check battery, find installed apps, or plan safe navigation."
                                 else history.takeLast(4).joinToString("\n\n"),12f))
                         }
                         addView(transcript, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
                         val input = EditText(this@NexaToolOverlayService).apply {
-                            hint = "Ask a local tool…"
+                            hint = "Ask the same Nexa AI as main Chat…"
                             setHintTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).secondary)
                             setTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).title)
                             textSize=13f
@@ -958,10 +1030,10 @@ class NexaToolOverlayService : Service() {
                         addView(input, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(46)))
                         input.setOnEditorActionListener { _,_,_ ->
-                            sendLocal(input.text.toString());true
+                            sendSharedChat(input.text.toString());true
                         }
                         addView(row(
-                            button("Send") { sendLocal(input.text.toString()) },
+                            button("Send to Nexa AI") { sendSharedChat(input.text.toString()) },
                             button("Open full Chat") { openTab("chat") }
                         ))
                     }
@@ -993,6 +1065,64 @@ class NexaToolOverlayService : Service() {
                                 ))
                             }
                         }
+                        addView(text("One permission mode for Chat, floating Tools and Sarvam Voice",12f,true))
+                        addView(text("Mode: "+NexaVoicePermissionPolicy.mode(this@NexaToolOverlayService)+
+                            " · Accessibility: "+(if(ScreenAssistState.connected) "Android enabled" else "Android off")+
+                            " · Overlay: "+(if(Settings.canDrawOverlays(this@NexaToolOverlayService)) "enabled" else "off"),11f,true))
+                        addView(row(
+                            button("Always allow safe navigation") {
+                                val saved=NexaVoicePermissionPolicy.setMode(
+                                    this@NexaToolOverlayService,
+                                    NexaVoicePermissionPolicy.TRUST_NAVIGATION)
+                                note=if(saved) "Trusted navigation saved across Chat, overlay and Voice. Only safe icons, single directional scrolls and approved app opening can skip a repeated Nexa prompt. Android grants and Pause still apply."
+                                    else "Could not persist navigation trust. Ask-every-time remains effective."
+                                render()
+                            },
+                            button("Ask every time") {
+                                val saved=NexaVoicePermissionPolicy.setMode(
+                                    this@NexaToolOverlayService,
+                                    NexaVoicePermissionPolicy.ASK_EVERY_TIME)
+                                note=if(saved) "All routine automation trust disabled. Fresh owner review required."
+                                    else "Could not save permission mode."
+                                render()
+                            }
+                        ))
+                        addView(row(
+                            button("Revoke saved grants") {
+                                val revoked=NexaVoicePermissionPolicy.clearGrants(this@NexaToolOverlayService)
+                                note=if(revoked) "Saved Nexa navigation approvals revoked." else "Could not revoke saved approvals."
+                                render()
+                            },
+                            button("Android Accessibility") {
+                                try {
+                                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                    note="Android Accessibility settings opened. Only you can grant access."
+                                }catch(_:Exception){
+                                    note="Android blocked Accessibility settings."
+                                }
+                                render()
+                            }
+                        ))
+                        addView(text("Calls, messages, contacts, alarms, arbitrary taps, private screen text, payments and system permissions are NOT covered by Always allow. Android's consent controls remain independent.",11f,true))
+                        addView(row(
+                            button(if(NexaSafeContextCache.ownerEnabled(this@NexaToolOverlayService))
+                                "Stop safe screen context" else "Enable safe screen context") {
+                                val requested=!NexaSafeContextCache.ownerEnabled(this@NexaToolOverlayService)
+                                val saved=NexaSafeContextCache.setOwnerEnabled(
+                                    this@NexaToolOverlayService,requested)
+                                note=if(!saved) "Android Nexa Accessibility and overlay permission must both be enabled before safe context can be armed."
+                                    else if(requested) "Safe-context mode ON while Nexa floats: only short nonsensitive control labels, kept in RAM for 8 seconds. Never shared with a provider automatically."
+                                    else "Safe-context mode OFF. Ephemeral screen observations discarded."
+                                render()
+                            },
+                            button("View safe context") {
+                                note=NexaSafeContextCache.peek(this@NexaToolOverlayService)
+                                    ?:"No fresh opt-in safe-control snapshot. Leave the overlay visible over the home screen and use Refresh."
+                                render()
+                            }
+                        ))
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
                         val requestedAction=proposedDeviceAction
                         if(requestedAction!=null &&
@@ -1008,6 +1138,11 @@ class NexaToolOverlayService : Service() {
                             button("Battery") { sendLocal("battery") },
                             button("Permissions") { sendLocal("device status") }
                         ))
+                        addView(button("Inspect 5 home apps (read-only)") {
+                            // Works only when the owner's Android home launcher
+                            // is visible behind the overlay.
+                            sendLocal("inspect five home apps")
+                        })
                         addView(row(
                             button("Check GitHub") { sendLocal("check github") },
                             button("Find GitHub") { sendLocal("find my github app") }
@@ -1153,7 +1288,7 @@ class NexaToolOverlayService : Service() {
                     },
                     button("Action safety settings") { openTab("settings") }
                 ))
-                addView(text("Actions need approval  ·  Screen access requires permission",11f,true))
+                addView(text("Actions need approval for high-impact steps. Screen access requires permission. Safe-navigation trust still obeys Android grants, owner Pause and the one-shot journal.",11f,true))
                 addView(text(note,11f,true))
                 if (section == "tools") {
                     addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
@@ -1228,6 +1363,8 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        NexaSafeContextCache.clear()
+        if(activeOverlay===this)activeOverlay=null
         proposedDeviceAction=null
         proposedDeviceActionExpiresAt=0L
         inspectedScreen = null

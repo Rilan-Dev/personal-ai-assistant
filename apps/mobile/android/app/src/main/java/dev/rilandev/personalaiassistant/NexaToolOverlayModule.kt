@@ -51,7 +51,35 @@ internal object NexaVoiceDraftState {
 /** Explicit owner actions, not part of the AI provider tool registry. */
 class NexaToolOverlayModule(private val context: ReactApplicationContext) :
     ReactContextBaseJavaModule(context) {
+    init { NexaOverlayChatRelay.attach(context) }
     override fun getName() = "PAANexaToolOverlay"
+
+    override fun invalidate() {
+        NexaOverlayChatRelay.detach(context)
+        super.invalidate()
+    }
+
+    /** Same Chat engine response, correlated to one still-live overlay input.
+     * Neither the model nor this bridge can mint an Android tool approval.
+     */
+    @ReactMethod fun completeChatRequest(id:String,response:String,p:Promise) {
+        if(NexaOverlayChatRelay.complete(id,response))p.resolve(true)
+        else p.reject("OVERLAY_REQUEST_EXPIRED",
+            "Overlay request expired or its one-time response was already delivered")
+    }
+
+    /** Not an approval by itself: safe per-tool policy inspection used
+     * ONLY after the shared agent has matched a tool to the exact owner
+     * request and prepared its durable one-time approval fingerprint.
+     */
+    @ReactMethod fun canAutoApproveNavigation(command:String,p:Promise) {
+        if(command !in setOf("open","scroll_screen:up","scroll_screen:down",
+                "scroll_screen:left","scroll_screen:right")){
+            p.resolve(false)
+            return
+        }
+        p.resolve(NexaVoicePermissionPolicy.canExecute(context,command))
+    }
 
     @ReactMethod fun getStatus(p: Promise) {
         val result = Arguments.createMap()
