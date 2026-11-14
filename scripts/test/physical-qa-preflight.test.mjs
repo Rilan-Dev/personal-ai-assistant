@@ -43,8 +43,8 @@ test('app and overlay stage grants requested runtime permissions and enables QA 
 test('Accessibility stage enables both isolated QA2 services through Android Settings', () => {
   assert.match(accessibility, /Nexa Screen Assist QA2/);
   assert.match(accessibility, /Nexa Launcher Navigation QA2/);
-  const resetToolsScroll = accessibility.indexOf('- tapOn: "Chat tab"');
-  const reopenTools = accessibility.indexOf('- tapOn: "Tools tab"', resetToolsScroll + 1);
+  const resetToolsScroll = accessibility.indexOf('- tapOn: "Chat"');
+  const reopenTools = accessibility.indexOf('- tapOn: "Tools"', resetToolsScroll + 1);
   const openSettings = accessibility.indexOf('- tapOn: "Open Android Accessibility Settings button"');
   assert.ok(resetToolsScroll >= 0 && reopenTools > resetToolsScroll && openSettings > reopenTools,
     'remount Tools after a persistent deep scroll before searching for Screen Assist');
