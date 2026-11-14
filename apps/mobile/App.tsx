@@ -46,7 +46,7 @@ import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, cle
 import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, authorizedAcaSelection, AcaRequestError, parseAcaMailSummaryIntent } from './src/native/acaEmail';
 import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
-  armScreenReadOnce, takeScreenReadOnce, clearScreenRead } from './src/native/screenAssist';
+  armScreenReadOnce, takeScreenReadOnce, clearScreenRead, inspectFiveHomeApps } from './src/native/screenAssist';
 import {iconRecognitionAvailable, armIconRecognition, takeIconRecognition, clearIconRecognition} from './src/native/androidIconRecognition';
 import {appCatalogueAvailable, findLaunchableApps} from './src/native/androidAppCatalogue';
 import {visualIconCaptureAvailable, armVisualIcons, takeVisualIcons, discardVisualIcons} from './src/native/androidVisualIcons';
@@ -1527,6 +1527,17 @@ export default function App() {
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
     const whatsappPreview=parseReviewedWhatsAppIntent(request);
+    // The five-app home pilot is an owner-requested, read-only assessment.
+    // It cannot trigger a model-specified click, enumerate unrelated apps,
+    // open WhatsApp/IMO/Contacts/Phone/Clock or change an alarm.
+    if(!restore && engine.live &&
+        /^(?:please\s+)?(?:inspect|check|show|scan)\s+(?:the\s+)?(?:five|5)\s+(?:home\s+)?apps(?:\s+on\s+(?:my\s+)?home\s+screen)?[.!?]*$/i.test(request)){
+      setInput('');setEvents([]);append('user',request);
+      try{append('assistant',await inspectFiveHomeApps());}
+      catch{append('assistant',
+        'Home pilot inspection unavailable. Enable Nexa Accessibility in Android Settings and open your home screen, then retry. No app was opened.');}
+      return;
+    }
     // Explicit owner device-fact questions use the ONE Kotlin task authority.
     // No model call, Accessibility action or external message can enter here.
     if(!restore && engine.live && (ownerDeviceFactKind(request)||ownerReadOnlyPlanKinds(request))){
