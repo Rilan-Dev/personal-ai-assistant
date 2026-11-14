@@ -118,3 +118,15 @@ test("LLM sees only five sanitized keys and revision, never raw UI labels",async
   assert.deepEqual(delivered.remaining,["imo","contacts","calls","clock"]);
   assert.doesNotMatch(JSON.stringify(delivered),/phone_number|body|sender|contact_name|screen_text|coordinates|otp/i);
 });
+
+test("different observed home revision cannot inherit a verified swipe receipt",async()=>{
+  const fixture=p([
+    view(0,["whatsapp"]),
+    // Android receipt claims revision 1, but this observation is revision 3.
+    view(3,["whatsapp","imo","contacts","calls","clock"])
+  ]);
+  const result=await runFiveAppHomePilot(fixture.port);
+  assert.equal(result.status,"uncertain");
+  assert.equal(result.swipes,1);
+  assert.deepEqual(result.observed,["whatsapp"]);
+});
