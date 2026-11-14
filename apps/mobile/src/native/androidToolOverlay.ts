@@ -12,6 +12,7 @@ type OverlayNative = {
   consumePendingVoiceDraft(): Promise<ReviewedVoiceDraft | null>;
   consumePendingMessageRequest(): Promise<unknown>;
   consumePendingTextEntry(): Promise<unknown>;
+  completeChatRequest(id:string,response:string):Promise<boolean>;
 };
 function bridge(): OverlayNative {
   const value = NativeModules.PAANexaToolOverlay;
@@ -21,6 +22,18 @@ function bridge(): OverlayNative {
     throw new Error('The updated Android tool-overlay module is not available');
   return value as OverlayNative;
 }
+export const NEXA_SHARED_OVERLAY_CHAT_EVENT = 'NexaOverlayChatRequest';
+
+/** Delivers a result only to the one outstanding owner-written overlay turn. */
+export async function completeSharedOverlayChat(id:string,response:string):Promise<boolean>{
+  if(!/^[0-9a-f-]{36}$/.test(id)||typeof response!=='string'||response.length>8000)
+    throw Error('INVALID_OVERLAY_CHAT_RESULT');
+  const value=bridge();
+  if(typeof value.completeChatRequest!=='function')
+    throw Error('Overlay Chat bridge not present in this APK');
+  return value.completeChatRequest(id,response);
+}
+
 export const toolOverlayAvailable = () => Platform.OS === 'android' &&
   typeof NativeModules.PAANexaToolOverlay?.getStatus === 'function';
 export const getToolOverlayStatus = () => bridge().getStatus();
