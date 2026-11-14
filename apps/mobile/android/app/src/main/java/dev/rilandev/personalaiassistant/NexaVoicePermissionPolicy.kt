@@ -1,6 +1,7 @@
 package dev.rilandev.personalaiassistant
 
 import android.content.Context
+import android.app.KeyguardManager
 
 /** Persistent owner choices for *non-sensitive* operations.
  * Android permission grants and app-specific consent are always checked separately.
@@ -71,6 +72,13 @@ internal object NexaVoicePermissionPolicy {
     fun canExecute(context:Context,command:String):Boolean {
         if(!NexaNativeActionSafety.permitsNewAction(context) ||
             !alwaysAllowed(context,command))return false
+        // Persistent trust never unlocks the phone or authorizes an action
+        // while the owner is away from an unlocked Android session.
+        val unlocked=try {
+            val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+            keyguard?.isKeyguardLocked == false
+        }catch(_:Exception){false}
+        if(!unlocked)return false
         return category(command) !in setOf(
             "screen.scroll","screen.navigate","screen.tap_label","screen.read") ||
             ScreenAssistState.connected && ScreenAssistService.active!=null
