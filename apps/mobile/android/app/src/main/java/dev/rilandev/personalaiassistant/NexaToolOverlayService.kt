@@ -763,6 +763,25 @@ class NexaToolOverlayService : Service() {
         val item = if (snap != null) NexaScreenActions.select(snap.token, id) else null
         note = if (item == null) "Icon selection expired. Inspect again."
             else "Confirm one tap on ${item.label} in ${snap?.packageName}? This action cannot be undone."
+        // Safe navigation is the ONLY tap class eligible for persisted trust.
+        // Never automate arbitrary labels, message controls or coordinates.
+        val service=ScreenAssistService.active
+        if(item!=null && snap!=null && service!=null &&
+            NexaScreenActionPolicy.permits(item) &&
+            NexaVoicePermissionPolicy.canExecute(this,"tap_safe_icon:"+item.semantic)){
+            note="Trusted safe navigation: one ${item.label} tap requested. No automatic replay."
+            Thread({
+                val result=try{NexaScreenActions.confirm(service,snap.token,origin="overlay")}
+                    catch(_:Exception){"Safe navigation outcome uncertain. No retry."}
+                Handler(Looper.getMainLooper()).post{
+                    if(view!=null && visible){
+                        inspectedScreen=null
+                        note=result
+                        render()
+                    }
+                }
+            },"nexa-trusted-one-safe-tap").start()
+        }
         render()
     }
 
@@ -808,8 +827,24 @@ class NexaToolOverlayService : Service() {
         cancelBoundedScrollSearch()
         inspectedScreen = null
         NexaScreenActions.reset()
-        note = ScreenAssistService.active?.let { NexaScreenScroll.prepare(it,direction) }
-            ?: "Enable Screen Assist before requesting a scroll."
+        val service=ScreenAssistService.active
+        note=service?.let{NexaScreenScroll.prepare(it,direction)}
+            ?: "Enable Nexa Screen Assist in Android Accessibility settings first."
+        // Only a direct owner overlay command in the previously selected
+        // persistent TRUST_NAVIGATION mode can skip this extra prompt.
+        // Native prepare/confirm still requires a unique visible target,
+        // same window, owner Pause fence and one-shot encrypted journal.
+        if(service!=null && NexaScreenScroll.isPending() &&
+            NexaVoicePermissionPolicy.canExecute(this,"scroll_screen:$direction")){
+            note="Trusted routine navigation: one $direction scroll requested. Checking Android evidence; no retry."
+            Thread({
+                val answer=try{NexaScreenScroll.confirm(service,origin="overlay")}
+                    catch(_:Exception){"Scroll result uncertain. Inspect the screen; no retry."}
+                Handler(Looper.getMainLooper()).post{
+                    if(view!=null && visible){note=answer;render()}
+                }
+            },"nexa-trusted-one-scroll").start()
+        }
         render()
     }
     private fun confirmScroll() {
@@ -1030,6 +1065,47 @@ class NexaToolOverlayService : Service() {
                                 ))
                             }
                         }
+                        addView(text("One permission mode for Chat, floating Tools and Sarvam Voice",12f,true))
+                        addView(text("Mode: "+NexaVoicePermissionPolicy.mode(this@NexaToolOverlayService)+
+                            " · Accessibility: "+(if(ScreenAssistState.connected) "Android enabled" else "Android off")+
+                            " · Overlay: "+(if(Settings.canDrawOverlays(this@NexaToolOverlayService)) "enabled" else "off"),11f,true))
+                        addView(row(
+                            button("Always allow safe navigation") {
+                                val saved=NexaVoicePermissionPolicy.setMode(
+                                    this@NexaToolOverlayService,
+                                    NexaVoicePermissionPolicy.TRUST_NAVIGATION)
+                                note=if(saved) "Trusted navigation saved across Chat, overlay and Voice. Only safe icons, single directional scrolls and approved app opening can skip a repeated Nexa prompt. Android grants and Pause still apply."
+                                    else "Could not persist navigation trust. Ask-every-time remains effective."
+                                render()
+                            },
+                            button("Ask every time") {
+                                val saved=NexaVoicePermissionPolicy.setMode(
+                                    this@NexaToolOverlayService,
+                                    NexaVoicePermissionPolicy.ASK_EVERY_TIME)
+                                note=if(saved) "All routine automation trust disabled. Fresh owner review required."
+                                    else "Could not save permission mode."
+                                render()
+                            }
+                        ))
+                        addView(row(
+                            button("Revoke saved grants") {
+                                val revoked=NexaVoicePermissionPolicy.clearGrants(this@NexaToolOverlayService)
+                                note=if(revoked) "Saved Nexa navigation approvals revoked." else "Could not revoke saved approvals."
+                                render()
+                            },
+                            button("Android Accessibility") {
+                                try {
+                                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    })
+                                    note="Android Accessibility settings opened. Only you can grant access."
+                                }catch(_:Exception){
+                                    note="Android blocked Accessibility settings."
+                                }
+                                render()
+                            }
+                        ))
+                        addView(text("Calls, messages, contacts, alarms, arbitrary taps, private screen text, payments and system permissions are NOT covered by Always allow. Android's consent controls remain independent.",11f,true))
                         addView(text("Direct device tools (not unrestricted control)",12f,true))
                         val requestedAction=proposedDeviceAction
                         if(requestedAction!=null &&
@@ -1190,7 +1266,7 @@ class NexaToolOverlayService : Service() {
                     },
                     button("Action safety settings") { openTab("settings") }
                 ))
-                addView(text("Actions need approval  ·  Screen access requires permission",11f,true))
+                addView(text("Saved safe-navigation trust still obeys Android grants, owner Pause and one-shot journal. High-impact actions need review.",11f,true))
                 addView(text(note,11f,true))
                 if (section == "tools") {
                     addView(button("Theme · " + NexaOverlayTheme.mode(this@NexaToolOverlayService) +
