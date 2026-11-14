@@ -76,6 +76,7 @@ export async function runFiveAppHomePilot(port:HomePilotPort):Promise<HomePilotR
     missing:HOME_PILOT_TARGETS.filter(v=>!seen.has(v))
   });
   const seenRevisions=new Set<string>();
+  let expectedNextRevision:string|null=null;
   if(!await port.ownerAllowsNavigation())return result("blocked","Owner's safe-navigation permission is not active.");
   for(let step=0;step<=maxSwipes;step++){
     if(port.cancelled?.())return result("cancelled","Owner stopped the pilot.");
@@ -84,6 +85,11 @@ export async function runFiveAppHomePilot(port:HomePilotPort):Promise<HomePilotR
       return result("blocked","The device is not on its unlocked home launcher.");
     const view=safeView(observation);
     if(!view)return result("blocked","The home observation is incomplete or malformed.");
+    // A dispatch receipt alone cannot move the pilot. Reacquire EXACTLY
+    // the home revision that Android independently recorded after the swipe.
+    if(expectedNextRevision!==null && view.revision!==expectedNextRevision)
+      return result("uncertain","Observed home page does not match the verified Android swipe receipt.");
+    expectedNextRevision=null;
     for(const v of view.unique)seen.add(v);
     if(seen.size===HOME_PILOT_TARGETS.length)
       return result("passed","All five app icons uniquely observed on verified home pages; no app was opened.");
@@ -112,8 +118,9 @@ export async function runFiveAppHomePilot(port:HomePilotPort):Promise<HomePilotR
        receipt.toRevision.length<8 ||
        seenRevisions.has(receipt.toRevision))
       return result("uncertain","Launcher revision evidence changed unexpectedly.");
-    // The NEXT observe must reacquire the live launcher; a receipt alone
-    // never marks a target as found or completes a business task.
+    expectedNextRevision=receipt.toRevision;
+    // The NEXT observe must reacquire the live launcher AND match this
+    // observed revision. No receipt itself can complete a target or task.
   }
   return result("incomplete","Pilot stopped at its configured bound.");
 }
