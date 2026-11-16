@@ -11,6 +11,24 @@ tags:
       all: deny
 - runFlow:
     when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"

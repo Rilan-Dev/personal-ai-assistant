@@ -5,6 +5,24 @@ package dev.rilandev.personalaiassistant
  * delivery, purchase or app launch. Attribution requires the original app/window.
  */
 internal object NexaUiActionEvidencePolicy {
+    /**
+     * A window ID may change during a verified launcher page swipe. That one
+     * case can retain evidence only when the observed root is still from the
+     * same package and the caller has independently reverified the launcher.
+     */
+    fun sameEvidenceContext(
+        kind: String,
+        expectedPackage: String,
+        expectedWindowId: Int,
+        observedPackage: String?,
+        observedWindowId: Int,
+        allowLauncherWindowChange: Boolean
+    ): Boolean {
+        if (expectedPackage.isBlank() || expectedPackage != observedPackage) return false
+        if (expectedWindowId == observedWindowId) return true
+        return kind == "scroll" && allowLauncherWindowChange
+    }
+
     fun classify(
         kind: String, before: String, after: String?,
         scrollEvents: Int, windowEvents: Int, sameContext: Boolean = true

@@ -15,6 +15,7 @@ import android.os.IBinder
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -43,15 +44,37 @@ class NexaToolOverlayService : Service() {
             private set
         @Volatile private var activeOverlay:NexaToolOverlayService?=null
         /** One in-memory response to the exact outstanding shared Chat turn. */
-        fun showSharedChatReply(reply:String) {
+        fun showSharedChatReply(token:String,reply:String) {
             Handler(Looper.getMainLooper()).post {
                 val service=activeOverlay ?:return@post
                 if(!visible || service.view==null)return@post
+                if(service.sharedChatApprovalToken==token) {
+                    service.sharedChatApprovalToken=null
+                    service.sharedChatApprovalSummary=null
+                    service.sharedChatApprovalDecisionSent=false
+                }
                 service.history.addLast("NEXA AI · "+reply.take(1200))
                 while(service.history.size>12)service.history.removeFirst()
                 service.note="Shared Chat result received. Android tool approvals remain independent."
                 service.render()
             }
+        }
+        /** Shows only a prevalidated, exact screen-scroll summary. */
+        fun showSharedChatApproval(token:String,summary:String):Boolean {
+            val service=activeOverlay ?:return false
+            if(!visible || service.view==null)return false
+            Handler(Looper.getMainLooper()).post {
+                if(activeOverlay!==service || !visible || service.view==null)return@post
+                service.sharedChatApprovalToken=token
+                service.sharedChatApprovalSummary=summary
+                service.sharedChatApprovalDecisionSent=false
+                    service.expanded=true
+                service.history.addLast("NEXA AI · Owner review required: "+summary)
+                while(service.history.size>12)service.history.removeFirst()
+                service.note="Review this exact screen action. Nothing has executed."
+                service.render()
+            }
+            return true
         }
     }
     private lateinit var wm: WindowManager
@@ -64,6 +87,9 @@ class NexaToolOverlayService : Service() {
     /** Only the owner may confirm an explicitly typed, short-lived action. */
     private var proposedDeviceAction: String? = null
     private var proposedDeviceActionExpiresAt: Long = 0L
+    private var sharedChatApprovalToken:String?=null
+    private var sharedChatApprovalSummary:String?=null
+    private var sharedChatApprovalDecisionSent=false
     private val history = ArrayDeque<String>()
     private var inspectedScreen: OverlayScreenSnapshot? = null
     private val guidedNavigation = NexaGuidedNavigation()
@@ -524,6 +550,25 @@ class NexaToolOverlayService : Service() {
         history.addLast("NEXA AI · Working through the shared Chat agent…")
         while(history.size>12)history.removeFirst()
         note="Shared Chat request accepted once. Check its result before another task; no automatic retries."
+        render()
+    }
+
+    /** Collapse before an approved Home gesture so the overlay cannot intercept it. */
+    private fun decideSharedChatApproval(token:String,approve:Boolean) {
+        if(sharedChatApprovalToken!=token || sharedChatApprovalDecisionSent)return
+        if(!NexaOverlayChatRelay.decideApproval(token,approve)) {
+            sharedChatApprovalToken=null
+            sharedChatApprovalSummary=null
+            sharedChatApprovalDecisionSent=false
+            note="This exact review expired or could not reach Chat. No device action was executed."
+            render()
+            return
+        }
+        sharedChatApprovalDecisionSent=true
+        if(approve) {
+            note="Owner approved this action once. Returning to the underlying screen."
+            expanded=false
+        } else note="Decline sent. No device action will run."
         render()
     }
 
@@ -1016,12 +1061,29 @@ class NexaToolOverlayService : Service() {
                         }
                         addView(transcript, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
+                        val approvalToken=sharedChatApprovalToken
+                        val approvalSummary=sharedChatApprovalSummary
+                        if(approvalToken!=null && approvalSummary!=null) {
+                            addView(text("REVIEW EXACT ACTION · "+approvalSummary,11f))
+                            if(sharedChatApprovalDecisionSent) {
+                                addView(text("Owner decision sent to shared Chat. Waiting for the verified task result.",11f,true))
+                            } else addView(row(
+                                button("Approve once") {
+                                    decideSharedChatApproval(approvalToken,true)
+                                },
+                                button("Decline") {
+                                    decideSharedChatApproval(approvalToken,false)
+                                }
+                            ))
+                        }
                         val input = EditText(this@NexaToolOverlayService).apply {
                             hint = "Ask the same Nexa AI as main Chat…"
                             setHintTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).secondary)
                             setTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).title)
                             textSize=13f
                             isSingleLine=true
+                            inputType=InputType.TYPE_CLASS_TEXT or
+                                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
                             imeOptions=EditorInfo.IME_ACTION_SEND
                             background=NexaOverlayTheme.inset(this@NexaToolOverlayService,
                                 NexaOverlayTheme.palette(this@NexaToolOverlayService))
@@ -1363,6 +1425,9 @@ class NexaToolOverlayService : Service() {
         view=null
         visible=false
         history.clear()
+        sharedChatApprovalToken=null
+        sharedChatApprovalSummary=null
+        sharedChatApprovalDecisionSent=false
         NexaSafeContextCache.clear()
         if(activeOverlay===this)activeOverlay=null
         proposedDeviceAction=null

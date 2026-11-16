@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "nexa-whatsapp-message-tool-chain",
+  "dataClass": "synthetic-test-data",
+  "sarvamScreenToolCall": {
+    "request": "Scroll left on the home screen",
+    "availableToolIds": ["screen.scroll"],
+    "response": {
+      "choices": [
+        {
+          "finish_reason": "tool_calls",
+          "message": {
+            "role": "assistant",
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call_fixture_scroll_left",
+                "type": "function",
+                "function": {
+                  "name": "screen_scroll",
+                  "arguments": "{\"direction\":\"left\"}"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "expectedCall": {
+      "toolId": "screen.scroll",
+      "input": {"direction": "left"}
+    }
+  },
+  "whatsappDraft": {
+    "request": "Open WhatsApp then open chat with Nexa QA Contact then prepare WhatsApp message for Nexa QA Contact saying \"Nexa QA test message.\" then send it",
+    "expectedToolCalls": [
+      {
+        "callId": "owner-seq-1",
+        "toolId": "device.open_app",
+        "input": {"app": "whatsapp"}
+      },
+      {
+        "callId": "owner-seq-2",
+        "toolId": "screen.open_whatsapp_chat",
+        "input": {"recipientHint": "Nexa QA Contact"}
+      },
+      {
+        "callId": "owner-seq-3",
+        "toolId": "screen.compose_whatsapp",
+        "input": {
+          "recipientHint": "Nexa QA Contact",
+          "exactText": "Nexa QA test message."
+        }
+      },
+      {
+        "callId": "owner-seq-4",
+        "toolId": "screen.send_whatsapp",
+        "input": {
+          "recipientHint": "Nexa QA Contact",
+          "exactText": "Nexa QA test message."
+        }
+      }
+    ],
+    "steps": [
+      {
+        "toolId": "device.open_app",
+        "input": {"app": "whatsapp"},
+        "evidence": {
+          "intentDispatched": true,
+          "packageId": "com.whatsapp",
+          "verification": "destination_package_observed"
+        }
+      },
+      {
+        "toolId": "screen.open_whatsapp_chat",
+        "input": {"recipientHint": "Nexa QA Contact"},
+        "evidence": {
+          "verification": "verified_chat_header",
+          "recipientMatched": true,
+          "messageComposerVisible": true,
+          "submitted": false
+        }
+      },
+      {
+        "toolId": "screen.compose_whatsapp",
+        "input": {
+          "recipientHint": "Nexa QA Contact",
+          "exactText": "Nexa QA test message."
+        },
+        "evidence": {
+          "verification": "exact_text_visible",
+          "recipientMatched": true,
+          "submitted": false,
+          "sent": false
+        }
+      }
+      ,{
+        "toolId": "screen.send_whatsapp",
+        "input": {
+          "recipientHint": "Nexa QA Contact",
+          "exactText": "Nexa QA test message."
+        },
+        "evidence": {
+          "verification": "sent_message_visible",
+          "recipientMatched": true,
+          "exactTextMatched": true,
+          "sent": true,
+          "deliveryReported": false
+        }
+      }
+    ],
+    "unsupportedSend": {
+      "request": "Open WhatsApp then send that message to Nexa QA Contact",
+      "toolId": "screen.send_whatsapp",
+      "expectedToolAvailable": true,
+      "expectedEffect": "none"
+    }
+  }
+}

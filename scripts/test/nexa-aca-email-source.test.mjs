@@ -1,44 +1,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import { readFileSync } from 'node:fs';
 
-const app=readFileSync(new URL('../../apps/mobile/App.tsx',import.meta.url),'utf8');
-const bridge=readFileSync(new URL('../../apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt',import.meta.url),'utf8');
-const api=readFileSync(new URL('../../apps/mobile/src/native/acaEmail.ts',import.meta.url),'utf8');
-const intent=readFileSync(new URL('../../apps/mobile/src/native/acaMailIntent.ts',import.meta.url),'utf8');
-const {parseAcaMailSummaryIntent}=await import('../../apps/mobile/src/native/acaMailIntent.ts');
+const app = readFileSync(new URL('../../apps/mobile/App.tsx', import.meta.url), 'utf8');
+const bridge = readFileSync(new URL('../../apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/AgentJournalModule.kt', import.meta.url), 'utf8');
+const gradle = readFileSync(new URL('../../apps/mobile/android/app/build.gradle', import.meta.url), 'utf8');
+const api = readFileSync(new URL('../../apps/mobile/src/native/acaEmail.ts', import.meta.url), 'utf8');
+const apiConfig = readFileSync(new URL('../../apps/mobile/src/native/acaConfig.ts', import.meta.url), 'utf8');
 
-test('ACA email routing remains separate from native device tool harness',()=>{
-  assert.match(app,/parseAcaMailSummaryIntent\(request\)/);
-  assert.match(app,/acaMailSummary\(acaSession,acaMailScope/);
-  assert.match(app,/createScreenAwarePlanner\(planner,screenGrant,resolveScreenQuestion\)/);
-  assert.match(app,/new AgentHarness\(engine\.registry/);
+test('ACA business Chat shares ACA orchestration and stays outside Nexa device harness', () => {
+  assert.match(app, /classifyAcaBusinessIntent\(request\)/);
+  assert.match(app, /streamAcaChatTurn\(/);
+  assert.match(app, /createScreenAwarePlanner\(planner,screenGrant,resolveScreenQuestion\)/);
+  assert.match(app, /new AgentHarness\(engine\.registry/);
+  assert.match(app, /sharedOverlaySendRef\.current\(request,undefined,id\)/);
+  assert.doesNotMatch(app, /acaMailSummary\(|summarizeAcaMailWithProvider|formatAcaMailAiReply/);
+  const route = app.indexOf('const acaBusinessIntent=!restore?classifyAcaBusinessIntent(request):null;');
+  const planner = app.indexOf('const planner=activeProvider && engine.live', route);
+  assert.ok(route >= 0 && route < planner, 'business requests must stop or use ACA before the local planner');
+  assert.doesNotMatch(app.slice(route, planner), /appendConversation\(/,
+    'business transcripts stay in ACA canonical history instead of a second Nexa history');
+  assert.ok(app.includes('Nexa-local model was used'));
 });
 
-test('ACA login has no hardcoded credentials and uses Android Keystore storage',()=>{
-  assert.match(bridge,/saveAcaSession/);
-  assert.match(bridge,/aca-device-session/);
-  assert.match(bridge,/write\(name\("private", "aca-device-session"\), data\)/);
-  assert.match(api,/https:\/\/aca\.starcitytechnical\.com/);
-  assert.match(api,/method:"DELETE"/);
-  assert.doesNotMatch(api,/AsyncStorage|hardcoded_password|demo_password/);
+test('ACA login has no hardcoded credentials and uses Android Keystore storage', () => {
+  assert.match(bridge, /saveAcaSession/);
+  assert.match(bridge, /aca-device-session/);
+  assert.match(bridge, /write\(name\("private", "aca-device-session"\), data\)/);
+  assert.match(api, /getAcaApiOrigin\(\)/);
+  assert.doesNotMatch(api, /aca\.starcitytechnical\.com/);
+  assert.match(apiConfig, /aca-unconfigured\.invalid/);
+  assert.match(gradle, /NEXA_ACA_API_ORIGIN/);
+  assert.match(gradle, /validateAcaReleaseApiOrigin/);
+  assert.match(bridge, /BuildConfig\.NEXA_ACA_API_ORIGIN/);
+  assert.doesNotMatch(bridge, /aca\.starcitytechnical\.com/);
+  assert.match(api, /method:"DELETE"/);
+  assert.doesNotMatch(api, /AsyncStorage|hardcoded_password|demo_password/);
 });
 
-test('read-only mail request parsing preserves user scope and blocks writes',()=>{
-  assert.match(intent,/send\\|draft\\|reply\\|forward\\|delete/);
-  assert.deepEqual(parseAcaMailSummaryIntent('Summarize unread emails from the last 24 hours'),{unreadOnly:true,inboxOnly:false,window:'24h'});
-  assert.deepEqual(parseAcaMailSummaryIntent('How many unread inbox emails do I have?'),{unreadOnly:true,inboxOnly:true,window:'all'});
-  assert.deepEqual(parseAcaMailSummaryIntent('Summarize emails in the last 24 hours'),{unreadOnly:false,inboxOnly:false,window:'24h'});
-  assert.equal(parseAcaMailSummaryIntent('Send an email to Mom'),null);
-  assert.equal(parseAcaMailSummaryIntent('Summarize emails from John in the last 24 hours'),null);
-  assert.equal(parseAcaMailSummaryIntent('Summarize emails today'),null);
-  assert.equal(parseAcaMailSummaryIntent('Open Chrome and search what is AI'),null);
+test('ACA settings do not promise email excerpts will be sent to Nexa BYOK', () => {
+  assert.doesNotMatch(app, /Connect an AI provider for email-content summaries/);
+  assert.doesNotMatch(app, /selected saved provider.*email/i);
+  assert.match(app, /ACA business source selected/);
 });
 
-test('ACA sign-in reverses its provisional device session when agent discovery fails',()=>{
-  assert.match(app,/let provisional:AcaSession\|null=null/);
-  assert.match(app,/provisional=await connectAca\(acaEmailInput,acaPasswordInput\)/);
-  assert.match(app,/await acaTargets\(provisional\)/);
-  assert.match(app,/await disconnectAca\(provisional\)/);
-  assert.match(app,/secure cleanup could not finish/);
+test('ACA sign-in reverses its provisional device session when agent discovery fails', () => {
+  assert.match(app, /let provisional:AcaSession\|null=null/);
+  assert.match(app, /provisional=await connectAca\(acaEmailInput,acaPasswordInput\)/);
+  assert.match(app, /await acaTargets\(provisional\)/);
+  assert.match(app, /await disconnectAca\(provisional\)/);
+  assert.match(app, /secure cleanup could not finish/);
 });

@@ -9,6 +9,9 @@ tags:
     clearState: true
     permissions:
       all: deny
+- extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 30000
 - runFlow:
     when:
       visible: "Don.t allow"
@@ -24,37 +27,48 @@ tags:
     timeout: 25000
 - runFlow:
     when:
-      notVisible: "Enabled"
-      visible: "Allow display over apps.*"
+      notVisible: "Show floating bubble"
     commands:
       - tapOn:
           text: "Allow display over apps.*"
-      # Android 11+ opens the app list; the owner must grant the permission in Settings.
-      - scrollUntilVisible:
-          element:
-            text: "Nexa AI"
-          direction: DOWN
-          timeout: 30000
-      - assertVisible: "Nexa AI"
-      - takeScreenshot: nexa-overlay-android-app-list
-      - tapOn: "Nexa AI"
-      - extendedWaitUntil:
-          visible:
-            text: "Allow display over other apps"
-          timeout: 25000
-      - takeScreenshot: nexa-overlay-permission-before
-      - tapOn:
-          text: "Allow display over other apps"
-      - takeScreenshot: nexa-overlay-permission-granted
-      - back
-      - back
-      - launchApp:
-          stopApp: false
+      # A grant can become visible while the Settings intent is being resolved.
+      # Enter the app list only if Android actually opened Settings.
       - runFlow:
           when:
-            visible: "Don.t allow"
+            visible: "Display over other apps"
           commands:
-            - tapOn: "Don.t allow"
+            - scrollUntilVisible:
+                element:
+                  text: "Nexa AI"
+                direction: DOWN
+                timeout: 30000
+            - assertVisible: "Nexa AI"
+            - assertVisible: "Not allowed"
+            - takeScreenshot: nexa-overlay-android-app-list
+            # Debug and QA2 installs share a label. Android orders the debug
+            # install first; select and verify the QA2 package as entry 2.
+            - tapOn:
+                text: "Nexa AI"
+                index: 1
+            - extendedWaitUntil:
+                visible:
+                  text: "Allow display over other apps"
+                timeout: 25000
+            - assertVisible: "0.3.2026111607"
+            - takeScreenshot: nexa-overlay-permission-before
+            # The app-list row is Not allowed, so one tap grants it.
+            - tapOn:
+                text: "Allow display over other apps"
+            - takeScreenshot: nexa-overlay-permission-granted
+            - back
+            - back
+            - launchApp:
+                stopApp: false
+            - runFlow:
+                when:
+                  visible: "Don.t allow"
+                commands:
+                  - tapOn: "Don.t allow"
 - scrollUntilVisible:
     element:
       text: "Show floating bubble"

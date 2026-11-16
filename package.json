@@ -16,6 +16,7 @@
     "start:agent": "npm run start --workspace @paa/agent-runtime",
     "test:provider-live": "node --experimental-strip-types services/agent-runtime/test/live-provider.acceptance.mjs",
     "start:mobile": "npm run start --workspace @paa/mobile",
+    "start:mobile:live": "npm run start:live --workspace @paa/mobile",
     "android": "npm run android --workspace @paa/mobile",
     "ios": "npm run ios --workspace @paa/mobile",
     "web": "npm run web --workspace @paa/mobile",

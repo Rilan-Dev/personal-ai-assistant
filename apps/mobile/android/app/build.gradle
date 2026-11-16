@@ -3,6 +3,43 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def isolatedPhysicalQaV2 = (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
+def livePhysicalQaV2 = (findProperty('paaLivePhysicalQaV2') ?: 'false').toString().toBoolean()
+def useEmbeddedPhysicalQaBundle = isolatedPhysicalQaV2 && !livePhysicalQaV2
+def configuredAcaApiOrigin = System.getenv("EXPO_PUBLIC_ACA_API_ORIGIN")
+def normalizeAcaApiOrigin = { String value, boolean development ->
+    if (value == null || value.length() == 0 || value.trim() != value || value.contains("?") || value.contains("#")) {
+        throw new GradleException("ACA API origin must be a bare origin without whitespace, query, or fragment.")
+    }
+    def uri
+    try {
+        uri = new java.net.URI(value)
+    } catch (Exception ignored) {
+        throw new GradleException("ACA API origin is malformed.")
+    }
+    def scheme = uri.scheme?.toLowerCase(java.util.Locale.ROOT)
+    def host = uri.host?.toLowerCase(java.util.Locale.ROOT)
+    if (host == null || uri.rawUserInfo != null || !(uri.rawPath in [null, "", "/"]) ||
+        uri.rawQuery != null || uri.rawFragment != null) {
+        throw new GradleException("ACA API origin must not contain credentials, path, query, or fragment.")
+    }
+    def bareHost = host.replace("[", "").replace("]", "")
+    def loopback = bareHost == "localhost" || bareHost == "::1" || bareHost ==~ /127(?:\\.\\d{1,3}){3}/
+    if (scheme != "https" && !(development && scheme == "http" && loopback)) {
+        throw new GradleException("ACA API origin must use HTTPS; HTTP is allowed only for Development loopback.")
+    }
+    def renderedHost = bareHost.contains(":") ? "[${bareHost}]" : bareHost
+    def port = uri.port
+    def includePort = port >= 0 && !((scheme == "https" && port == 443) || (scheme == "http" && port == 80))
+    return "${scheme}://${renderedHost}${includePort ? ":${port}" : ""}"
+}
+def acaApiOrigin = configuredAcaApiOrigin == null
+    ? "https://aca-unconfigured.invalid"
+    : normalizeAcaApiOrigin(configuredAcaApiOrigin, true)
+
+if (livePhysicalQaV2 && !isolatedPhysicalQaV2) {
+    throw new GradleException('Live physical QA requires paaIsolatedPhysicalQaV2=true to preserve its isolated app identity.')
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -14,10 +51,12 @@ react {
     hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
-    // Physical QA must launch without Metro and must never overwrite the
-    // owner's main, QA, or other-user debug installs.
-    if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean() ||
-        (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()) {
+    // Normal isolated QA bundles JS for offline startup. Live QA2 explicitly
+    // opts into Metro while retaining the same isolated application ID.
+    if (livePhysicalQaV2) {
+        debuggableVariants = ["debug"]
+    } else if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean() ||
+        isolatedPhysicalQaV2) {
         debuggableVariants = []
     }
 
@@ -112,9 +151,10 @@ android {
 
         // Planned task execution remains disabled in all normal APKs.
         buildConfigField "boolean", "NEXA_REVIEWED_READ_PLAN_ENABLED", "false"
-        // Physical/emulator QA APKs must execute the bundle compiled into this
-        // artifact, even when another developer's Metro server is reachable.
-        buildConfigField "boolean", "PAA_USE_EMBEDDED_JS_BUNDLE", "${(findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()}"
+        buildConfigField "String", "NEXA_ACA_API_ORIGIN", "\"${acaApiOrigin}\""
+        // Offline QA2 stays self-contained; live QA2 enables React Native
+        // DevSupport only for the explicitly selected physical live build.
+        buildConfigField "boolean", "PAA_USE_EMBEDDED_JS_BUNDLE", "${useEmbeddedPhysicalQaBundle}"
         buildConfigField "String", "PAA_SOURCE_REVISION", "\"${System.getenv('PAA_BUILD_SOURCE_REVISION') ?: 'development'}\""
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
@@ -202,6 +242,23 @@ android {
 
     androidResources {
         ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
+    }
+}
+
+// Every release variant must receive an explicit API origin. Keeping this as
+// a task dependency allows ordinary debug builds to use the non-routable
+// sentinel while preventing an accidental unconfigured release APK.
+tasks.register("validateAcaReleaseApiOrigin") {
+    doLast {
+        if (configuredAcaApiOrigin == null) {
+            throw new GradleException("Set EXPO_PUBLIC_ACA_API_ORIGIN explicitly before building a release variant.")
+        }
+        normalizeAcaApiOrigin(configuredAcaApiOrigin, false)
+    }
+}
+tasks.configureEach { task ->
+    if (task.name == "preReleaseBuild") {
+        task.dependsOn("validateAcaReleaseApiOrigin")
     }
 }
 

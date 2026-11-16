@@ -1,22 +1,19 @@
 import { NativeModules, Platform } from "react-native";
+import { getAcaApiOrigin } from "./acaConfig";
 
 /** First-party, feature-gated ACA read-only email client. Device credentials
  * are separate from BYOK AI keys and never enter the Android tool planner.
  */
-export const ACA_ORIGIN = "https://aca.starcitytechnical.com";
+export const ACA_ORIGIN = getAcaApiOrigin();
 const PREFIX = "nexa_m1_";
 export type AcaSession = {
-  version: 1; origin: typeof ACA_ORIGIN; token: string; expiresAt: string;
+  version: 1; origin: string; token: string; expiresAt: string;
   organizationId: string; agentId: string;
+  chatConversation?: { organizationId: string; agentId: string; conversationId: string };
 };
 export type AcaOrganization = {
   id: string; name: string; role: string;
   agents: Array<{id:string;name:string}>;
-};
-export type AcaSummary = {
-  report: string; source: "local_mail_database";
-  matchedCount: number; includedCount: number; hasMore: boolean;
-  lastSyncAt: string | null; fromUtc: string; toUtc: string;
 };
 type NativeAcaVault = {
   saveAcaSession(payload:string):Promise<boolean>;
@@ -53,11 +50,19 @@ export function acaVaultAvailable():boolean {
 export function validAcaSession(input:unknown):input is AcaSession {
   if (!input || typeof input !== "object" || Array.isArray(input))return false;
   const x=input as Record<string,unknown>;
-  return x.version === 1 && x.origin === ACA_ORIGIN &&
+  const baseValid=x.version === 1 && x.origin === ACA_ORIGIN &&
     typeof x.token === "string" && sessionPattern.test(x.token) &&
     typeof x.expiresAt === "string" && Number.isFinite(Date.parse(x.expiresAt)) &&
     typeof x.organizationId === "string" && optionalUuid.test(x.organizationId) &&
     typeof x.agentId === "string" && optionalUuid.test(x.agentId);
+  if(!baseValid)return false;
+  if(x.chatConversation===undefined)return true;
+  if(!x.chatConversation||typeof x.chatConversation!=="object"||Array.isArray(x.chatConversation))return false;
+  const conversation=x.chatConversation as Record<string,unknown>;
+  return typeof x.organizationId==="string"&&typeof x.agentId==="string"&&
+    conversation.organizationId===x.organizationId&&conversation.agentId===x.agentId&&
+    typeof conversation.conversationId==="string"&&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversation.conversationId);
 }
 export async function loadAcaSession():Promise<AcaSession|null> {
   const saved=await nativeVault().loadAcaSession();
@@ -138,20 +143,6 @@ export function authorizedAcaSelection(session:AcaSession,organizations:AcaOrgan
   return Boolean(session.organizationId && session.agentId && organizations.some(org=>
     org.id===session.organizationId && org.agents.some(agent=>agent.id===session.agentId)));
 }
-export async function acaMailSummary(session:AcaSession,options:{unreadOnly:boolean;inboxOnly:boolean;window:"all"|"24h"},signal?:AbortSignal):Promise<AcaSummary> {
-  if (!session.organizationId || !session.agentId)throw new Error("Select an organization and agent in ACA settings.");
-  const params=new URLSearchParams({
-    organizationId:session.organizationId,agentId:session.agentId,
-    unreadOnly:String(options.unreadOnly),inboxOnly:String(options.inboxOnly),window:options.window
-  });
-  const response=await requestJson("/api/mobile/v1/mail/summary?"+params.toString(),{
-    method:"GET",headers:bearer(session),signal
-  }) as AcaSummary;
-  if (!response || response.source!=="local_mail_database" ||
-    typeof response.report!=="string" || !Number.isFinite(response.matchedCount))
-    throw new Error("Invalid ACA mail summary response.");
-  return response;
-}
 export async function disconnectAca(session:AcaSession|null):Promise<{serverRevoked:boolean}> {
   let serverRevoked = !session || !validAcaSession(session);
   if (session && validAcaSession(session)) {
@@ -166,5 +157,3 @@ export async function disconnectAca(session:AcaSession|null):Promise<{serverRevo
   await clearAcaSession();
   return {serverRevoked};
 }
-
-export { parseAcaMailSummaryIntent } from "./acaMailIntent";

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Disposable GitHub emulator only; no production release key or real phone.
 set -euo pipefail
+if [[ "${NEXA_ACA_ENVIRONMENT:-}" != "development" ]]; then
+  echo "Set NEXA_ACA_ENVIRONMENT=development before running ACA-connected acceptance." >&2
+  exit 2
+fi
+: "${EXPO_PUBLIC_ACA_API_ORIGIN:?Set EXPO_PUBLIC_ACA_API_ORIGIN to the Development ACA origin}"
 ROOT="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
 # Source check precedes any Gradle build, adb install, force-stop or pm clear.
 # The Android emulator runner's synthetic data is the only allowed target.

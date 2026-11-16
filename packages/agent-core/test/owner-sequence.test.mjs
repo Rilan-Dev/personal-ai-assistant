@@ -145,16 +145,58 @@ test("six-step sequence has an extra completion turn and never claims success ea
 });
 
 
-test("recipient-bound WhatsApp multi-step request never includes Send",()=>{
-  const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "I am in a meeting and will call later"';
+test("recipient-bound WhatsApp send is the terminal one-time-approved step",()=>{
+  const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "I am in a meeting and will call later" then send it';
   const steps=parseOwnerMultiToolRequest(request);
   assert.deepEqual(steps?.map(s=>s.toolId),[
-    "device.open_app","screen.open_whatsapp_chat","screen.compose_whatsapp"
+    "device.open_app","screen.open_whatsapp_chat","screen.compose_whatsapp",
+    "screen.send_whatsapp"
   ]);
   assert.deepEqual(steps?.[1].input,{recipientHint:"Mom"});
   assert.deepEqual(steps?.[2].input,{recipientHint:"Mom",
     exactText:"I am in a meeting and will call later"});
-  assert.equal(steps?.some(s=>s.toolId.includes("send")),false);
+  assert.deepEqual(steps?.[3].input,{recipientHint:"Mom",
+    exactText:"I am in a meeting and will call later"});
+  assert.equal(steps?.[3].callId,"owner-seq-4");
+});
+
+test("search-selected WhatsApp, IMO and BOTIM messages are exact six-step owner plans",()=>{
+  const cases=[
+    ["WhatsApp","whatsapp","com.whatsapp"],
+    ["IMO","imo","com.imo.android.imoim"],
+    ["BOTIM","botim","im.thebot.messenger"]
+  ];
+  for(const [label,appId,packageId] of cases){
+    const request=`open ${label} then tap Search then type "Amma" into Search `+
+      `then tap Amma then prepare a ${label} message for Amma saying `+
+      `"Hi Mom i will call you later" then send it`;
+    const steps=parseOwnerMultiToolRequest(request);
+    assert.deepEqual(steps?.map(step=>step.toolId),[
+      "device.open_app","screen.tap_label","screen.fill_text","screen.tap_label",
+      "screen.compose_message","screen.send_message"
+    ],label);
+    assert.deepEqual(steps?.[0].input,{app:appId});
+    assert.deepEqual(steps?.[4].input,{appId,recipientHint:"Amma",
+      exactText:"Hi Mom i will call you later"});
+    assert.deepEqual(steps?.[5].input,steps?.[4].input);
+    assert.equal(evidenceForOwnerStep(steps[0],{status:"success",data:{
+      intentDispatched:true,packageId,verification:"destination_package_observed"
+    }}).safe,true);
+    assert.equal(evidenceForOwnerStep(steps[5],{status:"success",data:{
+      appId,verification:"sent_message_visible",recipientMatched:true,
+      exactTextMatched:true,sent:true,deliveryReported:false
+    }},true).safe,true);
+  }
+});
+
+test("search-to-send plans reject wrong recipients, wrong apps, and any nonterminal Send",()=>{
+  for(const request of [
+    'open IMO then tap Search then type "Amma" into Search then tap Amma then prepare a BOTIM message for Amma saying "hello" then send it',
+    'open BOTIM then tap Search then type "Amma" into Search then tap Amma then prepare a BOTIM message for Dad saying "hello" then send it',
+    'open WhatsApp then tap Search then type "Amma" into Search then tap Amma then prepare a WhatsApp message for Amma saying "hello" then send it then tap Search',
+    'open WhatsApp then send it',
+    'open WhatsApp then tap Search then type "Amma" into Search then tap Amma then send it'
+  ]) assert.equal(parseOwnerMultiToolRequest(request),null,request);
 });
 
 test("multi-step WhatsApp drafting rejects switched recipient and unsupported context",()=>{
@@ -163,7 +205,10 @@ test("multi-step WhatsApp drafting rejects switched recipient and unsupported co
     'Open Calendar then open chat with Mom then prepare WhatsApp message for Mom saying "hi"',
     'Open WhatsApp then prepare WhatsApp message for Mom saying "hi"',
     'Open WhatsApp then open chat with Mom then tap Search then prepare WhatsApp message for Mom saying "hi"',
-    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then send it',
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then send it to Dad',
+    'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then send it then send it',
+    'Open WhatsApp then send it',
+    'Open WhatsApp then open chat with Mom then send it',
     'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi" then prepare WhatsApp message for Mom saying "again"',
     'Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "hi and then pay"',
   ]) {
@@ -201,6 +246,28 @@ test("recipient evidence is not a generic window-change or a model assertion",as
   assert.equal(stopped.type,"clarify");
 });
 
+test("Send evidence requires the exact recipient, exact text, and no delivery claim",()=>{
+  const call={callId:"send-1",toolId:"screen.send_whatsapp",input:{
+    recipientHint:"Mom",exactText:"I will call later"
+  }};
+  assert.equal(evidenceForOwnerStep(call,{status:"success",data:{
+    verification:"sent_message_visible",recipientMatched:true,
+    exactTextMatched:true,sent:true,deliveryReported:false
+  }},true).safe,true);
+  for(const data of [
+    {verification:"sent_message_visible",recipientMatched:false,
+      exactTextMatched:true,sent:true,deliveryReported:false},
+    {verification:"sent_message_visible",recipientMatched:true,
+      exactTextMatched:false,sent:true,deliveryReported:false},
+    {verification:"sent_message_visible",recipientMatched:true,
+      exactTextMatched:true,sent:false,deliveryReported:false},
+    {verification:"sent_message_visible",recipientMatched:true,
+      exactTextMatched:true,sent:true,deliveryReported:true},
+    {verification:"android_accepted",recipientMatched:true,
+      exactTextMatched:true,sent:true,deliveryReported:false}
+  ]) assert.equal(evidenceForOwnerStep(call,{status:"success",data},true).safe,false);
+});
+
 
 test("multi-step native continuation requires independently observed app destination",async()=>{
   const request='Open WhatsApp then open chat with Mom then prepare WhatsApp message for Mom saying "Please call later"';
@@ -223,4 +290,18 @@ test("multi-step native continuation requires independently observed app destina
   assert.equal(observed.type,"tool");
   assert.equal(observed.call.toolId,"screen.open_whatsapp_chat");
   assert.deepEqual(observed.call.input,{recipientHint:"Mom"});
+});
+
+test("WhatsApp's full live Search label is treated as one recipient-search field",()=>{
+  const label="Ask Meta AI or Search";
+  const request=`Open WhatsApp then tap ${label} then type Amma into ${label} `+
+    `then tap Amma then prepare a WhatsApp message for Amma saying `+
+    `"Hi Mom i will call you later" then send it`;
+  const steps=parseOwnerMultiToolRequest(request);
+  assert.deepEqual(steps?.map(step=>step.toolId),[
+    "device.open_app","screen.tap_label","screen.fill_text","screen.tap_label",
+    "screen.compose_message","screen.send_message"
+  ]);
+  assert.deepEqual(steps?.[1].input,{label:"Search"});
+  assert.deepEqual(steps?.[2].input,{targetLabel:"Search",exactText:"Amma"});
 });

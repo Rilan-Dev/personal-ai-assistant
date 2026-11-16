@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -21,8 +22,10 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NexaLiveWhatsAppReadOnlyAndroidTest {
     @Test fun visibleWhatsAppHasOneGroundedRecipientOrVerifiedHeader() {
-        val recipient=InstrumentationRegistry.getArguments()
-            .getString("nexaRecipientHint").orEmpty().trim()
+        val arguments=InstrumentationRegistry.getArguments()
+        assumeTrue("Live WhatsApp read-only acceptance is opt-in via nexaRecipientHint",
+            arguments.containsKey("nexaRecipientHint"))
+        val recipient=arguments.getString("nexaRecipientHint").orEmpty().trim()
         assertTrue("An explicit owner-reviewed recipient hint is required",
             recipient.length in 3..55 && recipient.none { it.code<32 })
         val ctx=ApplicationProvider.getApplicationContext<Context>()

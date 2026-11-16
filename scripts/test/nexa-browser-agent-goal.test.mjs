@@ -39,6 +39,7 @@ test("browser-search authority stays inside the original user question",()=>{
 test("browser native tool stays approval-gated and scoped to Chrome",()=>{
   const tool=readFileSync("apps/mobile/src/native/androidTools.ts","utf8");
   const native=readFileSync("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/DeviceControlModule.kt","utf8");
+  const observation=readFileSync("apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaAppLaunchObservation.kt","utf8");
   assert.match(tool,/id: "device.browser_search"/);
   assert.match(tool,/hasExternalSideEffect: true/);
   assert.match(tool,/capabilities: \["apps.launch"\]/);
@@ -50,7 +51,8 @@ test("browser native tool stays approval-gated and scoped to Chrome",()=>{
   assert.match(browser,/NexaApprovedExternalAction.launch\(/);
   assert.match(gate,/NexaUiActionJournal.claim\(/);
   assert.match(gate,/NexaNativeActionSafety.dispatchWithFence\(/);
-  assert.match(native,/NexaAppLaunchObservation.expectedVisibleNow/);
+  assert.match(native,/NexaAppLaunchObservation.waitUntilExpectedVisible/);
+  assert.match(observation,/fun expectedVisibleNow\(context:Context,expectedPackage:String\):Boolean/);
   assert.match(native,/"destination_package_observed" else "not_observed"/);
   assert.match(native,/resolveObservedAppLaunch\(/);
 });

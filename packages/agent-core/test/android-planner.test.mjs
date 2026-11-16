@@ -34,6 +34,29 @@ test("does not invent screen verification after an intent", async () => {
   assert.equal(r.type, "done");
   assert.match(r.response, /cannot independently verify/);
 });
+test("reports an approved screen scroll only when Android observed a screen change", async () => {
+  const call={callId:"direct-1",toolId:"screen.scroll",input:{direction:"left"}};
+  const observed=await androidIntentPlanner.next("Scroll left on the current Home screen",[
+    {call,outcome:{status:"success",data:{actionAccepted:true,verification:"observed_change"}}}
+  ]);
+  assert.equal(observed.type,"done");
+  assert.match(observed.response,/left scroll/i);
+  assert.match(observed.response,/observed a screen change/i);
+  assert.match(observed.response,/no further action/i);
+
+  const unverified=await androidIntentPlanner.next("Scroll left on the current Home screen",[
+    {call,outcome:{status:"success",data:{actionAccepted:true,verification:"not_observed"}}}
+  ]);
+  assert.equal(unverified.type,"clarify");
+  assert.match(unverified.question,/did not verify a screen change/i);
+
+  const tap=await androidIntentPlanner.next("Tap the visible Home control",[
+    {call:{callId:"direct-2",toolId:"screen.tap_label",input:{label:"Settings"}},
+     outcome:{status:"success",data:{actionAccepted:true,verification:"observed_change"}}}
+  ]);
+  assert.equal(tap.type,"done");
+  assert.match(tap.response,/destination was not independently verified/i);
+});
 test("training approval command plans a safe isolated mock tool", async () => {
   const call = await androidIntentPlanner.next("Test approval", []);
   assert.equal(call.type, "tool");

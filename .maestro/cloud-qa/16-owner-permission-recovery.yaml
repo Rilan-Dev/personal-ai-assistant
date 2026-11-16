@@ -11,6 +11,14 @@ tags:
     permissions:
       all: deny
 - extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
     visible: "Make your assistant yours."
     timeout: 60000
 - tapOn: "Tools"
@@ -29,8 +37,8 @@ tags:
 - extendedWaitUntil:
     visible: "Task blocked: Permission required: apps.launch"
     timeout: 30000
-- assertVisible: "Review device permissions in Tools"
-- tapOn: "Review device permissions in Tools"
+- assertVisible: "Review device action permissions in Tools"
+- tapOn: "Review device action permissions in Tools"
 - extendedWaitUntil:
     visible: "Device controls"
     timeout: 30000

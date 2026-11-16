@@ -37,6 +37,16 @@ test('bounded search refuses ambiguous scroll containers and disabled launcher s
   assert.match(overlay, /NexaScreenScroll\.prepare\(nextService,nextRequest\.direction,requireUniqueContainer=true\)/);
 });
 
+test('horizontal Home scrolling chooses the bounded launcher gesture before semantic traversal', () => {
+  const scroll=read('NexaScreenScroll.kt');
+  const launcher=scroll.indexOf('NexaLauncherSwipe.isHome(service,root)');
+  const traversal=scroll.indexOf('val queue=java.util.ArrayDeque');
+  assert.ok(launcher>=0&&launcher<traversal,
+    'Home left/right requests must stage a proportional launcher gesture first');
+  assert.equal(scroll.includes('if(best==null && direction in setOf("left","right")'),false,
+    'the launcher gesture must not be a fallback only when semantic targets are absent');
+});
+
 test('a new floating scroll request invalidates older pending owner actions', () => {
   const overlay = read('NexaToolOverlayService.kt');
   const entry = overlay.indexOf('private fun sendLocal(raw: String)');

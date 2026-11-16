@@ -132,7 +132,7 @@ class NexaWhatsAppChatUiAndroidTest {
     @Test fun uncertainSpeechVariantCanBeFoundButNotWrongAlias() {
         val runId=NexaQaAccessibilityRoot.launchFixture(NexaChatListQaActivity::class.java,false)
         try {
-            val matched=settledScan(runId,1,"Nva Forever",85)
+            val matched=settledScan(runId,1,"Mab Forever",85)
             val current=matched.root
             val close=matched.scan
             assertEquals(fixtureTree(current),1,close.candidates)

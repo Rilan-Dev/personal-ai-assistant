@@ -83,13 +83,13 @@ internal object NexaUiActionJournal {
               reviewedInputDigest:String?=null,origin:String="overlay"): Boolean =
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
-                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","text_fill","app_launch",
+                kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","message_send","text_fill","app_launch",
                     "nav_back","nav_notifications") ||
                 origin !in setOf("chat","live-voice","assistant-role","overlay") ||
                 !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
-                (kind in setOf("message_fill","text_fill") &&
+                (kind in setOf("message_fill","message_send","text_fill") &&
                     !Regex("[0-9a-f]{64}").matches(reviewedInputDigest.orEmpty())) ||
-                (kind !in setOf("message_fill","text_fill") && reviewedInputDigest!=null)) {
+                (kind !in setOf("message_fill","message_send","text_fill") && reviewedInputDigest!=null)) {
                 return@synchronized false
             }
             if (!NexaNativeActionSafety.permitsNewAction(ctx)) return@synchronized false

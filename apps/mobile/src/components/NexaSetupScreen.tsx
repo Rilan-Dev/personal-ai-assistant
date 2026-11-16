@@ -85,6 +85,7 @@ export default function NexaSetupScreen(props: Props) {
   return (
     <>
     <ScrollView style={styles.scroll} contentContainerStyle={styles.content}
+      removeClippedSubviews={true}
       keyboardShouldPersistTaps="handled">
       <View style={styles.hero}>
         <View style={styles.topLine}>

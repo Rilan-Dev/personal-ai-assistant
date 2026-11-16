@@ -20,8 +20,8 @@ test('manual Maestro suite selects one isolated, signed-release grant-recovery f
 });
 test('grant-recovery flow never grants the permission or invokes an external action',()=>{
   assert.match(flow,/visible: "Task blocked: Permission required: apps\.launch"/);
-  assert.match(flow,/assertVisible: "Review device permissions in Tools"/);
-  assert.match(flow,/tapOn: "Review device permissions in Tools"/);
+  assert.match(flow,/assertVisible: "Review device action permissions in Tools"/);
+  assert.match(flow,/tapOn: "Review device action permissions in Tools"/);
   assert.match(flow,/assertVisible: "App launching"/);
   assert.doesNotMatch(flow,/tapOn: "App launching"/);
   assert.doesNotMatch(flow,/Approve once|Resume saved task|adb|shell|openApp|launchBrowser/);

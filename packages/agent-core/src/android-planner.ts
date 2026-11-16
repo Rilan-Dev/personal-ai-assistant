@@ -23,6 +23,28 @@ export const androidIntentPlanner: Planner = {
         return { type: "clarify", question:
           "Android did not confirm the notification shade request. No notification contents were read." };
       }
+      if (last.call.toolId === "screen.scroll") {
+        const direction=last.call.input.direction;
+        if (result?.actionAccepted === true &&
+            result?.verification === "observed_change" &&
+            typeof direction === "string" &&
+            ["up","down","left","right"].includes(direction)) {
+          return { type: "done", response:
+            "Android observed a screen change after the approved " + direction +
+            " scroll. No further action was taken." };
+        }
+        return { type: "clarify", question:
+          "Android did not verify a screen change after the approved scroll. No further action was taken." };
+      }
+      if (last.call.toolId === "screen.tap_label") {
+        if (result?.actionAccepted === true &&
+            result?.verification === "observed_change") {
+          return { type: "done", response:
+            "Android observed a screen change after the approved tap. The destination was not independently verified, and no further action was taken." };
+        }
+        return { type: "clarify", question:
+          "Android did not verify a screen change after the approved tap. No further action was taken." };
+      }
       if (result?.intentDispatched === true) {
         return {
           type: "done",

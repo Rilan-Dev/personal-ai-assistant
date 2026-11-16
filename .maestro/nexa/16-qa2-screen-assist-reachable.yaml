@@ -7,6 +7,26 @@ tags:
 ---
 - launchApp:
     stopApp: true
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
+      visible: "Continue to Nexa.*"
+    commands:
+      - tapOn: "Continue to Nexa.*"
 - tapOn: "Chat"
 - tapOn: "Tools"
 - assertVisible: "Device controls"

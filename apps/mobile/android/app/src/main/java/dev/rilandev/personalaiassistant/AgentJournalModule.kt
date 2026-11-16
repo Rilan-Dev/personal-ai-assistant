@@ -188,7 +188,7 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
             require(data.toByteArray(StandardCharsets.UTF_8).size <= 1200)
             val obj = JSONObject(data)
             require(obj.length() == 6 && obj.optInt("version") == 1)
-            require(obj.optString("origin") == "https://aca.starcitytechnical.com")
+            require(obj.optString("origin") == BuildConfig.NEXA_ACA_API_ORIGIN)
             require(obj.optString("token").matches(Regex("nexa_m1_[A-Za-z0-9_-]{43}")))
             // Avoid java.time APIs that require Android API 26 on older phones.
             val expires = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {

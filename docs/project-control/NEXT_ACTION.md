@@ -1,3 +1,47 @@
+## Current QA status — 2026-11-16
+
+The current QA2 debug APK (`0.3.2026111607`, code `2026111607`) is installed on `emulator-5554`. The ordered main Maestro suite passed 18/18 flows and the ordered experimental suite passed 4/4. Nexa `npm test` passed 606/606; root/mobile/runtime typechecks, Expo web export, and `git diff --check` passed. Android reports Screen Assist enabled and bound after the Maestro driver exited. APK SHA-256: `83F694DC689CFCF8DB80F583B0040DC2C799F05F0D78CAA6AAE23434155D4BFE`.
+
+**Still unverified:** a live Screen Assist read/tap/scroll against a third-party app. The direct ADB live-input attempt was rejected by platform safety review, so I did not retry through another input tool. A bound service and settings flows are not proof of cross-app action. No message was sent and no Sarvam key was used. Continue that acceptance only through a platform-approved interaction path. ACA live Development parity also remains subject to the isolated backend/test-identity gate below.
+
+---
+
+## 2026-11-16 — Nexa–ACA canonical business identity and parity
+
+**Direction:** Owner approved ACA as the canonical business backend and now requires the same identity, database, accounts, agent/provider configuration, and backend service plane. Within each environment both clients use the same ACA records; Development and Production remain isolated. Nexa calls authenticated ACA APIs and never connects directly to PostgreSQL, Redis, RabbitMQ, Qdrant, or provider APIs.
+
+**Verified from ACA Development source:** Mobile login verifies the same ACA email/password record and user ID through the existing PostgreSQL-backed auth path, then creates a separate revocable `nexa_m1_` device session. The current mobile feature flag and email allowlist fail closed. ACA Chat resolves the selected agent’s server-side runtime/configuration and uses its canonical business services.
+
+**Important visibility behavior:** Existing ACA Chat conversations are organization-and-agent scoped, so authorized organization members may see them; they are not private to the creator. Nexa must preserve that policy and must not market its ACA conversation history as personal/private.
+
+**Design and plan:** `docs/superpowers/specs/2026-11-16-nexa-aca-business-parity-design.md` and `docs/superpowers/plans/2026-11-16-nexa-aca-canonical-business-parity.md`. The plan adds an explicit Development API origin, reuses ACA’s full turn handler for read-only business access in both Nexa Chat and overlay, pins per-agent configuration, and keeps Android-only tasks in the existing native harness. Business mutations, voice, and reverse device control remain later gates.
+
+**Implementation:** Nexa Chat and floating overlay route ACA business-read prompts through one versioned, read-only ACA Chat API. ACA reuses its existing identity, organization/agent authorization, conversation repository, business records, and server-selected agent/provider configuration. Nexa’s device token is separate and revocable; the phone receives no DB, Redis, RabbitMQ, Qdrant, or provider credentials. Local device tasks remain on Nexa’s existing native harness.
+
+**Verification on 2026-11-16:** Nexa `npm test` 605/605; root/mobile/runtime typechecks and Expo web export passed. ACA Vitest 1,670/1,670 across 265 files and `pnpm typecheck` passed. Android instrumentation passed 273/273. Ordered Maestro business Chat and floating-overlay flows passed 2/2 on `Medium_Phone_API_37.0` (`emulator-5554`). No physical-device actions, mailbox reads, message sends, or provider-key use occurred.
+
+**QA APK:** `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`, QA2 package `dev.rilandev.personalaiassistant.physicalqa2`, version `0.3.2026111605`, SHA-256 `005376F21FBECD9FCB2E486195AE3BC89683542227EB32AED1DC6808C6AF97DA`. This is a debug QA artifact, not a public/release-signed build. It uses `https://aca-unconfigured.invalid` so it cannot contact a business backend.
+
+**Security gate:** The checked-in ACA Development PostCSS config contained an obfuscated loader that resolves a hardcoded Ethereum sender through public RPC/Blockscout, derives HTTP endpoints from transaction data, fetches XOR-encoded JavaScript, then evaluates and spawns it. This blob is identical on origin/Development. I replaced it in this local checkout with the plain Tailwind/autoprefixer config; the cleaned targeted test and full ACA suite pass. The earlier test run spawned detached node -i PID 7492 and had an established connection to 95.135.181.84:443; I terminated that process. Whether its remote second stage accessed local files or credentials is unknown. Treat secrets available to that test process as potentially exposed and rotate them. The remote branch still needs the fix and review before another fresh checkout/build.
+
+**Live-parity gate:** There is no configured isolated ACA Development API origin, test identity, database, or local service deployment in this workspace. Source and synthetic tests prove the same-handler/auth/config boundaries and fail-closed behavior, but do not prove a live ACA request or mailbox summary.
+
+**Next:** remediate the compromised origin/Development config and rotate any credentials reachable by the earlier process; then configure an isolated ACA Development deployment and synthetic test account, inject its Development origin into a fresh QA APK, and compare the same read-only prompt in ACA web Chat and Nexa Chat/overlay against canonical user/org/agent/config/conversation evidence. Keep writes, scheduling, WhatsApp sends, voice parity, and reverse device control deferred.
+
+---
+
+## 2026-11-15 — Multi-messenger static fixture and physical QA continuation
+
+**Ready:** the no-provider static owner planner and production message-tool definitions cover WhatsApp, IMO, and BOTIM with exact app/recipient/text binding and a high-risk one-shot Send claim. npm test passes (595 tests, exit 0); focused fixtures pass 26/26; root TypeScript checks, Expo web export, Android app/test Kotlin compilation, and git diff --check pass. QA2 live-debug ARM64 APK v0.3.2026111517 (code 2026111517) was built at apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk; SHA-256 3B3C4EAB5D36ACE730A191C7292FBC462F70FF25DB6FE5FEA2111605D505F9A9.
+
+**Physical test is pending:** Infinix serial 099344034S003788 remains on v1516. Read-only Android audio-policy output reports Nexa's VOICE_RECOGNITION AudioRecord active; the foreground changed from WhatsApp to Instagram during the source/build checks. Preserve that session; do not install/restart Nexa or control the phone until recording is inactive and the owner is ready.
+
+**Next:** when safe, install v1517 in place without clearing data; verify Nexa Screen Assist and Launcher Navigation are bound; run the exact no-provider workflow through Nexa tools for Amma and Hi Mom i will call you later in each app. Keep the app's Send review intact; if owner approval is presented, wait for the user. Verify the exact visible message bubble only; never infer delivery. No live message was sent during this source/build phase.
+
+This QA APK is not a signed release/public app. Do not bypass Android permissions or the app's Send review.
+
+---
+
 ## 2026-11-08 — Current Development safety/build verification and remaining release gates
 
 **Verified source commit:** `a2c4ec378e9385f68edd2d77fbea83148830ba29` (before these documentation-only notes). Development retains security fix PR #115 removing obfuscated bootstrap execution. No consumer `main` promotion or production service/database mutation.
@@ -822,3 +866,111 @@ The Windows runner returned `PEER_UNREACHABLE` through the tailnet SOCKS5 proxy 
 
 ## Next physical-device action (2026-11-14)
 Current state: QA2 `0.3.2026111407` is installed on the Infinix; Flow 10 and ordered experimental Flows 10–13 pass; Screen Assist is currently enabled and bound with no crash. The app's `SYSTEM_ALERT_WINDOW` grant is not enabled. Before testing floating Chat scroll: open Android's overlay-access screen for the QA2 package, obtain the owner's individual approval before enabling that setting, then use a scrollable safe external screen and request approval for each scroll. The previous approved Calculator swipe caused no visible scroll. Do not claim dynamic scroll is accepted until a visible external-screen change is verified. No messages were sent and no Sarvam key was used.
+
+## 2026-11-15 — ACA unread-summary live acceptance
+- Completed on `emulator-5554` from the already saved, server-revalidated ACA device session. The exact 24-hour unread request returned successfully with **0 matched / 0 included** from `local_mail_database`; the oldest mailbox sync was about 12 seconds before the report cutoff. No password was used, and no email was drafted or sent.
+- The requested 24-hour read-only check is complete. Broader ACA acceptance remains separate: compare equivalent counts against ACA web for the same authorized source, then exercise all-history and revoked/disabled/offline cases before claiming full ACA release acceptance. Do not use the previously pasted password; any future login must use a freshly rotated credential entered privately in Nexa.
+- Also completed the all-message 24-hour read-only request on that same session: **0 matched / 0 included**, `local_mail_database`, oldest sync about 0.45 seconds before cutoff. Both requested 24-hour reports returned successfully and contained no email rows. No subjects, senders, or bodies were copied; no email was drafted or sent.
+
+## Latest action — ACA mail routing and live comparison
+Ready: local Nexa mail-routing fix; focused tests 15/15, full tests 547/547, typecheck, web export, and debug QA2 build/install all pass. The emulator confirmed “Check my recent emails” and the exact last-24-hours unread summary both reach ACA directly and return 0 matched / 0 included. Unsupported custom filter is refused before query; email write request is refused. No email content was copied to logs and nothing was sent.
+
+Pending:
+1. Sign in privately in the open Chrome tab group ACA Read-only QA. Then run the exact prompt “Summarize unread emails from the last 24 hours” in ACA Live Chat and compare matched/included counts, UTC range, oldest sync time, and partial-coverage status against Nexa. Keep subjects and bodies out of logs.
+2. If an installable update of the main release-signed package is needed, obtain an authenticated GitHub Actions dispatch for the exact Development source. The local debug signer cannot update the installed release-signed app; it remains installed and untouched. The side-by-side QA2 build is debug only, not a public release.
+3. Full ACA shared conversation history is not part of the current mail-summary bridge: Nexa uses the same authorized mail evidence/report path but keeps chat history local. A shared ACA conversation requires the separate mobile chat/history API phase.
+
+## Follow-up — ACA all-history unread check
+The emulator QA2 build also passed “Summarize all my unread emails”: 50 matched / 50 included, full synchronized-data coverage, oldest sync about 10 seconds before cutoff. No message content was copied into logs. ACA web Chat remains untested because its tab is still at sign-in; complete private sign-in in ACA Read-only QA before comparing the same prompt.
+
+## 2026-11-15 — bounded ACA reply and live-voice gap
+Ready: Nexa Chat no longer appends the entire ACA report. It replies with the matched count/scope, at most two subject/sender highlights, partial-result status, and the local-sync caveat. It does not return email bodies, mailbox addresses, links, or UTC timestamps to chat/read-aloud, and it does not send email content to a BYOK model. Verification: focused ACA tests 20/20, full npm test 554/554, typecheck and `git diff --check` pass. QA2 `0.3.2026111503` built and installed on `emulator-5554` (SHA-256 `461E9695E85C88BAA1FD108D541821BBF80309850629DDD38AE6D6B22E3BB523`).
+
+Pending:
+1. Continuous Android live voice still has no ACA mail-summary route; the bounded reply currently applies to Nexa Chat and read-aloud of its reply. Add a read-only live-voice bridge only with an explicit, owner-visible rule for whether the short subject/sender preview may be processed by the selected speech provider; do not forward message bodies.
+2. ACA web Live Chat comparison remains pending private sign-in in the open `ACA Read-only QA` tab group. Run the same 24-hour prompt after sign-in and compare only counts, scope, freshness, and partial status.
+3. QA2 is a debug test package, not a new release-signed APK. The physical Infinix and main release app remain untouched.
+
+## Latest — human-style ACA email summary (2026-11-15)
+Ready: configured-provider ACA Chat summaries synthesize at most 20 sanitized excerpts (450 characters each) into a short spoken-style brief. Counts, sample coverage, and ACA sync caveat remain authoritative app text. No-provider/provider-failure cases retain the deterministic subject preview. Settings discloses that bounded excerpts go to the saved provider only for a requested content summary.
+
+Verification: focused ACA summary tests 11/11; full test suite 563/563; typecheck and `git diff --check` pass. QA2 `0.3.2026111505` (code `2026111505`, SHA-256 `1351830B87ED454CE5285F308EAE58A7F423444031EB84DBF3E8EE79825CE637`) is installed on `emulator-5554` and opens to Chat without a captured app crash. Ordered experimental Maestro flows 10–13 pass 4/4 (`.qa-results/maestro-email-summary-qa2-v1505/report.xml`); a final standalone flow 10 passes 1/1 and restores Screen Assist, which Android confirms enabled and bound with no crash.
+
+Pending:
+1. The QA2 instance currently reports “Private local assistant,” indicating no Nexa BYOK provider is saved. Save the intended provider in Settings, then run a private end-to-end summary on authorized ACA mail; no email content was queried or sent to a model during this verification.
+2. Continuous realtime voice still bypasses the ACA summary route; current scope is Chat and reading the last reply aloud.
+3. ACA web Live Chat count/freshness comparison still needs a private signed-in browser session. QA2 remains a debug test package, not a public or release-signed APK; the physical Infinix and main release installation remain untouched.
+
+## Latest — concise ACA summary refinement (2026-11-15)
+Ready: configured-provider summaries now request a 1–2 sentence, 30-word gist; final Chat/read-aloud response is capped at 60 words, while preserving exact match/coverage and sync caveats. Deterministic subject-only fallback remains available when a provider is not saved or fails. Verification: full Node suite 565/565; typecheck, web export, and `git diff --check` pass. QA2 `0.3.2026111506` installed and launched on `emulator-5554` (SHA-256 `76C962C5B041CE5252C946B9288A64AF60BFE537478AE2CF94665608DF310F20`).
+
+Pending:
+1. The emulator's saved ACA session expired; reconnect privately in Nexa Settings to run a live read-only summary. No mailbox rows were returned in the attempted QA request. No Nexa BYOK provider is saved, so model synthesis also needs the intended provider configured before live summary acceptance.
+2. Continuous realtime voice still has no ACA mail route; current behavior is Chat plus “Read last reply aloud.”
+3. Maestro flows 10–13 passed on `0.3.2026111505`; they were not rerun on this JS-only `0.3.2026111506` refinement. The release-signed/public APK and physical Infinix remain untouched; the new install is QA2 debug only.
+4. ACA web Live Chat comparison still requires the owner to sign in privately in the ACA Read-only QA browser session.
+
+## Latest — ACA reconnect and v1513 emulator verification (2026-11-15)
+Ready: the reconnected ACA session returned a read-only unread-email summary on the installed x86_64 QA2 v0.3.2026111513 build. The response used Nexa's deterministic subject-only fallback and retained the sync caveat; no expired-session error appeared. The saved Sarvam test key has been removed, and the latest live model-provider request failed generically, so configured-provider LLM synthesis after the sentence-cap fix remains unverified.
+
+Verification: full serial Node suite 576/576; root/mobile/runtime typecheck; Expo web export; experimental Maestro Flows 10–13 4/4; Flow 16 Screen Assist controls 1/1; final standalone Flow 10 1/1. After Maestro exited, Android reported Accessibility enabled and QA2 Screen Assist enabled/bound. The test artifact is `.qa-results/maestro-qa2-v1513/app-debug-v1513-x86_64.apk` (SHA-256 `497A104D6938A09D37D8FC5C8ABCDFF103D3323FFDFC720FD011123DD8A4506B`). It is debug QA, not a public or release-signed APK.
+
+Pending:
+1. Recheck configured-provider email synthesis only after a fresh, valid provider credential is privately stored; do not reuse the removed exposed test key.
+2. Realtime voice still lacks an ACA mail-summary route, and Nexa Chat does not yet share the ACA Live Chat conversation history.
+3. No release-signed/public APK was produced. The exact tested artifact is the separate x86_64 QA2 APK linked above; the default Gradle output was later rewritten by an ARM64 build and is not the artifact certified by these Maestro results.
+4. Review or manually remove the noted QA diagnostic screenshots/hierarchies if the short subject-only preview should not remain in the workspace. Automatic approval review rejected automated deletion of the temporary pulled APK (`.qa-results/qa2-installed-base.apk`, reason `blocked by policy`); no further deletion was attempted.
+
+## Latest — ACA reconnect and Screen Assist emulator continuation (2026-11-15)
+Complete: ACA's read-only unread-email request returned on QA2 v0.3.2026111513 without an expired-session error; Nexa used its short no-provider fallback and retained the sync caveat. Emulator Screen Assist was then verified directly: the service was bound, a one-shot read was armed from the visible Tools screen, Android Settings became foreground, and the service log recorded `package=com.android.settings nodes=120 captured=true`. The captured screen text was not displayed or sent to AI; Nexa's Discard control confirmed “Screen text discarded from memory.” Metadata-only evidence: `.qa-results/qa-v1513-screenassist-read.log`; discard UI evidence: `.qa-results/qa-v1513-discarded.png`. Emulator `emulator-5554` remains running with Nexa Tools foreground. Physical Infinix was not targeted.
+
+The exact QA2 x86_64 v1513 artifact remains `.qa-results/maestro-qa2-v1513/app-debug-v1513-x86_64.apk` (SHA-256 `497A104D6938A09D37D8FC5C8ABCDFF103D3323FFDFC720FD011123DD8A4506B`). Earlier on this artifact, Node tests passed 576/576, typechecks and Expo web export passed, and ordered Maestro Flows 10–13 passed 4/4. This is a debug QA build, not a release-signed APK.
+
+Pending: configured-provider email synthesis needs a fresh provider credential privately saved; no ACA web Live Chat comparison was run in this continuation; realtime voice still lacks the ACA mail-summary route and shared ACA chat history; broad arbitrary-app tap/scroll acceptance remains unverified; no public/release-signed APK was produced. Do not reuse the removed Sarvam test key.
+
+## Latest — physical Home-screen swipe acceptance (2026-11-15)
+Complete for this milestone: QA2 `0.3.2026111515` is installed on physical Infinix `099344034S003788`; a fresh Sarvam overlay request planned one left swipe, Nexa requested owner review, the owner approved once, and Android's observed Home page changed from page 1 to page 2. Evidence: `C:\Users\suajt\AppData\Local\Temp\paa-infinix-home-swipe-passed-v1515.png`. The launcher traversal fix prunes invisible hierarchy branches while keeping a strict bounded traversal and fail-closed incomplete-tree behavior. Full Node suite 578/578, TypeScript checks, and `git diff --check` passed. APK SHA-256: `341E40049D65B6264A3CCFDB9E6C5E7CA0B2790A892EDCB4130AC93075A70570`.
+
+Still pending outside this acceptance: repeatable dynamically grounded tap/scroll in other apps; the broader ordered Maestro suite on the exact v1515 source; live voice/multi-step cross-app acceptance; release signing and public distribution gates. The user’s per-action review requirement remains: fresh approval before each tap or scroll. No other app or external data was changed in the Home swipe test.
+
+## Latest — physical live-debug loop ready (2026-11-15)
+Ready on the Infinix: QA2 `dev.rilandev.personalaiassistant.physicalqa2` v`0.3.2026111516` is installed in live Metro mode, retaining QA2 app data. APK SHA-256: `BB0C54F6CE0E8DCDB262A4299E6CC094440625C6E6C225E3D053D54F1FE36C48`. Metro/Fast Refresh was verified with a temporary source-only probe; its updated marker appeared in Android logs without an APK install, and the probe has been removed. The Metro server is currently running.
+
+To resume after Metro stops, from the project root run `.\scripts\qa\start-physical-live-debug.ps1` in PowerShell. It defaults to physical serial `099344034S003788`, checks that only the requested serial and QA2 package are used, and sets up `adb reverse tcp:8081 tcp:8081`. JS/TS edits hot-refresh; native Kotlin/manifest/resource/dependency edits still require one native rebuild and in-place install. Full Node tests 579/579, TypeScript checks, and `git diff --check HEAD` passed. The emulator is off.
+
+## Follow-up — live QA2 Accessibility rebind remains pending (2026-11-15)
+The live Metro setup and verified JS Fast Refresh remain ready. After the existing QA2 Settings flow, Android reports both QA2 Accessibility components enabled and no crashes, but neither service is bound. The flow ended on a Launcher Navigation selector assertion; its final screenshot/hierarchy is under `C:\Users\suajt\.maestro\tests\2026-11-15_175617\`. The phone then showed BOTIM `BRTCActivity`, so no more device UI actions were taken. Once the phone is available on a safe Nexa/Home screen, rerun service-binding verification before any cross-app screen-control test. Emulator is stopped; only the Infinix is attached.
+
+## Latest — conversation/Android diagnostics review (2026-11-15)
+Findings: no conversation JSON export exists in the workspace or QA2 export cache; the source database `custom.db` is private, and the app's schema-v3 JSON export includes decrypted conversation text. No transcript was extracted. Available Android evidence shows zero crash, ANR, or native-signal markers in saved crash/device logs; QA2 system exit history contains only 16 `USER REQUESTED / FORCE STOP` records (0 crash, 0 ANR).
+
+The latest physical Settings Maestro JSON trace fails on step 36 (`android:id/switch_widget` not found). Android showed both QA2 Accessibility components enabled, none bound, and no crashed service. The physical serial then disappeared from ADB, so binding could not be rechecked. Plan: obtain the JSON export once the phone is available; make the Settings flow tolerate its post-consent navigation; verify Android binding after Maestro releases UiAutomation; gather fresh package-specific diagnostics before any native service fix. No app source fix is justified by the current crash/ANR evidence.
+
+## Physical reconnect update — diagnostics rechecked (2026-11-15)
+The Infinix returned on `099344034S003788`. QA2 Screen Assist and Launcher Navigation are bound, with no crashed services. Latest QA2 logcat/ActivityManager checks show 0 fatal/native crash markers and 0 ANRs; Android exit history contains only 16 user-requested force stops. Nexa is currently an active microphone client and has no focused window, so I did not open Nexa or interrupt the session. No conversation JSON export exists yet; the encrypted/private DB is present. The emulator is off and ADB lists only the Infinix.
+
+When Nexa is foreground and the voice session has ended, export its JSON locally and inspect it without sending it to another app. Continue the Settings flow fix separately; the previous step-36 selector miss was not a crash.
+
+## Previous checkpoint — WhatsApp static fixture before Send support (2026-11-15)
+
+At this checkpoint the fixture covered only open-chat and draft entry; Send was absent and the three-step focused test passed. This status is superseded by the current reviewed Send workflow below. The physical phone had WhatsApp installed, but the Nexa voice session was left undisturbed and no real chat/message was accessed.
+
+## Current — reviewed WhatsApp tool-call workflow (2026-11-15)
+
+Ready: the static scenario now exercises the full synthetic WhatsApp chain through Nexa's `AgentHarness`: open WhatsApp, verify the exact chat, fill the exact draft, then invoke the new dedicated high-risk `screen.send_whatsapp`. The provider fixture is tool-call-only (`content: null`), checks per-step execution/status evidence, and does not use a live key or a real contact. Native send revalidates recipient, draft and one unique adjacent Send button, claims a digest-bound no-replay journal under the pause fence, and only reports that the exact message is visible in the conversation; delivery is not claimed.
+
+Verified: focused suite 26/26; full Node suite 589/589; root/mobile/runtime typecheck; Expo web export; Android app and instrumentation Kotlin compilation; `git diff --check`.
+
+Pending: Android instrumentation has been compiled but not run, and the QA APK has not been rebuilt or installed. Nexa QA2 was still an active microphone client, so no app, contact or live message was touched. When the voice session is over, run the Android instrumentation on the physical Infinix, build/install the current native source once, then validate only with explicit in-app review of the exact recipient/text. The static fixture already passes; it intentionally will never send to a real contact.
+
+## Current action — 2026-11-16 physical multi-messenger run
+
+Ready: QA2 Screen Assist and Launcher Navigation were bound on the Infinix, and the Nexa Tools grants for app launch, reviewed screen actions and visible-control metadata are enabled. The exact static owner-sequence path passes its focused local tests 19/19.
+
+Pending: the physical serial `099344034S003788` disappeared during the live run and is no longer in ADB. A separate detached QA runner has restarted the emulator; no emulator test will be used, and I have left that process alone. The corrected task prompt was not submitted; no target app opened and no messages were sent. Reconnect the Infinix with USB debugging on and the screen awake, then resume the exact `Amma` / `Hi Mom i will call you later` flow in WhatsApp, IMO and BOTIM, verifying each recipient, draft and visible sent bubble before reporting.
+
+## Current continuation — 2026-11-16 physical QA2
+
+The Infinix is online and the prior phone call ended. The static overlay request reached the local owner-sequence planner, WhatsApp Search opened, and text entry failed; no chat was opened and no message was sent. Nexa's safe field scan found no named empty input. A read-only UI hierarchy check found the WhatsApp Search `EditText` focused and enabled, with the `com.whatsapp:id/search_input` resource; screen text was not emitted. Focused local checks pass 44/44 and mobile typecheck passes.
+
+Next: build the existing isolated Live QA2 debug variant (`paaIsolatedPhysicalQaV2=true`, `paaLivePhysicalQaV2=true`) from the current local source and install only to serial `099344034S003788` using `adb -s`. Metro is already running locally on 8081 with reverse forwarding. Confirm the live bundle is loaded, rerun the exact static WhatsApp sequence once, and use the newly surfaced safe native error category to fix field matching. Then verify the full recipient/draft/send flow one app at a time for WhatsApp, IMO, and BOTIM; confirm each visible sent bubble and never infer delivery. Keep emulator untouched.

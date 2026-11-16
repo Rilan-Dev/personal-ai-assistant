@@ -13,8 +13,31 @@ tags:
 - launchApp:
     stopApp: true
     clearState: false
+- runFlow:
+    when:
+      visible: "Pixel Launcher.*responding"
+    commands:
+      - tapOn: "Wait"
 - extendedWaitUntil:
-    visible: "How can I help today?"
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 180000
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: "Make your assistant yours."
     timeout: 180000
 - tapOn: "Tools"
 - extendedWaitUntil:
@@ -37,17 +60,13 @@ tags:
 - tapOn:
     text: "Show optional permissions and features"
     point: "50%,50%"
-- scrollUntilVisible:
-    element: "Hide optional features"
-    direction: UP
-    timeout: 30000
-- assertVisible: "Hide optional features"
+- assertVisible: "One-time screen assistance"
 # Overlay permission is checked separately after Maestro, because OEMs expose
 # different system grant surfaces.
 - scrollUntilVisible:
-    element: "One-time screen assistance"
-    direction: UP
-    timeout: 30000
+    element: "Open Accessibility.*One-time screen assistance.*"
+    direction: DOWN
+    timeout: 180000
 - tapOn:
     text: "Open Accessibility.*One-time screen assistance.*"
     point: "50%,50%"

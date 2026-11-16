@@ -833,7 +833,8 @@ internal object NexaTaskCoordinator {
                 // A successful Intent is only an OS dispatch receipt. Obtain
                 // a separate, one-shot package observation if Accessibility
                 // remains available; never wait, retry or infer task success.
-                NexaAppLaunchObservation.observeAfter(context,token,packageName)
+                NexaAppLaunchObservation.observeAfter(context,token,
+                    packageName,pauseGeneration)
                 "accepted"
             } else "uncertain"
         }catch (_:android.content.ActivityNotFoundException){

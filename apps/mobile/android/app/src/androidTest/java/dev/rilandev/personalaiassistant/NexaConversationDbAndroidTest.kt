@@ -81,6 +81,21 @@ class NexaConversationDbAndroidTest {
         assertFalse(NexaConversationDb.reserveUiActionClaim(ctx,"bad","tap",packageDigest))
     }
 
+    @Test fun messageSendClaimRequiresExactReviewedDigestAndIsOneShot() {
+        val ctx=ApplicationProvider.getApplicationContext<Context>()
+        val packageDigest=UUID.randomUUID().toString().replace("-","").repeat(2)
+        val exactDigest=UUID.randomUUID().toString().replace("-","").repeat(2)
+        val missingDigest=UUID.randomUUID().toString().replace("-","").repeat(2)
+        val token=UUID.randomUUID().toString().replace("-","").repeat(2)
+        assertFalse(NexaConversationDb.reserveUiActionClaim(
+            ctx,missingDigest,"message_send",packageDigest))
+        assertTrue(NexaConversationDb.reserveUiActionClaim(
+            ctx,token,"message_send",packageDigest,exactDigest))
+        assertFalse("A message send token can never be replayed",
+            NexaConversationDb.reserveUiActionClaim(
+                ctx,token,"message_send",packageDigest,exactDigest))
+    }
+
     @Test fun isolatedV1AndV2DatabaseMigrateWithoutLosingRows() {
         val ctx=ApplicationProvider.getApplicationContext<Context>()
         for(oldVersion in 1..2) {

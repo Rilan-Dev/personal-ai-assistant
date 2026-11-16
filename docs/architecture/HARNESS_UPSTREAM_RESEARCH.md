@@ -1,5 +1,24 @@
 # Agentic harness source review — October 31, 2026
 
+## 2026-11-15 — Floating overlay execution-context fix
+- Rechecked LangGraph.js `HEAD` at `fa426b293b6ecccbf62b4f262475777b4bf86673`:
+  `libs/langgraph-core/src/graph/state.ts` still defines `StateGraph` and its
+  compile/invoke graph API. The repository `LICENSE` is MIT. The existing
+  Node planner continues to reuse that stable API; this Android fix does not
+  add another planner or change model tool schemas.
+- Rechecked Deep Agents JS `HEAD` at
+  `9eaca89a25fd050beb19b7e3f13be6f00bbb161d`:
+  `libs/deepagents/src/agent.ts` still exposes `createDeepAgent`; the
+  repository `LICENSE` is MIT. It is not adopted: its generic middleware and
+  tool loop do not provide Android window identity or the phone's durable
+  one-shot action audit.
+- The fix remains in the existing Kotlin screen-action executor. Floating
+  overlay execution may proceed only when the existing exact, consumed
+  owner-approved step is present, Screen Assist is bound, the phone is
+  unlocked, the owner has not paused actions, and a fresh external window
+  target is grounded. No OS permission, approval, target validation, or
+  journal fence is bypassed.
+
 ## 2026-11-06 — Dynamic Android task ingress source check
 - Rechecked LangGraph.js HEAD `4030632d3d58a22601fdd1fa3be35b805a76f6a1`: `libs/langgraph-core/src/graph/state.ts` still exports `StateGraph` with node/edge construction and `.compile()`; MIT license at repository `LICENSE`. The app already uses the installed LangGraph package only in the Node planner. This milestone reuses that existing planning boundary and does not run a second graph in Android.
 - Rechecked Deep Agents JS HEAD `e80b3af2c842515cf3af2bb59a1f2be8a46d266c`: `libs/deepagents/src/agent.ts` builds `createDeepAgent` with filesystem, task, subagent and summarization middleware and optional human interrupts; MIT license at repository `LICENSE`. Its generic filesystem and tool loop are not adopted for Android screen actions.
@@ -278,3 +297,26 @@ Evidence categories: a launch Intent alone is not successful app navigation; the
 - Security scope: model-generated selectors and commands are untrusted; device retains risk grant, one-time claim, current window and result verification. No autonomous message send or OS bypass.
 - Rollback: remove `:maestro-portable` dependency and Git submodule link in one isolated commit; existing Nexa accessibility actions remain usable, because no duplicate service is introduced.
 - This is source provenance and an implementation checkpoint, not proof of emulator/physical-device acceptance.
+
+## 2026-11-15 — Deterministic multi-messenger tool chain
+
+Before extending the mobile tool registry, re-read current upstream source and
+license files at repository HEAD:
+- LangGraph.js `langchain-ai/langgraphjs@fa426b293b6ecccbf62b4f262475777b4bf86673`, MIT: `libs/langgraph-core/src/graph/state.ts`. The existing stable builder/`.compile()` API is relevant to the backend planning graph; this mobile workflow does not alter or duplicate it.
+- Deep Agents JS `langchain-ai/deepagentsjs@9eaca89a25fd050beb19b7e3f13be6f00bbb161d`, MIT: `libs/deepagents/src/agent.ts` composes LangChain `createAgent` with middleware. `libs/deepagents/src/permissions/enforce.ts` implements filesystem path rules whose unmatched-path default is `allow`; these rules cannot authorize Android UI actions and are not adopted.
+- Alternatives already compared (OpenAI Agents SDK, Pydantic AI, OpenHands and smolagents) do not supply the app's exact foreground/window checks, consumed owner approval, native Pause fence or durable no-replay journal. No dependency or upstream code is added.
+
+Implementation continues to use the existing `AgentHarness`, `owner-sequence.ts`,
+React Native `createAndroidTools()` registry and Kotlin `NexaAgentActionAudit`,
+`NexaMessageInputActions` and `NexaUiActionJournal`. A bounded literal owner
+sequence can select a known installed messenger, search for an exact contact,
+review a draft and make a terminal high-risk Send request without a provider
+call. Android revalidates the exact app/package, recipient header, composer,
+Send control, Pause generation and one-shot receipt; unverified Send results
+stop without retry, and delivery is never inferred. The static QA fixture is
+synthetic and its native bridge is fake; it is not physical-device evidence.
+
+## 2026-11-16 — safe native action failure diagnostics
+- Rechecked LangGraph.js `langchain-ai/langgraphjs@fd10c3a2c7c1b4d4e6d4339c32a546b44385af89`, MIT, source `libs/langgraph-core/src/graph/state.ts`; the existing planning service still uses the stable `StateGraph` compile/invoke API. This change does not alter or add a planner.
+- Rechecked Deep Agents JS `langchain-ai/deepagentsjs@9eaca89a25fd050beb19b7e3f13be6f00bbb161d`, MIT, source `libs/deepagents/src/agent.ts`; its `createDeepAgent` entry point assembles the generic agent/middleware runtime. It is not adopted and no upstream source is copied.
+- The change only passes a fixed allowlist of native screen/text/messaging error codes to local UI diagnostics; exception text, screen contents, recipient text, and message content remain suppressed. Android's existing approvals, per-step audit, validation, pause fence and no-replay policy are unchanged.

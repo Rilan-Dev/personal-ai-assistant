@@ -1,7 +1,9 @@
 import { NativeModules, Platform } from "react-native";
 import { setVerifiedFlashlight } from "./androidFlashlight";
+import { createReviewedMessageTools } from "./androidMessageTools";
 import type { Tool, ToolExecutionContext } from "@paa/agent-core";
 import { isLaunchableAppLabel } from "@paa/agent-contracts";
+import type { ReviewedMessageNativeBridge } from "./androidMessageTools";
 
 type NativeStatus = {
   platform: string;
@@ -16,7 +18,7 @@ type LaunchOutcome = {
   action?: string;
   packageId?: string;
 };
-interface DeviceControlBridge {
+interface DeviceControlBridge extends ReviewedMessageNativeBridge {
   getStatus(): Promise<NativeStatus>;
   getBatteryStatus(): Promise<{ levelPercent: number; charging: boolean; source: string }>;
   getStorageStatus(): Promise<{ totalGb:number; freeGb:number; usedGb:number; source:string }>;
@@ -41,6 +43,9 @@ interface DeviceControlBridge {
   }>;
   performReviewedWhatsAppDraft(recipientHint:string,exactText:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     verification:"exact_text_visible";recipientMatched:true;submitted:false;sent:false
+  }>;
+  performReviewedWhatsAppSend(recipientHint:string,exactText:string,sessionId:string,callId:string,fingerprint:string):Promise<{
+    verification:"sent_message_visible";recipientMatched:true;exactTextMatched:true;sent:true;deliveryReported:false
   }>;
 }
 
@@ -280,6 +285,27 @@ export function createAndroidTools(): Tool[] {
           String(recipientHint),String(exactText),...nativeStepMandate(ctx))
       })
     },
+    {
+      id:"screen.send_whatsapp",
+      description:"Send one exact WhatsApp draft only after a separate one-time approval; native code rechecks the same recipient, exact composer text and unique Send button. Never claim delivery.",
+      capabilities:["device.interact"],risk:"high",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===2&&
+        typeof input.recipientHint==="string"&&
+        /^[\p{L}][\p{L}\p{N} '-]{1,49}$/u.test(input.recipientHint)&&
+        reviewedText(input.exactText),
+      execute:async({recipientHint,exactText},ctx)=>{
+        const data=await getBridge().performReviewedWhatsAppSend(
+          String(recipientHint),String(exactText),...nativeStepMandate(ctx));
+        if(data.verification!=="sent_message_visible"||
+            data.recipientMatched!==true||data.exactTextMatched!==true||
+            data.sent!==true||data.deliveryReported!==false)
+          throw Object.assign(Error("WhatsApp send result was not verified"),
+            {code:"MESSAGE_SEND_UNCERTAIN"});
+        return {status:"success",data};
+      }
+    },
+    ...createReviewedMessageTools(()=>getBridge()),
     {
       id:"screen.fill_text",
       description:"Insert owner-reviewed exact text into one safe empty named field; never Send, Submit or overwrite.",

@@ -54,7 +54,8 @@ internal object NexaApprovedExternalAction {
                     if(!NexaUiActionJournal.finish(context,token,"android_accepted"))
                         Result.UNCERTAIN
                     else{
-                        NexaAppLaunchObservation.observeAfter(context,token,targetPackage)
+                        NexaAppLaunchObservation.observeAfter(context,token,
+                            targetPackage,fence)
                         Result.ACCEPTED
                     }
                 }

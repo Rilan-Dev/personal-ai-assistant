@@ -24,6 +24,13 @@ test('App launch grant remains explicit and does not bypass Android or action ap
 
 test('a blocked Chat device action links to Tools without changing any grant',()=>{
   assert.match(app, /message\.speaker==='assistant'[\s\S]*?\^Task blocked: Permission required:/);
+  const blockedMessagePattern=app.match(/\/\^Task blocked: Permission required: (.*?)\$\/\.test\(message\.text\)/s)?.[1];
+  assert.ok(blockedMessagePattern,'blocked-action recovery must keep an exact permission-message matcher');
+  const blockedMessage=new RegExp(`^Task blocked: Permission required: ${blockedMessagePattern}$`);
+  for(const capability of ['apps.launch','device.interact','device.observe','hardware.flashlight'])
+    assert.equal(blockedMessage.test(`Task blocked: Permission required: ${capability}`),true,
+      `the recovery link must render for ${capability}`);
+  assert.equal(blockedMessage.test('Task blocked: Permission required: unrelated.capability'),false);
   assert.match(app,/accessibilityLabel="Review device action permissions in Tools"/);
   assert.match(app,/Review device permissions in Tools/);
   assert.match(app,/onPress=\{\(\)=>navigate\('tools'\)\}/);

@@ -22,8 +22,12 @@ import { appDiscoveryAvailable, checkKnownApp, launchKnownApp } from './src/nati
 import { launcherNavigationAvailable, findGitHubOnLauncher, cancelLauncherNavigation, getLauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   hideToolOverlay, consumeToolOverlayNavigation, consumeReviewedVoiceDraft,
-  completeSharedOverlayChat, NEXA_SHARED_OVERLAY_CHAT_EVENT, canAutoApproveTrustedNavigation,
+  completeSharedOverlayChat, requestSharedOverlayChatApproval,
+  NEXA_SHARED_OVERLAY_CHAT_EVENT, NEXA_SHARED_OVERLAY_CHAT_APPROVAL_EVENT,
+  NEXA_SHARED_OVERLAY_CHAT_TIMEOUT_EVENT,
+  canAutoApproveTrustedNavigation,
   consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
+import {isSafeSharedOverlayActionSummary} from './src/native/overlayActionReview';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
 import type { LauncherNavigationStatus } from './src/native/androidLauncherNavigation';
 import type { AppAvailability } from './src/native/androidAppDiscovery';
@@ -43,7 +47,9 @@ import {wakeWordAvailable, readWakeStatus, installWakeModel, startWakeListening,
 import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
-import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, acaMailSummary, disconnectAca, storeAcaSession, authorizedAcaSelection, AcaRequestError, parseAcaMailSummaryIntent } from './src/native/acaEmail';
+import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, disconnectAca, storeAcaSession, authorizedAcaSelection } from './src/native/acaEmail';
+import { classifyAcaBusinessIntent } from './src/native/acaBusinessIntent';
+import { AcaChatRequestError, streamAcaChatTurn } from './src/native/acaChat';
 import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
 import { screenAssistAvailable, getScreenAssistStatus, openScreenAssistSettings,
   armScreenReadOnce, takeScreenReadOnce, clearScreenRead, inspectFiveHomeApps } from './src/native/screenAssist';
@@ -68,6 +74,38 @@ import {saveLocalTaskProposal,admitLocalReadOnlyTaskPlan} from './src/native/loc
 import {createOwnerSequentialPlanner,parseOwnerMultiToolRequest} from '@paa/agent-core';
 
 type ChatMessage = { id: number; speaker: 'user' | 'assistant'; text: string };
+type PendingActionApproval = {
+  sessionId: string; request: string; callId: string;
+  fingerprint: string; toolId: string; args: Record<string, unknown>
+};
+function overlayChatApprovalSummary(
+  toolId:string,args:Record<string,unknown>
+):string|null {
+  if(toolId==="screen.scroll"){
+    if(Object.keys(args).length!==1 || typeof args.direction!=="string" ||
+      !["up","down","left","right"].includes(args.direction))return null;
+    return `screen.scroll direction=${args.direction}`;
+  }
+  if(toolId==="screen.tap_label"){
+    const label=args.label;
+    if(Object.keys(args).length!==1 || typeof label!=="string" ||
+      label.length<2 || label.length>45 ||
+      !/^[A-Za-z0-9][A-Za-z0-9 _.-]{1,44}$/.test(label) ||
+      /\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\b/i.test(label))
+      return null;
+    return `screen.tap_label label=${label}`;
+  }
+  const inPlaceReviewedTools=new Set([
+    "device.open_app","device.visible_controls","device.open_notification_shade",
+    "screen.open_whatsapp_chat","screen.fill_text","screen.compose_whatsapp",
+    "screen.send_whatsapp","screen.compose_message","screen.send_message"
+  ]);
+  if(!inPlaceReviewedTools.has(toolId))return null;
+  // The overlay displays this exact structured request. Its validator rejects
+  // any tool or argument shape outside the reviewed Android capability set.
+  const summary=JSON.stringify({toolId,input:args});
+  return isSafeSharedOverlayActionSummary(summary)?summary:null;
+}
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
@@ -136,6 +174,12 @@ export default function App() {
   // A floating-chat prompt is linked to ONE assistant reply and cannot be
   // replayed after a JS restart or foreground/background transition.
   const overlayReplyToken=useRef<string|null>(null);
+  const overlayApprovalToken=useRef<string|null>(null);
+  const overlayPendingApprovalToken=useRef<string|null>(null);
+  const overlayTimedOutToken=useRef<string|null>(null);
+  const overlayTimeoutBlockedRef=useRef(false);
+  const overlayApprovalRequestRef=useRef<{token:string;summary:string}|null>(null);
+  const overlayReplyMessage=useRef('');
   const chatLogSession=useRef('chat-'+Date.now());
   const [historyEntries,setHistoryEntries]=useState<NexaConversationEntry[]>([]);
   const [taskHistoryEntries,setTaskHistoryEntries]=useState<NexaTaskHistoryEntry[]>([]);
@@ -446,6 +490,7 @@ export default function App() {
   const [acaSession,setAcaSession]=useState<AcaSession|null>(null);
   const [acaVerified,setAcaVerified]=useState(false);
   const [acaOrganizations,setAcaOrganizations]=useState<AcaOrganization[]>([]);
+  const acaConversationRef=useRef<{scope:string;id:string}|null>(null);
   const [acaEmailInput,setAcaEmailInput]=useState('');
   const [acaPasswordInput,setAcaPasswordInput]=useState('');
   const [acaBusy,setAcaBusy]=useState(false);
@@ -455,6 +500,7 @@ export default function App() {
     let active=true;
     void loadAcaSession().then(async(session)=>{
       if(!active || !session)return;
+      acaConversationRef.current=null;
       // A stored token is not proof that membership/agent access is still valid.
       setAcaSession(session);
       setAcaVerified(false);
@@ -464,7 +510,7 @@ export default function App() {
         const staleTarget=Boolean(session.organizationId||session.agentId) &&
           !authorizedAcaSelection(session,targets);
         if(staleTarget){
-          const withoutTarget={...session,organizationId:'',agentId:''};
+          const withoutTarget={...session,organizationId:'',agentId:'',chatConversation:undefined};
           await storeAcaSession(withoutTarget);
           if(!active)return;
           setAcaSession(withoutTarget);
@@ -487,9 +533,10 @@ export default function App() {
     setAcaBusy(true);setAcaNotice('');
     let provisional:AcaSession|null=null;
     try {
-      // A login alone does not establish a usable mailbox connection.
+      // A login alone does not establish a usable business Chat connection.
       // Verify the current member/agent targets before showing Connected.
       provisional=await connectAca(acaEmailInput,acaPasswordInput);
+      acaConversationRef.current=null;
       const organizations=await acaTargets(provisional);
       const selectable=organizations.flatMap(org=>org.agents.map(agent=>({org,agent})));
       const selected=selectable.length===1
@@ -500,8 +547,8 @@ export default function App() {
       setAcaVerified(true);
       provisional=null; // Ownership transferred to the verified UI session.
       setAcaNotice(selectable.length
-        ? 'Connected. Select an organization and agent below to enable read-only summaries.'
-        : 'Connected, but no email-readable organization/agent is available for this user.');
+        ? 'Connected. Select an organization and agent below to enable read-only ACA business Chat.'
+        : 'Connected, but no authorized organization/agent is available for this user.');
     }catch(error){
       setAcaVerified(false);
       if(provisional){
@@ -532,9 +579,10 @@ export default function App() {
     }
     setAcaBusy(true);
     try {
-      const next={...acaSession,organizationId,agentId};
-      await storeAcaSession(next);setAcaSession(next);
-      setAcaNotice('Email source selected. Summaries are read-only and reflect last sync.');
+      const sameTarget=acaSession.organizationId===organizationId&&acaSession.agentId===agentId;
+      const next={...acaSession,organizationId,agentId,chatConversation:sameTarget?acaSession.chatConversation:undefined};
+      await storeAcaSession(next);acaConversationRef.current=null;setAcaSession(next);
+      setAcaNotice('ACA business source selected. Chat reads use this agent’s saved tools and configuration.');
     }catch{setAcaNotice('Cannot save the selected ACA organization/agent on this phone.');}
     finally{setAcaBusy(false);}
   };
@@ -543,7 +591,7 @@ export default function App() {
     setAcaBusy(true);
     try{
       const {serverRevoked}=await disconnectAca(acaSession);
-      setAcaSession(null);setAcaVerified(false);setAcaOrganizations([]);setAcaEmailInput('');
+      acaConversationRef.current=null;setAcaSession(null);setAcaVerified(false);setAcaOrganizations([]);setAcaEmailInput('');
       setAcaNotice(serverRevoked
         ? 'ACA session revoked and removed from this device.'
         : 'ACA was removed from this phone, but server revocation could not be verified. The old session may remain valid until expiry.');
@@ -552,10 +600,8 @@ export default function App() {
     finally{setAcaPasswordInput('');setAcaBusy(false);}
   };
   const [recovered, setRecovered] = useState<SessionCheckpoint | null>(null);
-  const [pendingApproval, setPendingApproval] = useState<{
-    sessionId: string; request: string; callId: string;
-    fingerprint: string; toolId: string; args: Record<string, unknown>
-  } | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<PendingActionApproval | null>(null);
+  const pendingApprovalRef=useRef<PendingActionApproval|null>(null);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [voiceLanguage, setVoiceLanguage] = useState('');
@@ -1393,13 +1439,18 @@ export default function App() {
   };
   const append = (speaker: ChatMessage['speaker'], text: string) => {
     setMessages(prev => [...prev, { id: counter.current++, speaker, text }]);
-    if(speaker==='assistant' && overlayReplyToken.current!==null){
-      const token=overlayReplyToken.current;
-      overlayReplyToken.current=null;
-      void completeSharedOverlayChat(token,text).catch(()=>{});
-    }
+    if(speaker==='assistant' && overlayReplyToken.current!==null)
+      overlayReplyMessage.current=text;
     if(historyAvailable()) void appendConversation(chatLogSession.current,'chat',
       activeProvider?.provider??'local',speaker,text).catch(()=>{});
+  };
+  const deliverSharedOverlayReply=async(token:string,response:string)=>{
+    if(overlayReplyToken.current!==token)return false;
+    overlayReplyToken.current=null;
+    overlayApprovalToken.current=null;
+    overlayPendingApprovalToken.current=null;
+    try{return await completeSharedOverlayChat(token,response.slice(0,1200));}
+    catch{return false;}
   };
   const toggle = (cap: Capability) => {
     setCapabilities(prev => prev.includes(cap) ? prev.filter(c => c !== cap) : [...prev, cap]);
@@ -1527,11 +1578,130 @@ export default function App() {
     setBackendToken('');
     setBackendError('');
   };
-  const send = async (value: string = input, restore?: SessionCheckpoint) => {
+  const send = async (
+    value: string = input,restore?: SessionCheckpoint,sharedOverlayToken?:string
+  ) => {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    if(sharedOverlayToken){
+      overlayApprovalRequestRef.current=null;
+      overlayPendingApprovalToken.current=null;
+    }
     const whatsappPreview=parseReviewedWhatsAppIntent(request);
+    // ACA business requests always use the server's canonical identity,
+    // configuration, tools and conversation. Writes and mixed business/device
+    // tasks stop here, so the local provider and native harness cannot guess.
+    const acaBusinessIntent=!restore?classifyAcaBusinessIntent(request):null;
+    if(acaBusinessIntent){
+      setInput('');setEvents([]);
+      const showBusinessMessage=(speaker:ChatMessage['speaker'],text:string)=>{
+        const id=counter.current++;
+        setMessages(prev=>[...prev,{id,speaker,text}]);
+        if(speaker==='assistant'&&overlayReplyToken.current!==null)overlayReplyMessage.current=text;
+        return id;
+      };
+      showBusinessMessage('user',request);
+      if(acaBusinessIntent.kind==='business_write'){
+        const response='ACA business actions are read-only in this Nexa release. No email, WhatsApp, schedule, account or agent change was performed.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      if(acaBusinessIntent.kind==='mixed_request'){
+        const response='This request combines ACA business work with direct screen control. Please send those as two separate requests; no action was performed.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      if(acaBusinessIntent.kind==='unsupported_business'){
+        const response='I recognized an ACA business request, but could not match it to a supported read task. Please clarify the business data you want; I did not send it to Nexa’s local planner.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      if(!engine.live){
+        const response='ACA business Chat is available in the live Android app. This request was not sent to a local model.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      if(!acaSession){
+        const response='Connect your ACA account in Settings to read its authorized business data. Nexa did not query a mailbox or business service.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      if(!acaVerified||!authorizedAcaSelection(acaSession,acaOrganizations)){
+        const response='Verify your ACA account and select a currently authorized organization and agent in Settings before starting a business Chat turn.';
+        showBusinessMessage('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        return;
+      }
+      const businessScope=`${acaSession.origin}:${acaSession.organizationId}:${acaSession.agentId}`;
+      const savedConversation=acaSession.chatConversation;
+      const previous=acaConversationRef.current ?? (savedConversation&&
+        savedConversation.organizationId===acaSession.organizationId&&
+        savedConversation.agentId===acaSession.agentId
+          ?{scope:businessScope,id:savedConversation.conversationId}:null);
+      const conversationId=previous?.scope===businessScope?previous.id:undefined;
+      const businessAbort=new AbortController();
+      activeAbort.current=businessAbort;setRunning(true);
+      let reply='';
+      let streamError='';
+      const replyMessageId=showBusinessMessage('assistant','Connecting to ACA…');
+      const updateBusinessReply=(text:string)=>{
+        setMessages(prev=>prev.map(message=>message.id===replyMessageId?{...message,text}:message));
+        if(overlayReplyToken.current!==null)overlayReplyMessage.current=text;
+      };
+      try{
+        await streamAcaChatTurn(acaSession,{
+          organizationId:acaSession.organizationId,
+          agentId:acaSession.agentId,
+          ...(conversationId?{conversationId}:{}),
+          message:request,
+          signal:businessAbort.signal,
+        },event=>{
+          if(event.type==='conversation'||event.type==='done'){
+            acaConversationRef.current={scope:businessScope,id:event.conversationId};
+            void storeAcaSession({...acaSession,chatConversation:{
+              organizationId:acaSession.organizationId,agentId:acaSession.agentId,
+              conversationId:event.conversationId,
+            }}).catch(()=>{});
+          }else if(event.type==='status'||event.type==='progress'){
+            if(!reply)updateBusinessReply('ACA is working on your request…');
+          }else if(event.type==='delta'){
+            reply+=event.text;
+            if(reply.length>80_000)throw new Error('ACA returned a response that is too large to display. Narrow the request and try again.');
+            updateBusinessReply(reply);
+          }
+          else if(event.type==='error')streamError=event.message;
+        });
+        if(!businessAbort.signal.aborted){
+          if(streamError)throw new Error(streamError);
+          const response=reply.trim()||'ACA completed this turn without a readable answer. No Nexa-local model was used.';
+          updateBusinessReply(response);
+          if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        }
+      }catch(error){
+        if(!businessAbort.signal.aborted){
+          if(error instanceof AcaChatRequestError&&[401,403].includes(error.httpStatus)){
+            setAcaVerified(false);setAcaOrganizations([]);
+            acaConversationRef.current=null;
+            setAcaNotice(error.httpStatus===401
+              ?'ACA session expired or was revoked. Reconnect before starting another business turn.'
+              :'ACA access or tool permission changed. Refresh the authorized organization and agent before retrying.');
+          }
+          const response=error instanceof Error?error.message:'ACA business Chat is unavailable. No Nexa-local model was used.';
+          updateBusinessReply(response);
+          if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+        }
+      }finally{
+        if(businessAbort.signal.aborted)updateBusinessReply('ACA read canceled. No business action was performed.');
+        setRunning(false);activeAbort.current=null;
+      }
+      return;
+    }
     // The five-app home pilot is an owner-requested, read-only assessment.
     // It cannot trigger a model-specified click, enumerate unrelated apps,
     // open WhatsApp/IMO/Contacts/Phone/Clock or change an alarm.
@@ -1650,37 +1820,6 @@ export default function App() {
         return;
       }
     }
-    // ACA read-only summary is an explicit business intent. Never ask the
-    // native Android planner to guess email content or change its tool registry.
-    const acaMailScope = !restore && engine.live ? parseAcaMailSummaryIntent(request) : null;
-    if (acaMailScope) {
-      setInput('');setEvents([]);append('user',request);
-      if(!acaSession){
-        append('assistant','Connect AI Comms Agent in Settings to read synchronized emails. Nexa has not accessed a mailbox.');
-        return;
-      }
-      if(!acaVerified || !authorizedAcaSelection(acaSession,acaOrganizations)){
-        append('assistant','Verify your ACA account and choose a currently authorized organization and agent in Settings before reading mail. No mailbox was accessed.');
-        return;
-      }
-      const mailAbort=new AbortController();
-      activeAbort.current=mailAbort;setRunning(true);
-      try{
-        const summary=await acaMailSummary(acaSession,acaMailScope,mailAbort.signal);
-        if(!mailAbort.signal.aborted)append('assistant',summary.report +
-          (summary.hasMore ? '\\nThis is a partial result; refine your request in ACA for more details.' : ''));
-      }catch(error){
-        if(!mailAbort.signal.aborted){
-          if(error instanceof AcaRequestError && [401,403,404].includes(error.httpStatus)){
-            setAcaVerified(false);
-            setAcaOrganizations([]);
-            setAcaNotice('ACA account or mobile access was revoked or disabled. Reconnect or disconnect before further mailbox reads.');
-          }
-          append('assistant',error instanceof Error?error.message:'Email summary unavailable. No mail action was performed.');
-        }
-      }finally{setRunning(false);activeAbort.current=null;}
-      return;
-    }
     setInput(''); setEvents([]); append('user', request);
     const controller = new AbortController(); activeAbort.current = controller;
     setRunning(true);
@@ -1743,6 +1882,8 @@ export default function App() {
         androidActionJournal,request,canAutoApproveTrustedNavigation,
         trustedMode!=='ask_every_time' && !restore
       );
+      const plannerErrorDiagnostics:{code:string|null}={code:null};
+      const toolErrorDiagnostics:{code:string|null}={code:null};
       const harness=new AgentHarness(engine.registry,admittedPlanner);
       const result = await harness.run({
         request,
@@ -1752,23 +1893,139 @@ export default function App() {
         grantedCapabilities: localGrants,
         signal: controller.signal,
         maxSteps: (parseOwnerMultiToolRequest(request)?.length ?? 5) + 1,
+        onPlanningError:code=>{plannerErrorDiagnostics.code=code;},
+        onToolError:code=>{toolErrorDiagnostics.code=code;},
         onEvent: event => setEvents(prev => [...prev, event])
       });
       setRecovered(null);
-      if (result.status === 'completed') append('assistant', result.response);
+      if (result.status === 'completed') {
+        append('assistant', result.response);
+        if(sharedOverlayToken)
+          await deliverSharedOverlayReply(sharedOverlayToken,result.response);
+      }
       else if (result.status === 'awaiting_approval') {
-        setPendingApproval({
+        const approval:PendingActionApproval={
           sessionId, request, callId: result.call.callId,
           fingerprint: result.fingerprint, toolId: result.call.toolId,
           args: result.call.input
-        });
+        };
+        pendingApprovalRef.current=approval;
+        setPendingApproval(approval);
         append('assistant', 'Approval required. No action was executed. Review the exact tool request below.');
-      } else append('assistant', 'Task ' + result.status + ': ' + result.reason +
-        (activeProvider && result.reason === 'Planning failed' ? ' Check AI Configuration > Test connection.' : ''));
+        if(sharedOverlayToken) {
+          overlayPendingApprovalToken.current=sharedOverlayToken;
+          const summary=overlayChatApprovalSummary(result.call.toolId,result.call.input);
+          if(summary)overlayApprovalRequestRef.current={token:sharedOverlayToken,summary};
+          else await deliverSharedOverlayReply(sharedOverlayToken,
+            'This action requires its full Chat review. No action was executed; return to Nexa to review it.');
+        }
+      } else {
+        const providerFailureMessage:Record<string,string>={
+          AUTH_FAILED:'The provider rejected the saved API key or account access.',
+          RATE_LIMIT:'The provider quota or rate limit was reached.',
+          MODEL_NOT_FOUND:'The configured provider model or endpoint was not found.',
+          PROVIDER_UNAVAILABLE:'The provider service is temporarily unavailable.',
+          INVALID_RESPONSE:'The provider response did not contain a readable action proposal.',
+          NETWORK_OR_TIMEOUT:'The provider request timed out or the network connection failed.'
+        };
+        const plannerErrorCode=plannerErrorDiagnostics.code;
+        const providerFailure=plannerErrorCode?.startsWith('PROVIDER_HTTP_')
+          ?'The provider rejected the tool-planning request ('+plannerErrorCode.replace('PROVIDER_HTTP_','HTTP ')+').'
+          :plannerErrorCode?providerFailureMessage[plannerErrorCode]??'The provider request failed.':null;
+        const nativeToolFailureMessages:Record<string,string>={
+          ACCESSIBILITY_DISABLED:'Android reports that Screen Assist is disconnected; no action was verified.',
+          INVALID_SCROLL:'Android rejected the requested scroll direction.',
+          OWNER_ACTIONS_PAUSED:'Nexa device actions are paused.',
+          REVIEWED_STEP_NOT_CLAIMED:'Android did not find the consumed approval for this exact action; no replay was attempted.',
+          APP_NOT_UNIQUE_OR_INSTALLED:'Nexa could not verify one installed app matching the request.',
+          APP_LAUNCH_OUTCOME_UNKNOWN:'Nexa could not verify whether the requested app opened. Inspect the screen before continuing.',
+          APP_LAUNCH_REFUSED:'Android refused to open the requested app.',
+          INVALID_SEARCH:'The search request was invalid; no search was started.',
+          CHROME_NOT_VERIFIED:'Nexa could not verify the requested search result in Chrome.',
+          NOTIFICATION_SHADE_FAILED:'Android did not confirm that the notification shade opened.',
+          NO_CAMERA:'Nexa could not identify one available camera app.',
+          CAMERA_DENIED:'Android refused to open the camera.',
+          CAMERA_OUTCOME_UNKNOWN:'Nexa could not verify whether the camera opened. Inspect the screen before continuing.',
+          SCREEN_OBSERVATION_UNAVAILABLE:'Nexa could not safely inspect the current external app screen.',
+          SCROLL_ACTION_NOT_ACCEPTED:'Android returned an unrecognized result for the reviewed scroll; no retry was attempted.',
+          SCROLL_CONTEXT_CHANGED:'The Home screen context changed during the scroll; no retry was attempted.',
+          SCROLL_DISPATCH_REJECTED:'Android rejected the launcher swipe; no retry was attempted.',
+          SCROLL_JOURNAL_DENIED:'The secure action journal refused this scroll; no retry was attempted.',
+          SCROLL_WINDOW_UNAVAILABLE:'Android Accessibility did not expose the current Home window.',
+          SCROLL_CONTAINER_UNAVAILABLE:'Android did not recognize a safe Home swipe or an accessible scrollable region.',
+          SCROLL_TARGET_AMBIGUOUS:'Android found multiple scrollable regions and refused to guess.',
+          SCROLL_OUTCOME_UNCERTAIN:'Android could not verify the scroll; it was not replayed.',
+          SCROLL_TARGET_UNAVAILABLE:'No unique safe scroll target was visible on the current screen.',
+          UI_TAP_TARGET_UNAVAILABLE:'Android could not find the requested visible control on the current screen.',
+          UI_TAP_TARGET_AMBIGUOUS:'Android found multiple matching controls and refused to guess.',
+          UI_TAP_HIERARCHY_UNVERIFIED:'Android could not reverify the requested control in the live screen hierarchy.',
+          UI_TAP_DISPATCH_REJECTED:'Android refused the reviewed tap/focus action; it was not retried.',
+          UI_TAP_DENIED:'Android refused the reviewed tap because the live screen target was unsafe or unavailable.',
+          UI_TAP_UNCERTAIN:'The tap result could not be verified; Nexa will not replay it.',
+          UI_EVIDENCE_NOT_COMMITTED:'Nexa could not securely record the screen change; no retry was attempted.',
+          UI_OUTCOME_UNCERTAIN:'The screen-action result could not be verified; no retry was attempted.',
+          CHAT_STEP_NOT_CLAIMED:'Android did not find the consumed approval for this exact chat-opening step.',
+          CHAT_ROW_UNVERIFIED:'Nexa could not uniquely verify the requested chat row; no chat was opened.',
+          CHAT_HEADER_NOT_VERIFIED:'The requested recipient was not verified in the conversation header.',
+          CHAT_EVIDENCE_NOT_COMMITTED:'Nexa could not securely record the chat navigation; inspect the screen before continuing.',
+          CHAT_VERIFICATION_UNCERTAIN:'Nexa could not verify the requested chat; inspect the screen before continuing.',
+          CHAT_NAVIGATION_UNCERTAIN:'The chat-opening result is uncertain. Inspect the screen; Nexa will not retry.',
+          MESSAGE_STEP_NOT_CLAIMED:'Android did not find the consumed approval for this exact message step.',
+          MESSAGE_RECIPIENT_UNVERIFIED:'Nexa could not verify the requested recipient; no message was sent.',
+          MESSAGE_COMPOSER_UNVERIFIED:'Nexa could not verify the message input box; no text was entered.',
+          MESSAGE_DRAFT_UNCERTAIN:'Nexa could not verify the exact message text in the composer; nothing was sent.',
+          MESSAGE_EVIDENCE_NOT_COMMITTED:'Nexa could not securely record the message step; nothing was sent.',
+          MESSAGE_SEND_NOT_CLAIMED:'Android did not find the consumed approval for this exact send action.',
+          MESSAGE_APP_NOT_SUPPORTED:'The requested messaging app is not supported by the reviewed send action.',
+          TEXT_FIELD_UNVERIFIED:'Android could not verify one unique visible empty field; no text was entered.',
+          TEXT_OUTCOME_UNCERTAIN:'Android could not verify the text insertion. Nothing was submitted; inspect the field before continuing.',
+          TEXT_PARENT_EVIDENCE_FAILED:'The field may show the text, but Nexa could not securely record that step. Nothing was submitted.',
+          TEXT_REVIEW_INVALID:'Android rejected the reviewed text request as invalid; nothing was entered.',
+          MESSAGE_SEND_UNCERTAIN:'The message send outcome is uncertain. Inspect the conversation; Nexa will not retry.'
+        };
+        const nativeToolFailure=toolErrorDiagnostics.code
+          ?nativeToolFailureMessages[toolErrorDiagnostics.code]??null:null;
+        let response='Task ' + result.status + ': ' + result.reason +
+          (activeProvider && result.reason === 'Planning failed'
+            ?' '+(providerFailure??'Check AI Configuration > Test connection.'):'');
+        if(nativeToolFailure)response+=' '+nativeToolFailure;
+        append('assistant',response);
+        if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,response);
+      }
     } catch {
       append('assistant', 'Secure task initialization failed; no device action was executed.');
-    } finally { setRunning(false); activeAbort.current = null; }
+      if(sharedOverlayToken)await deliverSharedOverlayReply(sharedOverlayToken,
+        'Secure task initialization failed. No device action was executed.');
+    } finally {
+      setRunning(false); activeAbort.current = null;
+      const timedOutOverlayRequest=sharedOverlayToken!==undefined&&
+        overlayTimedOutToken.current===sharedOverlayToken;
+      if(timedOutOverlayRequest){
+        overlayTimedOutToken.current=null;
+        if(overlayPendingApprovalToken.current===sharedOverlayToken){
+          const canceled=await rejectPending();
+          if(canceled){
+            overlayPendingApprovalToken.current=null;
+            overlayTimeoutBlockedRef.current=false;
+          }
+        }else overlayTimeoutBlockedRef.current=false;
+      }
+      const stagedReview=overlayApprovalRequestRef.current;
+      if(sharedOverlayToken && !timedOutOverlayRequest &&
+          stagedReview?.token===sharedOverlayToken){
+        overlayApprovalRequestRef.current=null;
+        const reviewShown=await requestSharedOverlayChatApproval(
+          stagedReview.token,stagedReview.summary).catch(()=>false);
+        if(reviewShown)overlayApprovalToken.current=stagedReview.token;
+        else await deliverSharedOverlayReply(stagedReview.token,
+          'Approval is required, but the in-place review could not be shown. No action was executed; inspect the exact request in Nexa Chat.');
+      }
+    }
   };
+  // The native overlay listener outlives individual renders. Keep its Chat
+  // dispatch pointed at the latest callback so ACA/provider state is current.
+  const sharedOverlaySendRef = useRef(send);
+  sharedOverlaySendRef.current = send;
   // Floating Chat uses this EXACT send() code path, not a second model,
   // independent tool executor or trusted background owner. No OS grant or
   // native approval is inferred from a React event. The visible overlay
@@ -1782,28 +2039,60 @@ export default function App() {
         const id=value.id,request=value.request;
         if(typeof id!=='string'||!/^[-0-9a-f]{36}$/.test(id)||
           typeof request!=='string'||!request.trim()||request.length>500)return;
-        if(!engine.live||running||listening||speaking||voiceInProgress.current||
+        if(overlayTimeoutBlockedRef.current||!engine.live||running||listening||speaking||voiceInProgress.current||
           activeAbort.current!==null||overlayReplyToken.current!==null){
           void completeSharedOverlayChat(id,
-            'Shared Chat is busy or unavailable. No new AI task was started.').catch(()=>{});
+            overlayTimeoutBlockedRef.current
+              ?'A previous review is still being canceled or needs inspection. No new action was started.'
+              :'Shared Chat is busy or unavailable. No new AI task was started.').catch(()=>{});
           return;
         }
         overlayReplyToken.current=id;
-        void send(request).then(()=>{
-          if(overlayReplyToken.current===id){
-            overlayReplyToken.current=null;
-            void completeSharedOverlayChat(id,
-              'Shared Chat did not produce a verified reply. Inspect the task journal before retrying.').catch(()=>{});
+        overlayApprovalToken.current=null;
+        overlayPendingApprovalToken.current=null;
+        overlayReplyMessage.current='';
+        void sharedOverlaySendRef.current(request,undefined,id).then(()=>{
+          if(overlayReplyToken.current===id && overlayApprovalToken.current!==id){
+            void deliverSharedOverlayReply(id,overlayReplyMessage.current||
+              'Shared Chat finished without a verified reply. Inspect the task journal before retrying.');
           }
         }).catch(()=>{
           if(overlayReplyToken.current===id){
-            overlayReplyToken.current=null;
-            void completeSharedOverlayChat(id,
-              'Shared Chat failed unexpectedly. No automatic replay.').catch(()=>{});
+            void deliverSharedOverlayReply(id,
+              'Shared Chat failed unexpectedly. No automatic replay.');
           }
         });
       });
-    return ()=>sub.remove();
+    const timeoutSub=DeviceEventEmitter.addListener(
+      NEXA_SHARED_OVERLAY_CHAT_TIMEOUT_EVENT,(event:unknown)=>{
+        if(event===null||typeof event!=='object')return;
+        const value=event as Record<string,unknown>;
+        const id=value.id;
+        if(typeof id!=='string'||overlayReplyToken.current!==id)return;
+        overlayReplyToken.current=null;
+        overlayApprovalToken.current=null;
+        overlayApprovalRequestRef.current=null;
+        overlayReplyMessage.current='';
+        overlayTimedOutToken.current=id;
+        overlayTimeoutBlockedRef.current=true;
+        const hasPendingReview=overlayPendingApprovalToken.current===id;
+        activeAbort.current?.abort();
+        if(!hasPendingReview){
+          if(activeAbort.current===null){
+            overlayTimedOutToken.current=null;
+            overlayTimeoutBlockedRef.current=false;
+          }
+          return;
+        }
+        void rejectPending().then(canceled=>{
+          if(canceled){
+            overlayPendingApprovalToken.current=null;
+            overlayTimedOutToken.current=null;
+            overlayTimeoutBlockedRef.current=false;
+          }
+        }).catch(()=>{});
+      });
+    return ()=>{sub.remove();timeoutSub.remove();};
   },[engine.live,running,listening,speaking,activeProvider,remoteActive,capabilities,voicePermissionMode]);
   const stop = () => activeAbort.current?.abort();
   const listenForCommand = async () => {
@@ -1885,50 +2174,116 @@ export default function App() {
     }
     catch { setVoiceNotice('Unable to stop speech playback.'); }
   };
-  const approvePending = async () => {
-    if (!pendingApproval || running || !engine.live) return;
-    if (pendingApproval.toolId === 'device.set_flashlight') {
+  const approvePending = async (fromSharedOverlay=false):Promise<SessionCheckpoint|null> => {
+    const current=pendingApprovalRef.current??pendingApproval;
+    if (!current || (running&&!fromSharedOverlay) || !engine.live) return null;
+    if ((pendingApproval && pendingApproval.toolId === 'device.set_flashlight') ||
+        current.toolId === 'device.set_flashlight') {
       // Permission is requested only by the separate explicit UI button.
       // Never use a model-initiated approval to trigger an OS consent dialog.
       try {
         if (!await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.CAMERA)) {
           append('assistant', 'Grant Android CAMERA permission using the flashlight settings below before approving. No flashlight action was executed.');
-          return;
+          return null;
         }
       } catch {
         append('assistant', 'Could not verify flashlight permission. Nothing executed.');
-        return;
+        return null;
       }
     }
-    const pending = pendingApproval;
+    const pending = current;
     setRunning(true);
     try {
       const accepted = await androidActionJournal.approveAction(
         pending.sessionId, pending.callId, pending.fingerprint);
       if (!accepted) {
         append('assistant', 'Approval was already used or expired. No action executed.');
+        pendingApprovalRef.current=null;
         setPendingApproval(null);
-        return;
+        return null;
       }
       const saved = await androidActionJournal.loadSession(pending.sessionId);
+      pendingApprovalRef.current=null;
       setPendingApproval(null);
       if (saved) setRecovered(saved);
       append('assistant', 'Approved once. Use Resume to continue the exact task with your currently granted permissions.');
-    } catch { append('assistant', 'Unable to securely record approval; no action executed.'); }
+      return saved;
+    } catch {
+      append('assistant', 'Unable to securely record approval; no action executed.');
+      return null;
+    }
     finally { setRunning(false); }
   };
-  const rejectPending = async () => {
-    if (!pendingApproval || running || !engine.live) return;
-    const pending = pendingApproval;
+  const rejectPending = async ():Promise<boolean> => {
+    const pending=pendingApprovalRef.current??pendingApproval;
+    if (!pending || running || !engine.live) return false;
     try {
       const saved = await androidActionJournal.loadSession(pending.sessionId);
-      if (saved) await androidActionJournal.saveSession({
+      if(!saved || saved.status!=='awaiting_approval' ||
+          saved.pendingCall?.callId!==pending.callId ||
+          saved.pendingCall.toolId!==pending.toolId) {
+        append('assistant','Could not verify the pending task checkpoint; action remains unapproved.');
+        return false;
+      }
+      await androidActionJournal.saveSession({
         ...saved, status: 'cancelled', pendingCall: undefined, updatedAt: Date.now()
       });
+      pendingApprovalRef.current=null;
       setPendingApproval(null); setRecovered(null);
+      if(overlayPendingApprovalToken.current!==null){
+        overlayPendingApprovalToken.current=null;
+        overlayTimedOutToken.current=null;
+        overlayTimeoutBlockedRef.current=false;
+      }
       append('assistant', 'Approval declined. Task cancelled without execution.');
-    } catch { append('assistant', 'Could not persist cancellation; action remains unapproved.'); }
+      return true;
+    } catch { append('assistant', 'Could not persist cancellation; action remains unapproved.'); return false; }
   };
+  useEffect(()=>{
+    if(Platform.OS!=='android')return;
+    const sub=DeviceEventEmitter.addListener(
+      NEXA_SHARED_OVERLAY_CHAT_APPROVAL_EVENT,(event:unknown)=>{
+        if(event===null||typeof event!=='object')return;
+        const value=event as Record<string,unknown>;
+        const id=value.id,approve=value.approve;
+        if(typeof id!=='string'||typeof approve!=='boolean'||
+          overlayReplyToken.current!==id||overlayApprovalToken.current!==id)return;
+        void (async()=>{
+          const pending=pendingApprovalRef.current;
+          if(!pending){
+            await deliverSharedOverlayReply(id,
+              'The exact pending action is no longer available. No action was executed.');
+            return;
+          }
+          if(!approve){
+            await rejectPending();
+            await deliverSharedOverlayReply(id,
+              'You declined the exact screen action. Nothing was executed.');
+            return;
+          }
+          // The review is one-use. The native overlay collapses first, so an
+          // approved launcher gesture is delivered to Home rather than onto
+          // the overlay surface covering it.
+          overlayApprovalToken.current=null;
+          overlayPendingApprovalToken.current=null;
+          const saved=await approvePending(true);
+          if(!saved){
+            await deliverSharedOverlayReply(id,
+              'Could not record the one-time approval. No action was executed.');
+            return;
+          }
+          overlayReplyMessage.current='';
+          await send(saved.request,saved,id);
+          if(overlayReplyToken.current===id&&overlayApprovalToken.current!==id)
+            await deliverSharedOverlayReply(id,overlayReplyMessage.current||
+              'The resumed task ended without a verified reply. Inspect the task journal before retrying.');
+        })().catch(()=>{
+          void deliverSharedOverlayReply(id,
+            'Overlay approval handoff failed. No automatic retry was made.');
+        });
+      });
+    return ()=>sub.remove();
+  },[engine.live,running,pendingApproval]);
   const runSetupAction = async (label:string, action:()=>Promise<unknown>) => {
     if (setupBusy || running) return;
     setSetupBusy(true); setSetupNotice('');
@@ -2040,7 +2395,7 @@ export default function App() {
               <View style={[styles.messageCard,message.speaker==='user' ? styles.messageUser : styles.messageAssistant]}>
                 <Text style={styles.messageText}>{message.text}</Text>
                 {message.speaker==='assistant' &&
-                  /^Task blocked: Permission required: (apps\\.launch|device\\.interact|device\\.observe|hardware\\.flashlight)$/.test(message.text) &&
+                  /^Task blocked: Permission required: (apps\.launch|device\.interact|device\.observe|hardware\.flashlight)$/.test(message.text) &&
                   <Pressable accessibilityRole="button" accessibilityLabel="Review device action permissions in Tools"
                     style={styles.outlineInline} onPress={()=>navigate('tools')}>
                     <Text style={styles.outlineInlineText}>Review device permissions in Tools</Text>
@@ -2064,7 +2419,7 @@ export default function App() {
             <Text style={styles.actionDescription}>Bound to this exact saved task. No action has executed.</Text>
             <View style={styles.buttonRow}>
               <Pressable accessibilityRole="button" disabled={running} style={styles.primaryInline}
-                onPress={approvePending}><Text style={styles.primaryInlineText}>Approve once</Text></Pressable>
+              onPress={()=>void approvePending()}><Text style={styles.primaryInlineText}>Approve once</Text></Pressable>
               <Pressable accessibilityRole="button" disabled={running} style={styles.outlineInline}
                 onPress={rejectPending}><Text style={styles.outlineInlineText}>Decline</Text></Pressable>
             </View>
@@ -2083,7 +2438,8 @@ export default function App() {
             </Pressable>
             <TextInput style={styles.composerInput} value={input} onChangeText={setInput}
               editable={!running && !listening} placeholder="Message your assistant…" placeholderTextColor="#7f8ba5"
-              multiline maxLength={2000} accessibilityLabel="Assistant command" />
+              multiline maxLength={2000} autoCapitalize="none" autoCorrect={false} autoComplete="off"
+              accessibilityLabel="Assistant command" />
             <Pressable accessibilityRole="button" accessibilityLabel="Open voice studio" disabled={running}
               onPress={() => navigate('voice')} style={styles.composerIcon}><Text style={styles.composerIconText}>♫</Text></Pressable>
             <Pressable accessibilityRole="button" accessibilityLabel={running?'Stop request':'Send message'}
@@ -2760,7 +3116,7 @@ export default function App() {
             <Text style={styles.cardHeading}>AI Comms Agent · Email</Text>
             <Text style={[styles.sectionTag,acaSession&&acaVerified&&styles.sectionTagActive]}>{!acaSession?'Not connected':acaVerified?'Connected':'Needs verification'}</Text>
           </View>
-          <Text style={styles.cardText}>Use your existing ACA organization, permitted mailboxes and synchronized email summary engine. Device tools, WhatsApp handoff, AI provider and live voice remain unchanged. No auto-send.</Text>
+          <Text style={styles.cardText}>Use the same ACA login, organization, selected agent, saved provider configuration, business data and agent conversation. Nexa calls ACA’s server for its permitted read tools, including email, schedules, WhatsApp Business and knowledge when configured. Business writes stay disabled in this release; Nexa’s Android device tools and local AI settings remain separate.</Text>
           <Text style={styles.settingHelp}>{ACA_ORIGIN} · Read-only access · Android Keystore session</Text>
           {!acaSession && <>
             <Text style={styles.fieldLabel}>ACA ACCOUNT EMAIL</Text>
@@ -2780,7 +3136,7 @@ export default function App() {
             </Pressable>
           </>}
           {acaSession && <>
-            <Text style={styles.settingHelp}>Select the organization and agent that may read this mailbox:</Text>
+            <Text style={styles.settingHelp}>Select the organization and agent whose saved ACA tools and configuration Nexa Chat may use:</Text>
             {acaOrganizations.flatMap(org=>org.agents.map(agent=>({org,agent}))).map(item=>
               <Pressable key={item.org.id+':'+item.agent.id} accessibilityRole="button"
                 accessibilityState={{selected:acaSession.organizationId===item.org.id&&acaSession.agentId===item.agent.id}}
@@ -2793,7 +3149,7 @@ export default function App() {
               style={styles.outlineInline}><Text style={styles.outlineInlineText}>Disconnect ACA</Text></Pressable>
           </>}
           {acaNotice!==''&&<Text style={styles.feedback}>{acaNotice}</Text>}
-          <Text style={styles.settingHelp}>Try in Chat: “Summarize unread emails from the last 24 hours.” Reports include sync freshness; drafting and sending stay in ACA's reviewed workflows.</Text>
+          <Text style={styles.settingHelp}>Try in Chat: “Summarize unread emails from the last 24 hours.” ACA reads only this agent’s authorized mailbox data and uses its saved provider configuration to give a short, coverage-aware summary. The conversation and business data stay in ACA. Drafting and sending remain in ACA’s reviewed workflows.</Text>
         </View>}
         <View style={styles.setupShortcut}>
           <View style={styles.setupShortcutText}>

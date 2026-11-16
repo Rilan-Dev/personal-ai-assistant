@@ -299,13 +299,15 @@ internal object NexaAgentActionAudit {
                               requested:JSONObject):Boolean{
         if(!valid(session,call,fingerprint) ||
             toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
-                "screen.open_whatsapp_chat","screen.compose_whatsapp") ||
+                "screen.open_whatsapp_chat","screen.compose_whatsapp",
+                "screen.send_whatsapp","screen.compose_message",
+                "screen.send_message") ||
             !NexaNativeActionSafety.permitsNewAction(context))return false
         return try{synchronized(lock){
             val bound=JSONArray(fingerprint)
             if(bound.length()!=4 || bound.optString(0)!=session ||
                 bound.optString(1)!=call || bound.optString(2)!=toolId ||
-                requested.length() !in 1..2)return@synchronized false
+                requested.length() !in 1..3)return@synchronized false
             val args=bound.optJSONObject(3) ?:return@synchronized false
             if(args.length()!=requested.length())return@synchronized false
             for(key in requested.keys()){
@@ -321,12 +323,17 @@ internal object NexaAgentActionAudit {
                     args.optString("targetLabel").length in 2..60 &&
                     args.optString("exactText").length in 1..500
                 "screen.open_whatsapp_chat"->args.length()==1 &&
-                    args.optString("recipientHint").matches(
-                        Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}"))
+                    NexaMessageChannels.isSafeAgentRecipient(args.optString("recipientHint"))
                 "screen.compose_whatsapp"->args.length()==2 &&
-                    args.optString("recipientHint").matches(
-                        Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}")) &&
-                    args.optString("exactText").length in 1..500
+                    NexaMessageChannels.isSafeAgentRecipient(args.optString("recipientHint")) &&
+                    NexaWhatsAppSendPolicy.isValidExactText(args.optString("exactText"))
+                "screen.send_whatsapp"->args.length()==2 &&
+                    NexaMessageChannels.isSafeAgentRecipient(args.optString("recipientHint")) &&
+                    NexaWhatsAppSendPolicy.isValidExactText(args.optString("exactText"))
+                "screen.compose_message","screen.send_message"->args.length()==3 &&
+                    NexaMessageChannels.agentSendPackage(args.optString("appId"))!=null &&
+                    NexaMessageChannels.isSafeAgentRecipient(args.optString("recipientHint")) &&
+                    NexaWhatsAppSendPolicy.isValidExactText(args.optString("exactText"))
                 else->false
             }
             if(!allowedArgs)return@synchronized false
@@ -399,7 +406,9 @@ internal object NexaAgentActionAudit {
                                   evidence:String,gestureToken:String?=null):Boolean {
         if(!valid(session,call,fingerprint) ||
             toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
-                "screen.open_whatsapp_chat","screen.compose_whatsapp"))
+                "screen.open_whatsapp_chat","screen.compose_whatsapp",
+                "screen.send_whatsapp","screen.compose_message",
+                "screen.send_message"))
             return false
         val expectedKind=when(toolId){
             "screen.tap_label","screen.open_whatsapp_chat"->"tap"
@@ -409,9 +418,13 @@ internal object NexaAgentActionAudit {
                 "scroll_"+args.optString("direction")
             }
             "screen.compose_whatsapp"->"message_fill"
+            "screen.send_whatsapp"->"message_send"
+            "screen.compose_message"->"message_fill"
+            "screen.send_message"->"message_send"
             else->"text_fill"
         }
-        if(toolId in setOf("screen.open_whatsapp_chat","screen.compose_whatsapp")){
+        if(toolId in setOf("screen.open_whatsapp_chat","screen.compose_whatsapp",
+                "screen.send_whatsapp")){
             val args=try{JSONArray(fingerprint).optJSONObject(3)}
                 catch(_:Exception){null} ?:return false
             val recipient=args.optString("recipientHint")
@@ -420,7 +433,35 @@ internal object NexaAgentActionAudit {
             if(!NexaWhatsAppChatActions.verifiedOpen(ScreenAssistService.active,recipient))
                 return false
         }
-        if(toolId=="screen.fill_text"||toolId=="screen.compose_whatsapp"){
+        if(toolId=="screen.compose_message"||toolId=="screen.send_message"){
+            val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                catch(_:Exception){null} ?:return false
+            if(!NexaMessageInputActions.verifiedMessageChat(
+                    ScreenAssistService.active,args.optString("appId"),
+                    args.optString("recipientHint")))return false
+        }
+        if(toolId=="screen.send_whatsapp"){
+            val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                catch(_:Exception){null} ?:return false
+            if(evidence!="sent_message_visible"||gestureToken!=null||
+                !NexaMessageInputActions.verifySentWhatsApp(
+                    ScreenAssistService.active,args.optString("recipientHint"),
+                    args.optString("exactText")))return false
+        }else if(toolId=="screen.send_message"){
+            val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                catch(_:Exception){null} ?:return false
+            if(evidence!="sent_message_visible"||gestureToken!=null||
+                !NexaMessageInputActions.verifySentMessage(
+                    ScreenAssistService.active,args.optString("appId"),
+                    args.optString("recipientHint"),args.optString("exactText")))return false
+        }else if(toolId=="screen.compose_message"){
+            val args=try{JSONArray(fingerprint).optJSONObject(3)}
+                catch(_:Exception){null} ?:return false
+            if(evidence!="exact_text_visible"||gestureToken!=null||
+                !NexaMessageInputActions.verifyVisibleMessageDraft(
+                    ScreenAssistService.active,args.optString("appId"),
+                    args.optString("recipientHint"),args.optString("exactText")))return false
+        }else if(toolId=="screen.fill_text"||toolId=="screen.compose_whatsapp"){
             if(evidence!="exact_text_visible" || gestureToken!=null)return false
         }else if(toolId=="screen.open_whatsapp_chat"){
             if(evidence!="verified_chat_header")return false

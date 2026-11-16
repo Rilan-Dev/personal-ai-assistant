@@ -62,10 +62,11 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
   assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
-  assert.ok(/element: "Hide optional features"\n\s+direction: UP/.test(flow),
-    "the expanded accordion moves above the viewport, so scroll up to its new label");
-  assert.ok(flow.includes('element: "One-time screen assistance"'));
-  assert.ok(/element: "One-time screen assistance"\n\s+direction: UP/.test(flow));
+  assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"\n- assertVisible: "One-time screen assistance"'),
+    "verify the first optional permission appears after expansion; the accordion header is below all optional cards");
+  assert.ok(flow.includes('element: "Open Accessibility.*One-time screen assistance.*"'));
+  assert.ok(/element: "Open Accessibility\.\*One-time screen assistance\.\*"\n\s+direction: DOWN/.test(flow),
+    "scroll dynamically to the live Screen Assist action instead of searching for the offscreen accordion header");
   assert.ok(flow.includes('text: "Open Accessibility.*One-time screen assistance.*"'));
   assert.match(flow,/text: "Open Accessibility\.\*One-time screen assistance\.\*"\n\s+point: "50%,50%"/);
   assert.ok(/checked: true[\s\S]*?tapOn: "Turn off"[\s\S]*?checked: false/.test(flow),
@@ -76,7 +77,10 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
 
 test("Flow 10 enters Setup explicitly on an already-configured QA2 install",()=>{
   assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.physicalqa2$/m);
-  assert.ok(flow.includes('visible: "How can I help today?"'));
+  assert.match(flow,/visible: "Pixel Launcher\.\*responding"[\s\S]*?tapOn: "Wait"/,
+    "recover the Android launcher only when its boot-time ANR dialog is actually visible");
+  assert.ok(flow.includes('visible: "Make your assistant yours."'),
+    "wait for the actual Setup heading after resolving Android's delayed runtime-permission prompt");
   assert.ok(flow.includes('timeout: 180000'));
   assert.ok(flow.includes('- tapOn: "Tools"'));
   assert.ok(flow.includes('element: "Open permission setup"'));
@@ -93,7 +97,8 @@ test("Maestro navigation selectors match the rendered Chat and Tools labels",()=
     source(".maestro/physical-qa/01-enable-accessibility-services.yaml"),
     source(".maestro/physical-qa/02-ready-check.yaml"),
   ];
-  assert.ok(flow.includes('visible: "How can I help today?"'));
+  assert.ok(flow.includes('visible: "Make your assistant yours."'),
+    "anchor cold start on the rendered Setup heading rather than the application package label");
   assert.ok(flow.includes('- tapOn: "Tools"'));
   for(const navigationFlow of navigationFlows) {
     assert.doesNotMatch(navigationFlow,/"(?:Chat|Tools) tab"/,
@@ -105,6 +110,11 @@ test("Setup optional-feature accordion exposes its current action label to acces
   assert.match(component,/accessibilityLabel=\{showOptional \? 'Hide optional features' : 'Show optional permissions and features'\}/,
     "the expanded label must match visible text so assistive tools can verify the disclosure state");
   assert.match(component,/accessibilityState=\{\{expanded:showOptional\}\}/);
+});
+
+test("Setup clips offscreen permission cards so Android accessibility queries stay bounded",()=>{
+  assert.match(component,/<ScrollView[^>]*removeClippedSubviews=\{true\}/,
+    "the setup list must detach offscreen cards instead of exposing every optional card in one accessibility tree");
 });
 
 test("QA2 Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{

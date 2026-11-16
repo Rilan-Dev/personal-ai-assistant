@@ -52,6 +52,17 @@ test('Accessibility stage enables both isolated QA2 services through Android Set
   assert.match(accessibility, /tapOn: "Allow"/);
 });
 
+test('Accessibility recovery restarts services that are enabled but marked crashed', () => {
+  for (const label of ['Nexa Screen Assist QA2', 'Nexa Launcher Navigation QA2']) {
+    const start = accessibility.indexOf(`- tapOn: "${label}"`);
+    const end = accessibility.indexOf('- pressKey: BACK', start);
+    const serviceFlow = accessibility.slice(start, end < 0 ? undefined : end);
+    assert.ok(start >= 0, `missing Settings selection for ${label}`);
+    assert.match(serviceFlow, /id: "android:id\/switch_widget"[\s\S]*?checked: true[\s\S]*?tapOn:\s*\n\s+id: "android:id\/switch_widget"\s*\n\s+checked: true[\s\S]*?checked: false/,
+      `${label} must be explicitly stopped before recovery can clear Android's crashed-service state`);
+  }
+});
+
 test('postflight verifies Android permissions and binding after Maestro releases UiAutomation', () => {
   assert.match(runner, /--device=\$DeviceId/);
   assert.match(runner, /--no-reinstall-driver/);
