@@ -23,7 +23,7 @@ internal object NexaUiTaskAudit {
     const val POLICY="ui-action-audit-v1"
     private val sha=Regex("[0-9a-f]{64}")
     private val allowed=setOf("tap","scroll_up","scroll_down","scroll_left",
-        "scroll_right","message_fill","text_fill","app_launch",
+        "scroll_right","message_fill","message_send","text_fill","app_launch",
         "nav_back","nav_notifications")
     private val observed=setOf("observed_change","scroll_event_observed",
         "window_change_observed","structural_change_observed",
@@ -117,9 +117,9 @@ internal object NexaUiTaskAudit {
         if(!sha.matches(tokenDigest)||!sha.matches(packageDigest)||
             actionKind !in allowed ||
             origin !in setOf("chat","live-voice","assistant-role","overlay") ||
-            (actionKind in setOf("message_fill","text_fill") &&
+            (actionKind in setOf("message_fill","message_send","text_fill") &&
                 !sha.matches(reviewedInputDigest.orEmpty())) ||
-            (actionKind !in setOf("message_fill","text_fill") &&
+            (actionKind !in setOf("message_fill","message_send","text_fill") &&
                 reviewedInputDigest!=null))return false
         val taskId=id("task-",tokenDigest)
         val stepId=id("step-",tokenDigest)
@@ -133,9 +133,10 @@ internal object NexaUiTaskAudit {
             .put("packageDigest",packageDigest)
         // Keep the reviewed-text digest with its audit receipt so an outcome
         // can verify the exact approval without storing field contents.
-        if(actionKind in setOf("message_fill","text_fill"))
+        if(actionKind in setOf("message_fill","message_send","text_fill"))
             actionArgs.put("reviewedInputDigest",reviewedInputDigest)
         val args=NexaConversationDb.sealNativeTaskArguments(actionArgs.toString())
+        val risk=if(actionKind=="message_send")"high" else "medium"
         db.compileStatement(
             "INSERT INTO agent_tasks(task_id,session_id,origin,status,policy_version,"+
                 "plan_revision,goal_cipher,created_at,updated_at) "+
@@ -153,12 +154,13 @@ internal object NexaUiTaskAudit {
         db.compileStatement(
             "INSERT INTO agent_task_steps(step_id,task_id,ordinal,tool_id,status,"+
                 "risk,expected_evidence,arguments_cipher) "+
-                "VALUES(?,?,0,?,'outcome_unknown','medium','ui_observation',?)"
+                "VALUES(?,?,0,?,'outcome_unknown',?,'ui_observation',?)"
         ).use{stmt->
             stmt.bindString(1,stepId)
             stmt.bindString(2,taskId)
             stmt.bindString(3,"ui."+actionKind)
-            stmt.bindBlob(4,args)
+            stmt.bindString(4,risk)
+            stmt.bindBlob(5,args)
             check(stmt.executeInsert()!=-1L)
         }
         // The existing UI controller's owner confirmation was already
@@ -211,7 +213,7 @@ internal object NexaUiTaskAudit {
                 .openNativeTaskArguments(row.getBlob(0)))
             val kind=args.optString("kind")
             val pkg=args.optString("packageDigest")
-            val textAction=kind in setOf("message_fill","text_fill")
+            val textAction=kind in setOf("message_fill","message_send","text_fill")
             val reviewed=args.optString("reviewedInputDigest","")
             val expectedInput=if(textAction)reviewed
                 else digest("ui-action-v1:"+kind+":"+tokenDigest)

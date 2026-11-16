@@ -11,6 +11,14 @@ tags:
       all: deny
 - runFlow:
     when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 30000
+- runFlow:
+    when:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
@@ -32,12 +40,17 @@ tags:
 - pressKey: home
 - launchApp:
     stopApp: false
+- extendedWaitUntil:
+    visible: "(?s).*(?:How can I help today\\?|Don.t allow).*"
+    timeout: 30000
 - runFlow:
     when:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
-- assertVisible: "How can I help today?"
+- extendedWaitUntil:
+    visible: "How can I help today?"
+    timeout: 30000
 - tapOn: "Voice"
 - assertVisible: "Live speech-to-speech"
 - tapOn: "Tools"

@@ -1,11 +1,24 @@
 package dev.rilandev.personalaiassistant
 
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.graphics.Rect
+import android.graphics.Path
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import dev.rilandev.maestroportable.MaestroQuery
 import java.util.UUID
+
+/** A rejected Accessibility click on a verified search editor may still be
+ * focused safely. Never use this fallback for any non-search control. */
+internal object NexaSearchFieldTapPolicy {
+    fun dispatch(click:()->Boolean,focus:()->Boolean,
+                 gestureTap:()->Boolean={false}):Boolean =
+        click() || focus() || gestureTap()
+}
 
 /** Grounded, one-shot semantic tap: never trusts arbitrary X/Y from an LLM. */
 internal object NexaScreenLabelTap {
@@ -17,6 +30,71 @@ internal object NexaScreenLabelTap {
      */
     private fun labelKey(raw:String):String =
         raw.lowercase(java.util.Locale.ROOT).replace(Regex("""[^\p{L}\p{N}]"""),"")
+
+    /** Search may be presented as one longer accessible name, while the
+     * owner-sequenced plan intentionally requests the safe semantic label
+     * "Search". Keep the alias exact to WhatsApp's observed label and rely on
+     * the existing unique enabled-target check before any action is dispatched.
+     */
+    internal fun matchesRequestedLabel(packageName:String,requested:String,
+                                       visible:String):Boolean {
+        val target=requested.trim()
+        val candidate=visible.trim()
+        if(target.isEmpty() || candidate.isEmpty())return false
+        if(candidate.equals(target,ignoreCase=true) ||
+            labelKey(candidate)==labelKey(target))return true
+        return packageName=="com.whatsapp" &&
+            target.equals("Search",ignoreCase=true) &&
+            candidate.equals("Ask Meta AI or Search",ignoreCase=true)
+    }
+
+    /** Reacquire exactly one visible, enabled search editor from the fresh
+     * external window root. Its bounds must still match the owner-reviewed
+     * bounds before any gesture can be dispatched.
+     */
+    private fun uniqueLiveSearchInput(root:AccessibilityNodeInfo,pkg:String,
+                                      label:String,reviewedBounds:Rect):AccessibilityNodeInfo? {
+        if(!label.equals("search",ignoreCase=true) ||
+            root.packageName?.toString()!=pkg || !root.isVisibleToUser)return null
+        val screen=Rect().also { root.getBoundsInScreen(it) }
+        if(screen.isEmpty || !screen.contains(reviewedBounds))return null
+        val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+        val matches=mutableListOf<AccessibilityNodeInfo>()
+        queue.add(root)
+        var inspected=0
+        while(queue.isNotEmpty() && inspected++<200) {
+            val node=queue.removeFirst()
+            if(node.isVisibleToUser && node.isEnabled && node.isEditable &&
+                !node.isPassword &&
+                listOf(node.contentDescription?.toString().orEmpty(),
+                    node.hintText?.toString().orEmpty(),
+                    node.viewIdResourceName.orEmpty())
+                    .any { it.contains("search",ignoreCase=true) }) {
+                val bounds=Rect().also { node.getBoundsInScreen(it) }
+                if(!bounds.isEmpty && screen.contains(bounds) &&
+                    bounds==reviewedBounds)matches.add(node)
+            }
+            for(index in 0 until node.childCount)
+                node.getChild(index)?.let { queue.addLast(it) }
+        }
+        if(queue.isNotEmpty() || matches.size!=1)return null
+        return matches.single()
+    }
+
+    /** The geometric fallback is limited to a freshly revalidated Search
+     * editor. Coordinates are derived only from that editor's live bounds.
+     */
+    private fun dispatchSearchFieldTap(service:ScreenAssistService,bounds:Rect):Boolean {
+        if(bounds.isEmpty || bounds.left<0 || bounds.top<0)return false
+        val x=bounds.centerX().toFloat()
+        val y=bounds.centerY().toFloat()
+        val path=Path().apply {moveTo(x,y);lineTo(x,y)}
+        val gesture=GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path,0,80L)).build()
+        return try {
+            service.dispatchGesture(gesture,null,Handler(Looper.getMainLooper()))
+        }catch(_:Exception){false}
+    }
 
     /** A relative relationship is only trustworthy while its ONE matching
      * anchor remains on the same current screen and at the reviewed bounds.
@@ -115,19 +193,23 @@ internal object NexaScreenLabelTap {
                         node.hintText?.toString().orEmpty())
                     else listOf(node.text?.toString().orEmpty(),
                         node.contentDescription?.toString().orEmpty())
-                val requestedKey=labelKey(label)
                 val match=visible.any {
-                    it.trim().equals(label,ignoreCase=true) ||
-                        requestedKey.isNotBlank() && labelKey(it)==requestedKey ||
+                    NexaScreenLabelTap.matchesRequestedLabel(pkg,label,it) ||
                         (relative==null && pkg=="com.whatsapp" &&
                             NexaWhatsAppChatMatch.evidence(label,it)>=85)
                 } ||
                     isSearchInput && label.equals("search",ignoreCase=true)
                 if(match) {
+                    // Keep the live editable node as the target. Walking up to
+                    // its clickable wrapper makes the later unique-node check
+                    // depend on wrapper labels/bounds that vary across app
+                    // versions, and can make a valid Search focus fail.
                     var candidate:AccessibilityNodeInfo?=node
-                    repeat(3) {
-                        if(candidate!=null && !candidate!!.isClickable)
-                            candidate=candidate?.parent
+                    if(!isSearchInput) {
+                        repeat(3) {
+                            if(candidate!=null && !candidate!!.isClickable)
+                                candidate=candidate?.parent
+                        }
                     }
                     val rect=Rect()
                     candidate?.getBoundsInScreen(rect)
@@ -207,6 +289,7 @@ internal object NexaScreenLabelTap {
                 }
                 candidates[index]
             }
+            val searchInputTarget=found.isEditable && label.equals("search",ignoreCase=true)
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
             val reviewedAnchorBounds=anchors.values.singleOrNull()?.let { anchor ->
                 Rect().also { anchor.getBoundsInScreen(it) }
@@ -239,11 +322,25 @@ internal object NexaScreenLabelTap {
                             pkg,root.windowId,
                             liveRoot.packageName?.toString().orEmpty(),liveRoot.windowId
                         ) || !hierarchyStillVerified ||
-                        !found.isVisibleToUser || !found.isEnabled ||
-                        currentBounds!=reviewedBounds ||
+                        (!searchInputTarget &&
+                            (!found.isVisibleToUser || !found.isEnabled ||
+                                currentBounds!=reviewedBounds)) ||
                         (relative!=null && (reviewedAnchorBounds==null ||
                             !anchorStillUnique(liveRoot,relative.anchor,reviewedAnchorBounds)))) false
-                    else found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    else if(searchInputTarget) {
+                        val liveSearch=uniqueLiveSearchInput(liveRoot,pkg,label,reviewedBounds)
+                            ?:return@dispatchWithFence false
+                        try {
+                            val liveBounds=Rect().also { liveSearch.getBoundsInScreen(it) }
+                            NexaSearchFieldTapPolicy.dispatch(
+                                click={liveSearch.performAction(AccessibilityNodeInfo.ACTION_CLICK)},
+                                focus={liveSearch.performAction(AccessibilityNodeInfo.ACTION_FOCUS)},
+                                gestureTap={dispatchSearchFieldTap(service,liveBounds)}
+                            )
+                        } finally {
+                            try {liveSearch.recycle()}catch(_:Exception){}
+                        }
+                    } else found.performAction(AccessibilityNodeInfo.ACTION_CLICK)
                 } finally {
                     try {liveRoot.recycle()} catch (_:Exception) {}
                 }

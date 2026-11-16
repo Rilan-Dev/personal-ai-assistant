@@ -233,15 +233,13 @@ class DeviceControlModule(
      * return not_observed. Nothing is tapped, retried or marked delivered.
      */
     private fun resolveObservedAppLaunch(expectedPackage:String,
-                                         reviewGeneration:Long?,
+                                         reviewGeneration:Long,
                                          promise:Promise,action:String?=null){
-        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-            val observed=try{
-                reviewGeneration!=null &&
-                    NexaNativeActionSafety.approvalFenceCurrent(
-                        context,reviewGeneration) &&
-                    NexaAppLaunchObservation.expectedVisibleNow(context,expectedPackage)
-            }catch(_:Exception){false}
+        NexaAppLaunchObservation.waitUntilExpectedVisible(context,
+            expectedPackage,{
+                NexaNativeActionSafety.approvalFenceCurrent(
+                    context,reviewGeneration)
+            }) { observed ->
             val result=Arguments.createMap()
             result.putBoolean("intentDispatched",true)
             result.putString("packageId",expectedPackage)
@@ -249,7 +247,7 @@ class DeviceControlModule(
             result.putString("verification",if(observed)
                 "destination_package_observed" else "not_observed")
             promise.resolve(result)
-        },1500L)
+        }
     }
 
     @ReactMethod
@@ -258,10 +256,10 @@ class DeviceControlModule(
             promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
             return
         }
-        if(context.currentActivity?.hasWindowFocus()!=true){
-            promise.reject("NOT_FOREGROUND","Open Nexa and explicitly approve the app launch")
-            return
-        }
+        // The shared Chat task may be reviewed and resumed from Nexa's floating
+        // window while this Activity does not own focus. Keep the durable
+        // owner-action pause/fence, exact installed-app resolution and one-shot
+        // app-launch journal below as the native authorization boundary.
         // Resolve one exact launcher label; no guessed app or model-generated
         // package name may reach the shared native dispatch coordinator.
         val choice=NexaPhoneVoiceTools.findExactLaunchableApp(context,app)
@@ -395,10 +393,10 @@ class DeviceControlModule(
             p.reject("OWNER_ACTIONS_PAUSED","Device actions are paused")
             return null
         }
-        if(context.currentActivity?.hasWindowFocus()!=true){
-            p.reject("NOT_FOREGROUND","Review this step in the unlocked Nexa Chat")
-            return null
-        }
+        // Shared floating Chat executes while the external app remains the
+        // foreground window. Do not require Nexa's Activity to own focus here:
+        // every caller consumes the exact fingerprint-bound owner approval
+        // with NexaAgentActionAudit before inspecting or dispatching a UI step.
         val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
         if(keyguard?.isKeyguardLocked==true){
             p.reject("PHONE_LOCKED","Unlock your phone before executing a screen step")
@@ -460,7 +458,15 @@ class DeviceControlModule(
                 claimedToken={receipt=it})
             val token=receipt
             if(token==null || !result.startsWith("Android accepted one tap")){
-                promise.reject("UI_TAP_DENIED",
+                val code=when {
+                    result.startsWith("No enabled clickable control") -> "UI_TAP_TARGET_UNAVAILABLE"
+                    result.startsWith("Multiple controls") ||
+                        result.startsWith("Multiple or unsafe editable controls") -> "UI_TAP_TARGET_AMBIGUOUS"
+                    result.startsWith("The target or its unique live hierarchy") -> "UI_TAP_HIERARCHY_UNVERIFIED"
+                    result.startsWith("Android refused") -> "UI_TAP_DISPATCH_REJECTED"
+                    else -> "UI_TAP_DENIED"
+                }
+                promise.reject(code,
                     "Android rejected or could not uniquely ground the requested tap")
                 return
             }
@@ -490,7 +496,19 @@ class DeviceControlModule(
             val preflight=NexaScreenScroll.prepare(service,direction)
             if(!preflight.startsWith("Confirm scroll ") &&
                 !preflight.startsWith("Confirm one ")){
-                promise.reject("SCROLL_TARGET_UNAVAILABLE",
+                val code=when {
+                    preflight.startsWith("No permitted app window to scroll") ->
+                        "SCROLL_WINDOW_UNAVAILABLE"
+                    preflight.startsWith("No visible scrollable container supports") ->
+                        "SCROLL_CONTAINER_UNAVAILABLE"
+                    preflight.startsWith("Bounded scroll search requires one unique") ->
+                        "SCROLL_TARGET_AMBIGUOUS"
+                    preflight.startsWith("Owner paused") -> "OWNER_ACTIONS_PAUSED"
+                    preflight.startsWith("Unsupported") -> "INVALID_SCROLL"
+                    preflight.startsWith("Screen changed") -> "SCROLL_CONTEXT_CHANGED"
+                    else -> "SCROLL_TARGET_UNAVAILABLE"
+                }
+                promise.reject(code,
                     "No unique safe scroll target is currently visible")
                 return
             }
@@ -501,15 +519,27 @@ class DeviceControlModule(
             if(token==null ||
                 (!outcome.startsWith("Android accepted one scroll") &&
                  !outcome.startsWith("Android queued one"))){
-                promise.reject("SCROLL_OUTCOME_UNCERTAIN",
-                    "Android did not verify scroll dispatch. No automatic retry.")
+                val code=when {
+                    outcome.startsWith("No clear horizontal") ||
+                        outcome.startsWith("Launcher bounds are unavailable") ||
+                        outcome.startsWith("Scroll target changed") -> "SCROLL_TARGET_UNAVAILABLE"
+                    outcome.contains("journal",ignoreCase=true) -> "SCROLL_JOURNAL_DENIED"
+                    outcome.startsWith("Android refused") -> "SCROLL_DISPATCH_REJECTED"
+                    outcome.startsWith("Owner paused") -> "OWNER_ACTIONS_PAUSED"
+                    outcome.contains("screen changed",ignoreCase=true) ||
+                        outcome.startsWith("Launcher changed") ||
+                        outcome.startsWith("No permitted window") -> "SCROLL_CONTEXT_CHANGED"
+                    else -> "SCROLL_ACTION_NOT_ACCEPTED"
+                }
+                promise.reject(code,
+                    "Android did not accept the reviewed scroll. No automatic retry.")
                 return
             }
             finishUiStepAfterObservation(token,"scroll_"+direction,
                 sessionId,callId,fingerprint,"screen.scroll",promise)
         }catch(_:Exception){
             NexaScreenScroll.cancel()
-            promise.reject("SCROLL_OUTCOME_UNCERTAIN",
+            promise.reject("SCROLL_CONTEXT_CHANGED",
                 "Screen context changed. No automatic retry.")
         }
     }
@@ -632,10 +662,8 @@ class DeviceControlModule(
         }
     }
 
-    /**
-     * Owner-reviewed composition ONLY: match actual WhatsApp package,
-     * identical recipient header, one empty composer, exact text and durable
-     * no-replay claim. Pressing Send is NEVER exposed to the agent.
+    /** Owner-reviewed composition only. This step fills an empty composer and
+     * never sends; a separate high-risk tool owns the one-time Send approval.
      */
     @ReactMethod
     fun performReviewedWhatsAppDraft(recipientHint:String,exactText:String,
@@ -691,6 +719,167 @@ class DeviceControlModule(
             NexaMessageInputActions.cancel()
             promise.reject("MESSAGE_DRAFT_UNCERTAIN",
                 "Reviewed message preparation was not verified. No Send attempted.")
+        }
+    }
+
+    /** A separate, one-time-approved WhatsApp Send tool. Native policy
+     * rechecks the exact chat, exact draft, unique adjacent Send control and
+     * one-shot journal before a single click. Uncertain results are not retried.
+     */
+    @ReactMethod
+    fun performReviewedWhatsAppSend(recipientHint:String,exactText:String,
+                                    sessionId:String,callId:String,fingerprint:String,
+                                    promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,sessionId,callId,
+                fingerprint,"screen.send_whatsapp",
+                JSONObject().put("recipientHint",recipientHint)
+                    .put("exactText",exactText))){
+            promise.reject("MESSAGE_SEND_NOT_CLAIMED",
+                "The exact recipient and draft were not approved for this send step")
+            return
+        }
+        try {
+            val outcome=NexaMessageInputActions.sendReviewedWhatsApp(
+                service,recipientHint,exactText,origin="chat")
+            if(outcome!="sent_message_visible"){
+                promise.reject("MESSAGE_SEND_UNCERTAIN",
+                    "WhatsApp did not provide verified send evidence. Inspect the conversation; do not retry.")
+                return
+            }
+            if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,
+                    sessionId,callId,fingerprint,"screen.send_whatsapp",
+                    "sent_message_visible")){
+                promise.reject("MESSAGE_SEND_UNCERTAIN",
+                    "The message may be visible, but durable evidence was not committed. Inspect WhatsApp; do not retry.")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putString("verification","sent_message_visible")
+            result.putBoolean("recipientMatched",true)
+            result.putBoolean("exactTextMatched",true)
+            result.putBoolean("sent",true)
+            result.putBoolean("deliveryReported",false)
+            promise.resolve(result)
+        }catch(_:Exception){
+            promise.reject("MESSAGE_SEND_UNCERTAIN",
+                "WhatsApp send outcome is uncertain. Inspect the conversation; do not retry.")
+        }
+    }
+
+    /** App-bound draft tool for the exact allowlisted WhatsApp, IMO and BOTIM
+     * packages. It fills only the unique empty composer in the exact visible
+     * recipient chat and never submits.
+     */
+    @ReactMethod
+    fun performReviewedMessageDraft(appId:String,recipientHint:String,exactText:String,
+                                    sessionId:String,callId:String,fingerprint:String,
+                                    promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        val packageName=NexaMessageChannels.agentSendPackage(appId)
+        if(packageName==null||context.packageManager.getLaunchIntentForPackage(packageName)==null){
+            promise.reject("MESSAGE_APP_NOT_SUPPORTED","Only installed WhatsApp, IMO or BOTIM is supported")
+            return
+        }
+        val requested=JSONObject().put("appId",appId)
+            .put("recipientHint",recipientHint).put("exactText",exactText)
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,sessionId,callId,
+                fingerprint,"screen.compose_message",requested)){
+            promise.reject("MESSAGE_STEP_NOT_CLAIMED",
+                "The app, recipient and exact draft were not approved for this step")
+            return
+        }
+        try{
+            if(!NexaMessageInputActions.verifiedMessageChat(service,appId,recipientHint)||
+                !NexaMessageDraftState.stage(appId,packageName,recipientHint,exactText)){
+                promise.reject("MESSAGE_RECIPIENT_UNVERIFIED",
+                    "The exact selected chat is not open or draft data is invalid")
+                return
+            }
+            val preflight=NexaMessageInputActions.prepare(service)
+            if(!preflight.startsWith("One empty input box is visible")){
+                NexaMessageDraftState.clear()
+                NexaMessageInputActions.cancel()
+                promise.reject("MESSAGE_COMPOSER_UNVERIFIED",
+                    "One safe empty message composer was not uniquely verified")
+                return
+            }
+            val outcome=NexaMessageInputActions.confirm(service,origin="chat")
+            if(!outcome.startsWith("Exact prepared text is visible")||
+                !NexaMessageInputActions.verifyVisibleMessageDraft(
+                    service,appId,recipientHint,exactText)){
+                promise.reject("MESSAGE_DRAFT_UNCERTAIN",
+                    "The exact app, recipient or draft text was not verified; no retry or send")
+                return
+            }
+            if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,sessionId,callId,
+                    fingerprint,"screen.compose_message","exact_text_visible")){
+                promise.reject("MESSAGE_EVIDENCE_NOT_COMMITTED",
+                    "Exact draft was visible but native task evidence could not be committed")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putString("appId",appId)
+            result.putString("verification","exact_text_visible")
+            result.putBoolean("recipientMatched",true)
+            result.putBoolean("submitted",false)
+            result.putBoolean("sent",false)
+            promise.resolve(result)
+        }catch(_:Exception){
+            NexaMessageDraftState.clear()
+            NexaMessageInputActions.cancel()
+            promise.reject("MESSAGE_DRAFT_UNCERTAIN",
+                "Reviewed message preparation was not verified. No Send attempted.")
+        }
+    }
+
+    /** High-risk, one-time-approved generic message Send. Native policy is
+     * identical for all supported apps: exact chat/draft, one adjacent
+     * accessible Send control, pause fence, no-replay journal and a verified
+     * new visible bubble. Delivery is not reported.
+     */
+    @ReactMethod
+    fun performReviewedMessageSend(appId:String,recipientHint:String,exactText:String,
+                                   sessionId:String,callId:String,fingerprint:String,
+                                   promise:Promise) {
+        val service=sequencedScreenService(promise)?:return
+        if(NexaMessageChannels.agentSendPackage(appId)==null){
+            promise.reject("MESSAGE_APP_NOT_SUPPORTED","Only WhatsApp, IMO or BOTIM supports reviewed Send")
+            return
+        }
+        val requested=JSONObject().put("appId",appId)
+            .put("recipientHint",recipientHint).put("exactText",exactText)
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,sessionId,callId,
+                fingerprint,"screen.send_message",requested)){
+            promise.reject("MESSAGE_SEND_NOT_CLAIMED",
+                "The exact app, recipient and draft were not approved for this Send step")
+            return
+        }
+        try{
+            val outcome=NexaMessageInputActions.sendReviewedMessage(
+                service,appId,recipientHint,exactText,origin="chat")
+            if(outcome!="sent_message_visible"){
+                promise.reject("MESSAGE_SEND_UNCERTAIN",
+                    "Send was not verified in the selected app. Inspect it manually; do not retry.")
+                return
+            }
+            if(!NexaAgentActionAudit.recordReviewedUiEvidence(context,sessionId,callId,
+                    fingerprint,"screen.send_message","sent_message_visible")){
+                promise.reject("MESSAGE_SEND_UNCERTAIN",
+                    "The message may be visible, but durable evidence was not committed. Do not retry.")
+                return
+            }
+            val result=Arguments.createMap()
+            result.putString("appId",appId)
+            result.putString("verification","sent_message_visible")
+            result.putBoolean("recipientMatched",true)
+            result.putBoolean("exactTextMatched",true)
+            result.putBoolean("sent",true)
+            result.putBoolean("deliveryReported",false)
+            promise.resolve(result)
+        }catch(_:Exception){
+            promise.reject("MESSAGE_SEND_UNCERTAIN",
+                "Send outcome is uncertain. Inspect the conversation; do not retry.")
         }
     }
 

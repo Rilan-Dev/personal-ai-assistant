@@ -91,6 +91,21 @@ class NexaMessageInputPolicyAndroidTest {
         }
     }
 
+    @Test fun agentSendAllowlistMatchesExactWhatsAppImoAndBotimPackages() {
+        assertEquals("com.whatsapp",NexaMessageChannels.agentSendPackage("whatsapp"))
+        assertEquals("com.imo.android.imoim",NexaMessageChannels.agentSendPackage("imo"))
+        assertEquals("im.thebot.messenger",NexaMessageChannels.agentSendPackage("botim"))
+        assertNull(NexaMessageChannels.agentSendPackage("whatsapp-business"))
+        assertNull(NexaMessageChannels.agentSendPackage("sms"))
+        assertNull(NexaMessageChannels.agentSendPackage("unknown"))
+        assertFalse(NexaMessageChannels.isAgentSendTarget("imo","com.whatsapp"))
+        assertFalse(NexaMessageChannels.isAgentSendTarget("botim","com.imo.android.imoim"))
+        assertTrue(NexaMessageChannels.isSafeAgentRecipient("Amma"))
+        assertFalse(NexaMessageChannels.isSafeAgentRecipient("send"))
+        assertFalse(NexaMessageChannels.isSafeAgentRecipient("Amma then send"))
+        assertFalse(NexaMessageChannels.isSafeAgentRecipient(""))
+    }
+
     @Test fun approvalBindingRejectsAReplacedRecipientChannelOrMessage() {
         val exact=NexaMessageInputPolicy.approvedDraftDigest(
             "imo","com.imo.android.imoim","Mom","I am in a meeting")
@@ -110,6 +125,74 @@ class NexaMessageInputPolicyAndroidTest {
         assertNotEquals(
             NexaMessageInputPolicy.approvedDraftDigest("a","bc","d","e"),
             NexaMessageInputPolicy.approvedDraftDigest("ab","c","d","e"))
+    }
+
+    @Test fun sendRequiresOneAccessibleSendButtonBesideTheExactComposer() {
+        assertTrue(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.ImageButton",true,true,true,true))
+        assertTrue(NexaWhatsAppSendPolicy.isSendButton(
+            "Send message","android.widget.Button",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send to group","android.widget.Button",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.TextView",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.Button",false,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.Button",true,false,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.Button",true,true,false,true))
+        assertFalse(NexaWhatsAppSendPolicy.isSendButton(
+            "Send","android.widget.Button",true,true,true,false))
+
+        val window=android.graphics.Rect(0,0,1080,2400)
+        val composer=android.graphics.Rect(70,2100,900,2220)
+        val send=android.graphics.Rect(920,2110,1040,2210)
+        val otherRow=android.graphics.Rect(920,1850,1040,1950)
+        val leftSide=android.graphics.Rect(10,2110,60,2210)
+        assertTrue(NexaWhatsAppSendPolicy.isBesideComposer(window,composer,send))
+        assertFalse(NexaWhatsAppSendPolicy.isBesideComposer(window,composer,otherRow))
+        assertFalse(NexaWhatsAppSendPolicy.isBesideComposer(window,composer,leftSide))
+        assertFalse(NexaWhatsAppSendPolicy.isBesideComposer(
+            window,composer,android.graphics.Rect(1100,2110,1180,2210)))
+    }
+
+    @Test fun sentEvidenceRequiresExactWhatsAppChatTextAndClearedComposer() {
+        assertTrue(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp.w4b",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp",false,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp",true,false,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp",true,true,false,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentEvidence(
+            "com.whatsapp",true,true,true,false))
+    }
+
+    @Test fun sentEvidenceIsBoundToTheExactAllowlistedMessengerPackage() {
+        for ((app,pkg) in listOf(
+            "whatsapp" to "com.whatsapp",
+            "imo" to "com.imo.android.imoim",
+            "botim" to "im.thebot.messenger"
+        )) {
+            assertTrue(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+                app,pkg,true,true,true,true))
+            assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+                app,pkg,false,true,true,true))
+            assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+                app,pkg,true,false,true,true))
+            assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+                app,pkg,true,true,false,true))
+            assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+                app,pkg,true,true,true,false))
+        }
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+            "imo","com.whatsapp",true,true,true,true))
+        assertFalse(NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(
+            "whatsapp-business","com.whatsapp.w4b",true,true,true,true))
     }
 
 }

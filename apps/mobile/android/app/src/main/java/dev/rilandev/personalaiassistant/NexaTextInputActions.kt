@@ -43,7 +43,8 @@ internal object NexaTextInputPolicy {
                 (candidate==wanted ||
                     candidate.startsWith("$wanted ") &&
                     wanted in setOf("search","notes","note","description","comment",
-                        "title","query","subject","message","compose","text"))
+                        "title","query","subject","message","compose","text") ||
+                    wanted=="search" && candidate.endsWith(" $wanted"))
         }
     }
 }

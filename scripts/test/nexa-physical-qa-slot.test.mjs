@@ -13,8 +13,16 @@ test('second QA identity is explicitly opt-in and cannot downgrade an existing a
   assert.match(gradle,/findProperty\('paaInstallDebugAlongsideRelease'\)/);
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
   const reactBlock=gradle.slice(gradle.indexOf('react {'),gradle.indexOf('enableBundleCompression'));
-  assert.match(reactBlock,/paaIsolatedPhysicalQaV2[\s\S]*?debuggableVariants = \[\]/,
+  assert.match(reactBlock,/else if \([\s\S]*?isolatedPhysicalQaV2\)\s*\{\s*debuggableVariants = \[\]/,
     'isolated QA2 must bundle JS; never require a Metro server on the device');
+  assert.match(gradle,/paaLivePhysicalQaV2/,
+    'live mode must be a separate explicit build opt-in');
+  assert.match(gradle,/livePhysicalQaV2[\s\S]*?debuggableVariants = \["debug"\]/,
+    'live QA2 must connect its debug variant to Metro');
+  assert.match(gradle,/PAA_USE_EMBEDDED_JS_BUNDLE[\s\S]*?useEmbeddedPhysicalQaBundle/,
+    'only explicit live QA2 may disable the embedded bundle');
+  assert.match(gradle,/livePhysicalQaV2[\s\S]*?isolatedPhysicalQaV2[\s\S]*?GradleException/,
+    'live mode must refuse to build without the isolated QA2 identity');
   const debugBlock=gradle.slice(gradle.indexOf('buildTypes {'));
   assert.ok(debugBlock.indexOf("findProperty('paaIsolatedPhysicalQaV2')")<
     debugBlock.indexOf("findProperty('paaIsolatedPhysicalQa')"),

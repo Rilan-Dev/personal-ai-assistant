@@ -10,11 +10,22 @@ tags:
     clearState: true
     permissions:
       all: deny
+- extendedWaitUntil:
+    visible: "(?s).*(?:Chat|Don.t allow).*"
+    timeout: 30000
 - runFlow:
     when:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 30000
 - tapOn: "Chat"
 - assertVisible: "How can I help today?"
 # A training-only tool: no native device action, no message and no provider call.

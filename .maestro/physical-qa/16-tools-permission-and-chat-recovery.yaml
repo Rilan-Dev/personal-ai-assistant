@@ -29,8 +29,8 @@ tags:
 - extendedWaitUntil:
     visible: "Task blocked: Permission required: apps.launch"
     timeout: 30000
-- assertVisible: "Review device permissions in Tools"
-- tapOn: "Review device permissions in Tools"
+- assertVisible: "Review device action permissions in Tools"
+- tapOn: "Review device action permissions in Tools"
 - extendedWaitUntil:
     visible: "Device controls"
     timeout: 30000

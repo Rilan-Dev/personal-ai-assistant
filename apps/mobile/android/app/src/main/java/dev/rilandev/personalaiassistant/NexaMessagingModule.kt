@@ -48,6 +48,18 @@ internal object NexaMessageChannels {
     // The exact app id and package must remain bound through draft staging.
     fun expectedManualPackage(id: String): String? =
         if (permitsManualComposer(id)) known[id]?.second else null
+
+    /** Chat Agent send is intentionally narrower than manual draft support. */
+    fun agentSendPackage(id:String):String? =
+        if(id in setOf("whatsapp","imo","botim")) known[id]?.second else null
+
+    fun isAgentSendTarget(id:String,packageName:String):Boolean =
+        agentSendPackage(id)==packageName
+
+    fun isSafeAgentRecipient(hint:String):Boolean =
+        hint.matches(Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}")) &&
+            !Regex("\\b(?:and|then|send|submit|pay|buy|call|delete|grant|allow|confirm|password|otp)\\b",
+                RegexOption.IGNORE_CASE).containsMatchIn(hint)
 }
 
 /** Ephemeral and single-use; message body never enters SharedPreferences. */
@@ -65,7 +77,7 @@ internal object NexaMessageDraftState {
             if (!NexaMessageChannels.permitsManualComposer(appId) ||
                 pkg != NexaMessageChannels.expectedManualPackage(appId) ||
                 pkg.length !in 3..150 || !pkg.matches(Regex("[a-zA-Z0-9_.]+")) ||
-                !hint.matches(Regex("[\\p{L}][\\p{L}\\p{N} '-]{1,49}")) ||
+                !NexaMessageChannels.isSafeAgentRecipient(hint) ||
                 message.length !in 1..500 || message.isBlank() ||
                 message.any { it == '\u0000' || (it.code < 32 && it != '\n' && it != '\t') })
                 return@synchronized false

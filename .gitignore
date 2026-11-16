@@ -1,7 +1,5 @@
 node_modules/
 **/node_modules/
-.env
-.env.*
 !.env.example
 *.keystore
 *.jks
@@ -28,3 +26,6 @@ __pycache__/
 work
 config.bat
 .qa-results
+.maestro
+*.png
+*.xml

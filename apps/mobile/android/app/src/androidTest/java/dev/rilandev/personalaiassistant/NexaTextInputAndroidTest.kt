@@ -8,6 +8,67 @@ import org.junit.runner.RunWith
 /** No real app, text box or owner data is read by these synthetic checks. */
 @RunWith(AndroidJUnit4::class)
 class NexaTextInputAndroidTest {
+    @Test fun searchControlFocusFallsBackWhenAccessibilityClickIsRejected() {
+        var focusCalls=0
+        val focused=NexaSearchFieldTapPolicy.dispatch(
+            click={false},focus={focusCalls++;true})
+        assertTrue(focused)
+        assertEquals(1,focusCalls)
+    }
+
+    @Test fun searchControlDoesNotFocusTwiceWhenClickSucceeds() {
+        var focusCalls=0
+        val focused=NexaSearchFieldTapPolicy.dispatch(
+            click={true},focus={focusCalls++;true})
+        assertTrue(focused)
+        assertEquals(0,focusCalls)
+    }
+
+    @Test fun rejectedClickAndFocusRemainRejected() {
+        var focusCalls=0
+        val focused=NexaSearchFieldTapPolicy.dispatch(
+            click={false},focus={focusCalls++;false})
+        assertFalse(focused)
+        assertEquals(1,focusCalls)
+    }
+
+    @Test fun searchControlUsesOneGestureOnlyAfterClickAndFocusAreRejected() {
+        var gestureCalls=0
+        val accepted=NexaSearchFieldTapPolicy.dispatch(
+            click={false},focus={false},gestureTap={gestureCalls++;true})
+        assertTrue(accepted)
+        assertEquals(1,gestureCalls)
+    }
+
+    @Test fun searchControlDoesNotGestureWhenAccessibilityClickSucceeds() {
+        var focusCalls=0
+        var gestureCalls=0
+        val accepted=NexaSearchFieldTapPolicy.dispatch(
+            click={true},focus={focusCalls++;true},gestureTap={gestureCalls++;true})
+        assertTrue(accepted)
+        assertEquals(0,focusCalls)
+        assertEquals(0,gestureCalls)
+    }
+
+    @Test fun searchControlDoesNotGestureWhenAccessibilityFocusSucceeds() {
+        var gestureCalls=0
+        val accepted=NexaSearchFieldTapPolicy.dispatch(
+            click={false},focus={true},gestureTap={gestureCalls++;true})
+        assertTrue(accepted)
+        assertEquals(0,gestureCalls)
+    }
+
+    @Test fun genericSearchAliasMatchesLiveAccessibleSearchDescriptions() {
+        assertTrue(NexaTextInputPolicy.matches("Search",listOf("Ask Meta AI or Search"),
+            true,false,true,true,true,true))
+        assertTrue(NexaTextInputPolicy.matches("Ask Meta AI or Search",
+            listOf("Ask Meta AI or Search"),true,false,true,true,true,true))
+        assertFalse("Search metadata cannot override sensitive resource identifiers",
+            NexaTextInputPolicy.matches("Search",
+                listOf("Ask Meta AI or Search","com.test:id/paymentInput"),
+                true,false,true,true,true,true))
+    }
+
     @Test fun onlyExplicitlyNamedSafeEditableFieldsCanMatch() {
         assertTrue(NexaTextInputPolicy.matches("Search",listOf("Search"),
             true,false,true,true,true,true))

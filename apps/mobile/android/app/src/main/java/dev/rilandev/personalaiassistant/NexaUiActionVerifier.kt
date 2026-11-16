@@ -17,14 +17,17 @@ internal object NexaUiActionVerifier {
     private val lock=Any()
     private data class Observation(
         val token:String,val kind:String,val pkg:String,val windowId:Int,
-        val before:String,val start:Long,var scrollEvents:Int=0,var windowEvents:Int=0
+        val before:String,val start:Long,var scrollEvents:Int=0,var windowEvents:Int=0,
+        val allowLauncherWindowChange:Boolean=false
     )
     private val pending=LinkedHashMap<String,Observation>()
 
     /** SHA-256 of bounded structural metadata, never page content. */
     fun fingerprint(root:AccessibilityNodeInfo):String {
         val content=StringBuilder()
-        content.append(root.packageName?.toString().orEmpty()).append('#').append(root.windowId)
+        // Window IDs are transient Android handles. Omit them so an ID change
+        // alone cannot masquerade as visible structural change after a swipe.
+        content.append(root.packageName?.toString().orEmpty())
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited=0
@@ -52,13 +55,15 @@ internal object NexaUiActionVerifier {
     }
 
     /** Start BEFORE performAction to catch immediate TYPE_VIEW_SCROLLED events. */
-    fun begin(token:String,kind:String,pkg:String,windowId:Int,before:String) {
+    fun begin(token:String,kind:String,pkg:String,windowId:Int,before:String,
+              allowLauncherWindowChange:Boolean=false) {
         if(kind!="tap"&&kind!="scroll")return
         synchronized(lock){
             val now=SystemClock.elapsedRealtime()
             pending.entries.removeAll{now-it.value.start>3000}
             if(pending.size>=8)pending.remove(pending.keys.first())
-            pending[token]=Observation(token,kind,pkg,windowId,before,now)
+            pending[token]=Observation(token,kind,pkg,windowId,before,now,
+                allowLauncherWindowChange=allowLauncherWindowChange)
         }
     }
     fun cancel(token:String)=synchronized(lock){pending.remove(token);Unit}
@@ -91,9 +96,13 @@ internal object NexaUiActionVerifier {
                 return@postDelayed
             }
             val root=try{service.externalWindowRoot()}catch(_:Exception){null}
-            val sameContext=root==null || (
-                root.packageName?.toString()==observation.pkg &&
-                root.windowId==observation.windowId)
+            val observedPackage=root?.packageName?.toString()
+            val allowLauncherWindowChange=root!=null &&
+                observation.allowLauncherWindowChange &&
+                NexaLauncherSwipe.isHome(service,root)
+            val sameContext=root==null || NexaUiActionEvidencePolicy.sameEvidenceContext(
+                observation.kind,observation.pkg,observation.windowId,
+                observedPackage,root.windowId,allowLauncherWindowChange)
             val after=try {
                 if(root==null || !sameContext) null else fingerprint(root)
             }catch(_:Exception){null}finally{root?.recycle()}

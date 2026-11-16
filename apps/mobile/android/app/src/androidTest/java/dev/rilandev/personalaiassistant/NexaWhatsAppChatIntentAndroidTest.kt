@@ -38,7 +38,9 @@ class NexaWhatsAppChatIntentAndroidTest {
         assertEquals("Short aliases never receive fuzzy permission",0,
             NexaWhatsAppChatMatch.evidence("Mom","Mum"))
         assertEquals(85,NexaWhatsAppChatMatch.evidence(
-            "Nva Forever","Mah Forever 🖤"))
+            "Mab Forever","Mah Forever 🖤"))
+        assertEquals("A multi-edit ASR result stays ambiguous",0,
+            NexaWhatsAppChatMatch.evidence("Nva Forever","Mah Forever 🖤"))
         assertEquals(0,NexaWhatsAppChatMatch.evidence(
             "map forward","Mah Forever"))
         assertEquals(0,NexaWhatsAppChatMatch.evidence(

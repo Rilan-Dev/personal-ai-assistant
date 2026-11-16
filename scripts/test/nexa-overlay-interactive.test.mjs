@@ -25,6 +25,17 @@ test('the expanded overlay has its own Chat, Tools and Voice panels without auto
   assert.doesNotMatch(overlay,/button\("Tools"\) \{ openTab/);
 });
 
+test('floating Chat input preserves exact task text from keyboard auto-correction',()=>{
+  const start=overlay.indexOf('val input = EditText');
+  const end=overlay.indexOf('addView(input, LinearLayout.LayoutParams',start);
+  assert.ok(start>=0&&end>start,'the shared Chat command composer exists');
+  const composer=overlay.slice(start,end);
+  assert.match(composer,/inputType\s*=\s*InputType\.TYPE_CLASS_TEXT\s+or\s+InputType\.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD/,
+    'the composer must use a visible exact-text input variation that disables Gboard correction');
+  assert.doesNotMatch(composer,/TYPE_TEXT_FLAG_(?:CAP_SENTENCES|AUTO_CORRECT)/,
+    'the composer must not request capitalization or auto-correction');
+});
+
 test('local commands use a closed allowlist and do not grant the AI arbitrary device authority',()=>{
   assert.match(commands,/internal object NexaOverlayCommands/);
   assert.match(commands,/when \(text\)/);

@@ -7,6 +7,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class NexaUiActionEvidencePolicyAndroidTest {
+ @Test fun onlyVerifiedLauncherSwipeCanRetainEvidenceAcrossWindowIds() {
+  assertTrue(NexaUiActionEvidencePolicy.sameEvidenceContext(
+   "scroll","launcher",41,"launcher",42,true))
+  assertFalse(NexaUiActionEvidencePolicy.sameEvidenceContext(
+   "scroll","launcher",41,"launcher",42,false))
+  assertFalse(NexaUiActionEvidencePolicy.sameEvidenceContext(
+   "tap","launcher",41,"launcher",42,true))
+  assertFalse(NexaUiActionEvidencePolicy.sameEvidenceContext(
+   "scroll","launcher",41,"com.whatsapp",42,true))
+ }
  @Test fun scrollEventsAreMoreSpecificThanUnchangedGeometry() {
   assertEquals("scroll_event_observed",NexaUiActionEvidencePolicy.classify("scroll","a","a",1,0))
   assertEquals("no_observable_change",NexaUiActionEvidencePolicy.classify("scroll","a","a",0,0))

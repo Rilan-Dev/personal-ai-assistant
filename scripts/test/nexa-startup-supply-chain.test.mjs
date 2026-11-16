@@ -33,6 +33,21 @@ test('Metro config contains only the bounded Expo configuration', () => {
   assert.doesNotMatch(source, /\b(?:eval|Function|spin|splitLane)\s*\(/);
 });
 
+test('physical live-debug entrypoint attaches the USB reverse port and starts fixed-host Metro', () => {
+  assert.equal(existsSync(path.join(root, 'scripts/qa/start-physical-live-debug.ps1')), true,
+    'physical live-debug runner must exist');
+  const rootManifest = JSON.parse(read('package.json'));
+  const mobileManifest = JSON.parse(read('apps/mobile/package.json'));
+  const runner = read('scripts/qa/start-physical-live-debug.ps1');
+  assert.equal(rootManifest.scripts?.['start:mobile:live'],
+    'npm run start:live --workspace @paa/mobile');
+  assert.equal(mobileManifest.scripts?.['start:live'],
+    'expo start --dev-client --host localhost --port 8081');
+  assert.match(runner, /-s \$Serial reverse tcp:8081 tcp:8081/);
+  assert.match(runner, /& \$adbCommand\.Source devices/);
+  assert.match(runner, /npmCommand\.Source run start:mobile:live/);
+});
+
 test('Git ignores private environment files in every workspace', () => {
   const sensitive = [
     '.env',

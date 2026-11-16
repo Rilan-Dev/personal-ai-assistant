@@ -4,6 +4,16 @@ These are opt-in, non-destructive tests separated from `.maestro/nexa/config.yam
 
 **Prerequisites:** Owner-controlled Android test device connected by USB; signed `dev.rilandev.personalaiassistant.debug` package installed; Metro serving the debug JavaScript bundle (from `apps/mobile`); `adb reverse tcp:8081 tcp:8081`; correct `ANDROID_SERIAL`. Execute the host-side Maestro CLI against `.maestro/physical-debug/01-chat-battery.yaml`. Keep `clearState: false`.
 
+## Live JavaScript development on the Infinix
+
+The isolated QA2 app can run in live Metro mode without overwriting the owner's main app or clearing QA2 data. The live QA2 APK is installed once; while it is installed and connected, start the USB reverse tunnel and Metro with:
+
+```powershell
+.\scripts\qa\start-physical-live-debug.ps1
+```
+
+The script targets only the configured physical serial (`099344034S003788` by default), verifies the phone and isolated QA2 package are present, then maps USB port 8081 and runs Metro at localhost. Use `-Serial <adb-serial>` if the physical device receives a different serial. Keep the terminal open. React Native Fast Refresh applies JS/TS edits without another APK install; Android Kotlin, manifest, resource, or dependency changes still need a native rebuild and a single in-place reinstall. Normal isolated QA builds remain self-contained and offline.
+
 **Evidence, 2026-11-07:** Before installing the new selector-integrated APK, the Chat battery flow passed on a physical Infinix X6831 after Metro was started. On the new selector APK, synthetic on-device instrumentation passed 4/4 for unique/duplicate and protected/stale targets. The subsequent Chat rerun was blocked because the debug package disappeared while other Nexa APK variants were present, suggesting another device workflow or package-state change. **Do not count that rerun as a pass.** Full real third-party tap and floating Chat action acceptance remains unverified.
 
 This flow neither tests unrestricted agent navigation nor re-grants Accessibility/overlay permissions. Individual screen actions require owner approval, a current accessible foreground window, one-time journal claims and post-action verification. Never upload personal Maestro screenshots, hierarchy dumps or logcat to GitHub.

@@ -54,8 +54,32 @@ internal object NexaScreenScroll {
         if(direction !in setOf("up","down","left","right")) return "Unsupported scroll direction."
         val generation=NexaNativeActionSafety.approvalFence(service)
             ?:return "Owner paused device actions. No scroll review started."
-        val root=safeRoot(service) ?: return "No permitted app window to scroll."
+        val root=safeRoot(service) ?: run {
+            if(BuildConfig.DEBUG)android.util.Log.d("NexaScreenScroll",
+                "preflight window unavailable; direction=$direction")
+            return "No permitted app window to scroll."
+        }
         try{
+            val horizontalHome=direction in setOf("left","right") &&
+                !requireUniqueContainer && NexaLauncherSwipe.isHome(service,root)
+            if(BuildConfig.DEBUG && direction in setOf("left","right"))
+                android.util.Log.d("NexaScreenScroll",
+                    "preflight direction=$direction rootPackage=${root.packageName} " +
+                        "windowId=${root.windowId} launcherHome=$horizontalHome")
+            // Launcher Workspace nodes may expose a semantic horizontal scroll
+            // action that reports acceptance without moving between Home pages.
+            // Use the existing bounded, proportional gesture on the verified
+            // Home window before considering semantic scroll containers.
+            if(horizontalHome) {
+                val full=Rect()
+                root.getBoundsInScreen(full)
+                val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
+                    root.windowId,"__home_launcher_swipe__","",
+                    IconBox(full.left,full.top,full.right,full.bottom),direction,
+                    SystemClock.elapsedRealtime()+10_000L,generation)
+                synchronized(lock){pending=target}
+                return "Confirm one $direction swipe on your Android home screen."
+            }
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
             var visited=0
@@ -88,17 +112,6 @@ internal object NexaScreenScroll {
                     }
                     for(i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
                 }
-            }
-            if(best==null && direction in setOf("left","right") &&
-                !requireUniqueContainer && NexaLauncherSwipe.isHome(service,root)) {
-                val full=Rect()
-                root.getBoundsInScreen(full)
-                val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
-                    root.windowId,"__home_launcher_swipe__","",
-                    IconBox(full.left,full.top,full.right,full.bottom),direction,
-                    SystemClock.elapsedRealtime()+10_000L,generation)
-                synchronized(lock){pending=target}
-                return "Confirm one $direction swipe on your Android home screen."
             }
             if(requireUniqueContainer && eligibleContainers.size!=1)
                 return "Bounded scroll search requires one unique scrollable container. No gesture proposed."

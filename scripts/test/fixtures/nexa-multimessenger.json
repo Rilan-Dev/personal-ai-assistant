@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "nexa-multimessenger-reviewed-tool-chain",
+  "dataClass": "synthetic-test-data",
+  "providerResponse": {
+    "choices": [
+      {
+        "finish_reason": "tool_calls",
+        "message": {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "call_fixture_screen_scroll",
+              "type": "function",
+              "function": {
+                "name": "screen_scroll",
+                "arguments": "{\"direction\":\"left\"}"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "contact": "Nexa QA Contact",
+  "message": "Nexa QA test message.",
+  "apps": [
+    {"id": "whatsapp", "label": "WhatsApp", "packageName": "com.whatsapp",
+      "ownerRequest": "open WhatsApp then tap Search then type \"Nexa QA Contact\" into Search then tap Nexa QA Contact then prepare a WhatsApp message for Nexa QA Contact saying \"Nexa QA test message.\" then send it"},
+    {"id": "imo", "label": "IMO", "packageName": "com.imo.android.imoim",
+      "ownerRequest": "open IMO then tap Search then type \"Nexa QA Contact\" into Search then tap Nexa QA Contact then prepare an IMO message for Nexa QA Contact saying \"Nexa QA test message.\" then send it"},
+    {"id": "botim", "label": "BOTIM", "packageName": "im.thebot.messenger",
+      "ownerRequest": "open BOTIM then tap Search then type \"Nexa QA Contact\" into Search then tap Nexa QA Contact then prepare a BOTIM message for Nexa QA Contact saying \"Nexa QA test message.\" then send it"}
+  ],
+  "searchField": "Search",
+  "expectedActionsPerApp": [
+    "device.open_app",
+    "screen.tap_label",
+    "screen.fill_text",
+    "screen.tap_label",
+    "screen.compose_message",
+    "screen.send_message"
+  ]
+}

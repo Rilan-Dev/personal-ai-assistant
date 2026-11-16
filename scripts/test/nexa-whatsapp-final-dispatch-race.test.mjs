@@ -48,7 +48,24 @@ test('post-action message claim requires recipient, unique composer and exact ob
   assert.match(message,/NexaEditableNode\.containsExactTextAfterDispatch\(field,expected\)/);
   assert.match(message,/verifyCurrentDraft\(service,approval,draft\.recipientHint,draft\.message\)/);
   assert.match(message,/NOT SENT/);
-  assert.doesNotMatch(message,/ACTION_CLICK[\s\S]*?Send/);
+  const draftConfirm=message.slice(message.indexOf('fun confirm(service:'),
+    message.lastIndexOf('\n}'));
+  assert.ok(draftConfirm.length>100);
+  assert.doesNotMatch(draftConfirm,/ACTION_CLICK|ACTION_SEND|pressSend|sendMessage\s*\(/);
+});
+
+test('dedicated WhatsApp Send revalidates the exact draft and claims once before its unique button click',()=>{
+  const send=message.slice(message.indexOf('fun sendReviewedWhatsApp('),
+    message.indexOf('fun verifySentWhatsApp('));
+  assert.ok(send.length>100);
+  assert.match(send,/NexaUiActionJournal\.claim\(service,token,"message_send"/);
+  assert.match(send,/NexaNativeActionSafety\.dispatchWithFence/);
+  assert.match(send,/initialButton\.matches!=1/);
+  assert.match(send,/current\.recipientVisible&&current\.matches==1/);
+  assert.match(send,/containsExactTextAfterDispatch\(currentField,exactText\)/);
+  assert.match(send,/button!!\.performAction\(AccessibilityNodeInfo\.ACTION_CLICK\)/);
+  assert.match(send,/val uncertain=actionUncertain\|\|actionEntered/);
+  assert.match(send,/Inspect the conversation; do not retry/);
 });
 
 test('exceptions after entering a native side-effect remain unknown, never safe to replay',()=>{

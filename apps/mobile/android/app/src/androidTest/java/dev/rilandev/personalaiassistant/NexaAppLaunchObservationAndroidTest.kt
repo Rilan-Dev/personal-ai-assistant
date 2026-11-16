@@ -41,6 +41,22 @@ class NexaAppLaunchObservationAndroidTest {
             "com.example.nonexistentdestination"))
     }
 
+    @Test fun slowAppStartupRetriesReadOnlyObservationUntilExactPackageOrDeadline(){
+        assertEquals(NexaAppLaunchObservation.PollDecision.RETRY,
+            NexaAppLaunchObservation.decisionForObservation(true,false,1_500L))
+        assertEquals(NexaAppLaunchObservation.PollDecision.RETRY,
+            NexaAppLaunchObservation.decisionForObservation(true,false,4_200L))
+        assertEquals("destination_package_observed",
+            NexaAppLaunchObservation.classify("com.example.destination",
+                "com.example.destination",true,true))
+        assertEquals(NexaAppLaunchObservation.PollDecision.DESTINATION_PACKAGE_OBSERVED,
+            NexaAppLaunchObservation.decisionForObservation(true,true,4_200L))
+        assertEquals(NexaAppLaunchObservation.PollDecision.NOT_OBSERVED,
+            NexaAppLaunchObservation.decisionForObservation(false,false,1_500L))
+        assertEquals(NexaAppLaunchObservation.PollDecision.NOT_OBSERVED,
+            NexaAppLaunchObservation.decisionForObservation(true,false,6_000L))
+    }
+
     @Test fun observedDestinationRequiresConsumedLaunchClaimAndCannotReplay(){
         assumeTrue(NexaNativeActionSafety.permitsNewAction(ctx))
         val token="test-launch-"+UUID.randomUUID()

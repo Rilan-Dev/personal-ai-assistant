@@ -68,6 +68,11 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
             "Overlay request expired or its one-time response was already delivered")
     }
 
+    /** Presents a bounded scroll review in the overlay without opening Chat. */
+    @ReactMethod fun requestChatApproval(id:String,summary:String,p:Promise) {
+        p.resolve(NexaOverlayChatRelay.requestApproval(id,summary))
+    }
+
     /** Not an approval by itself: safe per-tool policy inspection used
      * ONLY after the shared agent has matched a tool to the exact owner
      * request and prepared its durable one-time approval fingerprint.

@@ -1,5 +1,6 @@
 import {NativeModules, Platform} from 'react-native';
 import type {MessageRequest,MessageAppId} from '@paa/agent-core';
+import {isSafeSharedOverlayActionSummary} from './overlayActionReview';
 
 export type ToolOverlayStatus = {granted:boolean; visible:boolean};
 export type ReviewedVoiceDraft = {contactHint:string; message:string; mode:'review_only'};
@@ -13,6 +14,7 @@ type OverlayNative = {
   consumePendingMessageRequest(): Promise<unknown>;
   consumePendingTextEntry(): Promise<unknown>;
   completeChatRequest(id:string,response:string):Promise<boolean>;
+  requestChatApproval(id:string,summary:string):Promise<boolean>;
   canAutoApproveNavigation(command:string):Promise<boolean>;
 };
 function bridge(): OverlayNative {
@@ -24,6 +26,8 @@ function bridge(): OverlayNative {
   return value as OverlayNative;
 }
 export const NEXA_SHARED_OVERLAY_CHAT_EVENT = 'NexaOverlayChatRequest';
+export const NEXA_SHARED_OVERLAY_CHAT_APPROVAL_EVENT = 'NexaOverlayChatApproval';
+export const NEXA_SHARED_OVERLAY_CHAT_TIMEOUT_EVENT = 'NexaOverlayChatTimeout';
 
 /** Delivers a result only to the one outstanding owner-written overlay turn. */
 export async function completeSharedOverlayChat(id:string,response:string):Promise<boolean>{
@@ -33,6 +37,18 @@ export async function completeSharedOverlayChat(id:string,response:string):Promi
   if(typeof value.completeChatRequest!=='function')
     throw Error('Overlay Chat bridge not present in this APK');
   return value.completeChatRequest(id,response);
+}
+
+/** Requests a visible in-place review; it never approves or dispatches an action. */
+export async function requestSharedOverlayChatApproval(
+  id:string,summary:string
+):Promise<boolean>{
+  if(!/^[0-9a-f-]{36}$/.test(id) ||
+      !isSafeSharedOverlayActionSummary(summary))
+    throw Error('INVALID_OVERLAY_ACTION_REVIEW');
+  const value=bridge();
+  if(typeof value.requestChatApproval!=='function')return false;
+  return value.requestChatApproval(id,summary);
 }
 
 /** Rechecks saved owner-selected navigation trust in native Android.

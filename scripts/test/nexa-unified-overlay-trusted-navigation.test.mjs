@@ -24,16 +24,18 @@ test("floating Chat submits to exactly the same React Chat send() pipeline",()=>
   assert.match(module,/NexaOverlayChatRelay\.attach\(context\)/);
   assert.match(module,/fun completeChatRequest\(id:String,response:String,p:Promise\)/);
   assert.match(app,/DeviceEventEmitter\.addListener\(NEXA_SHARED_OVERLAY_CHAT_EVENT/);
-  assert.match(app,/void send\(request\)/);
-  assert.match(app,/overlayReplyToken\.current=null;\s+void completeSharedOverlayChat\(token,text\)/);
+  assert.match(app,/void sharedOverlaySendRef\.current\(request,\s*undefined,\s*id\)/,
+    "floating Chat still uses the shared send pipeline with its current render state");
+  assert.match(app,/overlayReplyToken\.current=null;\s+overlayApprovalToken\.current=null;/);
+  assert.match(app,/completeSharedOverlayChat\(token,response\.slice\(0,1200\)\)/);
   const chatSection=service.split('"chat" -> {')[1]?.split('"tools" -> {')[0];
   assert.ok(chatSection);
   assert.doesNotMatch(chatSection,/button\("Send"\) \{ sendLocal/);
 });
 test("floating Chat relay is one-shot, bounded, in RAM and does not retry uncertain tasks",()=>{
-  assert.match(relay,/const val TTL_MS=60_000L/);
+  assert.match(relay,/const val RESPONSE_TTL_MS=60_000L/);
   assert.match(relay,/if\(isPending\(\)\)return false/);
-  assert.match(relay,/pending=Request\(token,SystemClock\.elapsedRealtime\(\)\)/);
+  assert.match(relay,/pending=Request\(\s*token,Phase\.PLANNING,/);
   assert.match(relay,/if\(!cancel\(token\)\)return false/);
   assert.match(relay,/No automatic replay|inspect the task journal before retrying/i);
   assert.doesNotMatch(relay,/openConnection|grantRuntimePermission|performAction|ACTION_CLICK|sendText|startActivity|okhttp|HttpURLConnection/);

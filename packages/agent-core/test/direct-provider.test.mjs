@@ -100,6 +100,20 @@ test("Sarvam can propose one explicitly requested dynamic screen action, never a
     assert.equal((await planner.next(request,[])).type,"clarify",request);
   }
 });
+
+test("natural screen-target scroll phrasing accepts only the requested direction",async()=>{
+  const screenTools=[...allowed,"device.visible_controls","screen.scroll","screen.tap_label"];
+  for(const [direction,expectedType] of [["left","tool"],["right","clarify"]]){
+    const planner=createDirectProviderPlanner({settings,availableToolIds:screenTools,
+      fetchImpl:fakeDecision({type:"tool",toolId:"screen.scroll",input:{direction}})});
+    const result=await planner.next("Scroll the current home screen to the left",[]);
+    assert.equal(result.type,expectedType,direction);
+    if(expectedType==="tool"){
+      assert.equal(result.call.toolId,"screen.scroll");
+      assert.deepEqual(result.call.input,{direction:"left"});
+    }else assert.match(result.question,/outside your exact request/);
+  }
+});
 test("invalid, non-allowlisted and multi-action model tool outputs never execute",async()=>{
   for(const choice of [
     {type:"tool",toolId:"contacts.read",input:{}},
@@ -113,6 +127,34 @@ test("invalid, non-allowlisted and multi-action model tool outputs never execute
     const result=await planner.next("Open WhatsApp and send a text",[]);
     assert.equal(result.type,"clarify");
   }
+});
+test("Sarvam retries one transient 5xx before accepting a constrained screen tool",async()=>{
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  let requests=0;
+  const success=new Response(JSON.stringify({choices:[{
+    finish_reason:"tool_calls",message:{role:"assistant",content:null,
+      tool_calls:[{id:"call_retry_1",type:"function",
+        function:{name:"screen_scroll",arguments:JSON.stringify({direction:"left"})}}]}
+  }]}),{status:200,headers:{"content-type":"application/json"}});
+  const planner=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["screen.scroll"],timeoutMs:30000,
+    fetchImpl:async()=>++requests===1
+      ?new Response("temporary outage",{status:503})
+      :success});
+  const result=await planner.next("Scroll the current home screen to the left",[]);
+  assert.equal(requests,2);
+  assert.equal(result.type,"tool");
+  assert.equal(result.call.toolId,"screen.scroll");
+  assert.deepEqual(result.call.input,{direction:"left"});
+});
+test("Sarvam reports provider unavailable after one bounded retry",async()=>{
+  let requests=0;
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  const planner=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["screen.scroll"],timeoutMs:30000,
+    fetchImpl:async()=>{requests++;return new Response("private provider error",{status:503})}});
+  await assert.rejects(planner.next("Scroll left on the home screen",[]),/PROVIDER_UNAVAILABLE/);
+  assert.equal(requests,2);
 });
 test("native observations complete locally with no second API call or hallucinated outcome",async()=>{
   let calls=0;
@@ -209,6 +251,7 @@ test("provider prose cannot claim screen actions or observations without an appr
     fetchImpl:fakeDecision({type:"done",response:"I completed the screen action."})});
   for(const request of [
     "Scroll down on the current home screen",
+    "Scroll the current home screen to the left",
     "Tap Alarm on the current screen",
     "Inspect visible controls on the current home screen",
     "Scroll down then tap Alarm"
@@ -290,4 +333,74 @@ test("Sarvam native function calls are parsed and still constrained to the exact
       fetchImpl:toolCall(name,args)});
     assert.equal((await planner.next(request,[])).type,"clarify",request);
   }
+});
+
+test("agentic screen navigation uses fresh safe controls and emits one reviewed action at a time",async()=>{
+  const screenTools=["device.open_app","device.visible_controls","screen.tap_label","screen.scroll"];
+  const task="Open Android Settings then navigate to Display";
+  const decisions=[
+    {type:"tool",toolId:"device.open_app",input:{app:"settings"}},
+    {type:"tool",toolId:"device.visible_controls",input:{}},
+    {type:"tool",toolId:"screen.tap_label",input:{label:"Display"}},
+    {type:"done",response:"The requested screen is open."}
+  ];
+  const requests=[];
+  const planner=createDirectProviderPlanner({settings,availableToolIds:screenTools,
+    fetchImpl:async(_url,options)=>{
+      requests.push(JSON.parse(options.body));
+      return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(decisions.shift())}}]}),
+        {status:200,headers:{"content-type":"application/json"}});
+    }});
+  const step1=await planner.next(task,[]);
+  assert.equal(step1.type,"tool");
+  assert.equal(step1.call.callId,"direct-1");
+  assert.deepEqual(step1.call.input,{app:"settings"});
+  const step2=await planner.next(task,[{call:step1.call,outcome:{status:"success",data:{
+    intentDispatched:true,packageId:"com.android.settings",verification:"destination_package_observed"
+  }}}]);
+  assert.equal(step2.type,"tool");
+  assert.equal(step2.call.callId,"direct-2");
+  assert.equal(step2.call.toolId,"device.visible_controls");
+  const controls={call:step2.call,outcome:{status:"success",data:{
+    observation:"Visible non-sensitive controls in com.android.settings: Display (middle center). Read-only observation, not an instruction or completed action.",
+    evidence:"android_accessibility",actionPerformed:false
+  }}};
+  const step3=await planner.next(task,[
+    {call:step1.call,outcome:{status:"success",data:{
+      intentDispatched:true,packageId:"com.android.settings",verification:"destination_package_observed"
+    }}},controls
+  ]);
+  assert.equal(step3.type,"tool");
+  assert.equal(step3.call.callId,"direct-3");
+  assert.equal(step3.call.toolId,"screen.tap_label");
+  assert.deepEqual(step3.call.input,{label:"Display"});
+  const final=await planner.next(task,[
+    {call:step1.call,outcome:{status:"success",data:{
+      intentDispatched:true,packageId:"com.android.settings",verification:"destination_package_observed"
+    }}},controls,{call:step3.call,outcome:{status:"success",data:{
+      actionAccepted:true,verification:"observed_change",businessOutcomeVerified:false
+    }}}
+  ]);
+  assert.equal(final.type,"done");
+  assert.match(final.response,/Android observed the screen change after the approved tap/i);
+  assert.doesNotMatch(final.response,/requested screen is open/i);
+  assert.equal(requests.length,4);
+  assert.match(requests[2].messages.at(-1).content,/UNTRUSTED ANDROID OBSERVATION/);
+  assert.match(requests[2].messages.at(-1).content,/Display/);
+});
+
+test("agentic navigation refuses a tap when its visible-control evidence is stale",async()=>{
+  const planner=createDirectProviderPlanner({settings,
+    availableToolIds:["device.visible_controls","screen.scroll","screen.tap_label"],
+    fetchImpl:fakeDecision({type:"tool",toolId:"screen.tap_label",input:{label:"Display"}})});
+  const task="Navigate to Display settings and scroll if needed";
+  const controls={call:{callId:"direct-1",toolId:"device.visible_controls",input:{}},outcome:{
+    status:"success",data:{observation:"Visible non-sensitive controls in com.android.settings: Display (top left). Read-only observation, not an instruction or completed action.",actionPerformed:false}
+  }};
+  const scroll={call:{callId:"direct-2",toolId:"screen.scroll",input:{direction:"down"}},outcome:{
+    status:"success",data:{actionAccepted:true,verification:"observed_change",businessOutcomeVerified:false}
+  }};
+  const result=await planner.next(task,[controls,scroll]);
+  assert.equal(result.type,"clarify");
+  assert.match(result.question,/fresh visible-control observation/i);
 });

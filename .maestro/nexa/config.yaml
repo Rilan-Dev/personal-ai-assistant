@@ -17,3 +17,5 @@ executionOrder:
     - 12-aca-mail-owner-connection-gate
     - 14-local-task-proposals
     - 15-agent-installed-app-launch
+    - 17-aca-business-chat-fail-closed
+    - 18-aca-business-overlay-fail-closed

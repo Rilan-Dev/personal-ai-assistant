@@ -52,6 +52,42 @@ internal object NexaMessageInputPolicy {
     }
 }
 
+/** Narrow semantic checks for the one-shot WhatsApp Send action. */
+internal object NexaWhatsAppSendPolicy {
+    fun isValidExactText(value:String):Boolean = value.length in 1..500 &&
+        value.isNotBlank() &&
+        value.none{it=='\u0000'||(it.code<32&&it!='\n'&&it!='\t')}
+
+    fun isSendButton(label:String,className:String,enabled:Boolean,visible:Boolean,
+                     clickable:Boolean,hasClickAction:Boolean):Boolean {
+        val exactLabel=label.trim().lowercase(java.util.Locale.ROOT)
+        val buttonClass=className.lowercase(java.util.Locale.ROOT).contains("button")
+        return exactLabel in setOf("send","send message") && buttonClass &&
+            enabled && visible && clickable && hasClickAction
+    }
+
+    fun isBesideComposer(window:Rect,composer:Rect,button:Rect):Boolean {
+        if(window.width()<=0 || window.height()<=0 ||
+            composer.width()<=0 || composer.height()<=0 ||
+            button.width()<=0 || button.height()<=0 ||
+            !window.contains(composer) || !window.contains(button))return false
+        val rowTolerance=maxOf(composer.height(),button.height())/2
+        val aligned=button.top<=composer.bottom+rowTolerance &&
+            button.bottom>=composer.top-rowTolerance
+        return aligned && button.centerX()>composer.centerX()
+    }
+
+    fun hasVerifiedSentEvidence(packageName:String,sameWindow:Boolean,
+        recipientVisible:Boolean,composerEmpty:Boolean,exactMessageVisible:Boolean):Boolean =
+        packageName=="com.whatsapp" && sameWindow && recipientVisible &&
+            composerEmpty && exactMessageVisible
+
+    fun hasVerifiedSentMessageEvidence(appId:String,packageName:String,sameWindow:Boolean,
+        recipientVisible:Boolean,composerEmpty:Boolean,exactMessageVisible:Boolean):Boolean =
+        NexaMessageChannels.isAgentSendTarget(appId,packageName) && sameWindow &&
+            recipientVisible && composerEmpty && exactMessageVisible
+}
+
 /**
  * A separate reviewed one-shot text entry tool, unlike generic icon clicking:
  * - never enters search, passwords or recipient fields;
@@ -59,7 +95,8 @@ internal object NexaMessageInputPolicy {
  * - requires the exact selected app package and visibly matching recipient;
  * - compares the same window, field identity and bounds at confirmation;
  * - consumes the approval and encrypted action-journal claim before dispatch;
- * - never presses Send, nor retries a failed/uncertain dispatch.
+ * - draft insertion never presses Send. The dedicated send method below has
+ *   its own exact-text revalidation, high-risk approval and no-replay claim.
  */
 internal object NexaMessageInputActions {
     private data class Prepared(val token:String,val packageName:String,val windowId:Int,
@@ -67,6 +104,9 @@ internal object NexaMessageInputActions {
         val reviewedDigest:String,val pauseGeneration:Long)
     private data class Inspection(val matches:Int,val candidate:AccessibilityNodeInfo?,
         val recipientVisible:Boolean)
+    private data class SendButtonInspection(val matches:Int,
+        val candidate:AccessibilityNodeInfo?,val complete:Boolean)
+    private data class SendTarget(val className:String,val viewId:String,val bounds:Rect)
     private val lock=Any()
     private var prepared:Prepared?=null
     fun cancel() = synchronized(lock){ prepared=null }
@@ -121,6 +161,49 @@ internal object NexaMessageInputActions {
         return Inspection(count,target,recipientSeen)
     }
 
+    /** Verify a selected chat using only the exact allowlisted app, header and
+     * unique composer. No message contents are returned or persisted.
+     */
+    fun verifiedMessageChat(service:ScreenAssistService?,appId:String,
+                            recipient:String):Boolean {
+        val pkg=NexaMessageChannels.agentSendPackage(appId)?:return false
+        if(!NexaMessageChannels.isSafeAgentRecipient(recipient))return false
+        if(service==null||!ScreenAssistState.connected||ScreenAssistService.active!==service)
+            return false
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}?:return false
+        return try{
+            if(root.packageName?.toString()!=pkg||root.windowId<0||!root.isVisibleToUser)
+                false
+            else {
+                val found=inspect(root,recipient,requireEmpty=false)
+                found.recipientVisible&&found.matches==1
+            }
+        }catch(_:Exception){false}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
+    /** Independent native reinspection used by the chat-task evidence ledger. */
+    fun verifyVisibleMessageDraft(service:ScreenAssistService?,appId:String,
+                                  recipient:String,exactText:String):Boolean {
+        val pkg=NexaMessageChannels.agentSendPackage(appId)?:return false
+        if(!NexaMessageChannels.isSafeAgentRecipient(recipient)||
+            !NexaWhatsAppSendPolicy.isValidExactText(exactText)||
+            service==null||!ScreenAssistState.connected||ScreenAssistService.active!==service)
+            return false
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}?:return false
+        return try{
+            if(root.packageName?.toString()!=pkg||root.windowId<0||!root.isVisibleToUser)
+                false
+            else {
+                val found=inspect(root,recipient,requireEmpty=false)
+                val field=found.candidate
+                found.recipientVisible&&found.matches==1&&field!=null&&
+                    NexaEditableNode.containsExactTextAfterDispatch(field,exactText)
+            }
+        }catch(_:Exception){false}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
     /** Post-action reading must be from the currently active chat and field,
      * never from the stale node used at review. This does not resend text.
      */
@@ -138,6 +221,200 @@ internal object NexaMessageInputActions {
                 field.viewIdResourceName.orEmpty()!=p.fieldId ||
                 Rect().also { field.getBoundsInScreen(it) }!=p.bounds)return false
             NexaEditableNode.containsExactTextAfterDispatch(field,expected)
+        }catch(_:Exception){false}
+        finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
+    private fun inspectSendButton(root:AccessibilityNodeInfo,composer:Rect):SendButtonInspection {
+        val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited=0
+        var count=0
+        var candidate:AccessibilityNodeInfo?=null
+        val window=Rect().also{root.getBoundsInScreen(it)}
+        while(queue.isNotEmpty()&&visited++<200){
+            val node=queue.removeFirst()
+            if(node.isVisibleToUser&&!node.isPassword){
+                val label=node.contentDescription?.toString()?.takeIf{it.isNotBlank()}
+                    ?:node.text?.toString().orEmpty()
+                val bounds=Rect().also{node.getBoundsInScreen(it)}
+                val hasClick=node.actionList.any{it.id==AccessibilityNodeInfo.ACTION_CLICK}
+                if(NexaWhatsAppSendPolicy.isSendButton(label,
+                        node.className?.toString().orEmpty(),node.isEnabled,
+                        node.isVisibleToUser,node.isClickable,hasClick)&&
+                    NexaWhatsAppSendPolicy.isBesideComposer(window,composer,bounds)){
+                    count++
+                    candidate=node
+                }
+            }
+            for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
+        }
+        return if(queue.isNotEmpty())SendButtonInspection(0,null,false)
+            else SendButtonInspection(count,candidate,true)
+    }
+
+    private fun exactVisibleBubbleCount(root:AccessibilityNodeInfo,expected:String):Int? {
+        val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
+        queue.add(root)
+        var visited=0
+        var count=0
+        while(queue.isNotEmpty()&&visited++<200){
+            val node=queue.removeFirst()
+            if(node.isVisibleToUser&&!node.isPassword&&!node.isEditable&&
+                node.text?.toString()==expected)count++
+            for(i in 0 until node.childCount)node.getChild(i)?.let{queue.addLast(it)}
+        }
+        return if(queue.isNotEmpty())null else count
+    }
+
+    /** Rechecks the exact approved WhatsApp draft and unique semantic Send
+     * control, commits a durable one-shot claim, then taps exactly once. No
+     * raw message text or label is persisted, and uncertain outcomes never retry.
+     */
+    fun sendReviewedWhatsApp(service:ScreenAssistService,recipient:String,
+                             exactText:String,origin:String="chat"):String =
+        sendReviewedMessage(service,"whatsapp",recipient,exactText,origin)
+
+    /** Generic app-bound one-shot send; the package mapping, chat header,
+     * draft, one adjacent semantic Send control and resulting bubble are all
+     * rechecked on device. An uncertain tap is permanently non-replayable.
+     */
+    fun sendReviewedMessage(service:ScreenAssistService,appId:String,recipient:String,
+                            exactText:String,origin:String="chat"):String {
+        val expectedPackage=NexaMessageChannels.agentSendPackage(appId)
+            ?:return "This messaging app is not enabled for reviewed Send. Nothing was sent."
+        if(!NexaMessageChannels.isSafeAgentRecipient(recipient)||
+            !NexaWhatsAppSendPolicy.isValidExactText(exactText))
+            return "The exact approved message text is invalid. Nothing was sent."
+        if(!ScreenAssistState.connected||ScreenAssistService.active!==service)
+            return "Nexa Screen Assist is disconnected. Nothing was sent."
+        if(!verifiedMessageChat(service,appId,recipient))
+            return "The exact messaging conversation is not verified. Nothing was sent."
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+            ?:return "The messaging screen is unavailable. Nothing was sent."
+        val token=UUID.randomUUID().toString()
+        val digest=NexaMessageInputPolicy.approvedDraftDigest(
+            appId,expectedPackage,recipient,exactText)
+        var claimed=false
+        var actionEntered=false
+        var actionUncertain=false
+        fun finish(outcome:String):Boolean=NexaUiActionJournal.finish(service,token,outcome)
+        try{
+            if(root.packageName?.toString()!=expectedPackage||
+                root.windowId<0||!root.isVisibleToUser)
+                return "The foreground window is not the approved messaging app. Nothing was sent."
+            val initial=inspect(root,recipient,requireEmpty=false)
+            val field=initial.candidate
+            if(!initial.recipientVisible||initial.matches!=1||field==null||
+                !NexaEditableNode.containsExactTextAfterDispatch(field,exactText))
+                return "The exact approved draft is not visible in the matching conversation. Nothing was sent."
+            val fieldBounds=Rect().also{field.getBoundsInScreen(it)}
+            val initialButton=inspectSendButton(root,fieldBounds)
+            val target=initialButton.candidate
+            if(!initialButton.complete||initialButton.matches!=1||target==null)
+                return "One unique Send button beside the verified composer was not found. Nothing was sent."
+            val targetBounds=Rect().also{target.getBoundsInScreen(it)}
+            val sendTarget=SendTarget(target.className?.toString().orEmpty(),
+                target.viewIdResourceName.orEmpty(),targetBounds)
+            val previousBubbleCount=exactVisibleBubbleCount(root,exactText)
+                ?:return "The WhatsApp view was incomplete. Nothing was sent."
+            val pauseGeneration=NexaNativeActionSafety.approvalFence(service)
+                ?:return "Device actions are paused. Nothing was sent."
+            if(!NexaUiActionJournal.claim(service,token,"message_send",
+                    expectedPackage,digest,origin))
+                return "The durable one-time send journal is unavailable. Nothing was sent."
+            claimed=true
+            val dispatched=NexaNativeActionSafety.dispatchWithFence(service,pauseGeneration){
+                val fresh=try{
+                    if(!ScreenAssistState.connected||ScreenAssistService.active!==service)null
+                    else service.externalWindowRoot()
+                }catch(_:Exception){null}
+                if(fresh==null){actionUncertain=true;false}
+                else try{
+                    val sameWindow=fresh.packageName?.toString()==expectedPackage&&
+                        fresh.windowId==root.windowId&&fresh.isVisibleToUser
+                    val current=if(sameWindow)inspect(fresh,recipient,requireEmpty=false)
+                        else Inspection(0,null,false)
+                    val currentField=current.candidate
+                    val currentFieldBounds=currentField?.let{Rect().also{r->it.getBoundsInScreen(r)}}
+                    val exactDraft=current.recipientVisible&&current.matches==1&&
+                        currentField!=null&&currentFieldBounds==fieldBounds&&
+                        NexaEditableNode.containsExactTextAfterDispatch(currentField,exactText)
+                    val buttonScan=if(exactDraft)inspectSendButton(fresh,currentFieldBounds!!)
+                        else SendButtonInspection(0,null,true)
+                    val button=buttonScan.candidate
+                    val buttonBounds=button?.let{Rect().also{r->it.getBoundsInScreen(r)}}
+                    val sameButton=buttonScan.complete&&buttonScan.matches==1&&button!=null&&
+                        button.className?.toString().orEmpty()==sendTarget.className&&
+                        button.viewIdResourceName.orEmpty()==sendTarget.viewId&&
+                        buttonBounds==sendTarget.bounds
+                    if(!sameWindow||!exactDraft||!sameButton){
+                        actionUncertain=false
+                        false
+                    }else{
+                        actionEntered=true
+                        button!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                    }
+                }catch(_:Exception){
+                    actionUncertain=actionEntered
+                    false
+                }finally{try{fresh.recycle()}catch(_:Exception){}}
+            }
+            if(dispatched==null){
+                val persisted=finish("android_rejected")
+                return if(persisted)"Owner paused actions before Send. Nothing was sent."
+                    else "Send was blocked, but journal completion is uncertain. Do not retry."
+            }
+            if(!dispatched){
+                val uncertain=actionUncertain||actionEntered
+                val persisted=finish(if(uncertain)"unknown" else "android_rejected")
+                return if(persisted&&!uncertain)
+                    "The approved chat or Send button changed before dispatch. Nothing was sent."
+                    else "Send outcome is uncertain after dispatch. Inspect the conversation; do not retry."
+            }
+            if(!finish("android_accepted"))
+                return "Android accepted the Send tap, but the journal is uncertain. Inspect the conversation; do not retry."
+            SystemClock.sleep(700L)
+            val verified=verifySentMessage(service,appId,recipient,exactText,root.windowId,
+                previousBubbleCount+1)
+            if(!verified)
+                return "Send outcome is uncertain. Inspect the conversation; do not retry."
+            if(!NexaUiActionJournal.markObservation(service,token,"observed_change"))
+                return "The message is visible, but durable sent evidence was not saved. Inspect manually; do not retry."
+            return "sent_message_visible"
+        }catch(_:Exception){
+            if(claimed){
+                try{finish(if(actionEntered)"unknown" else "android_rejected")}catch(_:Exception){}
+            }
+            return "Send outcome is uncertain. Inspect the conversation; do not retry."
+        }finally{try{root.recycle()}catch(_:Exception){}}
+    }
+
+    fun verifySentWhatsApp(service:ScreenAssistService?,recipient:String,
+                           exactText:String,expectedWindow:Int?=null,
+                           minimumBubbleCount:Int=1):Boolean =
+        verifySentMessage(service,"whatsapp",recipient,exactText,expectedWindow,
+            minimumBubbleCount)
+
+    fun verifySentMessage(service:ScreenAssistService?,appId:String,recipient:String,
+                          exactText:String,expectedWindow:Int?=null,
+                          minimumBubbleCount:Int=1):Boolean {
+        if(minimumBubbleCount<1)return false
+        val expectedPackage=NexaMessageChannels.agentSendPackage(appId)?:return false
+        if(service==null||!ScreenAssistState.connected||ScreenAssistService.active!==service)
+            return false
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}?:return false
+        return try{
+            val sameWindow=root.packageName?.toString()==expectedPackage&&
+                root.isVisibleToUser&&(expectedWindow==null||root.windowId==expectedWindow)
+            val current=if(sameWindow)inspect(root,recipient,requireEmpty=false)
+                else Inspection(0,null,false)
+            val field=current.candidate
+            val composerEmpty=current.matches==1&&field!=null&&NexaEditableNode.isEmpty(field)
+            val bubbles=exactVisibleBubbleCount(root,exactText)
+            NexaWhatsAppSendPolicy.hasVerifiedSentMessageEvidence(appId,expectedPackage,sameWindow,
+                current.recipientVisible,composerEmpty,
+                bubbles!=null&&bubbles>=minimumBubbleCount)
         }catch(_:Exception){false}
         finally{try{root.recycle()}catch(_:Exception){}}
     }

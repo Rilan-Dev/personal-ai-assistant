@@ -10,7 +10,7 @@ test('only exact native same-generation Accessibility evidence advances a launch
   const observe=read(base+'NexaAppLaunchObservation.kt');
   assert.match(native,/private fun resolveObservedAppLaunch\(/);
   assert.match(native,/NexaNativeActionSafety\.approvalFenceCurrent\(/);
-  assert.match(native,/NexaAppLaunchObservation\.expectedVisibleNow\(/);
+  assert.match(native,/NexaAppLaunchObservation\.waitUntilExpectedVisible\(/);
   assert.match(native,/"destination_package_observed" else "not_observed"/);
   assert.match(observe,/root\.packageName\?\.toString\(\)/);
   assert.match(observe,/root\.isVisibleToUser/);
@@ -25,4 +25,20 @@ test('JS cannot reclassify a native unverified launch after Pause or app switch'
   assert.match(bridge,/return \{status:"success",data:result\}/);
   assert.doesNotMatch(bridge,/observeLaunchedAppPackage/);
   assert.doesNotMatch(bridge,/setTimeout\(resolve,1500\)/);
+});
+
+test('owner-reviewed overlay app launch does not depend on Activity window focus',()=>{
+  const native=read(base+'DeviceControlModule.kt');
+  const start=native.indexOf('fun openSupportedApp(app: String, promise: Promise)');
+  const end=native.indexOf('\n    /**',start);
+  assert.ok(start>=0&&end>start,'native supported-app launch method exists');
+  const launch=native.slice(start,end);
+  assert.doesNotMatch(launch,/currentActivity\?\.hasWindowFocus\(\)/,
+    'the approved overlay owns focus while the shared Nexa task launches its selected app');
+  assert.match(launch,/NexaNativeActionSafety\.permitsNewAction\(context\)/,
+    'the owner Pause control must still block launch');
+  assert.match(launch,/NexaNativeActionSafety\.approvalFence\(context\)/,
+    'the current action generation must still be checked');
+  assert.match(launch,/dispatchOwnerApprovedAppLaunch\(/,
+    'the exact installed app launch must still be claimed in the one-shot native journal');
 });

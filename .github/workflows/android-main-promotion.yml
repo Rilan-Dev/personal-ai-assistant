@@ -14,6 +14,9 @@ jobs:
   release-test:
     runs-on: ubuntu-latest
     timeout-minutes: 85
+    env:
+      EXPO_PUBLIC_ACA_API_ORIGIN: https://aca-development.invalid
+      NEXA_ACA_ENVIRONMENT: development
     steps:
       - uses: actions/checkout@v4
         with:
@@ -98,6 +101,8 @@ jobs:
           retention-days: 7
       - name: Assemble optimized signed Android release variant
         working-directory: apps/mobile/android
+        env:
+          EXPO_PUBLIC_ACA_API_ORIGIN: https://aca.starcitytechnical.com
         run: |
           set -euo pipefail
           : "${PAA_BUILD_SOURCE_REVISION:?source revision was not pinned}"

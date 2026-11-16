@@ -9,6 +9,14 @@ tags:
     clearState: true
     permissions:
       all: deny
+- extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
 - runFlow:
     when:
       visible: "Don.t allow"
