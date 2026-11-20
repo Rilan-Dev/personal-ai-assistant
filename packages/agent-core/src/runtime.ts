@@ -32,6 +32,8 @@ export interface RunOptions {
   onPlanningError?: (code: string) => void;
   /** Receives only allowlisted native tool error codes; exception text is never exposed. */
   onToolError?: (code: string) => void;
+  /** Project observations for persistence without changing the in-memory tool results. */
+  checkpointObservations?: (observations: readonly ObservedAction[]) => readonly ObservedAction[];
   maxSteps?: number;
 }
 export type AgentRunResult =
@@ -53,6 +55,7 @@ const SAFE_NATIVE_TOOL_ERROR_CODES = new Set([
   "SCROLL_TARGET_AMBIGUOUS",
   "SCROLL_OUTCOME_UNCERTAIN",
   "SCROLL_TARGET_UNAVAILABLE",
+  "STALE_SCREEN_SNAPSHOT",
   "UI_TAP_TARGET_UNAVAILABLE",
   "UI_TAP_TARGET_AMBIGUOUS",
   "UI_TAP_HIERARCHY_UNVERIFIED",
@@ -61,6 +64,9 @@ const SAFE_NATIVE_TOOL_ERROR_CODES = new Set([
   "UI_TAP_UNCERTAIN",
   "UI_EVIDENCE_NOT_COMMITTED",
   "UI_OUTCOME_UNCERTAIN",
+  "KEY_ACTION_REFUSED",
+  "KEY_ACTION_AUDIT_UNCERTAIN",
+  "KEY_ACTION_UNCERTAIN",
   "TEXT_FIELD_UNVERIFIED",
   "TEXT_OUTCOME_UNCERTAIN",
   "TEXT_PARENT_EVIDENCE_FAILED",
@@ -138,7 +144,8 @@ export class AgentHarness {
     };
     const save = async (status: SessionStatus, pendingCall?: ToolCall) => {
       if (!journal) return;
-      checkpoint = { ...checkpoint, observations: [...observations], status,
+      const checkpointObservations=options.checkpointObservations?.(observations)??observations;
+      checkpoint = { ...checkpoint, observations: [...checkpointObservations], status,
         updatedAt: Date.now(), pendingCall };
       await journal.saveSession(checkpoint);
     };

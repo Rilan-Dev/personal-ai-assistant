@@ -26,6 +26,33 @@ def available_memory_gib():
         matched = re.search(r"^MemAvailable:\s+(\d+)\s+kB", values, re.MULTILINE)
         return round(int(matched.group(1)) * 1024 / GIB, 2) if matched else None
     except (OSError, ValueError):
+        if os.name != "nt":
+            return None
+    try:
+        import ctypes
+
+        class MemoryStatusEx(ctypes.Structure):
+            _fields_ = [
+                ("dwLength", ctypes.c_ulong),
+                ("dwMemoryLoad", ctypes.c_ulong),
+                ("ullTotalPhys", ctypes.c_ulonglong),
+                ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong),
+                ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong),
+                ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+            ]
+
+        status = MemoryStatusEx()
+        status.dwLength = ctypes.sizeof(status)
+        get_status = ctypes.WinDLL("kernel32", use_last_error=True).GlobalMemoryStatusEx
+        get_status.argtypes = [ctypes.POINTER(MemoryStatusEx)]
+        get_status.restype = ctypes.c_int
+        if not get_status(ctypes.byref(status)):
+            return None
+        return round(status.ullAvailPhys / GIB, 2)
+    except (AttributeError, OSError, TypeError, ValueError):
         return None
 
 

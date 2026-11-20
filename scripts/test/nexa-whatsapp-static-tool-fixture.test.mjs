@@ -67,7 +67,8 @@ test("Sarvam static response is a native tool call with no assistant prose",asyn
       assert.equal(url,PROVIDERS.sarvam.endpoint);
       const body=JSON.parse(options.body);
       assert.equal(body.messages[1].content,sample.request);
-      assert.equal(body.tool_choice,"auto");
+      assert.deepEqual(body.tool_choice,
+        {type:"function",function:{name:"screen_scroll"}});
       assert.ok(body.tools.some(tool=>tool.function.name==="screen_scroll"));
       return new Response(JSON.stringify(sample.response),{
         status:200,headers:{"content-type":"application/json"}
@@ -77,7 +78,7 @@ test("Sarvam static response is a native tool call with no assistant prose",asyn
   const decision=await planner.next(sample.request,[]);
   assert.equal(providerRequests,1);
   assert.equal(decision.type,"tool");
-  assert.deepEqual(decision.call,{callId:"direct-1",...sample.expectedCall});
+  assert.deepEqual(decision.call,{callId:sample.response.choices[0].message.tool_calls[0].id,...sample.expectedCall});
 });
 
 test("WhatsApp fixture runs the exact Android draft tools and reports per-step evidence",async()=>{

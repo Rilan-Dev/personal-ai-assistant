@@ -260,6 +260,12 @@ permission was added.
 
 ### Voice audit retention and startup behavior
 - Process-start reconciliation marks abandoned Voice checkpoints uncertain; it does not infer external app success or automatically replay a gesture.
+
+## 2026-11-18 screen-request routing review
+
+- LangGraph.js upstream checked at `langchain-ai/langgraphjs` commit `7257a24f7106ca8b8f5e14da6d1d72197077d6a7`; reviewed `libs/langgraph-core/src/graph/state.ts` and its MIT license. Stable graph APIs (`StateGraph`, `compile`, and `invoke`) remain the relevant integration surface.
+- Deep Agents JS upstream checked at `langchain-ai/deepagentsjs` commit `e21fb23ec369c87f79e2bb01ef116f791431d662`; reviewed `libs/deepagents/src/agent.ts`, `libs/deepagents/src/permissions/enforce.ts`, and its MIT license. Stable API reviewed: `createDeepAgent` and permission enforcement.
+- No upstream source or API is adopted for the bare “open settings” routing fix. This is a local deterministic screen-planner precedence correction; the Android capability grants, per-action review, and native policy owner remain unchanged. The existing compiled graph and permission boundaries are not modified.
 - Terminal voice audit goal/steps/evidence are eligible for explicit foreground owner privacy redaction. Both encrypted representations are cleared in one SQLite transaction, while identity and event/claim evidence remain for non-replay and incident history.
 - A minimal metadata flag indicates redaction in Tools without exposing private Voice text.
 
@@ -320,3 +326,29 @@ synthetic and its native bridge is fake; it is not physical-device evidence.
 - Rechecked LangGraph.js `langchain-ai/langgraphjs@fd10c3a2c7c1b4d4e6d4339c32a546b44385af89`, MIT, source `libs/langgraph-core/src/graph/state.ts`; the existing planning service still uses the stable `StateGraph` compile/invoke API. This change does not alter or add a planner.
 - Rechecked Deep Agents JS `langchain-ai/deepagentsjs@9eaca89a25fd050beb19b7e3f13be6f00bbb161d`, MIT, source `libs/deepagents/src/agent.ts`; its `createDeepAgent` entry point assembles the generic agent/middleware runtime. It is not adopted and no upstream source is copied.
 - The change only passes a fixed allowlist of native screen/text/messaging error codes to local UI diagnostics; exception text, screen contents, recipient text, and message content remain suppressed. Android's existing approvals, per-step audit, validation, pause fence and no-replay policy are unchanged.
+
+## 2026-11-16 — PowerShell debug tool bridge source check
+- Rechecked LangGraph.js `fa426b293b6ecccbf62b4f262475777b4bf86673`,
+  `libs/langgraph-core/src/graph/state.ts`: the existing library provides
+  the StateGraph compile/invoke graph API; repository license is MIT.
+- Rechecked Deep Agents JS `9eaca89a25fd050beb19b7e3f13be6f00bbb161d`,
+  `libs/deepagents/src/agent.ts`: it exposes `createDeepAgent` and generic
+  middleware orchestration; repository license is MIT.
+- The PowerShell bridge adds no planner and adopts no new upstream agent
+  framework. It sends one exact request through Nexa's current mobile
+  `AgentHarness`, registered Android tools, and secure action journal.
+  Deep Agents filesystem/shell tools are not adopted.
+
+## 2026-11-17 — Live screen observation handoff
+- Examined current LangGraph.js `langchain-ai/langgraphjs@d49ac713823afc61f7cc0ac54168ec0d2378a36d`, `libs/langgraph-core/src/graph/state.ts`, and repository `LICENSE` (MIT). Its stable `StateGraph` builder plus compiled graph `.invoke()` API remains the existing backend planning runtime; no LangGraph code or checkpoint is added to Android.
+- Examined current Deep Agents JS `langchain-ai/deepagentsjs@67d83a25ac29617c46e71a0e1f749f12a1dc53f6`, `libs/deepagents/src/agent.ts`, and repository `LICENSE` (MIT). `createDeepAgent` returns a compiled LangGraph graph and composes generic agent middleware. It is not adopted: it adds no Android Accessibility window binding, safe screen redaction, one-shot owner approval, or device-side target freshness.
+- Reuse remains the existing single `AgentHarness`/direct provider loop and Kotlin Accessibility executor. No new planner, autonomous loop, package, or upstream source is adopted or copied. Safe post-action metadata is bound to a short-lived native screen snapshot; Android retains exact window/target revalidation and the existing one-time approval/journal.
+- Compared OpenAI Agents SDK, Pydantic AI, OpenHands and smolagents against this task: each would add a second runtime or require a separate Python/tool bridge, while none replaces the current native owner-approval and Accessibility checks. Retain the existing stack.
+
+## 2026-11-20 — Floating review for snapshot-bound taps
+
+- Rechecked LangGraph.js `langchain-ai/langgraphjs@7257a24f7106ca8b8f5e14da6d1d72197077d6a7`, MIT: `docs/docs/agents/human-in-the-loop.md` documents `interrupt()` and checkpointed `Command({ resume })`; `libs/langgraph-core/src/interrupt.ts` contains the interrupt API implementation. Deep Agents JS `langchain-ai/deepagentsjs@2dd1d79860c5d1dcd83cd22c8e5171dbc6d188af`, MIT: `libs/deepagents/src/agent.ts` exposes `createDeepAgent`; `libs/deepagents/src/permissions/enforce.ts` implements its tool/file permission policy.
+- No upstream code or API is adopted for this fix. Nexa keeps the existing `AgentHarness`, `NexaOverlayChatRelay` review token and Android one-use action journal. The change only admits `screen.tap_observed` into the existing floating review after strict validation of its UUID snapshot, integer target index (0–39), and safe label. Android still checks Screen Assist, owner pause, the exact snapshot/window/target, the consumed approval and the no-replay journal before dispatch.
+- Root cause: the overlay had no safe summary for snapshot-bound taps, so it sent owners to full Chat for approval. Resuming there foregrounded Nexa over the external app and invalidated the visible target context. In-place review collapses the floating surface before resuming the exact task over the still-foreground external app.
+- The earlier alternative comparison remains valid: OpenAI Agents SDK, Pydantic AI, OpenHands and smolagents do not replace Android's live Accessibility window binding or native one-use authorization. No dependency, copied source or additional autonomous loop is introduced.
+

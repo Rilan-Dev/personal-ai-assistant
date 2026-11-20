@@ -7,7 +7,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$packageName = 'dev.rilandev.personalaiassistant.physicalqa2'
+$packageName = 'dev.rilandev.personalaiassistant.debug'
 $adbCommand = Get-Command adb -ErrorAction Stop
 $npmCommand = Get-Command npm.cmd -ErrorAction Stop
 
@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Could not establish USB reverse port 8081 for $Serial."
 }
 
-Write-Host "Metro live mode for $packageName on physical device $Serial."
+Write-Host "Metro live mode for the single debug app $packageName on physical device $Serial."
 Write-Host 'JavaScript/TypeScript edits use Fast Refresh; native Android changes require a rebuild and one reinstall.'
 Write-Host 'Keep this terminal running while testing. Press Ctrl+C to stop Metro.'
 

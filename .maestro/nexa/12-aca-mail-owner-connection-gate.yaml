@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa ACA email requires an explicit owner connection before any mailbox read
 tags:
   - nexa

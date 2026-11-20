@@ -42,8 +42,24 @@ class NexaPhoneVoiceToolsAndroidTest {
         val calendar=NexaPhoneVoiceTools.findExactLaunchableApp(app,"Calendar")
         assertNotNull("The emulator should expose Calendar as a launcher app",calendar)
         assertEquals("com.google.android.calendar",calendar!!.packageName)
+        val chrome=NexaPhoneVoiceTools.findExactLaunchableApp(app,"chrome")
+        assertNotNull("A short Chrome request should resolve its unique visible launcher name",chrome)
+        assertEquals("com.android.chrome",chrome!!.packageName)
         assertNull(NexaPhoneVoiceTools.findExactLaunchableApp(app,"Clock and send a message"))
         assertNull(NexaPhoneVoiceTools.findExactLaunchableApp(app,"an app that does not exist"))
+    }
+
+    @Test fun chatAppLaunchAcceptsOnlyUniqueVisibleNameSuffixes() {
+        val googleChrome=NexaPhoneVoiceTools.AppChoice("Google Chrome","com.android.chrome")
+        val brave=NexaPhoneVoiceTools.AppChoice("Brave Browser","com.brave.browser")
+        assertEquals(googleChrome,NexaPhoneVoiceTools.resolveUniqueLaunchableName(
+            listOf(googleChrome,brave),"chrome"))
+        assertNull("Chrome Beta must not be mistaken for Chrome",
+            NexaPhoneVoiceTools.resolveUniqueLaunchableName(
+                listOf(NexaPhoneVoiceTools.AppChoice("Chrome Beta","com.example.chrome.beta")),"chrome"))
+        assertNull("A suffix that names multiple apps must remain ambiguous",
+            NexaPhoneVoiceTools.resolveUniqueLaunchableName(listOf(googleChrome,
+                NexaPhoneVoiceTools.AppChoice("Vendor Chrome","com.example.vendorchrome")),"chrome"))
     }
 
     @Test fun sarvamModelFunctionSchemaIsReadOnlyAndArgumentsAreValidated() {

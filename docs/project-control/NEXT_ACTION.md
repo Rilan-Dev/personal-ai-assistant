@@ -1,8 +1,76 @@
-## Current QA status — 2026-11-16
+## Current QA status — 2026-11-19 emulator QA2 v1904 dynamic scroll acceptance
 
-The current QA2 debug APK (`0.3.2026111607`, code `2026111607`) is installed on `emulator-5554`. The ordered main Maestro suite passed 18/18 flows and the ordered experimental suite passed 4/4. Nexa `npm test` passed 606/606; root/mobile/runtime typechecks, Expo web export, and `git diff --check` passed. Android reports Screen Assist enabled and bound after the Maestro driver exited. APK SHA-256: `83F694DC689CFCF8DB80F583B0040DC2C799F05F0D78CAA6AAE23434155D4BFE`.
+Only `emulator-5554` was targeted in this continuation; the connected physical phone was not used. QA2 package `dev.rilandev.personalaiassistant.physicalqa2` v`0.3.2026111904` / code `2026111904` is installed. Local `app-debug.apk` and the pulled installed `base.apk` have matching SHA-256 `2F6457C715754F2EF6CD7A6398694CB572C70C1ECA0B615636B92A971F4024A2`. This is a debug QA build, not a release APK.
 
-**Still unverified:** a live Screen Assist read/tap/scroll against a third-party app. The direct ADB live-input attempt was rejected by platform safety review, so I did not retry through another input tool. A bound service and settings flows are not proof of cross-app action. No message was sent and no Sarvam key was used. Continue that acceptance only through a platform-approved interaction path. ACA live Development parity also remains subject to the isolated backend/test-identity gate below.
+**Dynamic cross-app scroll acceptance:** The test used only the synthetic Chrome fixture at `http://10.0.2.2:8765/screen-scroll-fixture.html`. Nexa Tools had `Reviewed multi-step screen actions` and `Read safe visible-control metadata` enabled for the app session, and Android reported QA2 Screen Assist enabled and bound. The first reviewed attempt correctly stopped because Nexa was foreground. After restoring Chrome as foreground, floating Chat proposed `screen.scroll direction=down`; one owner review was approved. Nexa then reported “Android observed a screen change after the approved down scroll. No further action was taken.” The unobstructed post-action screenshot shows rows 3–29; the reset fixture showed rows 1–21.
+
+**Evidence:** `.qa-results/qa2-fixture-restored-v1904.png`, `.qa-results/qa2-after-approved-fixture-v1904.png`, and `.qa-results/qa2-after-approved-collapsed-v1904.png`. Installed APK copy: `.qa-results/qa2-installed-v1904.apk`.
+
+**Checks:** Focused Node regression run passed 60/60 across `nexa-screen-scroll-actions`, `android-planner`, and `direct-provider`; `NexaUiActionEvidencePolicyAndroidTest` passed 11/11 on the emulator; `git diff --check` passed (line-ending notices only).
+
+**Still pending:** Repeatable dynamically grounded tap validation on a third-party app, the stable grouped Maestro report (the prior v1818 grouped run was a driver failure although affected flows passed individually), live provider-backed ACA mail/email and realtime voice acceptance, and release signing. No message was sent, no mailbox was read, and no Sarvam key was used.
+
+**Next:** Continue with a safe third-party app tap/scroll scenario using fresh Screen Assist observations and one owner review per action. Keep the full ordered Maestro suite, ACA live validation, and release build as separate acceptance gates.
+
+---
+## Archived QA status — 2026-11-18 emulator v1818 continuation
+
+Only `emulator-5554` was used in this continuation; the physical phone and emulator were not used together. The installed QA2 package is `dev.rilandev.personalaiassistant.physicalqa2` v`0.3.2026111818` / code `2026111818`. The local debug APK SHA-256 is `87A6C7957119116E98254CDE027C48911C682408BDBE862AC408CF08C0684D9D`. This is a debug QA artifact, not a public or release-signed APK.
+
+**Maestro coverage:** All 19 flows in `.maestro/nexa` (01–12 and 14–20; no flow 13) passed individually on v1818. Experimental flows 10–13 passed individually. The cloud permission recovery, physical QA preflight/setup flows 00–02 and 16, and the QA2 floating-bubble setup also passed individually. JUnit evidence for the latest standalone runs is under `.maestro/results/qa2-v1818-x86_64/`; the final accessibility setup passed 1/1 in `final-screen-assist-setup-20261118/report.xml`.
+
+**Grouped-run limitation:** The five-flow `core-suite/report.xml` run is not green: flow 05 passed, then the Maestro Android device server died during `viewHierarchy`/`deviceInfo`; the other four cases are harness `DeviceServerDiedException` errors, not app assertions. Each affected flow subsequently passed in its own standalone run. Therefore the scripts have individual pass evidence, but the grouped run must not be described as passing.
+
+**Settings ANR recovery:** A later Flow 19 run exposed a real Android Settings ANR while enabling Screen Assist. The flow now waits through `Settings isn't responding` and retries the toggle once only if Android still reports it off. The updated flow passed 1/1 in `final-screen-assist-retry-20261118/report.xml`. The read-only battery smoke flow also passed 1/1 in `physical-debug-battery-20261118/report.xml`. After stopping Maestro's driver packages, Android again reported Screen Assist enabled and bound with no crash.
+
+**External screen-read evidence:** Screen Assist is enabled and bound with no crashed service. A user-armed one-shot read captured only the Android Settings screen (`com.android.settings`, 120 nodes, `captured=true`, length 419). Nexa then showed “Screen text discarded from memory.” No screen text was included in the evidence or sent to AI. Metadata-only evidence is `.maestro/results/qa2-v1818-x86_64/settings-read-metadata.txt`.
+
+**Still unverified:** a floating-Chat LLM request that initiates an owner-approved tap or scroll on an unrelated app; live provider-backed ACA/email parity and realtime voice routing; a stable ordered grouped Maestro run; and release signing. The exposed Sarvam key was not used. No message was sent and no email was read in this continuation.
+
+**Next:** stabilize or split the Maestro runner lifecycle so grouped reports remain connected, then run one owner-approved floating-Chat action against a safe Settings page with a configured test provider. Keep ACA provider-backed acceptance and release signing as separate gates.
+
+---
+## Archived QA status — 2026-11-17 emulator continuation
+
+Only `emulator-5554` is currently attached, so validation is continuing on the emulator until the physical phone appears in ADB. The installed Nexa debug app is `dev.rilandev.personalaiassistant.debug` v`0.3.2026111727` / code `2026111727`; APK SHA-256 is `4B63EF5D8286DE68C032C4CD9FA74C8E26894B0D5B2D89634E92147B53C2438E`. The app-tools bridge reports `NexaAppTools`, `rawAdbInput=false`, `engineLive=true`, and 25 tools. Both Nexa Debug Accessibility services are bound.
+
+**Live action evidence:** A fresh Home observation and confirmed right swipe opened the Google Discover surface; the new observation showed the Google app and its offline “Couldn't connect to Discover” state. The left swipe from the Home edge was accepted but Android reported no visible change because there is no adjacent page on that side. A fresh Home target was used to tap Settings, which opened Android Settings. Fresh observed down and up scrolls there both returned `scroll_event_observed` and new snapshots. Notification shade open and Back were also accepted; the shade snapshot exposed no notification text or tappable targets. A stale snapshot was rejected before any gesture was dispatched.
+
+**Automated checks:** Full `npm test` passes 669/669; focused screen-control regressions pass 59/59; the four tests covering the two corrected package-ID expectations pass 4/4. The two stale assertions now match the current single `.debug` app identity and Gradle variable refactor. The APK was already built from the current native fixes; this continuation changed tests and QA notes only.
+
+**Still unverified:** the floating-chat LLM loop issuing a screen action, repeatability across unrelated third-party apps, and physical-device confirmation. No message was sent and no contacts, call history, or alarms were accessed. The previously shared Sarvam key was not used.
+
+**Next:** keep using `emulator-5554` until the physical phone appears in `adb devices -l`; then confirm the serial before switching the same safe, owner-reviewed app-tools checks to that phone.
+
+---
+## Archived QA status — 2026-11-17 physical Infinix scroll evidence
+
+Only the wired Infinix, serial 099344034S003788, was targeted; no emulator was used. The installed live-debug package is dev.rilandev.personalaiassistant.debug v0.3.2026111711 (code 2026111711). Metro is serving on port 8081 with the device reverse active. The debug Nexa bridge reports executor=NexaAppTools, rawAdbInput=false, engineLive=true, and 23 registered tools. Android reports both Debug and QA2 Screen Assist bound without crashed services.
+
+**Root cause/fix:** Native scrolls can finish as scroll_event_observed even when Android has not independently established the final position. Planner completion logic accepted older generic statuses and rejected these native statuses, producing a false “did not verify” failure after an accepted scroll. The planner now reports the approved directional event with an explicit position-verification limit; structural/legacy change evidence is reported separately. Tap-event wording remains equally conservative. Owner-sequence evidence accepts the native scroll and structural-change statuses.
+
+**Physical action evidence:** Nexa's device.open_app opened Android Settings. A separately confirmed downward screen.scroll used a fresh Accessibility snapshot. Before/after Settings snapshots changed from 15 to 12 normalized text lines, with 23 line differences after volatile status-bar values were excluded. Android returned actionAccepted=true, verification=scroll_event_observed, businessOutcomeVerified=false. This verifies visible movement, not an app-level task result. A separate down event at the list boundary did not change normalized screen text; the conservative event-only status did not claim that the page moved. From the Home launcher, one confirmed left scroll returned structural_change_observed and changed normalized text from 53 to 52 lines (97 differing lines). The right-scroll attempt first rejected a stale snapshot without a gesture; after a fresh observation, the foreground changed to another app and no scroll was issued there.
+
+**Automated checks:** The three focused regressions pass for up/down/left/right; npm test passes 653/653; root, mobile, and agent-runtime typechecks pass; git diff --check exits 0 (Git reports existing line-ending conversion warnings). The app is using the live Metro bundle, so no APK rebuild was needed for these TypeScript changes. Prior same-day web export and 22/22 Android instrumentation results are historical and were not rerun in this session.
+
+**Still unverified:** a fresh live floating-Chat/Sarvam request against the updated planner; a physical right scroll; repeated control across unrelated apps; and release-signed/public APK production. The physical vertical and left scrolls were invoked through Nexa's debug app-tools bridge, not through the floating Chat LLM loop. No message was sent.
+
+**Next:** run one new owner-reviewed floating-Chat request on Android Settings and verify that the overlay reports the directional event without claiming a verified final position. Keep message-send checks separate from this safe scroll test.
+
+---
+## Archived QA status — 2026-11-17 emulator QA2 (latest dual-architecture rerun)
+
+QA2 `dev.rilandev.personalaiassistant.physicalqa2` v`0.3.2026111708` (code `2026111708`) is installed on `emulator-5554`. Local and installed `base.apk` SHA-256 match: `DDF05F44C0813AD58FABF460D4782C53D2BC43940620A320D9094DA071D8DCD9`. The embedded JS bundle SHA-256 is `0F5968FB88AEC4219332885B935DF6B021FD070D79129D8C363CF516A4C4367A`; the APK contains the embedded bundle plus `arm64-v8a` and `x86_64` React Native libraries. It is a local debug QA APK, not release-signed. The physical Infinix was not targeted.
+
+**Ordered Maestro result:** Flows 05, 17, 18, 19, then 16 passed 5/5 in 4m 53s using Maestro 2.12.1 and the exact installed APK. JUnit: `.maestro/results/qa2-v1708-dualarch-batch-final-20261117/report.xml`. Flow 17/18 confirm ACA fail-closed routing; Flow 19 enables Screen Assist; Flow 16 confirms its controls remain reachable. After Maestro exited, its two driver packages were stopped; Android then listed QA2 Screen Assist under `Bound services`, with `Crashed services: {}`. Nexa remained foreground. Post-suite screenshot: `.maestro/results/qa2-v1708-dualarch-post-suite-screenassist-enabled.png`.
+
+**Screen Assist read:** On this exact APK, one local read of Android Settings succeeded (`com.android.settings`, 31 nodes, `captured=true`, length 16). The text was not opened, displayed, or sent to AI; Nexa showed its discard confirmation. Metadata-only log: `.maestro/results/qa2-v1708-dualarch-settings-read-metadata.txt`; discard screenshot: `.maestro/results/qa2-v1708-dualarch-current-screen.png`. This verifies one read, not AI-directed external tap or scroll.
+
+**Source checks:** `npm test` 645/645; `npm run typecheck` passed for root, mobile, and agent runtime; `npm run web:export` passed. `git diff --check` passed after this status update (line-ending conversion warnings only).
+
+**Still unverified:** an AI-initiated, owner-confirmed semantic tap and dynamic scroll on an external app; live provider-backed ACA email synthesis and realtime voice routing; release-signed/public APK production. ACA-origin flows remain at the local account gate because this QA build uses `https://aca-unconfigured.invalid`, so no email was read. No message was sent and no Sarvam key was used.
+
+**Next:** verify the action loop against a safe external screen using the required per-action owner confirmation. For live ACA parity, use a valid isolated Development origin and test account; confirm realtime voice routing separately. Release signing remains a distinct workflow.
 
 ---
 

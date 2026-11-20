@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa native battery and status tools return observed Android data
 tags:
   - nexa

@@ -20,6 +20,10 @@ const overlayModule=readFileSync(
   "apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaToolOverlayModule.kt",
   "utf8"
 ).replace(/\r\n/g,"\n");
+const snapshots=readFileSync(
+  "apps/mobile/android/app/src/main/java/dev/rilandev/personalaiassistant/NexaPowerShellScreenSnapshot.kt",
+  "utf8"
+).replace(/\r\n/g,"\n");
 
 test("reviewed overlay screen actions do not require Nexa Activity window focus",()=>{
   const start=source.indexOf("private fun sequencedScreenService(");
@@ -37,10 +41,12 @@ test("floating Chat reviews and resumes one exact screen action in place",()=>{
     "overlay approval details must be narrowly formatted from the exact planner tool");
   assert.match(app,/if\(toolId==="screen\.tap_label"\)/,
     "the overlay may format only safe named-control taps in addition to reviewed scrolls");
+  assert.match(app,/"screen\.tap_observed"/,
+    "a snapshot-bound observed tap stays in the overlay review flow instead of foregrounding Nexa over its target app");
   assert.match(app,/screen\.tap_label label=\$\{label\}/,
     "the owner sees the exact named control before approving a tap");
   for(const toolId of ["device.open_app","screen.open_whatsapp_chat","screen.fill_text",
-    "screen.compose_whatsapp","screen.send_whatsapp","screen.compose_message",
+    "screen.tap_observed","screen.compose_whatsapp","screen.send_whatsapp","screen.compose_message",
     "screen.send_message"])
     assert.match(app,new RegExp('"'+toolId.replaceAll('.','\\.')+'"'),
       `floating Chat can stage the exact ${toolId} request for owner review`);
@@ -113,8 +119,8 @@ test("overlay chat timeout renews for owner review and bounded action completion
     "initial model planning remains bounded");
   assert.match(relay,/private const val REVIEW_TTL_MS=120_000L/,
     "owner review receives its own bounded window");
-  assert.match(relay,/private const val EXECUTION_TTL_MS=60_000L/,
-    "an approved action result remains bounded");
+  assert.match(relay,/private const val EXECUTION_TTL_MS=180_000L/,
+    "approved action planning and verification have a longer but finite window");
   assert.match(relay,/deadlineAt/,
     "pending validity is measured from the current phase deadline");
   assert.match(relay,/scheduleTimeout\(token,generation,RESPONSE_TTL_MS\)/,
@@ -129,4 +135,22 @@ test("overlay chat timeout renews for owner review and bounded action completion
     "execution replaces the review timeout");
   assert.doesNotMatch(relay,/elapsedRealtime\(\)-request\.startedAt/,
     "later phases must not expire against the initial request timestamp");
+});
+
+test("screen action snapshots outlive model execution and the full owner review window",()=>{
+  const snapshotTtl=Number(snapshots.match(/ASSISTANT_ACTION_TTL_MS\s*=\s*(\d+)_?000L/)?.[1])*1000;
+  const executionTtl=Number(relay.match(/EXECUTION_TTL_MS\s*=\s*(\d+)_?000L/)?.[1])*1000;
+  const reviewTtl=Number(relay.match(/REVIEW_TTL_MS\s*=\s*(\d+)_?000L/)?.[1])*1000;
+  assert.ok(Number.isFinite(snapshotTtl),"assistant action snapshots need a review-aware TTL");
+  assert.ok(snapshotTtl>=executionTtl+reviewTtl+30_000,
+    "a fresh snapshot must remain available through bounded planning, owner review, and handoff");
+  assert.match(snapshots,/snapshots\[id\]\?\.takeIf\s*\{\s*now\s*-\s*it\.createdAt\s*<=\s*it\.ttlMs/,
+    "observed action expiry must use its snapshot-specific TTL");
+  assert.match(snapshots,/now\s*-\s*it\.value\.createdAt\s*>\s*it\.value\.ttlMs/,
+    "pruning must use each snapshot's own expiry");
+});
+
+test("an expired screen action snapshot gives a safe no-replay explanation",()=>{
+  assert.match(app,/STALE_SCREEN_SNAPSHOT:\s*'[^']*(?:expired|changed)[^']*no tap[^']*'/i,
+    "the owner is told when a reviewed target expired or changed without claiming a tap occurred");
 });

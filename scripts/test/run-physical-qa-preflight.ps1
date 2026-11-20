@@ -13,7 +13,7 @@ $flows = @(
   (Join-Path $repoRoot '.maestro\physical-qa\02-ready-check.yaml'),
   (Join-Path $repoRoot '.maestro\physical-qa\01-enable-accessibility-services.yaml')
 )
-$packageName = 'dev.rilandev.personalaiassistant.physicalqa2'
+$packageName = 'dev.rilandev.personalaiassistant.debug'
 $qaScreenService = "$packageName/dev.rilandev.personalaiassistant.ScreenAssistService"
 $qaLauncherService = "$packageName/dev.rilandev.personalaiassistant.NexaLauncherNavigationService"
 
@@ -102,7 +102,7 @@ $requiredRuntimePermissions = @(
   'android.permission.CAMERA'
 )
 $packageDump = (& $adb.Source -s $DeviceId shell dumpsys package $packageName 2>&1 | Out-String)
-if ($LASTEXITCODE -ne 0) { throw 'Could not query QA2 runtime permissions.' }
+if ($LASTEXITCODE -ne 0) { throw 'Could not query debug runtime permissions.' }
 $runtimePermissionLines = $packageDump -split "`r?`n"
 foreach ($permission in $requiredRuntimePermissions) {
   $permissionPattern = '^\s*' + [regex]::Escape($permission) + ':\s+granted=true(?:,|$)'
@@ -125,8 +125,8 @@ do {
   if ($LASTEXITCODE -ne 0) { throw 'Could not query Android Accessibility service state.' }
   $enabledQaScreen = $accessibilityDump.Contains($qaScreenService)
   $enabledQaLauncher = $accessibilityDump.Contains($qaLauncherService)
-  $boundQaScreen = $accessibilityDump.Contains('Service[label=Nexa Screen Assist QA2')
-  $boundQaLauncher = $accessibilityDump.Contains('Service[label=Nexa Launcher Navigation QA2')
+  $boundQaScreen = $accessibilityDump.Contains('Service[label=Nexa Screen Assist (Debug)')
+  $boundQaLauncher = $accessibilityDump.Contains('Service[label=Nexa Launcher Navigation (Debug)')
   if ($enabledQaScreen -and $enabledQaLauncher -and $boundQaScreen -and $boundQaLauncher) { break }
   if ((Get-Date) -ge $deadline) { break }
   Start-Sleep -Seconds 2
@@ -135,18 +135,18 @@ do {
 if (-not $enabledQaScreen -or -not $enabledQaLauncher -or -not $boundQaScreen -or -not $boundQaLauncher) {
   $enabledStatus = "ScreenAssist=$enabledQaScreen Launcher=$enabledQaLauncher"
   $boundStatus = "ScreenAssist=$boundQaScreen Launcher=$boundQaLauncher"
-  throw "QA2 Accessibility is not enabled and bound. Enabled [$enabledStatus]; bound [$boundStatus]."
+  throw "Debug Accessibility is not enabled and bound. Enabled [$enabledStatus]; bound [$boundStatus]."
 }
 if ($accessibilityDump -notmatch 'Crashed services:\s*\{\s*\}') {
   throw 'Android reports a crashed Accessibility service.'
 }
 
 & $adb.Source -s $DeviceId shell monkey -p $packageName -c android.intent.category.LAUNCHER 1 | Out-Null
-if ($LASTEXITCODE -ne 0) { throw 'QA2 permissions are ready, but Nexa could not be returned to the foreground.' }
+if ($LASTEXITCODE -ne 0) { throw 'Debug permissions are ready, but Nexa could not be returned to the foreground.' }
 
 Write-Output "PASS: Maestro permission setup completed on $DeviceId."
 Write-Output 'PASS: Microphone, notifications, coarse location, and camera runtime permissions are granted.'
 Write-Output 'PASS: Overlay permission is granted.'
-Write-Output 'PASS: QA2 Screen Assist and Launcher Navigation are both enabled and bound with no crash.'
-Write-Output 'PASS: Nexa QA2 returned to the foreground, ready for the next test.'
+Write-Output 'PASS: Debug Screen Assist and Launcher Navigation are both enabled and bound with no crash.'
+Write-Output 'PASS: The single Nexa debug app returned to the foreground, ready for the next test.'
 foreach ($report in $junitReports) { Write-Output "Maestro report: $report" }

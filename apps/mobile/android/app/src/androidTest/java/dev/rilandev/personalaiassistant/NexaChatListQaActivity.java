@@ -7,6 +7,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -20,7 +21,9 @@ public final class NexaChatListQaActivity extends Activity {
     public EditText messageInput;
     private boolean duplicateContact;
     private boolean overlappingContacts;
+    private boolean clickableContactAvatar;
     private int chatRowClicks;
+    private int avatarClicks;
     private int sendClicks;
     private boolean opened;
     private String qaRunId = "";
@@ -43,9 +46,11 @@ public final class NexaChatListQaActivity extends Activity {
         super.onCreate(state);
         duplicateContact = getIntent().getBooleanExtra("duplicate", false);
         overlappingContacts = getIntent().getBooleanExtra("qa_overlap", false);
+        clickableContactAvatar = getIntent().getBooleanExtra("qa_avatar", false);
         String provided = getIntent().getStringExtra("qa_run");
         qaRunId = provided == null ? "" : provided;
         chatRowClicks = 0;
+        avatarClicks = 0;
         sendClicks = 0;
         opened = false;
         showChatList();
@@ -53,7 +58,7 @@ public final class NexaChatListQaActivity extends Activity {
 
     private LinearLayout makeRow(String name) {
         LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.VERTICAL);
+        row.setOrientation(LinearLayout.HORIZONTAL);
         row.setClickable(true);
         row.setFocusable(true);
         row.setContentDescription(name);
@@ -62,6 +67,16 @@ public final class NexaChatListQaActivity extends Activity {
             opened = true;
             showConversation();
         });
+        if (clickableContactAvatar) {
+            ImageButton avatar = new ImageButton(this);
+            avatar.setContentDescription(name);
+            avatar.setFocusable(true);
+            avatar.setOnClickListener(v -> {
+                avatarClicks++;
+                showChatList();
+            });
+            row.addView(avatar, new LinearLayout.LayoutParams(72, 72));
+        }
         TextView title = label(name, 19f);
         title.setContentDescription(name);
         title.setPadding(0, 25, 0, 25);
@@ -73,6 +88,7 @@ public final class NexaChatListQaActivity extends Activity {
         TextView status = label("QA run: " + qaRunId
             + " · Duplicate contacts: " + duplicateContact
             + " · Chat row clicks: " + chatRowClicks
+            + " · Avatar clicks: " + avatarClicks
             + " · Send clicks: " + sendClicks
             + " · Opened: " + opened, 14f);
         status.setContentDescription(status.getText());

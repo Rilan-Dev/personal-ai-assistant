@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { getAcaApiOrigin, resolveAcaApiOrigin } from '../../apps/mobile/src/native/acaConfig.ts';
 
 test('accepts HTTPS ACA origins in development and production', () => {
@@ -48,4 +49,25 @@ test('reads the Expo compile-time origin with the runtime development mode', () 
     if (originalOrigin === undefined) delete process.env.EXPO_PUBLIC_ACA_API_ORIGIN;
     else process.env.EXPO_PUBLIC_ACA_API_ORIGIN = originalOrigin;
   }
+});
+
+test('keeps an embedded production-mode bundle bootable when Expo omitted the optional debug origin', () => {
+  const originalDev = globalThis.__DEV__;
+  const originalOrigin = process.env.EXPO_PUBLIC_ACA_API_ORIGIN;
+  try {
+    globalThis.__DEV__ = false;
+    delete process.env.EXPO_PUBLIC_ACA_API_ORIGIN;
+    assert.equal(getAcaApiOrigin(), 'https://aca-unconfigured.invalid');
+  } finally {
+    if (originalDev === undefined) delete globalThis.__DEV__;
+    else globalThis.__DEV__ = originalDev;
+    if (originalOrigin === undefined) delete process.env.EXPO_PUBLIC_ACA_API_ORIGIN;
+    else process.env.EXPO_PUBLIC_ACA_API_ORIGIN = originalOrigin;
+  }
+});
+
+test('Android JS bundle cache key includes the configured ACA origin', async () => {
+  const gradle = await readFile(new URL('../../apps/mobile/android/app/build.gradle', import.meta.url), 'utf8');
+  assert.match(gradle, /task\.name\s*==~\s*\/createBundle\.\*JsAndAssets\//);
+  assert.match(gradle, /inputs\.property\(["']expoPublicAcaApiOrigin["']\s*,\s*acaApiOrigin\)/);
 });

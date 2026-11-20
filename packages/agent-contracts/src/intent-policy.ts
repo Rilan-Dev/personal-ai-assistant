@@ -62,10 +62,12 @@ export type NativeOwnerIntent = {
 
 /** A bounded visible app label, never a package ID, URI, or command. */
 export function isLaunchableAppLabel(value: unknown): value is string {
-  return typeof value === "string" && value.length >= 2 && value.length <= 56 &&
-    value.trim() === value && /^[a-z0-9][a-z0-9 ._+-]*$/.test(value) &&
-    !/\s{2}|\b(?:and|then|send|text|message|call|dial|delete|install|uninstall)\b/.test(value) &&
-    !new Set(["app","an app","the app"]).has(value);
+  if (typeof value !== "string") return false;
+  const normalized=value.toLowerCase();
+  return value.length >= 2 && value.length <= 56 &&
+    value.trim() === value && /^[a-z0-9][a-z0-9 ._+-]*$/.test(normalized) &&
+    !/\s{2}|\b(?:and|then|send|text|message|call|dial|delete|install|uninstall)\b/.test(normalized) &&
+    !new Set(["app","an app","the app"]).has(normalized);
 }
 
 export function parseNativeOwnerIntent(request: string): NativeOwnerIntent | null {

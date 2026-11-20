@@ -49,21 +49,22 @@ test("WhatsApp intent is parsed into a local review even when the optional compo
     "optional draft-launch support must not suppress the local review preview");
 });
 test("Maestro grants Screen Assist in Settings; the bound service and shade are checked after Maestro exits",()=>{
-  assert.ok(flow.includes('extendedWaitUntil:\n    visible: "Use Nexa Screen Assist QA2"'));
+  assert.ok(flow.includes('extendedWaitUntil:\n    visible: "Use Nexa Screen Assist (Debug)"'));
   assert.ok(flow.includes('- tapOn:\n          id: "android:id/switch_widget"\n          checked: false'));
   assert.doesNotMatch(flow,/- inputText: "open notification bar"/);
   assert.match(runtimeAcceptance,/open notification bar/);
   assert.match(runtimeAcceptance,/actual Android System UI notification shade appears/);
 });
-test("Flow 10 expands optional setup without wiping owner app state",()=>{
-  assert.ok(/launchApp:\n\s+stopApp: true\n\s+clearState: false/.test(flow));
+test("Flow 10 restarts its transient tab and scroll state without clearing owner app data",()=>{
+  assert.ok(/launchApp:\n\s+stopApp: true\n\s+clearState: false/.test(flow),
+    "reopen the live debug runtime at its default tab without wiping owner data or permission grants");
   assert.ok(/extendedWaitUntil:\n\s+visible: "Make your assistant yours\."\n\s+timeout: 90000/.test(flow),
     "Flow 10 must wait for the QA2 JS bundle and explicitly opened Setup screen before querying it");
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
   assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
-  assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"\n- assertVisible: "One-time screen assistance"'),
-    "verify the first optional permission appears after expansion; the accordion header is below all optional cards");
+  assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"\n- scrollUntilVisible:\n    element: "One-time screen assistance"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "One-time screen assistance"'),
+    "after expanding optional setup, scroll the clipped first permission card into view before asserting it");
   assert.ok(flow.includes('element: "Open Accessibility.*One-time screen assistance.*"'));
   assert.ok(/element: "Open Accessibility\.\*One-time screen assistance\.\*"\n\s+direction: DOWN/.test(flow),
     "scroll dynamically to the live Screen Assist action instead of searching for the offscreen accordion header");
@@ -75,14 +76,23 @@ test("Flow 10 expands optional setup without wiping owner app state",()=>{
     "OEM Accessibility settings may require an explicit Stop confirmation before restarting the service");
 });
 
-test("Flow 10 enters Setup explicitly on an already-configured QA2 install",()=>{
-  assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.physicalqa2$/m);
+test("Flow 10 enters Setup explicitly from any already-open QA2 tab",()=>{
+  assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
   assert.match(flow,/visible: "Pixel Launcher\.\*responding"[\s\S]*?tapOn: "Wait"/,
     "recover the Android launcher only when its boot-time ANR dialog is actually visible");
-  assert.ok(flow.includes('visible: "Make your assistant yours."'),
-    "wait for the actual Setup heading after resolving Android's delayed runtime-permission prompt");
+  assert.ok(flow.includes(String.raw`visible: "(?s).*(?:How can I help today\\?|Make your assistant yours\\.|Don.t allow|Nexa · Tools).*"`),
+    "accept the initialized Chat, first-run Setup, or already-open Tools screen before selecting permission setup");
+  assert.ok(flow.includes(String.raw`when:
+      visible: "How can I help today\\?"
+    commands:
+      - tapOn: "Tools"`),
+    "route an initialized app from Chat to Tools before opening its permission setup");
+  assert.ok(flow.includes(String.raw`when:
+      visible: "Make your assistant yours\\."
+    commands:
+      - tapOn: "Tools"`),
+    "route a first-run Setup screen to Tools without assuming that it is the only startup state");
   assert.ok(flow.includes('timeout: 180000'));
-  assert.ok(flow.includes('- tapOn: "Tools"'));
   assert.ok(flow.includes('element: "Open permission setup"'));
   assert.ok(flow.includes('- tapOn:\n    text: "Open permission setup"\n    point: "50%,50%"'),
     "tap the live card's center by bounds instead of blocking on Android's accessibility click action");
@@ -100,6 +110,13 @@ test("Maestro navigation selectors match the rendered Chat and Tools labels",()=
   assert.ok(flow.includes('visible: "Make your assistant yours."'),
     "anchor cold start on the rendered Setup heading rather than the application package label");
   assert.ok(flow.includes('- tapOn: "Tools"'));
+  const bottomNavStart=app.indexOf('<View style={styles.bottomNav}>');
+  const bottomNavEnd=app.indexOf('</SafeAreaView>',bottomNavStart);
+  const bottomNav=app.slice(bottomNavStart,bottomNavEnd);
+  assert.ok(bottomNavStart>=0&&bottomNavEnd>bottomNavStart,
+    "the primary navigation must have a rendered container");
+  assert.match(bottomNav,/accessibilityLabel=\{item\.label\}/,
+    "the visible tab label is its accessible name; the tab role supplies the role without a duplicate suffix");
   for(const navigationFlow of navigationFlows) {
     assert.doesNotMatch(navigationFlow,/"(?:Chat|Tools) tab"/,
       "the rendered accessible hierarchy exposes the visible labels Chat and Tools without a tab suffix");
@@ -121,43 +138,119 @@ test("QA2 Screen Assist has a distinct Settings label and Flow 10 selects it",()
   assert.match(debugManifest,/service android:name="\.ScreenAssistService"[\s\S]*?android:label="\$\{screenAssistServiceLabel\}"/);
   assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist \(Debug\)'/);
   assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist QA2'/);
-  assert.ok(flow.includes('element: "Nexa Screen Assist QA2"'));
-  assert.ok(flow.includes('visible: "Use Nexa Screen Assist QA2"'));
+  assert.ok(flow.includes('element: "Nexa Screen Assist (Debug)"'));
+  const serviceSelection=flow.slice(flow.indexOf('notVisible: "Use Nexa Screen Assist (Debug)"'),
+    flow.indexOf('visible: "Use Nexa Screen Assist (Debug)"'));
+  assert.match(serviceSelection,/element: "Nexa Screen Assist \(Debug\)"[\s\S]*?direction: DOWN/,
+    "the Infinix Accessibility list places Nexa below its current position, so the flow must scroll to lower entries");
+  assert.ok(flow.includes('visible: "Use Nexa Screen Assist (Debug)"'));
   assert.ok(flow.includes('id: "android:id/switch_widget"\n        checked: false'));
   assert.ok(flow.includes('id: "android:id/switch_widget"\n    checked: true'));
 });
 
 test("the ordered experimental suite targets the same current isolated QA2 APK in every flow",()=>{
   for(const reviewFlow of reviewFlows) {
-    assert.match(reviewFlow,/^appId: dev\.rilandev\.personalaiassistant\.physicalqa2$/m);
+    assert.match(reviewFlow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
     assert.doesNotMatch(reviewFlow,/clearState:\s*true/,
       "message and text review flows must preserve Android's Accessibility grant");
   }
+  for(const reviewFlow of reviewFlows.slice(1)) {
+    assert.match(reviewFlow,/- launchApp:\n\s+stopApp: true\n\s+clearState: false/,
+      "message-channel and text-entry flows reset ephemeral request state without clearing Android grants");
+  }
+  assert.match(reviewFlows[0],/- launchApp:\n\s+stopApp: false\n\s+clearState: false/,
+    "the local WhatsApp review uses the already-running live app so it does not force a slow Metro cold start");
 });
 
-test("message review flows wait for the cold-started Chat tab before tapping it",()=>{
+test("message review flows wait for Chat and assert its persistent composer before typing",()=>{
   for(const reviewFlow of reviewFlows) {
-    assert.ok(reviewFlow.includes('- extendedWaitUntil:\n    visible: "Chat"\n    timeout: 90000\n- tapOn: "Chat"'),
-      "the debug JS bundle may render after launchApp has returned");
+    assert.match(reviewFlow,/- extendedWaitUntil:\n\s+visible:\s*"Chat"\n(?:\s*#.*\n)*\s+timeout:\s*\d+\n- tapOn:\s*"Chat"\n- assertVisible: "Assistant command"/,
+      "the composer remains available after the app has retained older conversation history");
   }
 });
 
+test("experimental flows reset Flow 10 scroll state and assert the persistent Chat composer",()=>{
+  assert.match(flow,/- launchApp:\n\s+stopApp: true\n\s+clearState: false/,
+    "Flow 10 must reset stale tab and scroll state before opening Android permission setup");
+  for(const reviewFlow of reviewFlows) {
+    assert.match(reviewFlow,/- assertVisible: "Assistant command"/,
+      "the composer is stable when Chat contains older messages");
+    assert.doesNotMatch(reviewFlow,/assertVisible:\s*"How can I help today\?"/,
+      "the empty-chat greeting is not present after any prior conversation");
+  }
+});
 test("generic text review scrolls the clipped exact-text row fully into view",()=>{
   const genericFlow=reviewFlows[2];
-  assert.ok(genericFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact text: project update"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "Target input: Search"\n- assertVisible: "Exact text: project update"'),
+  const scrollBlocks=[...genericFlow.matchAll(/- scrollUntilVisible:\n([\s\S]*?)(?=\n- |\n#|$)/g)].map(match=>match[0]);
+  for(const target of [
+    "Review text entry into another app",
+    "Exact text: project update",
+    "Prepare approved text entry",
+    "Discard text",
+  ]) {
+    assert.ok(scrollBlocks.some(block=>block.includes(`text: "${target}"`)&&block.includes("timeout: 90000")),
+      `the physical Tools page needs a longer dynamic search for ${target}`);
+  }
+  assert.ok(genericFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact text: project update"\n    direction: DOWN\n    timeout: 90000\n- assertVisible: "Target input: Search"\n- assertVisible: "Exact text: project update"'),
     "checking only the card header can leave the exact-text row clipped under the bottom navigation");
 });
 
+test("message review discard control exposes a stable accessible name for Maestro",()=>{
+  const at=app.indexOf("Discard message review — do not send");
+  assert.ok(at>=0,"the visible no-send discard action exists");
+  const start=app.lastIndexOf("<Pressable",at);
+  const pressable=app.slice(start,at);
+  assert.match(pressable,/accessibilityRole="button"/);
+  assert.match(pressable,/accessibilityLabel="Discard message review, do not send"/,
+    "the button needs a stable ASCII accessible name independent of the dash glyph");
+  const messageFlow=reviewFlows[1];
+  assert.match(messageFlow,/element: "Discard message review, do not send"\n\s+direction: DOWN\n\s+visibilityPercentage: 50\n\s+timeout: 90000/);
+  assert.match(messageFlow,/assertVisible: "Discard message review, do not send"/);
+});
+test("message review selectors avoid a platform-specific dash glyph",()=>{
+  const messageFlow=reviewFlows[1];
+  assert.doesNotMatch(messageFlow,/Discard message review — do not send/);
+  assert.match(messageFlow,/element: "Discard message review, do not send"/);
+});
 test("message review scrolls the exact draft, decision and discard controls into view",()=>{
   const messageFlow=reviewFlows[1];
-  assert.ok(messageFlow.includes('- scrollUntilVisible:\n    element:\n      text: "Exact draft: I am in the meeting i will call you later"\n    direction: DOWN\n    visibilityPercentage: 50\n    timeout: 60000\n- assertVisible: "Message app & recipient review"\n- extendedWaitUntil:\n    visible: "Exact draft: I am in the meeting i will call you later"\n    timeout: 30000\n- assertVisible: "Requested recipient: Mom"\n- assertVisible: "Exact draft: I am in the meeting i will call you later"\n- scrollUntilVisible:\n    element: "Messaging app decision"\n    direction: DOWN\n    visibilityPercentage: 50\n    timeout: 30000\n- assertVisible: "Messaging app decision"\n- scrollUntilVisible:\n    element:\n      text: "Discard message review — do not send"\n    direction: DOWN\n    timeout: 30000\n- assertVisible: "Discard message review — do not send"'),
-    "scroll each lower review target into the viewport before asserting it");
+  for(const target of [
+    "Exact draft: I am in the meeting i will call you later",
+    "Messaging app decision",
+    "Discard message review, do not send",
+  ]) {
+    const visibleIndex=messageFlow.indexOf(`- assertVisible: "${target}"`);
+    const scrollBlocks=[...messageFlow.matchAll(/- scrollUntilVisible:\n([\s\S]*?)(?=\n- |\n#|$)/g)];
+    assert.ok(visibleIndex>=0&&scrollBlocks.some(block=>
+      (block[0].includes(`text: "${target}"`)||block[0].includes(`element: "${target}"`))&&
+      block.index<visibleIndex),
+      `scroll the exact review target into view before asserting: ${target}`);
+  }
 });
 
-test("WhatsApp owner preview allows dynamic scrolling through the full Tools page",()=>{
+test("WhatsApp owner preview stays directly visible for local review",()=>{
   const whatsappFlow=reviewFlows[0];
-  assert.ok(whatsappFlow.includes('text: "Requested contact: mom.*Nothing was sent.*"\n    direction: DOWN\n    timeout: 90000'),
-    "the preview is below the long Screen Assist cards on the physical phone");
+  assert.ok(whatsappFlow.includes('inputText: \'Send a WhatsApp message to my mom "Nexa QA local review only"\''),
+    "the local test uses unique text so stale in-memory review state cannot satisfy it");
+  assert.ok(whatsappFlow.includes('assertVisible:\n    text: "Requested contact: mom.*Nothing was sent.*"'),
+    "the owner review flow verifies the local no-send result directly");
+  assert.ok(whatsappFlow.includes('assertVisible: "Draft text: Nexa QA local review only"'),
+    "the exact message text remains visible in Nexa for owner review");
+  assert.ok(!whatsappFlow.includes('scrollUntilVisible'),
+    "the review result is near the top of Tools and is not buried under history");
+});
+
+test("pending WhatsApp review appears before unbounded Tools history",()=>{
+  const tools=app.slice(app.indexOf("{tab === 'tools'"));
+  const introAt=tools.indexOf("Tools & permissions");
+  const previewAt=tools.indexOf("whatsAppDraftNotice!==''");
+  const deviceControlsAt=tools.indexOf(">Device controls</Text>");
+  assert.ok(previewAt>introAt && previewAt<deviceControlsAt,
+    "the local message review must render near the top of Tools before long history cards");
+  assert.ok(tools.includes("Draft text: {whatsAppDraft}"),
+    "the review card shows the exact local draft for confirmation");
+  assert.equal(tools.indexOf("whatsAppDraftNotice!==''",previewAt+1),-1,
+    "the notice is rendered only once instead of appearing again far down the page");
 });
 
 test("destroying an old Screen Assist instance cannot disconnect a replacement",()=>{
@@ -195,4 +288,25 @@ test("React Native retries real connection status after resuming from Android Se
   assert.ok(app.includes("if (state==='active')"));
   assert.ok(!app.includes("setSetupStatus({...status,screenAssistConnected:true})"),
     "Never fabricate a bound Accessibility-service state");
+});
+test("Tools reflects the bound Screen Assist service even when live voice is off",()=>{
+  const statusCall=app.indexOf("const refresh=(remaining=80)=>getScreenAssistStatus()");
+  const effectStart=app.lastIndexOf("useEffect(()=>{",statusCall);
+  const effectEnd=app.indexOf("},[tab]);",statusCall)+"},[tab]);".length;
+  const effect=app.slice(effectStart,effectEnd);
+  assert.ok(statusCall>0&&effectStart>=0&&effectEnd>statusCall,"the Screen Assist status refresh effect must exist");
+  assert.match(effect,/if\(!screenAssistAvailable\(\)\)return;/);
+  assert.doesNotMatch(effect,/if\(!engine\.live\|\|!screenAssistAvailable\(\)\)return;/,
+    "Screen Assist status is independent of whether live voice is running");
+  assert.match(effect,/setScreenAssistEnabled\(value\.enabled\)/);
+  assert.match(app,/const screenAssistSetupNotice='Enable Nexa Screen Assist in Android Accessibility settings\. Return and arm a single capture\.'/);
+  assert.match(effect,/if\(value\.enabled\)setScreenAssistNotice\(notice=>notice===screenAssistSetupNotice\?'':notice\)/,
+    "once Android confirms the service is connected, clear only the stale setup prompt and retain capture/review feedback");
+  assert.match(effect,/AppState\.addEventListener\('change'/);
+  assert.match(effect,/if\(!value\.enabled&&remaining>0\)[\s\S]{0,160}setTimeout\(\(\)=>\{void refresh\(remaining-1\);\},1500\)/,
+    "the badge must keep polling for up to two minutes to cover Android's delayed post-Maestro service rebind, with a fixed upper bound");
+  assert.match(effect,/\},\[tab\]\);/);
+  const toolsTab=app.slice(app.indexOf('<View style={styles.bottomNav}>'));
+  assert.match(toolsTab,/onPress=\{\(\)=>\{\s*navigate\(item\.id\);\s*if\(item\.id==='tools'\)screenAssistRefreshRef\.current\?\.\(\)/,
+    "selecting Tools again must restart the bounded Screen Assist connection refresh even if the selected tab did not change");
 });

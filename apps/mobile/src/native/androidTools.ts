@@ -30,10 +30,31 @@ interface DeviceControlBridge extends ReviewedMessageNativeBridge {
   openChromeSearch(query: string): Promise<LaunchOutcome>;
   openNotificationShade(): Promise<{notificationShadeAccepted: boolean}>;
   performReviewedScreenTap(label:string,sessionId:string,callId:string,fingerprint:string):Promise<{
-    actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
+    actionAccepted:boolean;verification:"observed_change"|"not_observed"|"tap_event_observed";
+    businessOutcomeVerified:false;screenObservation?:string;screenObservationAvailable?:boolean
   }>;
+  performReviewedObservedScreenTap(snapshotId:string,index:number,label:string,
+    sessionId:string,callId:string,fingerprint:string):Promise<{
+      actionAccepted:boolean;verification:"observed_change"|"not_observed"|"tap_event_observed";
+      businessOutcomeVerified:false;screenObservation?:string;screenObservationAvailable?:boolean
+    }>;
+  capturePowerShellScreen():Promise<string>;
+  capturePowerShellAccessibilityTree():Promise<string>;
+  getPowerShellScreenSnapshot(snapshotId:string):Promise<string|null>;
+  isPowerShellScreenSnapshotCurrent(snapshotId:string):Promise<boolean>;
+  performReviewedIndexedScreenTap(snapshotId:string,index:number,sessionId:string,
+    callId:string,fingerprint:string):Promise<{
+      actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
+    }>;
+  performReviewedPowerShellKeyAction(name:"back"|"home"|"notifications",
+    sessionId:string,callId:string,fingerprint:string):Promise<{
+      actionAccepted:boolean;verification:"dispatch_accepted";businessOutcomeVerified:false;
+      screenObservation?:string;screenObservationAvailable?:boolean
+    }>;
   performReviewedScreenScroll(direction:string,sessionId:string,callId:string,fingerprint:string):Promise<{
-    actionAccepted:boolean;verification:"observed_change"|"not_observed";businessOutcomeVerified:false
+    actionAccepted:boolean;verification:"observed_change"|"not_observed"|
+      "structural_change_observed"|"scroll_event_observed";
+    businessOutcomeVerified:false;screenObservation?:string;screenObservationAvailable?:boolean
   }>;
   performReviewedScreenText(label:string,text:string,sessionId:string,callId:string,fingerprint:string):Promise<{
     submitted:false;verification:"exact_text_visible"
@@ -55,6 +76,13 @@ export const nativeDeviceAvailable = (): boolean =>
   typeof NativeModules.PAADeviceControl?.openSupportedApp === "function" &&
   typeof NativeModules.PAADeviceControl?.openCamera === "function";
 
+export async function readPowerShellScreenSnapshot(snapshotId:string):Promise<string|null>{
+  return getBridge().getPowerShellScreenSnapshot(snapshotId);
+}
+export async function isPowerShellScreenSnapshotCurrent(snapshotId:string):Promise<boolean>{
+  return getBridge().isPowerShellScreenSnapshotCurrent(snapshotId);
+}
+
 function getBridge(): DeviceControlBridge {
   if (!nativeDeviceAvailable()) throw new Error("Android native module is not available. Rebuild the native application.");
   return NativeModules.PAADeviceControl as DeviceControlBridge;
@@ -63,6 +91,21 @@ const plainObject = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const emptyInput = (value: unknown): value is Record<string, unknown> =>
   plainObject(value) && Object.keys(value).length === 0;
+function parseScreenObservation(value:unknown):Record<string,unknown>|undefined {
+  if(typeof value==="string"){
+    if(value.length>16_000)return undefined;
+    try{const parsed:unknown=JSON.parse(value);return plainObject(parsed)?parsed:undefined;}
+    catch{return undefined;}
+  }
+  return plainObject(value)?value:undefined;
+}
+function nativeObservationFields<T extends {screenObservation?:string|null;
+  screenObservationAvailable?:boolean}>(value:T):Record<string,unknown> {
+  const snapshot=parseScreenObservation(value.screenObservation);
+  const rest={...value};
+  delete rest.screenObservation;
+  return {...rest,...(snapshot?{screenObservation:snapshot}:{})};
+}
 const appInput = (value: unknown): value is Record<string, unknown> =>
   plainObject(value) &&
   Object.keys(value).length === 1 &&
@@ -87,11 +130,13 @@ export async function updateNativeActionsPaused(paused:boolean):Promise<boolean>
   return actual;
 }
 const safeControlLabel=(value:unknown):value is string=>
-  typeof value==="string"&&value.length>=2&&value.length<=45&&
-  value.trim()===value&&/^[\p{L}\p{N}][\p{L}\p{N} _.-]*$/u.test(value)&&
+  typeof value==="string"&&value.length>=1&&value.length<=45&&
+  value.trim()===value&&((value.length===1&&/^[0-9]$/.test(value))||
+    (value.length>=2&&/^[\p{L}][\p{L}\p{N} _.-]*$/u.test(value)))&&
   !/\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\b/i.test(value);
 const reviewedFieldLabel=(value:unknown):value is string=>
-  safeControlLabel(value)&&!/\b(recipient|account|email address|phone number|amount|address|checkout|password|security|payment)\b/i.test(value);
+  safeControlLabel(value)&&typeof value==="string"&&value.length>=2&&
+  !/\b(recipient|account|email address|phone number|amount|address|checkout|password|security|payment)\b/i.test(value);
 const reviewedText=(value:unknown):value is string=>
   typeof value==="string"&&value.length>=1&&value.length<=500&&
   value.trim().length>0&&!/[\x00-\x08\x0b-\x1f]/.test(value);
@@ -152,11 +197,21 @@ export function createAndroidTools(): Tool[] {
       risk: "medium",
       hasExternalSideEffect: true,
       validateInput: emptyInput,
-      execute: async () => ({
-        status: "success",
-        data: { observation: await getBridge().readVisibleControls(),
-          evidence: "android_accessibility", actionPerformed: false }
-      })
+      execute: async () => {
+        const raw=await getBridge().readVisibleControls();
+        let observation=raw;
+        let screenObservation:Record<string,unknown>|undefined;
+        try{
+          const parsed:unknown=JSON.parse(raw);
+          if(plainObject(parsed)&&typeof parsed.observation==="string"){
+            observation=parsed.observation;
+            screenObservation=parseScreenObservation(parsed.screenObservation);
+          }
+        }catch{/* Older native builds return the safe summary string directly. */}
+        return {status:"success",data:{observation,
+          ...(screenObservation?{screenObservation}:{}),
+          evidence:"android_accessibility",actionPerformed:false}};
+      }
     },
     {
       id: "device.set_flashlight",
@@ -201,6 +256,35 @@ export function createAndroidTools(): Tool[] {
       })
     },
     {
+      id:"screen.tap_observed",
+      description:"With one-time owner approval, tap one unique safe clickable from the newest complete Accessibility snapshot. Requires its exact snapshot id, index and visible label; Android revalidates the same app/window and target. Never accepts coordinates.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===3&&
+        typeof input.snapshotId==="string"&&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.snapshotId)&&
+        Number.isInteger(input.index)&&Number(input.index)>=0&&Number(input.index)<40&&
+        safeControlLabel(input.label),
+      execute:async({snapshotId,index,label},ctx)=>{
+        const result=await getBridge().performReviewedObservedScreenTap(
+          String(snapshotId),Number(index),String(label),...nativeStepMandate(ctx));
+        return {status:"success",data:nativeObservationFields(result)};
+      }
+    },
+    {
+      id:"screen.key_action",
+      description:"With one-time owner approval, perform only named Android Back, Home or Notifications navigation. No raw keycodes, Enter, submit or text-entry keys.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===1&&
+        ["back","home","notifications"].includes(String(input.name)),
+      execute:async({name},ctx)=>{
+        const result=await getBridge().performReviewedPowerShellKeyAction(
+          name as "back"|"home"|"notifications",...nativeStepMandate(ctx));
+        return {status:"success",data:nativeObservationFields(result)};
+      }
+    },
+    {
       id: "device.open_camera",
       description: "Open camera via system Android Intent; does not capture an image",
       capabilities: ["apps.launch"],
@@ -237,10 +321,11 @@ export function createAndroidTools(): Tool[] {
       capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
       validateInput:(input):input is Record<string,unknown>=>
         plainObject(input)&&Object.keys(input).length===1&&safeControlLabel(input.label),
-      execute:async({label},ctx)=>({
-        status:"success",
-        data:await getBridge().performReviewedScreenTap(String(label),...nativeStepMandate(ctx))
-      })
+      execute:async({label},ctx)=>{
+        const result=await getBridge().performReviewedScreenTap(
+          String(label),...nativeStepMandate(ctx));
+        return {status:"success",data:nativeObservationFields(result)};
+      }
     },
     {
       id:"screen.scroll",
@@ -249,11 +334,11 @@ export function createAndroidTools(): Tool[] {
       validateInput:(input):input is Record<string,unknown>=>
         plainObject(input)&&Object.keys(input).length===1&&
         ["up","down","left","right"].includes(String(input.direction)),
-      execute:async({direction},ctx)=>({
-        status:"success",
-        data:await getBridge().performReviewedScreenScroll(
-          String(direction),...nativeStepMandate(ctx))
-      })
+      execute:async({direction},ctx)=>{
+        const result=await getBridge().performReviewedScreenScroll(
+          String(direction),...nativeStepMandate(ctx));
+        return {status:"success",data:nativeObservationFields(result)};
+      }
     },
     {
       id:"screen.open_whatsapp_chat",
@@ -317,6 +402,42 @@ export function createAndroidTools(): Tool[] {
         status:"success",
         data:await getBridge().performReviewedScreenText(
           String(targetLabel),String(exactText),...nativeStepMandate(ctx))
+      })
+    }
+  ];
+}
+
+/** Debug-only PowerShell surface. Release chats never receive the broader read/index tools. */
+export function createPowerShellAndroidTools():Tool[] {
+  return [
+    {
+      id:"screen.accessibility_tree",
+      description:"After explicit owner confirmation, capture one bounded tree from the active external app through Nexa Screen Assist. Returns all accessibility-exposed nodes with snapshot-local parent/child path IDs, class/resource IDs, flags, actions and screen-pixel bounds. Visible non-editable text is included for the active LLM; editable and password values are redacted. This is a one-shot read, not background monitoring.",
+      capabilities:["device.observe"],risk:"high",hasExternalSideEffect:true,
+      validateInput:emptyInput,
+      execute:async()=>({status:"success",data:JSON.parse(
+        await getBridge().capturePowerShellAccessibilityTree())})
+    },
+    {
+      id:"screen.inspect",
+      description:"With one-time owner confirmation, read a bounded in-memory external-app snapshot; excludes editable/password fields and returns indexed labeled controls with their observed screen bounds. Screen text is returned only to the local PowerShell caller.",
+      capabilities:["device.observe"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:emptyInput,
+      execute:async()=>({status:"success",data:JSON.parse(await getBridge().capturePowerShellScreen())})
+    },
+    {
+      id:"screen.tap_index",
+      description:"With one-time owner confirmation, tap a uniquely labeled clickable at an index from a current screen.inspect snapshot. Rejects stale screens and never accepts raw coordinates.",
+      capabilities:["device.interact"],risk:"medium",hasExternalSideEffect:true,
+      validateInput:(input):input is Record<string,unknown>=>
+        plainObject(input)&&Object.keys(input).length===2&&
+        typeof input.snapshotId==="string"&&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.snapshotId)&&
+        Number.isSafeInteger(input.index)&&Number(input.index)>=0&&Number(input.index)<40,
+      execute:async({snapshotId,index},ctx)=>({
+        status:"success",
+        data:await getBridge().performReviewedIndexedScreenTap(
+          String(snapshotId),Number(index),...nativeStepMandate(ctx))
       })
     }
   ];

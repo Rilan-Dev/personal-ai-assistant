@@ -84,7 +84,7 @@ internal object NexaUiActionJournal {
         synchronized(lock) {
             if (approvalToken.length !in 16..128 ||
                 kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right","message_fill","message_send","text_fill","app_launch",
-                    "nav_back","nav_notifications") ||
+                    "nav_back","nav_home","nav_notifications") ||
                 origin !in setOf("chat","live-voice","assistant-role","overlay") ||
                 !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")) ||
                 (kind in setOf("message_fill","message_send","text_fill") &&
@@ -148,7 +148,7 @@ internal object NexaUiActionJournal {
         synchronized(lock) {
             if (observation !in setOf("observed_change","no_observable_change",
                     "scroll_event_observed","window_change_observed",
-                    "structural_change_observed","context_changed_unverified",
+                    "structural_change_observed","tap_event_observed","content_change_observed","context_changed_unverified",
                     "destination_package_observed","unverified"))
                 return@synchronized false
             try {
@@ -173,7 +173,8 @@ internal object NexaUiActionJournal {
 
     /** Exact one-time approval lookup. Only the status is returned, never UI data. */
     fun outcomeFor(ctx: Context, approvalToken: String, kind:String="tap"): String? = synchronized(lock) {
-        if(kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right")) return@synchronized null
+        if(kind !in setOf("tap","scroll_up","scroll_down","scroll_left","scroll_right",
+                "nav_back","nav_home","nav_notifications")) return@synchronized null
         if(approvalToken.length !in 16..128) return@synchronized null
         try {
             val id=digest(approvalToken)
@@ -203,7 +204,8 @@ internal object NexaUiActionJournal {
                     status !in setOf("claimed","android_accepted","android_rejected",
                         "unknown","observed_change","no_observable_change",
                         "scroll_event_observed","window_change_observed",
-                        "structural_change_observed","unverified","context_changed_unverified"))
+                        "structural_change_observed","tap_event_observed","content_change_observed",
+                        "unverified","context_changed_unverified"))
                     null
                 else kind to status
             }

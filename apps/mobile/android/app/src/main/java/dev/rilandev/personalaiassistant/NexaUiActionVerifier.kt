@@ -18,7 +18,12 @@ internal object NexaUiActionVerifier {
     private data class Observation(
         val token:String,val kind:String,val pkg:String,val windowId:Int,
         val before:String,val start:Long,var scrollEvents:Int=0,var windowEvents:Int=0,
-        val allowLauncherWindowChange:Boolean=false
+        var contentEvents:Int=0,
+        val allowLauncherWindowChange:Boolean=false,
+        var changedWindowEventPackage:String?=null,
+        var changedWindowEventId:Int?=null,
+        val expectedClickIdentity:String?=null,
+        var tapEvents:Int=0
     )
     private val pending=LinkedHashMap<String,Observation>()
 
@@ -56,36 +61,79 @@ internal object NexaUiActionVerifier {
 
     /** Start BEFORE performAction to catch immediate TYPE_VIEW_SCROLLED events. */
     fun begin(token:String,kind:String,pkg:String,windowId:Int,before:String,
-              allowLauncherWindowChange:Boolean=false) {
+              allowLauncherWindowChange:Boolean=false,
+              expectedClickIdentity:String?=null) {
         if(kind!="tap"&&kind!="scroll")return
         synchronized(lock){
             val now=SystemClock.elapsedRealtime()
             pending.entries.removeAll{now-it.value.start>3000}
             if(pending.size>=8)pending.remove(pending.keys.first())
             pending[token]=Observation(token,kind,pkg,windowId,before,now,
-                allowLauncherWindowChange=allowLauncherWindowChange)
+                allowLauncherWindowChange=allowLauncherWindowChange,
+                expectedClickIdentity=expectedClickIdentity)
         }
     }
     fun cancel(token:String)=synchronized(lock){pending.remove(token);Unit}
 
-    /** Only metadata from the same third-party app + window can count. */
+    /** Only safe app/window metadata can count; no event text is retained. */
     fun onAccessibilityEvent(event:AccessibilityEvent) {
         val type=event.eventType
         if(type!=AccessibilityEvent.TYPE_VIEW_SCROLLED&&
-            type!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)return
+            type!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&
+            type!=AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED&&
+            type!=AccessibilityEvent.TYPE_VIEW_CLICKED)return
         val pkg=event.packageName?.toString().orEmpty()
         val window=event.windowId
+        val eventIdentity=if(type==AccessibilityEvent.TYPE_VIEW_CLICKED){
+            val source=try{event.source}catch(_:Exception){null}
+            try{source?.let{clickIdentity(it,pkg,window)}}
+            finally{try{source?.recycle()}catch(_:Exception){}}
+        }else null
         synchronized(lock){
             val now=SystemClock.elapsedRealtime()
             for(state in pending.values){
-                if(now-state.start !in 0..2000 || pkg!=state.pkg || window!=state.windowId)continue
+                if(now-state.start !in 0..2000)continue
+                val sameWindow=pkg==state.pkg && window==state.windowId
+                val permittedWindowChange = ScreenAssistSourcePolicy.matches(
+                    pkg,pkg,BuildConfig.APPLICATION_ID) ||
+                    (BuildConfig.DEBUG && pkg==BuildConfig.APPLICATION_ID)
+                if(!sameWindow && state.kind=="tap" &&
+                    type==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+                    permittedWindowChange){
+                    state.changedWindowEventPackage=pkg
+                    state.changedWindowEventId=window
+                    continue
+                }
+                if(!sameWindow)continue
+                if(type==AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED&&
+                    NexaUiActionEvidencePolicy.isMatchingContentChangeEvent(
+                        state.kind,state.pkg,state.windowId,pkg,window))
+                    state.contentEvents++
                 if(type==AccessibilityEvent.TYPE_VIEW_SCROLLED&&state.kind=="scroll")
                     state.scrollEvents++
                 if(type==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&state.kind=="tap")
                     state.windowEvents++
+                if(type==AccessibilityEvent.TYPE_VIEW_CLICKED&&state.kind=="tap"&&
+                    NexaUiActionEvidencePolicy.isMatchingTapEvent(
+                        state.expectedClickIdentity,eventIdentity))state.tapEvents++
             }
         }
     }
+
+    /** Transient hash of package/window, class, resource id and bounds only. */
+    fun clickIdentity(node:AccessibilityNodeInfo,pkg:String,windowId:Int):String?=try{
+        val bounds=Rect().also{node.getBoundsInScreen(it)}
+        if(pkg.isBlank()||bounds.isEmpty)null else {
+            val metadata=listOf(pkg,windowId.toString(),
+                node.className?.toString().orEmpty().take(100),
+                node.viewIdResourceName.orEmpty().take(140),
+                bounds.left.toString(),bounds.top.toString(),
+                bounds.right.toString(),bounds.bottom.toString()).joinToString("|")
+            MessageDigest.getInstance("SHA-256")
+                .digest(metadata.toByteArray(Charsets.UTF_8))
+                .joinToString(""){ "%02x".format(it.toInt() and 255) }
+        }
+    }catch(_:Exception){null}
 
     /** Never mistake accepted dispatch for task completion. */
     fun observeAfter(service:ScreenAssistService,token:String,unusedPrior:String) {
@@ -95,7 +143,13 @@ internal object NexaUiActionVerifier {
                 NexaUiActionJournal.markObservation(service,token,"unverified")
                 return@postDelayed
             }
-            val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+            val externalRoot=try{service.externalWindowRoot()}catch(_:Exception){null}
+            // The owner root is deliberately debug-only and is already limited
+            // by ScreenAssistService to the active, focused Nexa window.
+            val ownerRoot=if(externalRoot==null && BuildConfig.DEBUG)
+                try{service.assistantOwnerWindowRoot()}catch(_:Exception){null}
+            else null
+            val root=externalRoot ?: ownerRoot
             val observedPackage=root?.packageName?.toString()
             val allowLauncherWindowChange=root!=null &&
                 observation.allowLauncherWindowChange &&
@@ -103,12 +157,33 @@ internal object NexaUiActionVerifier {
             val sameContext=root==null || NexaUiActionEvidencePolicy.sameEvidenceContext(
                 observation.kind,observation.pkg,observation.windowId,
                 observedPackage,root.windowId,allowLauncherWindowChange)
+            val externalWindowChangeObserved = externalRoot != null &&
+                NexaUiActionEvidencePolicy.isCorroboratedExternalWindowTransition(
+                    observation.kind,observation.pkg,observation.windowId,
+                    observation.changedWindowEventPackage,observation.changedWindowEventId,
+                    observedPackage,root?.windowId ?: observation.windowId,
+                    ScreenAssistSourcePolicy.matches(
+                        observedPackage.orEmpty(),observedPackage.orEmpty(),BuildConfig.APPLICATION_ID))
+            val ownerWindowChangeObserved = ownerRoot != null &&
+                NexaUiActionEvidencePolicy.isCorroboratedOwnerWindowTransition(
+                    observation.kind,observation.pkg,observation.windowId,
+                    observation.changedWindowEventPackage,observation.changedWindowEventId,
+                    observedPackage,root?.windowId ?: observation.windowId,
+                    BuildConfig.APPLICATION_ID,BuildConfig.DEBUG)
             val after=try {
                 if(root==null || !sameContext) null else fingerprint(root)
             }catch(_:Exception){null}finally{root?.recycle()}
+            // Represent a corroborated external root as present without
+            // comparing fingerprints across different app/window trees.
+            val observedAfter = if(root != null && !sameContext &&
+                (externalWindowChangeObserved || ownerWindowChangeObserved))
+                "window-transition-present" else after
             val status=NexaUiActionEvidencePolicy.classify(
-                observation.kind,observation.before,after,
-                observation.scrollEvents,observation.windowEvents,sameContext)
+                observation.kind,observation.before,observedAfter,
+                observation.scrollEvents,observation.windowEvents,sameContext,
+                externalWindowChangeObserved,tapEvents=observation.tapEvents,
+                ownerWindowChangeObserved=ownerWindowChangeObserved,
+                contentEvents=observation.contentEvents)
             NexaUiActionJournal.markObservation(service,token,status)
         },900L)
     }

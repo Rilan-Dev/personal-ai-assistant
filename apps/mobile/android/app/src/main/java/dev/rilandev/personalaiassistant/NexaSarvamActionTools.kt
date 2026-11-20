@@ -79,7 +79,7 @@ internal object NexaSarvamActionTools {
             }
             "request_tap_visible_label" -> {
                 val label=value("label")
-                label!=null && label.length in 2..45 &&
+                label!=null && NexaTaskScreenObservation.safeLabel(label)!=null &&
                     asks("tap","click","press","select","pick","focus") &&
                     (q.contains(label) ||
                         label.contains("search") && q.contains("search"))

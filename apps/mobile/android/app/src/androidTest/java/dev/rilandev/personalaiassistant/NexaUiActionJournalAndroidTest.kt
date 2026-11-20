@@ -72,6 +72,30 @@ class NexaUiActionJournalAndroidTest {
         assertNull(NexaUiActionJournal.outcomeFor(ctx,other))
     }
 
+    @Test fun tapEventEvidenceIsStoredWithoutScreenContent() {
+        val token="test-"+UUID.randomUUID().toString()
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"tap","com.transsion.calculator"))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        assertTrue(NexaUiActionJournal.markObservation(ctx,token,"tap_event_observed"))
+        assertEquals("tap_event_observed",NexaUiActionJournal.outcomeFor(ctx,token))
+        val latest=NexaUiActionJournal.latestOutcome(ctx)
+        assertEquals("tap" to "tap_event_observed",latest)
+        assertFalse(latest.toString().contains("com.transsion.calculator"))
+        assertFalse(latest.toString().contains(token))
+    }
+
+    @Test fun contentChangeEvidenceIsStoredAsScreenChangeNotTaskCompletion() {
+        val token="content-event-"+UUID.randomUUID()
+        val pkg="com.example.contentchange"
+        assertTrue(NexaUiActionJournal.claim(ctx,token,"tap",pkg))
+        assertTrue(NexaUiActionJournal.finish(ctx,token,"android_accepted"))
+        assertTrue(NexaUiActionJournal.markObservation(ctx,token,"content_change_observed"))
+        assertEquals("content_change_observed",NexaUiActionJournal.outcomeFor(ctx,token))
+        assertEquals("tap" to "content_change_observed",NexaUiActionJournal.latestOutcome(ctx))
+        assertFalse(NexaUiActionJournal.summary(ctx).toString().contains(pkg))
+        assertFalse(NexaUiActionJournal.summary(ctx).toString().contains(token))
+    }
+
     @Test fun replayDeniedEvenAfterFortyAuditEntriesAreEvicted() {
         val first="test-"+UUID.randomUUID().toString()
         val pkg="com.example.auditretention"

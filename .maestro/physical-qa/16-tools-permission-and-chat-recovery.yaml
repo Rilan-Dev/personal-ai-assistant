@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant.physicalqa
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa exposes device grants and recovers safely from denied app launch
 tags:
   - nexa
@@ -10,6 +10,14 @@ tags:
     clearState: true
     permissions:
       all: deny
+- extendedWaitUntil:
+    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Don.t allow"
+    commands:
+      - tapOn: "Don.t allow"
 - extendedWaitUntil:
     visible: "Make your assistant yours."
     timeout: 60000

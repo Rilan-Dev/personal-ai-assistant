@@ -10,15 +10,16 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NexaAccessibilityServiceStatusAndroidTest {
     @Test fun enabledSettingMatchesOnlyTheExactServiceComponent() {
+        val appId = BuildConfig.APPLICATION_ID
         val expected = ComponentName(
-            "dev.rilandev.personalaiassistant.physicalqa2",
+            appId,
             "dev.rilandev.personalaiassistant.ScreenAssistService")
 
         assertTrue(NexaAccessibilityServiceStatus.isEnabled(
-            "dev.rilandev.personalaiassistant.physicalqa2/dev.rilandev.personalaiassistant.ScreenAssistService",
+            "$appId/dev.rilandev.personalaiassistant.ScreenAssistService",
             expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled(
-            "dev.rilandev.personalaiassistant.debug/dev.rilandev.personalaiassistant.ScreenAssistService",
+            "dev.rilandev.personalaiassistant.physicalqa2/dev.rilandev.personalaiassistant.ScreenAssistService",
             expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled("", expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled(null, expected))

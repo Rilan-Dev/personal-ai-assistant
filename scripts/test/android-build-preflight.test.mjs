@@ -13,12 +13,13 @@ test("Android build preflight is read-only and reports actionable results",()=>{
   const src=readFileSync(script,"utf8");
   assert.doesNotMatch(src,/sdkmanager|gradlew|git push|gh workflow run|rm -rf|subprocess\.Popen/);
   const r=spawnSync(python3,[script,"--mode","compile","--json"],{
-    encoding:"utf8",timeout:10000
+    encoding:"utf8",timeout:30000
   });
   assert.ok([0,2].includes(r.status),r.stderr);
   const report=JSON.parse(r.stdout);
   assert.equal(report.mode,"compile");
   assert.equal(typeof report.safe_to_attempt,"boolean");
+  assert.equal(typeof report.available_memory_gib,"number");
   assert.equal(typeof report.free_disk_gib,"number");
   assert.ok(Array.isArray(report.issues));
   assert.equal(r.status,report.safe_to_attempt?0:2);
@@ -27,7 +28,7 @@ test("Android build preflight is read-only and reports actionable results",()=>{
 
 test("Emulator preflight checks hardware acceleration and stricter capacity",()=>{
   const r=spawnSync(python3,[script,"--mode","emulator","--json"],{
-    encoding:"utf8",timeout:10000
+    encoding:"utf8",timeout:30000
   });
   assert.ok([0,2].includes(r.status),r.stderr);
   const report=JSON.parse(r.stdout);
@@ -46,7 +47,7 @@ test("JDK version check runs under Python 3.6 using portable subprocess argument
       : ["#!/bin/sh", "echo 'openjdk version \"21.0.12.1\"' >&2", ""].join("\n"));
     if(!windows)chmodSync(fake,0o755);
     const result=spawnSync(python3,[script,"--mode","compile","--json"],{
-      encoding:"utf8",timeout:10000,
+      encoding:"utf8",timeout:30000,
       env:{...process.env,PATH:work+delimiter+process.env.PATH}
     });
     assert.ok([0,2].includes(result.status),result.stderr);

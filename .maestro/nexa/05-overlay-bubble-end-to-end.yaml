@@ -1,30 +1,77 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa overlay grant bubble appears on home screen
 tags:
   - nexa
   - overlay
   - extended
 ---
+# Recover a pre-existing system dialog before launchApp can wait on its owner.
+- runFlow:
+    when:
+      visible: "Settings isn't responding"
+    commands:
+      - tapOn: "Close app"
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - launchApp:
     clearState: true
     permissions:
       all: deny
+      android.permission.ACCESS_LOCAL_NETWORK: allow
+- runFlow:
+    when:
+      visible: "Settings isn't responding"
+    commands:
+      # The emulator keeps this stale Accessibility Settings task in ANR; close
+      # only the unresponsive system Settings process to uncover Nexa's prompt.
+      - tapOn: "Close app"
+- runFlow:
+    when:
+      visible: "System UI isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - extendedWaitUntil:
     visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
-    timeout: 30000
+    # The debug variant fetches its JavaScript bundle from Metro on cold start.
+    # On the x86_64 emulator that first download can exceed one minute.
+    timeout: 180000
 - runFlow:
     when:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - extendedWaitUntil:
     visible: 'Make your assistant yours.'
     timeout: 30000
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - tapOn: "Show optional permissions and features"
 - scrollUntilVisible:
     element: "Floating quick tools"
     direction: DOWN
-    timeout: 25000
+    visibilityPercentage: 30
+    timeout: 60000
 - runFlow:
     when:
       notVisible: "Show floating bubble"
@@ -45,16 +92,15 @@ tags:
             - assertVisible: "Nexa AI"
             - assertVisible: "Not allowed"
             - takeScreenshot: nexa-overlay-android-app-list
-            # Debug and QA2 installs share a label. Android orders the debug
-            # install first; select and verify the QA2 package as entry 2.
+            # The device is kept on one isolated debug installation.
             - tapOn:
                 text: "Nexa AI"
-                index: 1
+                index: 0
             - extendedWaitUntil:
                 visible:
                   text: "Allow display over other apps"
                 timeout: 25000
-            - assertVisible: "0.3.2026111607"
+            - assertVisible: "0\\.3\\.[0-9]{10}"
             - takeScreenshot: nexa-overlay-permission-before
             # The app-list row is Not allowed, so one tap grants it.
             - tapOn:

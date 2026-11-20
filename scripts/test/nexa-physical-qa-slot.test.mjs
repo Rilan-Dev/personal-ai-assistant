@@ -12,6 +12,8 @@ test('second QA identity is explicitly opt-in and cannot downgrade an existing a
   assert.match(gradle,/applicationIdSuffix '\.physicalqa'/);
   assert.match(gradle,/findProperty\('paaInstallDebugAlongsideRelease'\)/);
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
+  assert.match(gradle,/findProperty\('paaLiveDebug'\)/);
+  assert.match(gradle,/liveDebugBuild[\s\S]*?applicationIdSuffix '\.debug'/);
   const reactBlock=gradle.slice(gradle.indexOf('react {'),gradle.indexOf('enableBundleCompression'));
   assert.match(reactBlock,/else if \([\s\S]*?isolatedPhysicalQaV2\)\s*\{\s*debuggableVariants = \[\]/,
     'isolated QA2 must bundle JS; never require a Metro server on the device');
@@ -34,7 +36,7 @@ test('reviewed revision instrumentation accepts only explicit disposable QA app 
   assert.match(identity,/expected,actual/);
   assert.match(identity,/"dev\.rilandev\.personalaiassistant\.physicalqa"/);
   assert.match(identity,/"dev\.rilandev\.personalaiassistant\.physicalqa2"/);
-  assert.doesNotMatch(identity,/\bBuildConfig\.APPLICATION_ID\s*==\s*"dev\.rilandev\.personalaiassistant\.debug"/);
+  assert.match(identity,/"dev\.rilandev\.personalaiassistant\.debug"/);
 });
 
 test('separate-process AndroidTest fixtures use self-contained Java, without relying on Kotlin runtime',()=>{

@@ -180,6 +180,13 @@ class ScreenAssistService : AccessibilityService() {
         val locked = (getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
             ?.isKeyguardLocked == true
         if (locked) return null
+        // A notification panel is a higher-level System UI surface. Do not
+        // observe or act on the app window underneath it as if it were visible.
+        val shade = try { notificationShadeRoot() } catch (_: Exception) { null }
+        if (shade != null) {
+            try { shade.recycle() } catch (_: Exception) {}
+            return null
+        }
         val allWindows = try { windows.orEmpty() } catch (_: Exception) { emptyList() }
         for (window in allWindows.sortedByDescending { it.layer }) {
             if (window.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION)
@@ -195,6 +202,86 @@ class ScreenAssistService : AccessibilityService() {
         if (isPermittedExternalWindow(root.packageName?.toString().orEmpty())) return root
         root.recycle()
         return null
+    }
+
+    /**
+     * The Nexa activity is not an external app, but a named key action can
+     * legitimately return to it. Expose only the currently active, focused
+     * Nexa application window so the caller can ground its next step without
+     * broadening third-party screen reads or sampling an obscured owner window.
+     */
+    internal fun assistantOwnerWindowRoot(): AccessibilityNodeInfo? {
+        if (!ScreenAssistState.connected) return null
+        val locked = (getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+            ?.isKeyguardLocked == true
+        if (locked) return null
+        val allWindows = try { windows.orEmpty() } catch (_: Exception) { emptyList() }
+        for (window in allWindows.sortedByDescending { it.layer }) {
+            if (window.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION ||
+                !window.isFocused || !window.isActive) continue
+            val candidate = try { window.root } catch (_: Exception) { null } ?: continue
+            if (candidate.packageName?.toString() == packageName && candidate.isVisibleToUser)
+                return candidate
+            try { candidate.recycle() } catch (_: Exception) {}
+        }
+        // rootInActiveWindow is itself the focused accessibility window; retain
+        // the same exact package and visible-root checks for OEMs that omit the
+        // interactive-window list.
+        val activeRoot = try { rootInActiveWindow } catch (_: Exception) { null } ?: return null
+        if (activeRoot.packageName?.toString() == packageName && activeRoot.isVisibleToUser)
+            return activeRoot
+        try { activeRoot.recycle() } catch (_: Exception) {}
+        return null
+    }
+
+    /** The current notification shade, kept separate from third-party app roots. */
+    internal fun notificationShadeRoot(): AccessibilityNodeInfo? {
+        if (!ScreenAssistState.connected) return null
+        val locked = (getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+            ?.isKeyguardLocked == true
+        if (locked) return null
+        val allWindows = try { windows.orEmpty() } catch (_: Exception) { emptyList() }
+        for (window in allWindows.sortedByDescending { it.layer }) {
+            if (window.type != android.view.accessibility.AccessibilityWindowInfo.TYPE_SYSTEM)
+                continue
+            val title = try { window.title?.toString().orEmpty() } catch (_: Exception) { "" }
+            val candidate = try { window.root } catch (_: Exception) { null } ?: continue
+            val markerIds = visibleNotificationShadeMarkers(candidate)
+            if (candidate.isVisibleToUser && NexaKeyActionSurfacePolicy.isNotificationShade(
+                    candidate.packageName?.toString().orEmpty(), title, markerIds)) return candidate
+            try { candidate.recycle() } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    private fun visibleNotificationShadeMarkers(root: AccessibilityNodeInfo): Set<String> {
+        if (root.packageName?.toString() != "com.android.systemui") return emptySet()
+        val markers = setOf(
+            "com.android.systemui:id/notification_panel",
+            "com.android.systemui:id/quick_settings_container",
+            "com.android.systemui:id/notification_stack_scroller"
+        )
+        val found = linkedSetOf<String>()
+        for (marker in markers) {
+            val matches = try { root.findAccessibilityNodeInfosByViewId(marker) }
+                catch (_: Exception) { null } ?: continue
+            try {
+                if (matches.any { node ->
+                        node.isVisibleToUser &&
+                            node.packageName?.toString() == "com.android.systemui"
+                    }) found.add(marker)
+            } catch (_: Exception) {
+                // A partially unavailable system tree is not enough to identify the shade.
+            } finally {
+                matches.forEach { try { it.recycle() } catch (_: Exception) {} }
+            }
+        }
+        return found
+    }
+
+    internal fun isNotificationShadeVisible(): Boolean {
+        val root = notificationShadeRoot() ?: return false
+        try { return true } finally { try { root.recycle() } catch (_: Exception) {} }
     }
 
     private fun isPermittedExternalWindow(pkg: String): Boolean =
@@ -236,11 +323,9 @@ class ScreenAssistService : AccessibilityService() {
             private set
     }
     override fun onServiceConnected() {
-        serviceInfo = serviceInfo.apply {
-            flags = flags or
-                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS or
-                AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
-        }
+        // Keep service configuration declarative in screen_assist_config.xml.
+        // Replacing serviceInfo during this callback caused Android 17 to
+        // unbind and destroy the service immediately after connecting.
         active = this
         ScreenAssistState.connected = true
         if (BuildConfig.DEBUG) android.util.Log.d(
@@ -357,6 +442,10 @@ class ScreenAssistModule(private val context: ReactApplicationContext) :
     override fun getName(): String = "PAAScreenAssist"
 
     @ReactMethod fun getStatus(p: Promise) {
+        if (BuildConfig.DEBUG) android.util.Log.d(
+            "NexaScreenAssistStatus",
+            "getStatus connected=${ScreenAssistState.connected} active=${ScreenAssistService.active != null} pid=${android.os.Process.myPid()}"
+        )
         val value = Arguments.createMap()
         value.putBoolean("enabled", ScreenAssistState.connected)
         value.putBoolean("armed", ScreenAssistState.isArmed())

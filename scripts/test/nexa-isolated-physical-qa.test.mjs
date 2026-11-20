@@ -8,7 +8,7 @@ test('USB device QA gets a separately installed package without altering release
   assert.match(gradle,/applicationId "dev\.rilandev\.personalaiassistant"/);
   assert.match(gradle,/findProperty\('paaIsolatedPhysicalQa'\)/);
   assert.match(gradle,/applicationIdSuffix '\.physicalqa'/);
-  assert.match(gradle,/else if \(\(findProperty\('paaInstallDebugAlongsideRelease'\)/);
+  assert.match(gradle,/else if \(installDebugAlongsideRelease\)/);
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
   assert.match(gradle,/signingConfig signingConfigs\.debug/);
   assert.match(gradle,/if \(file\('testing-release\.keystore'\)\.exists\(\)\)/);

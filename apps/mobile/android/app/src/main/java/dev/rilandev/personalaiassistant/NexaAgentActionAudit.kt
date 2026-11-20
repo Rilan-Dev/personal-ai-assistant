@@ -110,7 +110,8 @@ internal object NexaAgentActionAudit {
                                 "AND e.event_kind='chat_native_ui_reserved' "+
                                 "AND NOT EXISTS (SELECT 1 FROM agent_task_events o "+
                                 "WHERE o.task_id=e.task_id AND o.step_id=e.step_id "+
-                                "AND o.event_kind='chat_native_ui_observed') LIMIT 1",
+                                "AND o.event_kind IN ('chat_native_ui_observed',"+
+                                "'chat_native_action_accepted')) LIMIT 1",
                             arrayOf(taskId)
                         ).use{it.moveToFirst()}
                         if(unverifiedUi)return@synchronized false
@@ -298,7 +299,8 @@ internal object NexaAgentActionAudit {
                               fingerprint:String,toolId:String,
                               requested:JSONObject):Boolean{
         if(!valid(session,call,fingerprint) ||
-            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
+            toolId !in setOf("screen.tap_label","screen.tap_index","screen.tap_observed","screen.scroll","screen.fill_text",
+                "screen.key_action",
                 "screen.open_whatsapp_chat","screen.compose_whatsapp",
                 "screen.send_whatsapp","screen.compose_message",
                 "screen.send_message") ||
@@ -317,8 +319,20 @@ internal object NexaAgentActionAudit {
             val allowedArgs=when(toolId){
                 "screen.tap_label"->args.length()==1 &&
                     args.optString("label").length in 2..45
+                "screen.tap_index"->args.length()==2 &&
+                    args.optString("snapshotId").matches(Regex(
+                        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")) &&
+                    args.optInt("index",-1) in 0 until 40
+                "screen.tap_observed"->args.length()==3 &&
+                    args.optString("snapshotId").matches(Regex(
+                        "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}")) &&
+                    args.optInt("index",-1) in 0 until 40 &&
+                    args.optString("label").length in 2..45 &&
+                    NexaTaskScreenObservation.safeLabel(args.optString("label")) != null
                 "screen.scroll"->args.length()==1 &&
                     args.optString("direction") in setOf("up","down","left","right")
+                "screen.key_action"->args.length()==1 &&
+                    args.optString("name") in setOf("back","home","notifications")
                 "screen.fill_text"->args.length()==2 &&
                     args.optString("targetLabel").length in 2..60 &&
                     args.optString("exactText").length in 1..500
@@ -405,13 +419,13 @@ internal object NexaAgentActionAudit {
                                   fingerprint:String,toolId:String,
                                   evidence:String,gestureToken:String?=null):Boolean {
         if(!valid(session,call,fingerprint) ||
-            toolId !in setOf("screen.tap_label","screen.scroll","screen.fill_text",
+            toolId !in setOf("screen.tap_label","screen.tap_index","screen.tap_observed","screen.scroll","screen.fill_text",
                 "screen.open_whatsapp_chat","screen.compose_whatsapp",
                 "screen.send_whatsapp","screen.compose_message",
                 "screen.send_message"))
             return false
         val expectedKind=when(toolId){
-            "screen.tap_label","screen.open_whatsapp_chat"->"tap"
+            "screen.tap_label","screen.tap_index","screen.tap_observed","screen.open_whatsapp_chat"->"tap"
             "screen.scroll"->{
                 val args=try{JSONArray(fingerprint).optJSONObject(3)}
                     catch(_:Exception){null} ?:return false
@@ -469,18 +483,25 @@ internal object NexaAgentActionAudit {
                     context,gestureToken,"tap") !in setOf(
                     "android_accepted","observed_change",
                     "structural_change_observed","window_change_observed",
+                    "content_change_observed",
                     // A real chat transition can change Accessibility
                     // window ID; the exact live header+composer recheck
                     // above, not this token, is the completion evidence.
                     "context_changed_unverified"))
                 return false
         }else{
-            if(evidence!="observed_change" ||
-                gestureToken.isNullOrBlank() ||
-                NexaUiActionJournal.outcomeFor(context,gestureToken,expectedKind) !in
-                    setOf("observed_change","structural_change_observed",
-                        "window_change_observed","scroll_event_observed"))
-                return false
+            if(gestureToken.isNullOrBlank())return false
+            val status=NexaUiActionJournal.outcomeFor(context,gestureToken,expectedKind)
+            val tapEvent=evidence=="tap_event_observed"&&
+                toolId in setOf("screen.tap_label","screen.tap_index","screen.tap_observed")&&
+                    status=="tap_event_observed"
+            val contentEvent=evidence=="content_change_observed"&&
+                toolId in setOf("screen.tap_label","screen.tap_index","screen.tap_observed")&&
+                    status=="content_change_observed"
+            val changed=evidence=="observed_change"&&status in setOf(
+                "observed_change","structural_change_observed",
+                "window_change_observed","scroll_event_observed")
+            if(!tapEvent&&!contentEvent&&!changed)return false
         }
         return try{synchronized(lock){
             val taskId=opaqueId("task-",sessionKey(session))
@@ -523,6 +544,74 @@ internal object NexaAgentActionAudit {
                     db.execSQL(
                         "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
                             "VALUES(?,?,'chat_native_ui_observed',?)",
+                        arrayOf(taskId,stepId,System.currentTimeMillis())
+                    )
+                    db.setTransactionSuccessful()
+                    true
+                }finally{db.endTransaction()}
+            }finally{helper.close()}
+        }}catch(_:Exception){false}
+    }
+
+    /** Settle a named global action as dispatch accepted, never as a screen change. */
+    fun recordReviewedKeyActionAccepted(context:Context,session:String,call:String,
+                                        fingerprint:String,uiToken:String):Boolean {
+        if(!valid(session,call,fingerprint) || uiToken.length !in 16..128)return false
+        val bound=try{JSONArray(fingerprint)}catch(_:Exception){return false}
+        if(bound.length()!=4 || bound.optString(0)!=session ||
+            bound.optString(1)!=call || bound.optString(2)!="screen.key_action")return false
+        val args=bound.optJSONObject(3)?:return false
+        if(args.length()!=1)return false
+        val kind=when(args.optString("name")){
+            "back"->"nav_back"
+            "home"->"nav_home"
+            "notifications"->"nav_notifications"
+            else->return false
+        }
+        if(NexaUiActionJournal.outcomeFor(context,uiToken,kind)!="android_accepted")
+            return false
+        return try{synchronized(lock){
+            val taskId=opaqueId("task-",sessionKey(session))
+            val stepId=opaqueId("step-",callKey(session,call))
+            val helper=NexaConversationDb(context)
+            try{
+                val db=helper.writableDatabase
+                db.beginTransaction()
+                try{
+                    val found=db.rawQuery(
+                        "SELECT s.arguments_cipher FROM agent_tasks t "+
+                            "JOIN agent_task_steps s ON s.task_id=t.task_id "+
+                            "WHERE t.task_id=? AND t.policy_version=? AND t.origin='chat' "+
+                            "AND t.status='running' AND s.step_id=? "+
+                            "AND s.status='outcome_unknown' AND s.tool_id='legacy.chat.action' LIMIT 2",
+                        arrayOf(taskId,POLICY,stepId)
+                    ).use{row->
+                        if(!row.moveToFirst())false
+                        else{
+                            val proof=JSONObject(NexaConversationDb
+                                .openNativeTaskArguments(row.getBlob(0)))
+                            proof.optString("fingerprintDigest")==sha(fingerprint) &&
+                                proof.optBoolean("approvalRequired",false) &&
+                                proof.optLong("pauseGeneration",-1L)==
+                                    NexaNativeActionSafety.approvalFence(context) &&
+                                !row.moveToNext()
+                        }
+                    }
+                    if(!found)return@synchronized false
+                    val reserved=db.rawQuery(
+                        "SELECT 1 FROM agent_task_events WHERE task_id=? AND step_id=? "+
+                            "AND event_kind='chat_native_ui_reserved' LIMIT 2",
+                        arrayOf(taskId,stepId)
+                    ).use{it.moveToFirst() && !it.moveToNext()}
+                    val settled=db.rawQuery(
+                        "SELECT 1 FROM agent_task_events WHERE task_id=? AND step_id=? "+
+                            "AND event_kind IN ('chat_native_action_accepted','chat_native_ui_observed') LIMIT 1",
+                        arrayOf(taskId,stepId)
+                    ).use{it.moveToFirst()}
+                    if(!reserved || settled)return@synchronized false
+                    db.execSQL(
+                        "INSERT INTO agent_task_events(task_id,step_id,event_kind,created_at) "+
+                            "VALUES(?,?,'chat_native_action_accepted',?)",
                         arrayOf(taskId,stepId,System.currentTimeMillis())
                     )
                     db.setTransactionSuccessful()

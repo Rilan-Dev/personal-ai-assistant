@@ -1,19 +1,23 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, AppState, BackHandler, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView,
-  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter
+  StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter, NativeModules
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation, parsePowerShellRequest, isPowerShellToolAllowed, getPowerShellToolMetadata, requiresPowerShellConfirmation } from '@paa/agent-core';
+import type { Planner, RunOptions } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
 import {messagingAvailable,installedMessagingApps,rememberedMessageApp,rememberMessageAppForDays,
   messageAppPreferenceDetails,forgetMessageApp,forgetAllRememberedMessageApps,openReviewedSmsDraft,openManualMessageComposer,
   reviewedTextInputAvailable,stageReviewedTextInput,cancelReviewedTextInput} from './src/native/nexaMessaging';
 import type {MessageAppPreference} from './src/native/nexaMessaging';
-import { createAndroidTools, nativeDeviceAvailable, nativeActionSafetyAvailable,
+import { createAndroidTools, createPowerShellAndroidTools, nativeDeviceAvailable, nativeActionSafetyAvailable,
+  readPowerShellScreenSnapshot, isPowerShellScreenSnapshotCurrent,
   readNativeActionsPaused, updateNativeActionsPaused } from './src/native/androidTools';
 import { androidActionJournal, androidJournalAvailable, newAndroidSessionId, readLastAndroidSession } from './src/native/androidJournal';
+import { powerShellBridgeDebugBuild, startPowerShellBridge, stopPowerShellBridge,
+  replyPowerShellBridge, POWER_SHELL_BRIDGE_EVENT } from './src/native/androidPowerShellBridge';
 import type { SessionCheckpoint, DirectProviderId, DirectProviderSettings } from '@paa/agent-core';
 import { voiceBridgeAvailable, getVoiceCapabilities, requestMicrophoneForTap, transcribeOnDevice, cancelOnDeviceTranscription, speakOffline, stopOfflineSpeech } from './src/native/androidVoice';
 import { tileInstallationAvailable, requestAssistantQuickTile } from './src/native/androidInvocation';
@@ -69,7 +73,7 @@ import type {OwnerApproximateLocation,OwnerSelectedContact} from './src/native/o
 import { sarvamVoiceConfigAvailable, readSarvamVoiceConfig, saveSarvamVoiceConfig, deleteSarvamVoiceConfig, saveSamvaadWorkspaceKey, samvaadWorkspaceKeyPresent, deleteSamvaadWorkspaceKey, samvaadStreamingConsentStatus, setSamvaadStreamingConsent } from './src/native/sarvamVoiceConfig';
 import { sarvamSpeechAvailable, dictateSarvamOnce, cancelSarvamDictation, speakSarvamOnce, stopSarvamSpeech, requestMicForSarvamDictation } from './src/native/sarvamSpeech';
 import {NEXA_TASK_V2_ENABLED} from '@paa/agent-contracts';
-import type { AgentTraceEvent, Capability } from '@paa/agent-contracts';
+import type { AgentTraceEvent, Capability, ToolCall } from '@paa/agent-contracts';
 import {saveLocalTaskProposal,admitLocalReadOnlyTaskPlan} from './src/native/localTaskProposals';
 import {createOwnerSequentialPlanner,parseOwnerMultiToolRequest} from '@paa/agent-core';
 
@@ -97,7 +101,7 @@ function overlayChatApprovalSummary(
   }
   const inPlaceReviewedTools=new Set([
     "device.open_app","device.visible_controls","device.open_notification_shade",
-    "screen.open_whatsapp_chat","screen.fill_text","screen.compose_whatsapp",
+    "screen.tap_observed","screen.open_whatsapp_chat","screen.fill_text","screen.compose_whatsapp",
     "screen.send_whatsapp","screen.compose_message","screen.send_message"
   ]);
   if(!inPlaceReviewedTools.has(toolId))return null;
@@ -109,7 +113,9 @@ function overlayChatApprovalSummary(
 const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
   const registry = new ToolRegistry();
   const live = nativeDeviceAvailable() && androidJournalAvailable();
-  (live ? createAndroidTools() : createDemoTools()).forEach(tool => registry.register(tool));
+  const tools=live ? createAndroidTools() : createDemoTools();
+  if(live && powerShellBridgeDebugBuild())tools.push(...createPowerShellAndroidTools());
+  tools.forEach(tool => registry.register(tool));
   if (live) createReadOnlyScreenTools(grant,resolveScreenQuestion).forEach(tool=>registry.register(tool));
   return {
     registry,
@@ -118,6 +124,69 @@ const makeEngine = (grant: ReturnType<typeof createOwnerScreenGrant>) => {
     live
   };
 };
+
+async function runPowerShellTool(engine:ReturnType<typeof makeEngine>,toolId:string,
+                                 input:Record<string,unknown>,confirmed:boolean,
+                                 requestId:string):Promise<{ok:true;data:unknown}|{ok:false;error:string}> {
+  if(!engine.live || !powerShellBridgeDebugBuild())
+    return {ok:false,error:'DEBUG_BRIDGE_UNAVAILABLE'};
+  if(!isPowerShellToolAllowed(toolId))return {ok:false,error:'TOOL_NOT_ALLOWED'};
+  const tool=engine.registry.get(toolId);
+  const metadata=engine.registry.describe().find(item=>item.id===toolId);
+  if(!tool || !metadata)return {ok:false,error:'TOOL_NOT_AVAILABLE'};
+  if(requiresPowerShellConfirmation(metadata) && !confirmed)
+    return {ok:false,error:'CONFIRM_REQUIRED'};
+
+  const call:ToolCall={callId:requestId,toolId,input};
+  const planner:Planner={
+    next:async(_request,observations)=>observations.length>0
+      ?{type:'done',response:'PowerShell tool completed.'}
+      :{type:'tool',call}
+  };
+  const harness=new AgentHarness(engine.registry,planner);
+  const sessionId=await newAndroidSessionId();
+  let safeToolErrorCode:string|undefined;
+  const options:RunOptions={
+    request:`PowerShell action ${toolId}`,
+    sessionId,
+    grantedCapabilities:new Set(tool.capabilities),
+    journal:androidActionJournal,
+    onToolError:(code:string)=>{safeToolErrorCode=code;},
+    checkpointObservations:observations=>observations.map(observation=>{
+      if(observation.call.toolId!=='screen.accessibility_tree'||
+          observation.outcome.status!=='success')return observation;
+      const data=observation.outcome.data;
+      if(!data||typeof data!=='object'||Array.isArray(data))return observation;
+      const tree=data as Record<string,unknown>;
+      return {...observation,outcome:{status:'success' as const,data:{
+        checkpointResultRedacted:true,
+        snapshotId:tree.snapshotId,
+        packageName:tree.packageName,
+        nodeCount:tree.nodeCount,
+        truncated:tree.truncated,
+        textTruncated:tree.textTruncated
+      }}};
+    }),
+    maxSteps:2
+  };
+  let result=await harness.run(options);
+  if(result.status==='awaiting_approval'){
+    if(!confirmed)return {ok:false,error:'CONFIRM_REQUIRED'};
+    const approved=await androidActionJournal.approveAction(
+      sessionId,result.call.callId,result.fingerprint);
+    if(!approved)return {ok:false,error:'APPROVAL_REJECTED'};
+    result=await harness.run({...options,resume:true});
+  }
+  if(result.status!=='completed')
+    return {ok:false,error:result.status==='blocked'?result.reason:
+      safeToolErrorCode??'TOOL_EXECUTION_FAILED'};
+  const event=[...result.trace].reverse().find(item=>item.type==='tool_result');
+  if(!event || event.type!=='tool_result')return {ok:false,error:'TOOL_RESULT_MISSING'};
+  if(event.outcome.status!=='success')
+    return {ok:false,error:event.outcome.status==='blocked'?event.outcome.reason:
+      safeToolErrorCode??'TOOL_EXECUTION_FAILED'};
+  return {ok:true,data:event.outcome.data};
+}
 
 export default function App() {
   const screenGrant=useMemo(createOwnerScreenGrant,[]);
@@ -129,6 +198,115 @@ export default function App() {
     });
     return ()=>{listener.remove();screenGrant.revoke();iconReviews.clear();};
   },[screenGrant,iconReviews]);
+  useEffect(()=>{
+    const bridgeModule=NativeModules.PAAPowerShellBridge;
+    if(__DEV__)console.info('[Nexa QA bridge] module',{
+      startType:typeof bridgeModule?.start,
+      debugBuild:bridgeModule?.debugBuild,
+      engineLive:engine.live
+    });
+    if(!powerShellBridgeDebugBuild())return;
+    let active=true;
+    const respond=async(event:{requestId:string;envelopeJson:string})=>{
+      let response:{ok:true;data:unknown}|{ok:false;error:string};
+      try{
+        const envelope=JSON.parse(event.envelopeJson) as Record<string,unknown>;
+        if(envelope.requestId!==event.requestId){
+          response={ok:false,error:'REQUEST_ID_MISMATCH'};
+        }else{
+          const request=parsePowerShellRequest(envelope);
+          if(request.kind==='error')response={ok:false,error:request.error};
+          else if(request.kind==='tools'){
+            const tools=getPowerShellToolMetadata(engine.registry.describe()).map(tool=>({
+              ...tool,requiresConfirmation:requiresPowerShellConfirmation(tool)
+            }));
+            response={ok:true,data:tools};
+          }else if(request.kind==='status'){
+            if(!engine.live){
+              response={ok:true,data:{
+                protocol:'nexa-qa-v1',executor:'NexaAppTools',debugBuild:true,
+                rawAdbInput:false,bridgeAvailable:true,engineLive:false,
+                registeredToolCount:engine.toolCount
+              }};
+            }else{
+              const result=await runPowerShellTool(engine,'device.status',{},false,event.requestId);
+              response=result.ok?{ok:true,data:{
+                protocol:'nexa-qa-v1',executor:'NexaAppTools',debugBuild:true,
+                rawAdbInput:false,bridgeAvailable:true,engineLive:true,
+                registeredToolCount:engine.toolCount,...(result.data as Record<string,unknown>)
+              }}:result;
+            }
+          }else if(request.kind==='observe'){
+            const result=await runPowerShellTool(engine,'screen.inspect',{},true,event.requestId);
+            if(!result.ok)response=result;
+            else{
+              const snapshotId=String((result.data as Record<string,unknown>).snapshotId??'');
+              const raw=await readPowerShellScreenSnapshot(snapshotId);
+              if(!raw)response={ok:false,error:'SNAPSHOT_EXPIRED'};
+              else{
+                const snapshot=JSON.parse(raw) as Record<string,unknown>;
+                if(request.format==='json')response={ok:true,data:snapshot};
+                else{
+                  const lines=Array.isArray(snapshot.text)?snapshot.text.map(String):[];
+                  const clickables=Array.isArray(snapshot.clickables)?snapshot.clickables as Array<{
+                    index:number;label:string;bounds:{left:number;top:number;right:number;bottom:number;centerX:number;centerY:number}
+                  }>:[];
+                  const output=[
+                    `App: ${String(snapshot.packageName??'unknown')}`,
+                    `Snapshot: ${snapshot.snapshotId}`,
+                    `Expires: ${new Date(Number(snapshot.expiresAt)).toLocaleTimeString()}`,
+                    '', 'Visible text:', ...(lines.length?lines.map(line=>`  ${line}`):['  (none exposed)']),
+                    '', 'Clickable targets (index is 0-based; bounds are screen pixels):',
+                    ...(clickables.length?clickables.map(item=>
+                      `  [${item.index}] ${item.label}  ${JSON.stringify(item.bounds)}`):['  (none safely indexed)'])
+                  ].join('\n');
+                  response={ok:true,data:output};
+                }
+              }
+            }
+          }else if(request.kind==='tap'){
+            const result=await runPowerShellTool(engine,'screen.tap_index',{
+              snapshotId:request.snapshotId,index:request.index
+            },true,event.requestId);
+            response=result;
+          }else if(request.kind==='scroll'){
+            if(!await isPowerShellScreenSnapshotCurrent(request.snapshotId))
+              response={ok:false,error:'STALE_SCREEN_SNAPSHOT'};
+            else response=await runPowerShellTool(engine,'screen.scroll',{
+              direction:request.direction
+            },true,event.requestId);
+          }else if(request.kind==='key'){
+            response=await runPowerShellTool(engine,'screen.key_action',{
+              name:request.name
+            },true,event.requestId);
+          }else if(request.kind==='invoke'){
+            response=await runPowerShellTool(engine,request.toolId,request.input,
+              request.confirmed,event.requestId);
+          }else response={ok:false,error:'INVALID_REQUEST'};
+        }
+      }catch{
+        response={ok:false,error:'BRIDGE_DISPATCH_FAILED'};
+      }
+      if(!active)return;
+      try{
+        const serialized=JSON.stringify(response);
+        await replyPowerShellBridge(event.requestId,serialized.length<=460_000?
+          serialized:JSON.stringify({ok:false,error:'RESPONSE_TOO_LARGE'}));
+      }catch{/* The socket client will time out and refuse to retry side effects. */}
+    };
+    const subscription=DeviceEventEmitter.addListener(POWER_SHELL_BRIDGE_EVENT,
+      (event:{requestId:string;envelopeJson:string})=>{void respond(event);});
+    void startPowerShellBridge().then(started=>{
+      if(__DEV__)console.info('[Nexa QA bridge] started',started);
+    }).catch(error=>{
+      if(__DEV__)console.warn('[Nexa QA bridge] start failed',String(error));
+    });
+    return ()=>{
+      active=false;
+      subscription.remove();
+      void stopPowerShellBridge().catch(()=>{});
+    };
+  },[engine]);
   const [tab, setTab] = useState<'chat'|'voice'|'tools'|'setup'|'settings'>(engine.live?'setup':'chat');
   const initialSetupAutoRoutePending = useRef(engine.live);
   const [keyboardVisible,setKeyboardVisible]=useState(false);
@@ -649,7 +827,9 @@ export default function App() {
     : (configuredVoiceProvider??'No supported live provider configured');
 
   const [screenAssistNotice,setScreenAssistNotice] = useState('');
+  const screenAssistSetupNotice='Enable Nexa Screen Assist in Android Accessibility settings. Return and arm a single capture.';
   const [screenAssistEnabled,setScreenAssistEnabled] = useState(false);
+  const screenAssistRefreshRef=useRef<(()=>void)|null>(null);
   const [screenArmed,setScreenArmed] = useState(false);
   const [screenSnapshot,setScreenSnapshot] = useState<{text:string;packageName:string}|null>(null);
   const [iconScanArmed,setIconScanArmed] = useState(false);
@@ -1107,22 +1287,25 @@ export default function App() {
     return ()=>{enabled=false;clearInterval(interval);};
   },[engine.live]);
   useEffect(()=>{
-    if(!engine.live||!screenAssistAvailable())return;
+    if(!screenAssistAvailable())return;
     let enabled=true;
     let connectionPollTimer:ReturnType<typeof setTimeout>|null=null;
-    const refresh=(remaining=8)=>getScreenAssistStatus().then(value=>{
+    const refresh=(remaining=80)=>getScreenAssistStatus().then(value=>{
       if(!enabled)return;
       setScreenAssistEnabled(value.enabled);setScreenArmed(value.armed);
+      if(value.enabled)setScreenAssistNotice(notice=>notice===screenAssistSetupNotice?'':notice);
       // Android may return to Nexa before it has finished rebinding the
-      // AccessibilityService. Keep the Tools badge in sync with the real
-      // connection instead of leaving a stale Off state after Settings.
+      // AccessibilityService. Maestro's Accessibility driver can delay the
+      // real bind until its flow exits, so keep this refresh bounded at two
+      // minutes to avoid leaving a stale Off state after Android Settings.
       if(!value.enabled&&remaining>0)
-        connectionPollTimer=setTimeout(()=>{void refresh(remaining-1);},750);
+          connectionPollTimer=setTimeout(()=>{void refresh(remaining-1);},1500);
     }).catch(()=>{});
     const refreshAfterResume=()=>{
       if(connectionPollTimer!==null){clearTimeout(connectionPollTimer);connectionPollTimer=null;}
       void refresh();
     };
+    screenAssistRefreshRef.current=refreshAfterResume;
     refreshAfterResume();
     const appState=AppState.addEventListener('change',next=>{
       if(next==='active')refreshAfterResume();
@@ -1130,9 +1313,10 @@ export default function App() {
     return ()=>{
       enabled=false;
       if(connectionPollTimer!==null)clearTimeout(connectionPollTimer);
+      if(screenAssistRefreshRef.current===refreshAfterResume)screenAssistRefreshRef.current=null;
       appState.remove();
     };
-  },[engine.live,tab]);
+  },[tab]);
   useEffect(()=>{
     if(!engine.live||!sarvamVoiceConfigAvailable())return;
     let mounted=true;
@@ -1274,7 +1458,7 @@ export default function App() {
   };
   const openScreenSettings=async()=>{
     try {await openScreenAssistSettings();
-      setScreenAssistNotice('Enable Nexa Screen Assist in Android Accessibility settings. Return and arm a single capture.');}
+      setScreenAssistNotice(screenAssistSetupNotice);}
     catch{setScreenAssistNotice('Could not open Accessibility Settings.');}
   };
   const armScreenRead=async()=>{
@@ -1947,6 +2131,7 @@ export default function App() {
           CAMERA_DENIED:'Android refused to open the camera.',
           CAMERA_OUTCOME_UNKNOWN:'Nexa could not verify whether the camera opened. Inspect the screen before continuing.',
           SCREEN_OBSERVATION_UNAVAILABLE:'Nexa could not safely inspect the current external app screen.',
+          STALE_SCREEN_SNAPSHOT:'The reviewed screen snapshot expired or changed before the tap. No tap was replayed; ask Nexa to observe the screen again.',
           SCROLL_ACTION_NOT_ACCEPTED:'Android returned an unrecognized result for the reviewed scroll; no retry was attempted.',
           SCROLL_CONTEXT_CHANGED:'The Home screen context changed during the scroll; no retry was attempted.',
           SCROLL_DISPATCH_REJECTED:'Android rejected the launcher swipe; no retry was attempted.',
@@ -2620,9 +2805,13 @@ export default function App() {
         </Pressable>
         <View style={styles.pageIntro}><Text style={styles.pageHeadline}>Tools & permissions</Text>
           <Text style={styles.pageSubtitle}>Choose exactly what your assistant can do.</Text></View>
-        {/* Put app-launch and screen-action grants at the top of Tools so blocked
-            Chat requests can be resolved without scrolling past stored memory,
-            message-review forms, or an unbounded task backlog. */}
+        {whatsAppDraftNotice!==''&&<View style={styles.sectionCard}>
+          <Text style={styles.cardHeading}>Local WhatsApp request review</Text>
+          <Text style={styles.feedback}>{whatsAppDraftNotice}</Text>
+          {whatsAppDraft.trim()!==''&&<Text style={styles.cardText}>Draft text: {whatsAppDraft}</Text>}
+        </View>}
+        {/* Keep app-launch, screen-action grants, and active owner reviews near
+            the top so they remain reachable above stored history and task logs. */}
         <View style={styles.sectionCard}>
           <View style={styles.cardHeadingRow}><Text style={styles.cardHeading}>Device controls</Text><Text style={styles.sectionTag}>{engine.toolCount} tools</Text></View>
           <Text style={styles.cardText}>Each permission is independent. For a bounded multi-tool request use: “Check battery then check storage” or “Open Calendar then tap Search”. Only fully verified steps continue; reapprove each side effect. Flashlight additionally needs Android camera permission.</Text>
@@ -2929,7 +3118,9 @@ export default function App() {
                 </Pressable>}
             </>}
             {messageNotice!==''&&<Text style={styles.feedback}>{messageNotice}</Text>}
-            <Pressable accessibilityRole="button" style={styles.textAction}
+            <Pressable accessibilityRole="button"
+              accessibilityLabel="Discard message review, do not send"
+              style={styles.textAction}
               onPress={cancelMessageReview}>
               <Text style={styles.textActionText}>Discard message review — do not send</Text>
             </Pressable>
@@ -3004,7 +3195,6 @@ export default function App() {
             </Pressable>}
           </>}
           {privacyToolNotice!==''&&<Text style={styles.feedback}>{privacyToolNotice}</Text>}
-          {whatsAppDraftNotice!==''&&<Text style={styles.feedback}>{whatsAppDraftNotice}</Text>}
           <Text style={styles.settingHelp}>No background contact tracking, address-book scraping or continuous location access. Voice agents cannot invoke these private tools.</Text>
         </View>
         <View style={styles.sectionCard}>
@@ -3280,10 +3470,13 @@ export default function App() {
         {([{id:'chat',glyph:'✦',label:'Chat'},
            {id:'voice',glyph:'◉',label:'Voice'},
            {id:'tools',glyph:'▦',label:'Tools'}] as const).map(item=>
-          <Pressable key={item.id} accessibilityRole="tab"
+          <Pressable key={item.id} accessible={true} accessibilityRole="tab"
             accessibilityState={{selected:tab===item.id}}
-            accessibilityLabel={item.label+' tab'}
-            onPress={()=>navigate(item.id)}
+            accessibilityLabel={item.label}
+            onPress={()=>{
+              navigate(item.id);
+              if(item.id==='tools')screenAssistRefreshRef.current?.();
+            }}
             style={({pressed})=>[styles.tabButton,tab===item.id&&styles.tabButtonActive,pressed&&styles.pressed]}>
             <Text style={[styles.tabGlyph,tab===item.id&&styles.tabGlyphActive]}>{item.glyph}</Text>
             <Text style={[styles.tabLabel,tab===item.id&&styles.tabLabelActive]}>{item.label}</Text>

@@ -73,8 +73,40 @@ class NexaUnifiedOverlayPermissionAndroidTest {
     @Test fun floatingChatReviewAcceptsSafeNamedTapsButRejectsSensitiveOrChangedActions() {
         assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
             "screen.tap_label label=Alarms"))
+        assertTrue("a single-digit calculator control is a safe tap label",
+            NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+                "screen.tap_label label=1"))
+        assertFalse("multi-digit data remains excluded from tap summaries",
+            NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+                "screen.tap_label label=12"))
+        assertTrue("JSON tap review also accepts one exact calculator digit",
+            NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+                JSONObject().put("toolId","screen.tap_label")
+                    .put("input",JSONObject().put("label","1")).toString()))
+        assertFalse("JSON tap review still rejects multi-digit values",
+            NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+                JSONObject().put("toolId","screen.tap_label")
+                    .put("input",JSONObject().put("label","12")).toString()))
         assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
             "screen.scroll direction=left"))
+        val observedTap=JSONObject().put("toolId","screen.tap_observed")
+            .put("input",JSONObject()
+                .put("snapshotId","550e8400-e29b-41d4-a716-446655440000")
+                .put("index",0).put("label","Open QA details")).toString()
+        assertTrue("snapshot-bound safe control taps may be reviewed in place",
+            NexaOverlayChatRelay.isSafeScreenActionReviewSummary(observedTap))
+        for(input in listOf(
+            JSONObject().put("snapshotId","550e8400-e29b-41d4-a716-446655440000")
+                .put("index",40).put("label","Open QA details"),
+            JSONObject().put("snapshotId","bad-id").put("index",0)
+                .put("label","Open QA details"),
+            JSONObject().put("snapshotId","550e8400-e29b-41d4-a716-446655440000")
+                .put("index",0).put("label","Send"),
+            JSONObject().put("snapshotId","550e8400-e29b-41d4-a716-446655440000")
+                .put("index",0.5).put("label","Open QA details")
+        )) assertFalse(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+            JSONObject().put("toolId","screen.tap_observed")
+                .put("input",input).toString()))
         for(summary in listOf(
             "screen.tap_label label=Send",
             "screen.tap_label label=Delete account",
@@ -101,6 +133,12 @@ class NexaUnifiedOverlayPermissionAndroidTest {
             JSONObject().put("toolId","device.open_app")
                 .put("input",JSONObject().put("app","whatsapp")).toString()))
         assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+            JSONObject().put("toolId","device.open_app")
+                .put("input",JSONObject().put("app","WhatsApp")).toString()))
+        assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
+            JSONObject().put("toolId","device.open_app")
+                .put("input",JSONObject().put("app","Google Maps")).toString()))
+        assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
             JSONObject().put("toolId","screen.open_whatsapp_chat")
                 .put("input",JSONObject().put("recipientHint","Amma")).toString()))
         assertTrue(NexaOverlayChatRelay.isSafeScreenActionReviewSummary(
@@ -116,6 +154,8 @@ class NexaUnifiedOverlayPermissionAndroidTest {
             JSONObject().put("toolId","screen.send_message")
                 .put("input",JSONObject().put("appId","whatsapp")
                     .put("recipientHint","send").put("exactText","Hi")).toString(),
+            JSONObject().put("toolId","device.open_app")
+                .put("input",JSONObject().put("app","WhatsApp then Send")).toString(),
             JSONObject().put("toolId","screen.tap_label")
                 .put("input",JSONObject().put("label","Send")).toString()
         )) assertFalse(summary,NexaOverlayChatRelay.isSafeScreenActionReviewSummary(summary))

@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa user-requested named input box stays reviewed and unsent
 tags:
   - nexa
@@ -7,12 +7,14 @@ tags:
   - experimental
 ---
 - launchApp:
+    stopApp: true
     clearState: false
 - extendedWaitUntil:
     visible: "Chat"
-    timeout: 90000
+    # Debug builds fetch the JavaScript bundle from Metro on cold start.
+    timeout: 180000
 - tapOn: "Chat"
-- assertVisible: "How can I help today?"
+- assertVisible: "Assistant command"
 - tapOn: "Assistant command"
 - inputText: "Hey Nexa type project update into the Search box"
 - hideKeyboard
@@ -25,22 +27,22 @@ tags:
     element:
       text: "Review text entry into another app"
     direction: DOWN
-    timeout: 30000
+    timeout: 90000
 - scrollUntilVisible:
     element:
       text: "Exact text: project update"
     direction: DOWN
-    timeout: 30000
+    timeout: 90000
 - assertVisible: "Target input: Search"
 - assertVisible: "Exact text: project update"
 - scrollUntilVisible:
     element:
       text: "Prepare approved text entry"
     direction: DOWN
-    timeout: 30000
+    timeout: 90000
 - scrollUntilVisible:
     element:
       text: "Discard text"
     direction: DOWN
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: nexa-reviewed-generic-text-input

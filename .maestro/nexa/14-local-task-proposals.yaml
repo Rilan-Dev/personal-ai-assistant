@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa encrypted owner task proposals are review-only and remain cancelled
 tags:
   - nexa
@@ -46,7 +46,7 @@ tags:
     timeout: 30000
 - scrollUntilVisible:
     element: "Proposal safety: no AI agent, message or phone action runs from a proposal."
-    direction: UP
+    direction: DOWN
     timeout: 30000
 - assertVisible: "Proposal safety: no AI agent, message or phone action runs from a proposal."
 - scrollUntilVisible:

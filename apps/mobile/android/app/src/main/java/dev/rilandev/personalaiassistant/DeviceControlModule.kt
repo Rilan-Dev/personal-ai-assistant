@@ -206,10 +206,6 @@ class DeviceControlModule(
             promise.reject("OWNER_ACTIONS_PAUSED","Nexa device actions are paused")
             return
         }
-        if(context.currentActivity?.hasWindowFocus()!=true) {
-            promise.reject("NOT_FOREGROUND","Open Nexa to approve screen inspection")
-            return
-        }
         if(!ScreenAssistState.connected || ScreenAssistService.active==null) {
             promise.reject("ACCESSIBILITY_DISABLED",
                 "Enable Screen Assist in Android Accessibility Settings")
@@ -222,7 +218,195 @@ class DeviceControlModule(
                 "No verified external-app control observation was available")
             return
         }
-        promise.resolve(result)
+        val payload=JSONObject().put("observation",result)
+        val matchingSnapshot=NexaTaskScreenObservation.matchingAssistantSnapshot(
+            result,freshExternalAssistantScreenObservation())
+        if(matchingSnapshot!=null)payload.put("screenObservation",matchingSnapshot)
+        else payload.put("screenObservation",JSONObject.NULL)
+        promise.resolve(payload.toString())
+    }
+
+    /** Capture the external app for owner Chat even while its floating window
+     * has focus. The general debug bridge may intentionally inspect Nexa's own
+     * focused activity; task grounding must remain bound to the observed app.
+     */
+    private fun freshExternalAssistantScreenObservation():String? {
+        if(!NexaNativeActionSafety.permitsNewAction(context) ||
+            !ScreenAssistState.connected)return null
+        val service=ScreenAssistService.active ?:return null
+        if(ScreenAssistService.active!==service)return null
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null} ?:return null
+        return try {
+            if(ScreenAssistService.active!==service || !root.isVisibleToUser)null
+            else NexaPowerShellScreenSnapshot.captureAssistant(root)
+        }catch(_:Exception){null}
+        finally {try{root.recycle()}catch(_:Exception){}}
+    }
+
+    /** Debug CLI only: the returned body is a summary; screen text stays in the process memory store. */
+    private fun shouldObserveFocusedNexaWindow():Boolean =
+        BuildConfig.DEBUG && context.currentActivity?.hasWindowFocus()==true
+
+    @ReactMethod
+    fun capturePowerShellScreen(promise:Promise) {
+        if (!BuildConfig.DEBUG) {
+            promise.reject("DEBUG_BRIDGE_UNAVAILABLE", "Screen snapshots require a Nexa debug build")
+            return
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (!ScreenAssistState.connected || ScreenAssistService.active == null) {
+                promise.reject("ACCESSIBILITY_DISABLED", "Enable and bind Screen Assist before observing an app")
+                return@post
+            }
+            val service = ScreenAssistService.active
+            if (service == null) {
+                promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "No permitted external application screen is visible")
+                return@post
+            }
+            // System UI may visually cover an app while that app remains the
+            // resumed Activity. Prefer the separately bounded shade view.
+            val visibleShade = try { service.notificationShadeRoot() } catch (_: Exception) { null }
+            if (visibleShade != null) {
+                try {
+                    val snapshot = NexaPowerShellScreenSnapshot.captureAssistantNotificationShade(visibleShade)
+                    if (snapshot == null)
+                        promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "The notification shade cannot be safely observed")
+                    else promise.resolve(snapshot)
+                } catch (_: Exception) {
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "Could not create a bounded notification-shade observation")
+                } finally {
+                    try { visibleShade.recycle() } catch (_: Exception) {}
+                }
+                return@post
+            }
+            // When Nexa is the focused full-screen app, another activity can
+            // remain underneath it in the task stack. Do not misreport that
+            // background app as the visible screen. The overlay path has no
+            // focused Nexa Activity and continues to observe the external app.
+            if(shouldObserveFocusedNexaWindow()) {
+                val ownerRoot=try { service.assistantOwnerWindowRoot() }
+                    catch (_:Exception) { null }
+                if(ownerRoot==null) {
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE",
+                        "Focused Nexa window unavailable; background screen was not observed")
+                    return@post
+                }
+                try {
+                    val snapshot=NexaPowerShellScreenSnapshot.captureOwnerWindow(ownerRoot)
+                    if(snapshot==null)
+                        promise.reject("SCREEN_OBSERVATION_UNAVAILABLE",
+                            "The focused Nexa window cannot be safely observed")
+                    else promise.resolve(snapshot)
+                } catch (_:Exception) {
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE",
+                        "Could not create a bounded owner-app observation")
+                } finally {
+                    try { ownerRoot.recycle() } catch (_:Exception) {}
+                }
+                return@post
+            }
+            val root = try { service.externalWindowRoot() } catch (_: Exception) { null }
+            if (root == null) {
+                val ownerRoot = try { service.assistantOwnerWindowRoot() } catch (_: Exception) { null }
+                if (ownerRoot != null) {
+                    try {
+                        val snapshot = NexaPowerShellScreenSnapshot.captureOwnerWindow(ownerRoot)
+                        if (snapshot == null)
+                            promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "The focused Nexa window cannot be safely observed")
+                        else promise.resolve(snapshot)
+                    } catch (_: Exception) {
+                        promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "Could not create a bounded owner-app observation")
+                    } finally {
+                        try { ownerRoot.recycle() } catch (_: Exception) {}
+                    }
+                    return@post
+                }
+
+                val shade = try { service.notificationShadeRoot() } catch (_: Exception) { null }
+                if (shade == null) {
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "No permitted external, focused Nexa, or notification-shade screen is visible")
+                    return@post
+                }
+                try {
+                    val snapshot = NexaPowerShellScreenSnapshot.captureAssistantNotificationShade(shade)
+                    if (snapshot == null)
+                        promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "The notification shade cannot be safely observed")
+                    else promise.resolve(snapshot)
+                } catch (_: Exception) {
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "Could not create a bounded notification-shade observation")
+                } finally {
+                    try { shade.recycle() } catch (_: Exception) {}
+                }
+                return@post
+            }
+            try {
+                val snapshot = NexaPowerShellScreenSnapshot.capture(root)
+                if (snapshot == null)
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "The current window cannot be safely observed")
+                else promise.resolve(snapshot)
+            } catch (_: Exception) {
+                promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "Could not create a bounded screen observation")
+            } finally {
+                try { root.recycle() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** Debug-only, one-shot hierarchy read. All screen access stays in Nexa's
+     * bound Accessibility service; editable and password values are redacted.
+     */
+    @ReactMethod
+    fun capturePowerShellAccessibilityTree(promise:Promise) {
+        if (!BuildConfig.DEBUG) {
+            promise.reject("DEBUG_BRIDGE_UNAVAILABLE", "Accessibility tree capture requires a Nexa debug build")
+            return
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            if (!ScreenAssistState.connected || ScreenAssistService.active == null) {
+                promise.reject("ACCESSIBILITY_DISABLED", "Enable and bind Screen Assist before observing an app")
+                return@post
+            }
+            val service = ScreenAssistService.active
+            val root = try { service?.externalWindowRoot() } catch (_: Exception) { null }
+            if (service == null || root == null) {
+                promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "No permitted external application screen is visible")
+                return@post
+            }
+            try {
+                val tree = NexaAccessibilityHierarchySnapshot.capture(root)
+                if (tree == null)
+                    promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "The current window cannot be safely observed")
+                else promise.resolve(tree)
+            } catch (_: Exception) {
+                promise.reject("SCREEN_OBSERVATION_UNAVAILABLE", "Could not create a bounded accessibility hierarchy")
+            } finally {
+                try { root.recycle() } catch (_: Exception) {}
+            }
+        }
+    }
+
+    @ReactMethod
+    fun getPowerShellScreenSnapshot(snapshotId:String,promise:Promise) {
+        if (!BuildConfig.DEBUG) {
+            promise.reject("DEBUG_BRIDGE_UNAVAILABLE", "Screen snapshots require a Nexa debug build")
+            return
+        }
+        val value = NexaPowerShellScreenSnapshot.read(snapshotId)
+        if (value == null) promise.reject("SNAPSHOT_EXPIRED", "The screen observation expired; run observe again")
+        else promise.resolve(value)
+    }
+
+    @ReactMethod
+    fun isPowerShellScreenSnapshotCurrent(snapshotId:String,promise:Promise) {
+        if (!BuildConfig.DEBUG) {
+            promise.resolve(false)
+            return
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val service = ScreenAssistService.active
+            promise.resolve(service != null && ScreenAssistState.connected &&
+                NexaPowerShellScreenSnapshot.isCurrent(service, snapshotId))
+        }
     }
 
     /**
@@ -410,6 +594,40 @@ class DeviceControlModule(
         return service
     }
 
+    /** Capture only bounded safe targets/icons after an already reviewed step. */
+    private fun freshAssistantScreenObservation():String? {
+        if(!NexaNativeActionSafety.permitsNewAction(context) ||
+            !ScreenAssistState.connected)return null
+        val service=ScreenAssistService.active ?:return null
+        if(ScreenAssistService.active!==service)return null
+        val visibleShade=try{service.notificationShadeRoot()}catch(_:Exception){null}
+        if(visibleShade!=null)return try {
+            NexaPowerShellScreenSnapshot.captureAssistantNotificationShade(visibleShade)
+        } catch(_:Exception){null}
+        finally {try{visibleShade.recycle()}catch(_:Exception){}}
+        if(shouldObserveFocusedNexaWindow()) {
+            val ownerRoot=try{service.assistantOwnerWindowRoot()}
+                catch(_:Exception){null} ?:return null
+            return try {
+                NexaPowerShellScreenSnapshot.captureOwnerWindow(ownerRoot)
+            } catch(_:Exception){null}
+            finally {try{ownerRoot.recycle()}catch(_:Exception){}}
+        }
+        val root=try{service.externalWindowRoot()}catch(_:Exception){null}
+        if(root!=null)return try {NexaPowerShellScreenSnapshot.captureAssistant(root)}
+        catch(_:Exception){null}
+        finally {try{root.recycle()}catch(_:Exception){}}
+        val ownerRoot=try{service.assistantOwnerWindowRoot()}catch(_:Exception){null}
+        if(ownerRoot!=null)return try {
+            NexaPowerShellScreenSnapshot.captureOwnerWindow(ownerRoot)
+        } catch(_:Exception){null}
+        finally {try{ownerRoot.recycle()}catch(_:Exception){}}
+        val shade=try{service.notificationShadeRoot()}catch(_:Exception){null} ?:return null
+        return try {NexaPowerShellScreenSnapshot.captureAssistantNotificationShade(shade)}
+        catch(_:Exception){null}
+        finally {try{shade.recycle()}catch(_:Exception){}}
+    }
+
     private fun finishUiStepAfterObservation(token:String,kind:String,
                                               session:String,call:String,
                                               fingerprint:String,toolId:String,
@@ -419,10 +637,12 @@ class DeviceControlModule(
                 val status=NexaUiActionJournal.outcomeFor(context,token,kind)
                 val observed=status in setOf("observed_change",
                     "structural_change_observed","window_change_observed",
-                    "scroll_event_observed")
+                    "scroll_event_observed","tap_event_observed",
+                    "content_change_observed")
                 if(observed && !NexaAgentActionAudit.recordReviewedUiEvidence(
                         context,session,call,fingerprint,toolId,
-                        "observed_change",token)){
+                        if(status=="tap_event_observed"||status=="content_change_observed")
+                            status else "observed_change",token)){
                     p.reject("UI_EVIDENCE_NOT_COMMITTED",
                         "Native UI change was observed but the parent task record is uncertain")
                     return@postDelayed
@@ -430,10 +650,13 @@ class DeviceControlModule(
                 val result=Arguments.createMap()
                 result.putBoolean("actionAccepted",true)
                 result.putString("verification",
-                    if(observed)"observed_change" else "not_observed")
+                    if(observed)status else "not_observed")
                 // The observation describes a UI change, NOT successful
                 // recipient navigation, business outcome or submitted message.
                 result.putBoolean("businessOutcomeVerified",false)
+                val screen=freshAssistantScreenObservation()
+                result.putBoolean("screenObservationAvailable",screen!=null)
+                if(screen!=null)result.putString("screenObservation",screen)
                 p.resolve(result)
             }catch(_:Exception){
                 p.reject("UI_OUTCOME_UNCERTAIN","Could not verify the claimed step; do not replay it")
@@ -474,6 +697,184 @@ class DeviceControlModule(
                 fingerprint,"screen.tap_label",promise)
         }catch(_:Exception){
             promise.reject("UI_TAP_UNCERTAIN","Tap outcome uncertain. No automatic replay.")
+        }
+    }
+
+    /** Indexed PowerShell taps resolve to one safe label and recheck the same screen at dispatch. */
+    @ReactMethod
+    fun performReviewedIndexedScreenTap(snapshotId:String,index:Int,
+                                        sessionId:String,callId:String,
+                                        fingerprint:String,promise:Promise) {
+        if (!BuildConfig.DEBUG) {
+            promise.reject("DEBUG_BRIDGE_UNAVAILABLE", "Indexed PowerShell actions require a Nexa debug build")
+            return
+        }
+        if (index !in 0 until 40) {
+            promise.reject("INVALID_TAP_TARGET", "Screen target index is outside the supported range")
+            return
+        }
+        val service=sequencedScreenService(promise)?:return
+        val target=NexaPowerShellScreenSnapshot.resolveCurrent(service,snapshotId,index)
+        if(target==null) {
+            promise.reject("STALE_SCREEN_SNAPSHOT", "The screen changed or the indexed control expired; observe again")
+            return
+        }
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.tap_index",
+                JSONObject().put("snapshotId",snapshotId).put("index",index))){
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED",
+                "This indexed tap has no consumed one-time owner approval")
+            return
+        }
+        try {
+            var receipt:String?=null
+            val result=NexaScreenLabelTap.approvedFromSnapshot(service,target.label,
+                target.claim,target.bounds,origin="chat",claimedToken={receipt=it})
+            val token=receipt
+            if(token==null || !result.startsWith("Android accepted one tap")){
+                val code=when {
+                    result.startsWith("No enabled clickable control") -> "UI_TAP_TARGET_UNAVAILABLE"
+                    result.startsWith("Multiple controls") ||
+                        result.startsWith("Multiple or unsafe editable controls") -> "UI_TAP_TARGET_AMBIGUOUS"
+                    result.startsWith("The observed screen changed") ||
+                        result.startsWith("The target or its unique live hierarchy") -> "STALE_SCREEN_SNAPSHOT"
+                    result.startsWith("Android refused") -> "UI_TAP_DISPATCH_REJECTED"
+                    else -> "UI_TAP_DENIED"
+                }
+                promise.reject(code,"Android refused the indexed tap; no automatic retry")
+                return
+            }
+            finishUiStepAfterObservation(token,"tap",sessionId,callId,
+                fingerprint,"screen.tap_index",promise)
+        }catch(_:Exception){
+            promise.reject("UI_TAP_UNCERTAIN","Indexed tap outcome uncertain. No automatic replay.")
+        }
+    }
+
+    /** Live Chat tap bound to the exact fresh safe target the owner reviews. */
+    @ReactMethod
+    fun performReviewedObservedScreenTap(snapshotId:String,index:Int,label:String,
+                                         sessionId:String,callId:String,
+                                         fingerprint:String,promise:Promise) {
+        if(index !in 0 until 40 || NexaTaskScreenObservation.safeLabel(label)==null) {
+            promise.reject("INVALID_TAP_TARGET","The observed target is invalid")
+            return
+        }
+        val service=sequencedScreenService(promise)?:return
+        val target=NexaPowerShellScreenSnapshot.resolveAssistantCurrent(
+            service,snapshotId,index,label)
+        if(target==null) {
+            promise.reject("STALE_SCREEN_SNAPSHOT",
+                "The safe target is expired, truncated or no longer on the same screen")
+            return
+        }
+        val request=JSONObject().put("snapshotId",snapshotId)
+            .put("index",index).put("label",label)
+        if(!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.tap_observed",request)) {
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED",
+                "This observed tap has no consumed one-time owner approval")
+            return
+        }
+        try {
+            var receipt:String?=null
+            val outcome=NexaScreenLabelTap.approvedFromSnapshot(service,target.label,
+                target.claim,target.bounds,origin="chat",claimedToken={receipt=it})
+            val token=receipt
+            if(token==null || !outcome.startsWith("Android accepted one tap")) {
+                val code=when {
+                    outcome.startsWith("No enabled clickable control") -> "UI_TAP_TARGET_UNAVAILABLE"
+                    outcome.startsWith("Multiple controls") ||
+                        outcome.startsWith("Multiple or unsafe editable controls") -> "UI_TAP_TARGET_AMBIGUOUS"
+                    outcome.startsWith("The observed screen changed") ||
+                        outcome.startsWith("The target or its unique live hierarchy") -> "STALE_SCREEN_SNAPSHOT"
+                    outcome.startsWith("Android refused") -> "UI_TAP_DISPATCH_REJECTED"
+                    else -> "UI_TAP_DENIED"
+                }
+                promise.reject(code,"Android refused the snapshot-bound tap; no retry")
+                return
+            }
+            finishUiStepAfterObservation(token,"tap",sessionId,callId,
+                fingerprint,"screen.tap_observed",promise)
+        } catch (_:Exception) {
+            promise.reject("UI_TAP_UNCERTAIN","Observed tap outcome uncertain. No replay.")
+        }
+    }
+
+    /** Named keys only; raw keycodes and submit-capable text keys stay unavailable. */
+    @ReactMethod
+    fun performReviewedPowerShellKeyAction(name:String,sessionId:String,
+                                           callId:String,fingerprint:String,
+                                           promise:Promise) {
+        if (name !in setOf("back","home","notifications")) {
+            promise.reject("INVALID_KEY", "Only Back, Home, or Notifications are supported")
+            return
+        }
+        if (!NexaNativeActionSafety.permitsNewAction(context)) {
+            promise.reject("OWNER_ACTIONS_PAUSED", "Nexa device actions are paused")
+            return
+        }
+        if (!NexaAgentActionAudit.reserveReviewedUiStep(context,
+                sessionId,callId,fingerprint,"screen.key_action",
+                JSONObject().put("name",name))) {
+            promise.reject("REVIEWED_STEP_NOT_CLAIMED", "This key action has no consumed one-time owner approval")
+            return
+        }
+        try {
+            var actionToken:String?=null
+            val service=ScreenAssistService.active
+            val ownerRoot=try { service?.assistantOwnerWindowRoot() }
+                catch (_:Exception) { null }
+            val ownerWindowId=ownerRoot?.windowId
+            try { ownerRoot?.recycle() } catch (_:Exception) {}
+            val ownerWindowStillFocused:()->Boolean={
+                val liveRoot=try { service?.assistantOwnerWindowRoot() }
+                    catch (_:Exception) { null }
+                if(liveRoot==null)false else try {
+                    liveRoot.packageName?.toString()==context.packageName &&
+                        liveRoot.windowId==ownerWindowId
+                } catch (_:Exception) { false }
+                finally { try { liveRoot.recycle() } catch (_:Exception) {} }
+            }
+            val outcome=NexaBrowserTaskActions.keyActionApproved(
+                context,name,boundService=service,origin="chat",
+                claimedToken={actionToken=it},
+                ownerWindowFocused=ownerWindowId!=null,
+                ownerWindowStillFocused=ownerWindowStillFocused)
+            val dispatchAccepted=if(name=="notifications")
+                outcome.startsWith("Android accepted the notification shade request")
+            else outcome.startsWith("Android accepted one named")
+            if (!dispatchAccepted) {
+                // The executor returns only fixed, content-free guard reasons.
+                // Preserve that reason so local QA can tell a paused service
+                // from an unavailable external window without reading its text.
+                promise.reject("KEY_ACTION_REFUSED", outcome)
+                return
+            }
+            val token=actionToken
+            if (token.isNullOrBlank() ||
+                !NexaAgentActionAudit.recordReviewedKeyActionAccepted(
+                    context,sessionId,callId,fingerprint,token)) {
+                promise.reject("KEY_ACTION_AUDIT_UNCERTAIN", "The named key outcome could not be committed; do not retry")
+                return
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    val result=Arguments.createMap()
+                    result.putBoolean("actionAccepted",true)
+                    result.putString("verification","dispatch_accepted")
+                    result.putBoolean("businessOutcomeVerified",false)
+                    val screen=freshAssistantScreenObservation()
+                    result.putBoolean("screenObservationAvailable",screen!=null)
+                    if(screen!=null)result.putString("screenObservation",screen)
+                    promise.resolve(result)
+                }catch(_:Exception){
+                    promise.reject("KEY_ACTION_UNCERTAIN",
+                        "Named key was accepted but its result could not be returned")
+                }
+            },650L)
+        } catch (_:Exception) {
+            promise.reject("KEY_ACTION_UNCERTAIN", "Named key action outcome uncertain; do not retry")
         }
     }
 

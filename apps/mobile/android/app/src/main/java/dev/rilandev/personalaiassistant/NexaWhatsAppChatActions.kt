@@ -108,7 +108,12 @@ internal object NexaWhatsAppChatActions {
                         if(previousIndex<0)rows.add(Row(candidate,score,Rect(rect)))
                         else {
                             val previous=rows[previousIndex]
-                            val preferred=if(rect.width().toLong()*rect.height() <
+                            // When the same contact label appears on both a
+                            // clickable conversation row and a nested avatar,
+                            // the avatar may open a quick-view card. Prefer the
+                            // enclosing row; equal-area duplicates retain the
+                            // first (outermost) BFS match.
+                            val preferred=if(rect.width().toLong()*rect.height() >
                                 previous.bounds.width().toLong()*previous.bounds.height())
                                 Row(candidate,maxOf(score,previous.evidence),Rect(rect))
                             else Row(previous.target,maxOf(score,previous.evidence),previous.bounds)

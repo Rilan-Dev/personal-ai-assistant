@@ -130,7 +130,7 @@ internal object NexaLiveToolPolicy {
             }
             "request_tap_visible_label" -> {
                 val label=single("label")?.trim().orEmpty()
-                if(label.length !in 2..45 || !label.matches(Regex("[A-Za-z0-9][A-Za-z0-9 _-]{1,44}")) ||
+                if(NexaTaskScreenObservation.safeLabel(label)==null ||
                     Regex("""\b(send|submit|pay|buy|purchase|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|otp|logout)\b""",
                         RegexOption.IGNORE_CASE).containsMatchIn(label))
                     Decision.Immediate("Rejected: unsafe or invalid tap label")

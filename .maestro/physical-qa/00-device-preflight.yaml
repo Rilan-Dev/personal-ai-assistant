@@ -1,12 +1,12 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
-name: Grant QA2 runtime permissions, controls, and overlay
+appId: dev.rilandev.personalaiassistant.debug
+name: Grant debug runtime permissions, controls, and overlay
 tags:
   - nexa
   - physical
   - qa-preflight
   - no-external-action
 ---
-# Keep QA2 data intact. Maestro grants declared runtime permissions. Android
+# Keep debug app data intact. Maestro grants declared runtime permissions. Android
 # owns the overlay control, so this flow changes it only through visible Settings.
 - launchApp:
     stopApp: true

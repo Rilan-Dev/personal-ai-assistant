@@ -80,10 +80,13 @@ test("armed screen reads retry unavailable roots briefly and accept scroll event
   assert.match(code,/rootPackage != expectedPackage/);
   assert.match(code,/if \(!ScreenAssistState\.isArmed\(\)\)[\s\S]*?return/);
 });
-test("Screen Assist reasserts external-window retrieval and retries within the owner's arm",()=>{
+test("Screen Assist declares window retrieval without rewriting serviceInfo during bind",()=>{
   const code=read(path+"ScreenAssistService.kt");
-  assert.match(code,/override fun onServiceConnected\(\)[\s\S]*?serviceInfo\s*=\s*serviceInfo\.apply[\s\S]*?FLAG_RETRIEVE_INTERACTIVE_WINDOWS/);
-  assert.match(code,/FLAG_INCLUDE_NOT_IMPORTANT_VIEWS/);
+  const config=read("apps/mobile/android/app/src/main/res/xml/screen_assist_config.xml");
+  assert.match(code,/override fun onServiceConnected\(\)[\s\S]*?active\s*=\s*this[\s\S]*?ScreenAssistState\.connected\s*=\s*true/);
+  assert.doesNotMatch(code,/serviceInfo\s*=\s*serviceInfo\.apply/,
+    "serviceInfo updates from onServiceConnected immediately unbound the emulator service");
+  assert.match(config,/android:accessibilityFlags="flagReportViewIds\|flagRetrieveInteractiveWindows\|flagIncludeNotImportantViews"/);
   assert.match(code,/MAX_SCREEN_READ_RETRIES\s*=\s*40/);
   assert.match(code,/postDelayed\(retry,\s*READ_ROOT_RETRY_DELAY_MS\)/);
 });

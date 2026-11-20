@@ -36,6 +36,7 @@ test('navigation steps are bounded suggestions requiring separate inspection and
  assert.deepEqual(result.steps.map(s=>s.semantic),['menu','search']);
  assert.ok(result.steps.every(s=>s.freshInspectionRequired&&s.ownerConfirmationRequired));
  assert.equal(proposeNavigationSteps('tap send',snap(),3000).status,'unsupported');
+ assert.equal(proposeNavigationSteps('open settings',snap(),3000).status,'unsupported');
  assert.equal(proposeNavigationSteps('open settings',snap(),80000).status,'expired');
 });
 

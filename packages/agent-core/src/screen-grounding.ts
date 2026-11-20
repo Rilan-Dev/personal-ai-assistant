@@ -100,7 +100,7 @@ export function proposeNavigationSteps(
   'open search from menu':['menu','search'],
   'open settings from menu':['menu','settings'],
   'find settings in menu':['menu','settings'],
-  'open menu':['menu'],'find search':['search'],'open settings':['settings']
+  'open menu':['menu'],'find search':['search']
  });
  const selected=templates[request.toLowerCase().trim().replace(/[.?!]+$/,'')];
  if(!selected)return none('unsupported','Only bounded, non-destructive navigation suggestions are available.');

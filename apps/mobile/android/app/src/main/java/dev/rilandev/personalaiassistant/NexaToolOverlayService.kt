@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
@@ -28,6 +29,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.abs
 
 /**
@@ -38,6 +42,11 @@ import kotlin.math.abs
  */
 class NexaToolOverlayService : Service() {
     companion object {
+        internal data class ScreenGestureOverlayState(
+            val expanded: Boolean,
+            val bounds: Rect?,
+        )
+
         const val ACTION_SHOW = "dev.rilandev.personalaiassistant.OVERLAY_SHOW"
         const val ACTION_HIDE = "dev.rilandev.personalaiassistant.OVERLAY_HIDE"
         @Volatile var visible = false
@@ -53,6 +62,8 @@ class NexaToolOverlayService : Service() {
                     service.sharedChatApprovalSummary=null
                     service.sharedChatApprovalDecisionSent=false
                 }
+                service.section="chat"
+                service.expanded=true
                 service.history.addLast("NEXA AI · "+reply.take(1200))
                 while(service.history.size>12)service.history.removeFirst()
                 service.note="Shared Chat result received. Android tool approvals remain independent."
@@ -68,13 +79,36 @@ class NexaToolOverlayService : Service() {
                 service.sharedChatApprovalToken=token
                 service.sharedChatApprovalSummary=summary
                 service.sharedChatApprovalDecisionSent=false
-                    service.expanded=true
+                service.section="chat"
+                service.expanded=true
                 service.history.addLast("NEXA AI · Owner review required: "+summary)
                 while(service.history.size>12)service.history.removeFirst()
                 service.note="Review this exact screen action. Nothing has executed."
                 service.render()
             }
             return true
+        }
+
+        /**
+         * Snapshot Nexa's live touch-occlusion on the UI thread. A timeout is
+         * represented as an unknown expanded overlay so screen gestures fail
+         * closed instead of risking a swipe through Nexa's panel.
+         */
+        internal fun screenGestureOverlayState(): ScreenGestureOverlayState? {
+            val service = activeOverlay ?: return null
+            if (!visible) return null
+            if (Looper.myLooper() == Looper.getMainLooper())
+                return service.snapshotScreenGestureOverlayOnMain()
+
+            val result = AtomicReference<ScreenGestureOverlayState?>()
+            val completed = CountDownLatch(1)
+            val posted = Handler(Looper.getMainLooper()).post {
+                try { result.set(service.snapshotScreenGestureOverlayOnMain()) }
+                finally { completed.countDown() }
+            }
+            if (!posted || !completed.await(800L, TimeUnit.MILLISECONDS))
+                return ScreenGestureOverlayState(expanded=true, bounds=null)
+            return result.get() ?: ScreenGestureOverlayState(expanded=true, bounds=null)
         }
     }
     private lateinit var wm: WindowManager
@@ -133,6 +167,14 @@ class NexaToolOverlayService : Service() {
                 }
             }
         },1_250L)
+    }
+
+    private fun snapshotScreenGestureOverlayOnMain(): ScreenGestureOverlayState {
+        if (!visible || view == null) return ScreenGestureOverlayState(expanded=false, bounds=null)
+        val visibleBounds = Rect()
+        val attached = view?.let { it.isAttachedToWindow && it.getGlobalVisibleRect(visibleBounds) } == true
+        return ScreenGestureOverlayState(expanded=expanded,
+            bounds=if (attached && !visibleBounds.isEmpty) Rect(visibleBounds) else null)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -550,7 +592,10 @@ class NexaToolOverlayService : Service() {
         history.addLast("NEXA AI · Working through the shared Chat agent…")
         while(history.size>12)history.removeFirst()
         note="Shared Chat request accepted once. Check its result before another task; no automatic retries."
-        render()
+        // Expose the requested application while the shared agent plans and
+        // inspects its live UI. A pending review or reply expands this panel
+        // again, and approval collapses it before the native action dispatch.
+        collapse()
     }
 
     /** Collapse before an approved Home gesture so the overlay cannot intercept it. */
@@ -1061,6 +1106,21 @@ class NexaToolOverlayService : Service() {
                         }
                         addView(transcript, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,dp(96)))
+                        // A posted fullScroll can run before WindowManager measures the new
+                        // overlay, leaving the latest reply below the viewport under load.
+                        // Scroll to the measured content bottom both after attachment and
+                        // after the ScrollView receives its first layout.
+                        val scrollToLatestReply = {
+                            val content = transcript.getChildAt(0)
+                            if (content != null) {
+                                transcript.scrollTo(0,
+                                    (content.bottom - transcript.height).coerceAtLeast(0))
+                            }
+                        }
+                        transcript.addOnLayoutChangeListener { changed, _, _, _, _, _, _, _, _ ->
+                            (changed as ScrollView).post { scrollToLatestReply() }
+                        }
+                        transcript.post { scrollToLatestReply() }
                         val approvalToken=sharedChatApprovalToken
                         val approvalSummary=sharedChatApprovalSummary
                         if(approvalToken!=null && approvalSummary!=null) {

@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa ambiguous Mom message asks channel and displays exact draft without sending
 tags:
   - nexa
@@ -7,12 +7,14 @@ tags:
   - experimental
 ---
 - launchApp:
+    stopApp: true
     clearState: false
 - extendedWaitUntil:
     visible: "Chat"
-    timeout: 90000
+    # Debug builds fetch the JavaScript bundle from Metro on cold start.
+    timeout: 180000
 - tapOn: "Chat"
-- assertVisible: "How can I help today?"
+- assertVisible: "Assistant command"
 - tapOn: "Assistant command"
 - inputText: "Hey Nexa Send Message to my Mom That I am in the meeting i will call you later"
 - hideKeyboard
@@ -23,7 +25,8 @@ tags:
       text: "Exact draft: I am in the meeting i will call you later"
     direction: DOWN
     visibilityPercentage: 50
-    timeout: 60000
+    # Allow the agent response to settle while the reviewed card is rendered.
+    timeout: 120000
 - assertVisible: "Message app & recipient review"
 - extendedWaitUntil:
     visible: "Exact draft: I am in the meeting i will call you later"
@@ -37,9 +40,9 @@ tags:
     timeout: 30000
 - assertVisible: "Messaging app decision"
 - scrollUntilVisible:
-    element:
-      text: "Discard message review — do not send"
+    element: "Discard message review, do not send"
     direction: DOWN
-    timeout: 30000
-- assertVisible: "Discard message review — do not send"
+    visibilityPercentage: 50
+    timeout: 90000
+- assertVisible: "Discard message review, do not send"
 - takeScreenshot: nexa-ambiguous-messenger-explicit-owner-choice

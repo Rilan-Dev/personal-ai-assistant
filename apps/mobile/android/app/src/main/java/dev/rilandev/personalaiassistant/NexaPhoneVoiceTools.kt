@@ -229,15 +229,30 @@ internal object NexaPhoneVoiceTools {
 
     /** Chat launch resolves only one exact, currently installed launcher label. */
     fun findExactLaunchableApp(context: Context, name: String): AppChoice? {
+        return resolveUniqueLaunchableName(launchableApps(context),name)
+    }
+
+    /**
+     * Resolve a visible launcher label from an owner/model app name. Exact
+     * labels win. If none exists, allow a unique word-boundary suffix so a
+     * request such as "Chrome" can resolve to the installed label "Google
+     * Chrome". Qualifiers such as "Chrome Beta" do not match, and multiple
+     * suffix candidates remain ambiguous rather than being guessed.
+     */
+    internal fun resolveUniqueLaunchableName(
+        available:List<AppChoice>,name:String
+    ):AppChoice? {
         val target=name.trim().lowercase(Locale.ROOT)
             .let { if(it=="whatsapp-business") "whatsapp business" else it }
         if(target.length !in 2..56 ||
             !target.matches(Regex("[a-z0-9][a-z0-9 ._+-]*"))) return null
-        val matches=launchableApps(context).filter { candidate ->
-            val label=candidate.label.lowercase(Locale.ROOT)
-            label==target || label.removeSuffix(" app")==target
+        val normalized=available.map { candidate ->
+            candidate to candidate.label.trim().lowercase(Locale.ROOT).removeSuffix(" app")
         }
-        return matches.singleOrNull()
+        val exact=normalized.filter { (_,label) -> label==target }
+        if(exact.isNotEmpty())return exact.singleOrNull()?.first
+        val suffix=normalized.filter { (_,label) -> label.endsWith(" $target") }
+        return suffix.singleOrNull()?.first
     }
 
     /** Revalidate an EXACT native owner-reviewed launcher choice immediately

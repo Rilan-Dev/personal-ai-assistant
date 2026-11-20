@@ -18,8 +18,13 @@ test('mobile navigation has three primary tabs and retains setup/settings via co
   assert.match(app,/accessibilityLabel="Open permission setup"/);
   assert.match(app,/accessibilityRole="tab"/);
   assert.match(app,/accessibilityState=\{\{selected:tab===item.id\}\}/);
-  assert.match(app,/onPress=\{\(\)=>navigate\(item.id\)\}/);
+  assert.match(app,/onPress=\{\(\)=>\{\s*navigate\(item.id\);/);
   assert.match(app,/bottomNav:/);
+});
+
+test('bottom navigation exposes stable accessible tab names on clickable parents',()=>{
+  assert.match(app,/accessible=\{true\}/);
+  assert.match(app,/accessibilityLabel=\{item\.label\}/);
 });
 
 test('settings controls and credential entry are separate from conversation',()=>{

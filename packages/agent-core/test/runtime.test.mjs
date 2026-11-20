@@ -111,3 +111,35 @@ test("tool diagnostics suppress arbitrary native error codes and messages",async
   assert.deepEqual(seen,[]);
 });
 test("high risk action requires approval",async()=>{const result=await run(build(tool({risk:"high"}),plan()));assert.equal(result.status,"awaiting_approval")});
+test("large accessibility results stay available to the caller but checkpoints keep only the requested projection",async()=>{
+  const journal=new InMemoryActionJournal();
+  const call={callId:"tree-call",toolId:"screen.accessibility_tree",input:{}};
+  const largeTree={packageName:"com.transsion.XOSLauncher",nodeCount:512,
+    nodes:Array.from({length:512},(_,index)=>({id:String(index),text:"screen-label-".repeat(12)}))};
+  const registry=new ToolRegistry();
+  registry.register(tool({id:call.toolId,risk:"high",hasExternalSideEffect:true,
+    execute:async()=>({status:"success",data:largeTree})}));
+  const harness=new AgentHarness(registry,plan(call));
+  const options={request:"read current accessibility tree",sessionId:"tree-large-result",
+    grantedCapabilities:new Set(),journal,
+    checkpointObservations:observations=>observations.map(observation=>({
+      ...observation,
+      outcome:observation.call.toolId===call.toolId&&observation.outcome.status==="success"
+        ?{status:"success",data:{packageName:largeTree.packageName,nodeCount:largeTree.nodeCount,
+          checkpointResultRedacted:true}}
+        :observation.outcome
+    }))};
+  const pending=await harness.run(options);
+  assert.equal(pending.status,"awaiting_approval");
+  assert.equal(await journal.approveAction("tree-large-result",call.callId,pending.fingerprint),true);
+  const result=await harness.run({...options,resume:true});
+  assert.equal(result.status,"completed");
+  const toolResult=result.trace.find(event=>event.type==="tool_result");
+  assert.equal(toolResult.outcome.data.nodes.length,512);
+  assert.equal(toolResult.outcome.data.nodes[0].text,"screen-label-".repeat(12));
+  const checkpoint=await journal.loadSession("tree-large-result");
+  assert.deepEqual(checkpoint.observations[0].outcome.data,{
+    packageName:"com.transsion.XOSLauncher",nodeCount:512,checkpointResultRedacted:true
+  });
+  assert.ok(JSON.stringify(checkpoint).length<64*1024);
+});

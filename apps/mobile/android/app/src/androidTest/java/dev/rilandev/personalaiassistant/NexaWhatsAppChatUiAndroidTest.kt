@@ -88,7 +88,7 @@ class NexaWhatsAppChatUiAndroidTest {
             // Accessibility window. Await the fixture's changed navigation state,
             // not the marker shared by both the chat list and conversation.
             val openedStatus=
-                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Send clicks: 0 · Opened: true"
+                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Avatar clicks: 0 · Send clicks: 0 · Opened: true"
             NexaQaAccessibilityRoot.waitForText(runId,openedStatus).let { current ->
                 assertTrue("New chat header + message composer must both be present: "+
                     fixtureTree(current),
@@ -118,13 +118,34 @@ class NexaWhatsAppChatUiAndroidTest {
                     composers.single().performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,payload))
             }
             val after=NexaQaAccessibilityRoot.waitForText(runId,
-                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Send clicks: 0 · Opened: true")
+                "QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Avatar clicks: 0 · Send clicks: 0 · Opened: true")
             assertTrue(NexaQaAccessibilityRoot.nodes(after).any{
                 it.text?.toString()=="Synthetic test: I will call later"
             })
             assertTrue(NexaQaAccessibilityRoot.nodes(after).any{
-                it.text?.toString()?.contains("Chat row clicks: 1 · Send clicks: 0 · Opened: true")==true
+                it.text?.toString()?.contains("Chat row clicks: 1 · Avatar clicks: 0 · Send clicks: 0 · Opened: true")==true
             })
+        } finally {
+            NexaQaAccessibilityRoot.closeFixture()
+        }
+    }
+
+    @Test fun matchingClickableAvatarDoesNotReplaceTheConversationRowTarget() {
+        val runId=NexaQaAccessibilityRoot.launchFixture(
+            NexaChatListQaActivity::class.java,false,clickableAvatar=true)
+        try {
+            val current=root(runId)
+            val scan=NexaWhatsAppChatActions.inspect(current,"Mah Forever")
+            assertEquals("One semantic contact row",1,scan.candidates)
+            assertNotNull("The exact contact row must be available",scan.target)
+            assertEquals("The conversation row must win over its quick-view avatar",
+                "android.widget.LinearLayout",scan.target!!.className.toString())
+            assertTrue("The chosen contact row opens a chat",
+                scan.target!!.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+            val expected="QA run: $runId · Duplicate contacts: false · Chat row clicks: 1 · Avatar clicks: 0 · Send clicks: 0 · Opened: true"
+            val opened=NexaQaAccessibilityRoot.waitForText(runId,expected)
+            assertTrue("The row click must expose its chat header and composer",
+                NexaWhatsAppChatActions.inspect(opened,"Mah Forever").alreadyOpen)
         } finally {
             NexaQaAccessibilityRoot.closeFixture()
         }
@@ -139,7 +160,7 @@ class NexaWhatsAppChatUiAndroidTest {
             assertEquals(85,close.bestEvidence)
             assertEquals(0,NexaWhatsAppChatActions.inspect(current,"Map Forward").candidates)
             assertTrue(NexaQaAccessibilityRoot.nodes(current).any{
-                it.text?.toString()?.contains("Duplicate contacts: false · Chat row clicks: 0 · Send clicks: 0 · Opened: false")==true
+                it.text?.toString()?.contains("Duplicate contacts: false · Chat row clicks: 0 · Avatar clicks: 0 · Send clicks: 0 · Opened: false")==true
             })
         } finally {
             NexaQaAccessibilityRoot.closeFixture()
@@ -154,7 +175,7 @@ class NexaWhatsAppChatUiAndroidTest {
             assertEquals(fixtureTree(current),2,scan.candidates)
             assertNull("Two different rows cannot become an approved target",scan.target)
             assertTrue(NexaQaAccessibilityRoot.nodes(current).any{
-                it.text?.toString()?.contains("Duplicate contacts: true · Chat row clicks: 0 · Send clicks: 0 · Opened: false")==true
+                it.text?.toString()?.contains("Duplicate contacts: true · Chat row clicks: 0 · Avatar clicks: 0 · Send clicks: 0 · Opened: false")==true
             })
         } finally {
             NexaQaAccessibilityRoot.closeFixture()

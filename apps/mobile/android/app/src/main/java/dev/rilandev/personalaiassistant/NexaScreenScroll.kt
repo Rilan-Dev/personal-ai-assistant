@@ -1,29 +1,47 @@
 package dev.rilandev.personalaiassistant
 
+import android.accessibilityservice.AccessibilityService
+import android.accessibilityservice.GestureDescription
 import android.app.KeyguardManager
 import android.content.Context
 import android.graphics.Rect
+import android.graphics.Path
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import java.util.UUID
 
-/** User-confirmed accessibility scrolling; no global coordinates or gesture injection. */
+/** User-confirmed semantic scrolling with a bounded screen-relative fallback for opaque app views. */
 internal object NexaScreenScroll {
     private data class Target(
         val token: String, val pkg: String, val windowId: Int,
         val classname: String, val resourceId: String, val bounds: IconBox,
-        val direction: String, val expiry: Long, val pauseGeneration:Long
+        val direction: String, val actionId: Int,
+        val gesturePlan: NexaScreenScrollGesturePlan? = null,
+        val expiry: Long, val pauseGeneration:Long
     )
     private val lock=Any()
     private var pending: Target? = null
+    private const val MAX_SCROLL_NODES = 512
+    private const val GESTURE_ACTION_ID = -2
+    private const val GESTURE_TARGET_CLASS = "__screen_scroll_gesture__"
     fun cancel() = synchronized(lock) { pending=null }
-    /** Android semantic scroll actions; no guessed XY swipes. */
-    private fun scrollAction(direction:String):Int = when(direction) {
-        "down" -> AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-        "up" -> AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-        "left" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id
-        "right" -> AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id
-        else -> -1
+    /** Directional actions work on scroll views that do not expose logical order. */
+    internal fun scrollActions(direction:String):List<Int> = when(direction) {
+        "down" -> listOf(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.id,
+            AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+        "up" -> listOf(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_UP.id,
+            AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)
+        "left" -> listOf(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_LEFT.id)
+        "right" -> listOf(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_RIGHT.id)
+        else -> emptyList()
+    }
+
+    internal fun selectScrollAction(direction:String, availableActionIds:Collection<Int>):Int? {
+        val available=availableActionIds.toHashSet()
+        return scrollActions(direction).firstOrNull { it in available }
     }
 
 
@@ -34,10 +52,18 @@ internal object NexaScreenScroll {
         return try {
             val guard=service.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
             if (guard?.isKeyguardLocked==true) return null
-            val root=service.externalWindowRoot() ?: return null
+            // In debug/live-QA builds Nexa itself can be the focused surface
+            // while a stale external app (for example Settings) remains in a
+            // background task. Prefer the focused owner window in that case;
+            // on a third-party foreground app it is null and we keep the
+            // external-window behavior used for cross-app control.
+            val root=(if(BuildConfig.DEBUG)service.assistantOwnerWindowRoot() else null)
+                ?: service.externalWindowRoot()
+                ?: return null
             try {
                 val pkg=root.packageName?.toString().orEmpty()
-                if (pkg.isBlank() || pkg==service.packageName || pkg=="com.android.systemui" ||
+                if (pkg.isBlank() || (pkg==service.packageName && !BuildConfig.DEBUG) ||
+                    pkg=="com.android.systemui" ||
                     pkg=="android" || pkg.startsWith("com.google.android.inputmethod")) {
                     try { root.recycle() } catch (_: Exception) {}
                     null
@@ -75,7 +101,7 @@ internal object NexaScreenScroll {
                 root.getBoundsInScreen(full)
                 val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
                     root.windowId,"__home_launcher_swipe__","",
-                    IconBox(full.left,full.top,full.right,full.bottom),direction,
+                    IconBox(full.left,full.top,full.right,full.bottom),direction,-1,null,
                     SystemClock.elapsedRealtime()+10_000L,generation)
                 synchronized(lock){pending=target}
                 return "Confirm one $direction swipe on your Android home screen."
@@ -83,22 +109,29 @@ internal object NexaScreenScroll {
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
             var visited=0
+            var scrollableNodeCount=0
             var best: AccessibilityNodeInfo?=null
             var bestArea=0L
+            var bestActionId=-1
             // Bounded target search refuses multiple independently scrollable
             // containers; ordinary owner scrolling retains prior behavior.
             val eligibleContainers=linkedSetOf<String>()
-            while(queue.isNotEmpty() && visited<200){
+            while(queue.isNotEmpty() && visited<MAX_SCROLL_NODES){
                 val node=queue.removeFirst()
                 visited++
                 if (!node.isPassword && !node.isEditable && node.isVisibleToUser){
                     if(node.isScrollable){
+                        scrollableNodeCount++
                         val rect=Rect()
                         node.getBoundsInScreen(rect)
-                        val action=scrollAction(direction)
-                        val actions=node.actionList.any { it.id==action }
+                        val actionIds=node.actionList.map { it.id }
+                        val actionId=selectScrollAction(direction,actionIds)
+                        if(BuildConfig.DEBUG)android.util.Log.d("NexaScreenScroll",
+                            "scan direction=$direction package=${root.packageName} " +
+                                "class=${node.className} bounds=${rect.left},${rect.top},${rect.right},${rect.bottom} " +
+                                "actions=${actionIds.joinToString(",")} selected=$actionId")
                         val area=rect.width().toLong()*rect.height().toLong()
-                        if(actions && area>0L && area<500_000_000L &&
+                        if(actionId!=null && area>0L && area<500_000_000L &&
                             rect.left>=0 && rect.top>=0){
                             eligibleContainers.add(
                                 listOf(node.className?.toString().orEmpty(),
@@ -107,25 +140,59 @@ internal object NexaScreenScroll {
                             if(area>bestArea){
                                 best=node
                                 bestArea=area
+                                bestActionId=actionId
                             }
                         }
                     }
                     for(i in 0 until node.childCount) node.getChild(i)?.let { queue.addLast(it) }
                 }
             }
+            if(queue.isNotEmpty()) {
+                if(BuildConfig.DEBUG)android.util.Log.w("NexaScreenScroll",
+                    "preflight hierarchy truncated direction=$direction visited=$visited " +
+                        "remaining=${queue.size}")
+                return "Scrollable hierarchy exceeds the safe inspection limit. No scroll proposed."
+            }
             if(requireUniqueContainer && eligibleContainers.size!=1)
                 return "Bounded scroll search requires one unique scrollable container. No gesture proposed."
-            val candidate=best ?: return "No visible scrollable container supports that direction."
+            val candidate=best ?: run {
+                if(BuildConfig.DEBUG)android.util.Log.d("NexaScreenScroll",
+                    "no target direction=$direction package=${root.packageName} " +
+                        "inspected=$visited scrollableNodes=$scrollableNodeCount")
+                if(requireUniqueContainer || scrollableNodeCount!=0)
+                    return "No visible scrollable container supports that direction."
+                if(hasVisibleInputMethodWindow(service))
+                    return "The keyboard is visible. No screen swipe proposed."
+                val overlay=NexaToolOverlayService.screenGestureOverlayState()
+                if(overlay?.expanded==true)
+                    return "Collapse the Nexa panel before reviewing a screen swipe."
+                if(overlay!=null && overlay.bounds==null)
+                    return "Nexa's visible bubble bounds are unavailable. No screen swipe proposed."
+                val appBounds=Rect().also { root.getBoundsInScreen(it) }
+                val gesturePlan=NexaScreenScrollGesturePlanner.plan(appBounds,direction,
+                    listOfNotNull(overlay?.bounds),service.resources.displayMetrics.density)
+                    ?: return "No clear, safe swipe path is available in this app window."
+                val target=Target(UUID.randomUUID().toString(),root.packageName.toString(),
+                    root.windowId,GESTURE_TARGET_CLASS,"",
+                    IconBox(appBounds.left,appBounds.top,appBounds.right,appBounds.bottom),
+                    direction,GESTURE_ACTION_ID,gesturePlan,
+                    SystemClock.elapsedRealtime()+10_000L,generation)
+                synchronized(lock){pending=target}
+                return "Confirm one $direction screen swipe in ${target.pkg}."
+            }
             val box=Rect()
             candidate.getBoundsInScreen(box)
             val tgt=Target(UUID.randomUUID().toString(),root.packageName.toString(),
                 root.windowId,candidate.className?.toString().orEmpty(),
                 candidate.viewIdResourceName.orEmpty(),
-                IconBox(box.left,box.top,box.right,box.bottom),direction,
+                IconBox(box.left,box.top,box.right,box.bottom),direction,bestActionId,
+                null,
                 SystemClock.elapsedRealtime()+10_000L,generation)
             synchronized(lock){ pending=tgt }
             return "Confirm scroll ${direction} in ${tgt.pkg} within 10 seconds."
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            if(BuildConfig.DEBUG)android.util.Log.w("NexaScreenScroll",
+                "preflight failed direction=$direction exception=${error.javaClass.simpleName}")
             cancel()
             return "Screen changed during scroll inspection. No action requested."
         } finally { try { root.recycle() } catch (_: Exception) {} }
@@ -144,14 +211,19 @@ internal object NexaScreenScroll {
      * cannot authorize a gesture.
      */
     private fun reviewedTarget(root:AccessibilityNodeInfo, approved:Target):AccessibilityNodeInfo? {
-        val action=scrollAction(approved.direction)
+        val action=approved.actionId
+        if(BuildConfig.DEBUG)android.util.Log.w("NexaScreenScroll",
+            "review root package=${root.packageName} window=${root.windowId} " +
+                "visible=${root.isVisibleToUser} targetPackage=${approved.pkg} " +
+                "targetWindow=${approved.windowId} class=${approved.classname} " +
+                "resource=${approved.resourceId} bounds=${approved.bounds} action=$action")
         if(action<0 || !root.isVisibleToUser) return null
         val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
         queue.add(root)
         var visited=0
         var matching=0
         var result:AccessibilityNodeInfo?=null
-        while(queue.isNotEmpty() && visited<200) {
+        while(queue.isNotEmpty() && visited<MAX_SCROLL_NODES) {
             val node=queue.removeFirst()
             visited++
             if(node.isVisibleToUser && !node.isPassword && !node.isEditable) {
@@ -172,7 +244,80 @@ internal object NexaScreenScroll {
                     node.getChild(i)?.let { queue.addLast(it) }
             }
         }
-        return if(queue.isEmpty() && matching==1) result else null
+        val accepted=queue.isEmpty() && matching==1
+        if(BuildConfig.DEBUG)android.util.Log.w("NexaScreenScroll",
+            "review result accepted=$accepted visited=$visited remaining=${queue.size} " +
+                "matching=$matching expectedAction=$action")
+        return if(accepted) result else null
+    }
+
+    private fun hasVisibleInputMethodWindow(service:ScreenAssistService):Boolean = try {
+        service.windows.orEmpty().any { window ->
+            if(window.type!=AccessibilityWindowInfo.TYPE_INPUT_METHOD) false
+            else Rect().also { window.getBoundsInScreen(it) }.let { !it.isEmpty }
+        }
+    } catch (_:Exception) { true }
+
+    private fun sameRootBounds(root:AccessibilityNodeInfo,approved:Target):Boolean {
+        val bounds=Rect().also { root.getBoundsInScreen(it) }
+        return bounds.left==approved.bounds.left && bounds.top==approved.bounds.top &&
+            bounds.right==approved.bounds.right && bounds.bottom==approved.bounds.bottom
+    }
+
+    private fun reviewedOverlayPlan(service:ScreenAssistService,root:AccessibilityNodeInfo,
+                                    approved:Target):NexaScreenScrollGesturePlan? {
+        if(approved.classname!=GESTURE_TARGET_CLASS || approved.actionId!=GESTURE_ACTION_ID ||
+            approved.gesturePlan==null || !root.isVisibleToUser ||
+            root.packageName?.toString()!=approved.pkg || root.windowId!=approved.windowId ||
+            !sameRootBounds(root,approved) || hasVisibleInputMethodWindow(service)) return null
+        val overlay=NexaToolOverlayService.screenGestureOverlayState()
+        if(overlay?.expanded==true || (overlay!=null && overlay.bounds==null)) return null
+        val bounds=Rect().also { root.getBoundsInScreen(it) }
+        return NexaScreenScrollGesturePlanner.plan(bounds,approved.direction,
+            listOfNotNull(overlay?.bounds),service.resources.displayMetrics.density)
+            ?.takeIf { it==approved.gesturePlan }
+    }
+
+    private fun dispatchGesture(service:ScreenAssistService,root:AccessibilityNodeInfo,
+                                approved:Target,origin:String,
+                                claimedToken:(String)->Unit):String {
+        if(reviewedOverlayPlan(service,root,approved)==null)
+            return "Screen, overlay or swipe path changed after review. No gesture performed."
+        val plan=approved.gesturePlan ?: return "Reviewed swipe path is missing. No gesture performed."
+        if(!NexaUiActionJournal.claim(service,approved.token,"scroll_${approved.direction}",
+                approved.pkg,origin=origin))
+            return "Secure action journal unavailable or approval already used. No swipe requested."
+        claimedToken(approved.token)
+        val before=NexaUiActionVerifier.fingerprint(root)
+        NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
+        val path=Path().apply {
+            moveTo(plan.startX,plan.startY)
+            lineTo(plan.endX,plan.endY)
+        }
+        val description=GestureDescription.Builder()
+            .addStroke(GestureDescription.StrokeDescription(path,0L,360L)).build()
+        val queued=NexaNativeActionSafety.dispatchWithFence(service,approved.pauseGeneration) {
+            val fresh=safeRoot(service) ?: return@dispatchWithFence false
+            try {
+                if(reviewedOverlayPlan(service,fresh,approved)==null) false
+                else service.dispatchGesture(description,
+                    object:AccessibilityService.GestureResultCallback(){
+                        override fun onCancelled(gestureDescription:GestureDescription?) {
+                            NexaUiActionVerifier.cancel(approved.token)
+                            NexaUiActionJournal.markObservation(service,approved.token,"gesture_cancelled")
+                        }
+                    },Handler(Looper.getMainLooper()))
+            } finally { try { fresh.recycle() } catch (_:Exception) {} }
+        }
+        if(queued!=true) {
+            NexaUiActionVerifier.cancel(approved.token)
+            NexaUiActionJournal.finish(service,approved.token,"android_rejected")
+            return "Android refused the reviewed screen swipe. No retry."
+        }
+        NexaUiActionVerifier.observeAfter(service,approved.token,before)
+        return if(NexaUiActionJournal.finish(service,approved.token,"android_accepted"))
+            "Android queued one ${approved.direction} screen swipe. Check the visible result."
+        else "Android queued one screen swipe; journal outcome uncertain. No retry."
     }
 
     fun confirm(service: ScreenAssistService, origin:String="overlay", claimedToken:(String)->Unit={}): String {
@@ -194,13 +339,15 @@ internal object NexaScreenScroll {
                     return "Launcher changed; no swipe allowed."
                 return NexaLauncherSwipe.gesture(service,root,approved.direction,approved.token,approved.pauseGeneration,claimedToken)
             }
+            if(approved.classname==GESTURE_TARGET_CLASS)
+                return dispatchGesture(service,root,approved,origin,claimedToken)
             if(reviewedTarget(root,approved)==null)
                 return "Scroll target changed, truncated or ambiguous. No action requested."
             val direction="scroll_"+approved.direction
             if(!NexaUiActionJournal.claim(service,approved.token,direction,approved.pkg,origin=origin))
                 return "Secure action journal unavailable or approval already used. No scroll requested."
             claimedToken(approved.token)
-            val action=scrollAction(approved.direction)
+            val action=approved.actionId
             val before=NexaUiActionVerifier.fingerprint(root)
             NexaUiActionVerifier.begin(approved.token,"scroll",approved.pkg,root.windowId,before)
             val performed=NexaNativeActionSafety.dispatchWithFence(

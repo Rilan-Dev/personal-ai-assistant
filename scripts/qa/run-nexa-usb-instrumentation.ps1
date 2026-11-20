@@ -35,7 +35,7 @@ if (-not $Serial) {
     $Serial = $devices[0]
 }
 if ($devices -notcontains $Serial) { throw "ADB serial is not authorized: $Serial" }
-$package = 'dev.rilandev.personalaiassistant.physicalqa'
+$package = 'dev.rilandev.personalaiassistant.debug'
 $runner = "$package.test/androidx.test.runner.AndroidJUnitRunner"
 $installed = @(& $adb -s $Serial shell pm path $package)
 if (-not ($installed -match '^package:')) {

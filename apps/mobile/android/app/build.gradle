@@ -5,7 +5,9 @@ apply plugin: "com.facebook.react"
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
 def isolatedPhysicalQaV2 = (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
 def livePhysicalQaV2 = (findProperty('paaLivePhysicalQaV2') ?: 'false').toString().toBoolean()
-def useEmbeddedPhysicalQaBundle = isolatedPhysicalQaV2 && !livePhysicalQaV2
+def liveDebugBuild = (findProperty('paaLiveDebug') ?: 'false').toString().toBoolean()
+def installDebugAlongsideRelease = (findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()
+def useEmbeddedPhysicalQaBundle = isolatedPhysicalQaV2 && !livePhysicalQaV2 && !liveDebugBuild
 def configuredAcaApiOrigin = System.getenv("EXPO_PUBLIC_ACA_API_ORIGIN")
 def normalizeAcaApiOrigin = { String value, boolean development ->
     if (value == null || value.length() == 0 || value.trim() != value || value.contains("?") || value.contains("#")) {
@@ -40,6 +42,13 @@ def acaApiOrigin = configuredAcaApiOrigin == null
 if (livePhysicalQaV2 && !isolatedPhysicalQaV2) {
     throw new GradleException('Live physical QA requires paaIsolatedPhysicalQaV2=true to preserve its isolated app identity.')
 }
+if (liveDebugBuild && !installDebugAlongsideRelease) {
+    throw new GradleException('Live debug requires paaInstallDebugAlongsideRelease=true to use the isolated .debug app identity.')
+}
+if (liveDebugBuild && (isolatedPhysicalQaV2 ||
+    (findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean())) {
+    throw new GradleException('Live debug uses the single .debug identity; do not combine it with physical QA identities.')
+}
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -51,9 +60,9 @@ react {
     hermesCommand = new File(["node", "--print", "require.resolve('hermes-compiler/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsolutePath() + "/hermesc/%OS-BIN%/hermesc"
     codegenDir = new File(["node", "--print", "require.resolve('@react-native/codegen/package.json', { paths: [require.resolve('react-native/package.json')] })"].execute(null, rootDir).text.trim()).getParentFile().getAbsoluteFile()
 
-    // Normal isolated QA bundles JS for offline startup. Live QA2 explicitly
-    // opts into Metro while retaining the same isolated application ID.
-    if (livePhysicalQaV2) {
+    // Normal isolated QA bundles JS for offline startup. Live QA2 and the
+    // single isolated .debug app explicitly opt into Metro for Fast Refresh.
+    if (livePhysicalQaV2 || liveDebugBuild) {
         debuggableVariants = ["debug"]
     } else if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean() ||
         isolatedPhysicalQaV2) {
@@ -178,11 +187,11 @@ android {
     buildTypes {
         debug {
             manifestPlaceholders += [screenAssistServiceLabel: (
-                (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
+                (isolatedPhysicalQaV2 && !liveDebugBuild)
                     ? 'Nexa Screen Assist QA2'
                     : 'Nexa Screen Assist (Debug)'),
                 launcherNavigationServiceLabel: (
-                    (findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()
+                (isolatedPhysicalQaV2 && !liveDebugBuild)
                         ? 'Nexa Launcher Navigation QA2'
                         : 'Nexa Launcher Navigation (Debug)')]
             // Local device QA can keep the signed release-test app and its
@@ -193,11 +202,13 @@ android {
             // An older physicalqa app may belong to a different debug signer.
             // Use a NEW, separate disposable package rather than downgrading,
             // uninstalling, or replacing the owner's existing QA installation.
-            if ((findProperty('paaIsolatedPhysicalQaV2') ?: 'false').toString().toBoolean()) {
+            if (liveDebugBuild) {
+                applicationIdSuffix '.debug'
+            } else if (isolatedPhysicalQaV2) {
                 applicationIdSuffix '.physicalqa2'
             } else if ((findProperty('paaIsolatedPhysicalQa') ?: 'false').toString().toBoolean()) {
                 applicationIdSuffix '.physicalqa'
-            } else if ((findProperty('paaInstallDebugAlongsideRelease') ?: 'false').toString().toBoolean()) {
+            } else if (installDebugAlongsideRelease) {
                 applicationIdSuffix '.debug'
             }
             // Development-only: reviewed, low-risk native reads require an
@@ -257,6 +268,21 @@ tasks.register("validateAcaReleaseApiOrigin") {
     }
 }
 tasks.configureEach { task ->
+    // Expo inlines EXPO_PUBLIC_* values when bundling JS. Include the ACA
+    // origin in Gradle's bundle inputs so changing the build environment can
+    // never reuse a stale bundle with the previous (or missing) origin.
+    if (task.name ==~ /createBundle.*JsAndAssets/) {
+        task.inputs.property("expoPublicAcaApiOrigin", acaApiOrigin)
+        // The mobile entry imports these workspace packages by source. Expo's
+        // default bundle inputs stop at apps/mobile, so without these files a
+        // Gradle up-to-date hit can ship stale agent logic in a fresh APK.
+        task.inputs.files(
+            fileTree("${projectRoot}/../../packages/agent-core/src") { include "**/*.ts" },
+            fileTree("${projectRoot}/../../packages/agent-contracts/src") { include "**/*.ts" },
+            file("${projectRoot}/../../packages/agent-core/package.json"),
+            file("${projectRoot}/../../packages/agent-contracts/package.json")
+        ).withPropertyName("paaWorkspaceBundleSources")
+    }
     if (task.name == "preReleaseBuild") {
         task.dependsOn("validateAcaReleaseApiOrigin")
     }

@@ -56,42 +56,78 @@ internal object NexaBrowserTaskActions {
                                    kind:String,packageName:String,
                                    action:Int,origin:String,
                                    expectedWindow:Int?=null,
-                                   structure:String?=null):NavigationReceipt{
+                                   structure:String?=null,
+                                   claimedToken:(String)->Unit={},
+                                   surfaceStillValid:()->Boolean={true}):NavigationReceipt{
         if(origin !in setOf("chat","live-voice","assistant-role","overlay") ||
-            !ScreenAssistState.connected || ScreenAssistService.active!==service)
+            !ScreenAssistState.connected || ScreenAssistService.active!==service) {
+            if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind precondition=service_or_origin")
             return NavigationReceipt.DENIED
+        }
         val keyguard=context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        if(keyguard?.isKeyguardLocked==true)return NavigationReceipt.DENIED
-        val generation=NexaNativeActionSafety.approvalFence(context)
-            ?:return NavigationReceipt.DENIED
-        val token=java.util.UUID.randomUUID().toString()
-        if(!NexaUiActionJournal.claim(context,token,kind,packageName,origin=origin))
+        if(keyguard?.isKeyguardLocked==true) {
+            if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind precondition=keyguard")
             return NavigationReceipt.DENIED
+        }
+        val generation=NexaNativeActionSafety.approvalFence(context)
+            ?:run {
+                if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind precondition=owner_fence")
+                return NavigationReceipt.DENIED
+            }
+        val token=java.util.UUID.randomUUID().toString()
+        if(!NexaUiActionJournal.claim(context,token,kind,packageName,origin=origin)) {
+            if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind claim=denied")
+            return NavigationReceipt.DENIED
+        }
+        try { claimedToken(token) } catch (_:Exception) {
+            if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind claim_callback=failed")
+            return NavigationReceipt.DENIED
+        }
         return try{
             val accepted=NexaNativeActionSafety.dispatchWithFence(context,generation) {
                 if(!ScreenAssistState.connected ||
                     ScreenAssistService.active!==service ||
-                    keyguard?.isKeyguardLocked==true)
+                    keyguard?.isKeyguardLocked==true) {
+                    if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind dispatch_fence=service_or_keyguard")
                     return@dispatchWithFence false
+                }
+                val surfaceValid=try{surfaceStillValid()}catch(_:Exception){false}
+                if(!surfaceValid) {
+                    if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind dispatch_fence=surface_changed")
+                    return@dispatchWithFence false
+                }
                 if(expectedWindow!=null){
                     val root=service.externalWindowRoot()
-                        ?:return@dispatchWithFence false
+                        ?:run {
+                            if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind dispatch_fence=window_missing")
+                            return@dispatchWithFence false
+                        }
                     val unchanged=try{
                         root.packageName?.toString()==packageName &&
                             root.windowId==expectedWindow &&
-                            NexaUiActionVerifier.fingerprint(root)==structure
+                            (structure==null ||
+                                NexaUiActionVerifier.fingerprint(root)==structure)
                     }catch(_:Exception){false}
                     finally{try{root.recycle()}catch(_:Exception){}}
-                    if(!unchanged)return@dispatchWithFence false
+                    if(!unchanged) {
+                        if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind dispatch_fence=window_changed")
+                        return@dispatchWithFence false
+                    }
                 }
-                service.performGlobalAction(action)
+                val result=service.performGlobalAction(action)
+                if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind android_returned=${result}")
+                result
             }
             when(accepted){
-                true->if(NexaUiActionJournal.finish(context,token,"android_accepted"))
-                    NavigationReceipt.ACCEPTED else NavigationReceipt.UNCERTAIN
+                true-> {
+                    val committed=NexaUiActionJournal.finish(context,token,"android_accepted")
+                    if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind journal_committed=${committed}")
+                    if(committed)NavigationReceipt.ACCEPTED else NavigationReceipt.UNCERTAIN
+                }
                 false,null->{
-                    NexaUiActionJournal.finish(context,token,"android_rejected")
-                    NavigationReceipt.DENIED
+                    val committed=NexaUiActionJournal.finish(context,token,"android_rejected")
+                    if(BuildConfig.DEBUG)android.util.Log.d("NexaNamedNavigation","$kind dispatch=${if(accepted==null)"owner_fence_blocked" else "rejected"} journal_committed=${committed}")
+                    if(accepted==null)NavigationReceipt.UNCERTAIN else NavigationReceipt.DENIED
                 }
             }
         }catch(_:Exception){
@@ -100,17 +136,84 @@ internal object NexaBrowserTaskActions {
         }
     }
 
+    /** One named system navigation action, bound to the current external window. */
+    fun keyActionApproved(context:Context,name:String,
+                          boundService:ScreenAssistService?=ScreenAssistService.active,
+                          origin:String="chat",
+                          claimedToken:(String)->Unit={},
+                          ownerWindowFocused:Boolean=false,
+                          ownerWindowStillFocused:()->Boolean={ownerWindowFocused}):String {
+        if(name !in setOf("back","home","notifications"))
+            return "Rejected: unsupported named key action."
+        if(!NexaNativeActionSafety.permitsNewAction(context))
+            return "Nexa device actions are paused. No key action occurred."
+        val service=boundService
+            ?:return "Screen Assist is disabled. No key action occurred."
+        if(name=="notifications")
+            return notificationsApproved(context,service,origin,claimedToken)
+        val root=service.externalWindowRoot()
+        if(root==null) {
+            val shadeVisible=service.isNotificationShadeVisible()
+            val fallbackPackage=NexaKeyActionSurfacePolicy.fallbackPackage(
+                name,context.packageName,ownerWindowFocused,shadeVisible)
+                ?:return "No verified Nexa or notification-shade window is available for the named key action."
+            val (fallbackKind,fallbackAction)=if(name=="home")
+                "nav_home" to AccessibilityService.GLOBAL_ACTION_HOME
+            else "nav_back" to AccessibilityService.GLOBAL_ACTION_BACK
+            val stillOnApprovedSurface:()->Boolean=if(fallbackPackage=="com.android.systemui")
+                ({service.isNotificationShadeVisible()})
+            else ownerWindowStillFocused
+            return when(dispatchNavigation(context,service,fallbackKind,fallbackPackage,
+                    fallbackAction,origin,claimedToken=claimedToken,
+                    surfaceStillValid=stillOnApprovedSurface)) {
+                NavigationReceipt.ACCEPTED -> "Android accepted one named $name action. Verify the resulting screen."
+                NavigationReceipt.DENIED -> "Android refused the named $name action. No retry was attempted."
+                NavigationReceipt.UNCERTAIN -> "The named $name action outcome is uncertain. Inspect the phone; do not retry."
+            }
+        }
+        val packageName:String
+        val window:Int
+        val structure:String
+        try {
+            packageName=root.packageName?.toString().orEmpty()
+            window=root.windowId
+            structure=NexaUiActionVerifier.fingerprint(root)
+        } catch (_:Exception) {
+            return "Android could not safely inspect the key action target."
+        } finally { try { root.recycle() } catch (_:Exception) {} }
+        if(packageName==context.packageName || packageName=="android" ||
+            packageName=="com.android.systemui" || window<0 ||
+            !packageName.matches(Regex("[A-Za-z][A-Za-z0-9_.]{2,150}")))
+            return "The key action requires one visible external app."
+        val (kind,action)=when(name) {
+            "back" -> "nav_back" to AccessibilityService.GLOBAL_ACTION_BACK
+            "home" -> "nav_home" to AccessibilityService.GLOBAL_ACTION_HOME
+            else -> "nav_notifications" to AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS
+        }
+        // Back depends on the exact current page, so keep its full-screen
+        // freshness check. Home and Notifications have the same meaning across
+        // content changes; bind those global actions to the same app window.
+        return when(dispatchNavigation(context,service,kind,packageName,action,
+                origin,window,structure.takeIf { name=="back" },claimedToken)) {
+            NavigationReceipt.ACCEPTED -> "Android accepted one named $name action. Verify the resulting screen."
+            NavigationReceipt.DENIED -> "Android refused the named $name action. No retry was attempted."
+            NavigationReceipt.UNCERTAIN -> "The named $name action outcome is uncertain. Inspect the phone; do not retry."
+        }
+    }
+
     /** Opens the shade, not its private notification contents. */
     fun notificationsApproved(context:Context,
                               boundService:ScreenAssistService?=ScreenAssistService.active,
-                              origin:String="live-voice"):String {
+                              origin:String="live-voice",
+                              claimedToken:(String)->Unit={}):String {
         if(!NexaNativeActionSafety.permitsNewAction(context))
             return "Nexa device actions are paused. Notification shade not opened."
         val service=boundService
             ?:return "Screen Assist is disabled. Notification shade was not opened."
         return when(dispatchNavigation(context,service,"nav_notifications",
                 "com.android.systemui",
-                AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS,origin)){
+                AccessibilityService.GLOBAL_ACTION_NOTIFICATIONS,origin,
+                claimedToken=claimedToken)){
             NavigationReceipt.ACCEPTED ->
                 "Android accepted the notification shade request. No notifications were read."
             NavigationReceipt.DENIED ->

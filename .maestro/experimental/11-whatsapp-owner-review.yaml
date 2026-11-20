@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa WhatsApp owner request prepares local review without sending
 tags:
   - nexa
@@ -7,29 +7,26 @@ tags:
   - cloud
 ---
 - launchApp:
+    stopApp: false
     clearState: false
 - extendedWaitUntil:
     visible: "Chat"
-    timeout: 90000
+    # Reuse the live debug runtime; this check must not wait through a cold bundle load.
+    timeout: 30000
 - tapOn: "Chat"
-- assertVisible: "How can I help today?"
+- assertVisible: "Assistant command"
 - tapOn: "Assistant command"
-- inputText: 'Send a WhatsApp message to my mom "I will call you later"'
+- inputText: 'Send a WhatsApp message to my mom "Nexa QA local review only"'
 - hideKeyboard
 - tapOn:
     text: "Send message"
-# Route to the private Tools review first. The contact-preview area is
-# intentionally below device controls; Maestro does not auto-scroll for
-# extendedWaitUntil. Do not pass merely because the Tools tab appeared.
+# The live app routes the request to Tools; verify both the local no-send status
+# and the unique test text, not merely the selected tab.
 - tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 30000
-- scrollUntilVisible:
-    element:
-      text: "Requested contact: mom.*Nothing was sent.*"
-    direction: DOWN
-    timeout: 90000
 - assertVisible:
     text: "Requested contact: mom.*Nothing was sent.*"
+- assertVisible: "Draft text: Nexa QA local review only"
 - takeScreenshot: nexa-owner-whatsapp-local-preview-no-send

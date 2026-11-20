@@ -54,7 +54,8 @@ test("post-dispatch exceptions are journaled as unknown rather than silently ret
 
 test("synthetic Android UI verifies unchanged and mismatching source identity",()=>{
   assert.match(tests,/safeIconResolverRejectsStaleClassResourceOrBounds/);
-  assert.match(tests,/uniqueCurrentTarget\(root,observed\)/);
+  assert.match(tests,/NexaScreenActions\.uniqueCurrentTarget\(root,icon\)/,
+    'the fixture resolves the observed icon against a fresh Accessibility root');
   assert.match(tests,/className="android\.widget\.TextView"/);
   assert.match(tests,/resourceId="dev\.rilandev\.personalaiassistant:id\/not-the-search-icon"/);
   assert.match(tests,/Send remains excluded from all safe navigation actions/);

@@ -2,6 +2,9 @@ package dev.rilandev.personalaiassistant
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -130,7 +133,24 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
             context.startService(Intent(context, NexaToolOverlayService::class.java).apply {
                 action = NexaToolOverlayService.ACTION_SHOW
             })
-            p.resolve(true) // Intent dispatched; service reports actual visibility later
+            // Setup refreshes its status after this promise resolves. Wait for
+            // the service to attach the WindowManager view so that refresh
+            // observes the actual bubble state rather than the pre-start value.
+            val handler = Handler(Looper.getMainLooper())
+            val deadline = SystemClock.uptimeMillis() + 2_500L
+            val confirmVisible = object : Runnable {
+                override fun run() {
+                    when {
+                        NexaToolOverlayService.visible -> p.resolve(true)
+                        SystemClock.uptimeMillis() >= deadline -> p.reject(
+                            "OVERLAY_ATTACH_TIMEOUT",
+                            "Android did not attach Nexa's floating tool bubble"
+                        )
+                        else -> handler.postDelayed(this, 50L)
+                    }
+                }
+            }
+            handler.post(confirmVisible)
         } catch (_: Exception) {
             p.reject("OVERLAY_START_DENIED", "Android could not show Nexa's tool bubble")
         }

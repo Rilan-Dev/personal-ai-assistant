@@ -88,11 +88,12 @@ internal object NexaQaAccessibilityRoot {
     }
 
     fun launchFixture(activity:Class<*>,duplicate:Boolean?=null,
-                      overlap:Boolean=false):String {
+                      overlap:Boolean=false,clickableAvatar:Boolean=false):String {
         val packageName=InstrumentationRegistry.getInstrumentation().context.packageName
         val component="$packageName/${activity.name}"
         val extra=duplicate?.let { " --ez duplicate $it" }.orEmpty()+
-            (if(overlap)" --ez qa_overlap true" else "")
+            (if(overlap)" --ez qa_overlap true" else "")+
+            (if(clickableAvatar)" --ez qa_avatar true" else "")
         val runId=UUID.randomUUID().toString().replace("-","")
         val descriptor=qaAutomation().executeShellCommand("am start -n $component -f 0x10008000$extra --es qa_run $runId")
         val output=FileInputStream(descriptor.fileDescriptor).bufferedReader().use{it.readText()}

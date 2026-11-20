@@ -48,6 +48,18 @@ class MaestroSafeSelectorTest {
         assertEquals(Bounds(5, 10, 50, 40), found.bounds)
     }
 
+    @Test fun matchesSingleDigitVisibleControl() {
+        val s = screen(
+            node("1", "[10,100][90,180]"),
+            node("2", "[100,100][180,180]")
+        )
+        val found = MaestroSafeSelector.findUnique(
+            s, "com.example.messaging", 17, MaestroQuery(text="1")
+        )
+        assertNotNull(found)
+        assertEquals(listOf(0), found!!.path)
+    }
+
     @Test fun duplicatedOrUnknownTargetIsRejectedWithoutGuessing() {
         val s = screen(node("Continue", "[10,20][90,60]"),
             node("Continue", "[120,20][200,60]"))

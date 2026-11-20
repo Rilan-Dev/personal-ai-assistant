@@ -17,7 +17,7 @@ const permittedQuestion=(question:string):boolean=>
  /^(?:what icons are on (?:my |the )?screen|list (?:visible )?icons)\??$/i.test(question.trim());
 const navigationTemplates=new Set([
  'find search in menu','open search from menu','open settings from menu',
- 'find settings in menu','open menu','find search','open settings'
+ 'find settings in menu','open menu','find search'
 ]);
 /**
  * Register only in an owner-visible app. Calls are blocked until an explicit,

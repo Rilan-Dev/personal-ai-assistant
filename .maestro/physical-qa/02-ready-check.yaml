@@ -1,5 +1,5 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
-name: Verify Nexa QA2 in-app controls are preconfigured
+appId: dev.rilandev.personalaiassistant.debug
+name: Verify Nexa debug in-app controls are preconfigured
 tags:
   - nexa
   - physical

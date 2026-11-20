@@ -9,12 +9,12 @@ const workflow=normalized('.github/workflows/maestro-cloud-manual.yml');
 const flow=normalized('.maestro/cloud-qa/16-owner-permission-recovery.yaml');
 const app=readFileSync('apps/mobile/App.tsx','utf8');
 
-test('manual Maestro suite selects one isolated, signed-release grant-recovery flow',()=>{
+test('manual Maestro suite selects the single isolated debug grant-recovery flow',()=>{
   assert.match(workflow,/workflow_dispatch:/);
   assert.match(workflow,/          - grant-recovery\n/);
   assert.match(workflow,/grant-recovery\) target="\.maestro\/cloud-qa\/16-owner-permission-recovery\.yaml"/);
   assert.match(workflow,/cancel-in-progress: false/);
-  assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant$/m);
+  assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
   assert.match(flow,/clearState: true/);
   assert.doesNotMatch(flow,/dev\.rilandev\.personalaiassistant\.physicalqa/);
 });

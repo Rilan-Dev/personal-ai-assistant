@@ -134,6 +134,14 @@ internal object NexaScreenLabelTap {
                  origin:String="overlay", claimedToken:(String)->Unit={}):String =
         approvedRelative(service,requested,null,origin,claimedToken)
 
+    /** An index is actionable only against the exact still-live observation. */
+    fun approvedFromSnapshot(service:ScreenAssistService, requested:String,
+                             claim:NexaPowerShellScreenSnapshot.Claim,
+                             targetBounds:Rect,
+                             origin:String="chat",
+                             claimedToken:(String)->Unit={}):String =
+        approvedRelative(service,requested,null,origin,claimedToken,claim,targetBounds)
+
     /**
      * A separately owner-reviewed, non-sensitive relative selector. This
      * preserves the original action executor, Pause fence and permanent claim.
@@ -142,20 +150,31 @@ internal object NexaScreenLabelTap {
     fun approvedRelative(service:ScreenAssistService, requested:String,
                          relative:NexaMaestroRelativeTap?,
                          origin:String="overlay",
-                         claimedToken:(String)->Unit={}):String {
+                         claimedToken:(String)->Unit={},
+                         expectedSnapshot:NexaPowerShellScreenSnapshot.Claim?=null,
+                         expectedTargetBounds:Rect?=null):String {
         val label=requested.trim()
         if(relative!=null && (label!=relative.target ||
             NexaMaestroRelativeTap.fromAction(relative.toAction())!=relative))
             return "Invalid relative target. No action attempted."
-        if(label.length !in 2..45 || unsafe.containsMatchIn(label))
+        if(NexaTaskScreenObservation.safeLabel(label)==null ||
+            unsafe.containsMatchIn(label))
             return "Unsafe or invalid requested control; no tap was sent."
         val generation=NexaNativeActionSafety.approvalFence(service)
             ?:return "Owner paused device actions. No tap permitted."
-        val root=service.externalWindowRoot() ?:return "No permitted external app is visible. Enable Screen Assist."
+        val ownerWindow=BuildConfig.DEBUG &&
+            expectedSnapshot?.packageName==BuildConfig.APPLICATION_ID
+        val root=(if(ownerWindow)service.assistantOwnerWindowRoot()
+            else service.externalWindowRoot())
+            ?:return "No permitted app window is visible. Enable Screen Assist."
         try {
             val pkg=root.packageName?.toString().orEmpty()
-            if(pkg.isBlank() || pkg==service.packageName || pkg=="android" ||
-                pkg=="com.android.systemui")return "The window is not permitted for interaction."
+            if(pkg.isBlank() || pkg=="android" || pkg=="com.android.systemui" ||
+                (pkg==service.packageName && !ownerWindow))
+                return "The window is not permitted for interaction."
+            if(expectedSnapshot!=null &&
+                !NexaPowerShellScreenSnapshot.sameWindow(root,expectedSnapshot))
+                return "The observed screen changed or expired. No tap performed."
             val rootRect=Rect().also{root.getBoundsInScreen(it)}
             val queue=java.util.ArrayDeque<AccessibilityNodeInfo>()
             queue.add(root)
@@ -206,7 +225,7 @@ internal object NexaScreenLabelTap {
                     // versions, and can make a valid Search focus fail.
                     var candidate:AccessibilityNodeInfo?=node
                     if(!isSearchInput) {
-                        repeat(3) {
+                        repeat(NexaPowerShellScreenSnapshot.MAX_CLICKABLE_ANCESTOR_HOPS) {
                             if(candidate!=null && !candidate!!.isClickable)
                                 candidate=candidate?.parent
                         }
@@ -291,6 +310,8 @@ internal object NexaScreenLabelTap {
             }
             val searchInputTarget=found.isEditable && label.equals("search",ignoreCase=true)
             val reviewedBounds=Rect().also { found.getBoundsInScreen(it) }
+            if(expectedTargetBounds!=null && reviewedBounds!=expectedTargetBounds)
+                return "The target or its unique live hierarchy could not be verified. No tap performed."
             val reviewedAnchorBounds=anchors.values.singleOrNull()?.let { anchor ->
                 Rect().also { anchor.getBoundsInScreen(it) }
             }
@@ -299,14 +320,17 @@ internal object NexaScreenLabelTap {
             if(!NexaUiActionJournal.claim(service,token,"tap",pkg,origin=origin))
                 return "Action journal rejected this request. No tap occurred."
             claimedToken(token)
-            NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before)
+            NexaUiActionVerifier.begin(token,"tap",pkg,root.windowId,before,
+                expectedClickIdentity=NexaUiActionVerifier.clickIdentity(
+                    found,pkg,root.windowId))
             // Clicking a verified search input transfers focus only. Never
             // use ACTION_SET_TEXT or read/edit the field's current contents.
             val clicked=NexaNativeActionSafety.dispatchWithFence(service,generation) {
                 // A permitted window can change between approval and dispatch.
                 // Revalidate current package, window and candidate geometry
                 // before consuming the one-shot click. Never retry uncertainty.
-                val liveRoot=service.externalWindowRoot()
+                val liveRoot=(if(ownerWindow)service.assistantOwnerWindowRoot()
+                    else service.externalWindowRoot())
                     ?:return@dispatchWithFence false
                 try {
                     val currentBounds=Rect().also { found.getBoundsInScreen(it) }

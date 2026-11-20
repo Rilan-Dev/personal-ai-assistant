@@ -39,8 +39,10 @@ object MaestroSafeSelector {
 
     private data class Entry(val node: TreeNode, val path: List<Int>, val bounds: Bounds?)
 
-    private fun readable(raw: String?, max: Int): Boolean =
-        raw == null || (raw.trim().length in 2..max &&
+    private fun readable(raw: String?, max: Int,
+                         allowSingleDigit: Boolean = false): Boolean =
+        raw == null || ((raw.trim().length in 2..max ||
+            (allowSingleDigit && raw.trim().length == 1 && raw.trim()[0] in '0'..'9')) &&
             raw.none { it.code < 32 || it.code == 127 })
 
     private fun box(raw: String?): Bounds? {
@@ -118,7 +120,8 @@ object MaestroSafeSelector {
         if (expectedPackage.isBlank() || screen.packageName != expectedPackage ||
             screen.windowId != expectedWindowId || screen.windowId < 0 ||
             query.minVisiblePercent !in 1..100 ||
-            !readable(query.text, 80) || !readable(query.resourceId, 160) ||
+            !readable(query.text, 80, allowSingleDigit = true) ||
+            !readable(query.resourceId, 160) ||
             !readable(query.belowText, 80) || !readable(query.aboveText, 80) ||
             !readable(query.leftOfText, 80) || !readable(query.rightOfText, 80) ||
             !readable(query.childOfText, 80)) return null

@@ -3,6 +3,7 @@ package dev.rilandev.personalaiassistant
 import android.content.Context
 import android.graphics.Rect
 import android.view.accessibility.AccessibilityNodeInfo
+import org.json.JSONObject
 import java.util.Locale
 
 /**
@@ -27,9 +28,10 @@ internal object NexaTaskScreenObservation {
         if(raw==null)return null
         val value=raw.replace(Regex("""[\p{Cc}\p{Cf}]+""")," ")
             .replace(Regex("""\s+""")," ").trim()
-        if(value.length !in 2..32 || value.split(' ').size>4 ||
-            suspicious.containsMatchIn(value) || emailOrUrl.containsMatchIn(value) ||
-            !allowedChars.matches(value))return null
+        val singleDigit=value.length==1 && value[0] in '0'..'9'
+        if((!singleDigit && (value.length !in 2..32 || value.split(' ').size>4 ||
+                !allowedChars.matches(value))) ||
+            suspicious.containsMatchIn(value) || emailOrUrl.containsMatchIn(value))return null
         return value
     }
 
@@ -39,8 +41,31 @@ internal object NexaTaskScreenObservation {
         if(!clickable||!enabled||!visible||editable||password)return false
         val name=className.orEmpty()
         return name.endsWith(".Button") || name.endsWith(".ImageButton") ||
-            name.endsWith(".TextView") || name.endsWith(".Switch") ||
-            name.endsWith(".CheckBox") || name.endsWith(".Tab")
+            name.endsWith(".ToggleButton") || name.endsWith(".TextView") ||
+            name.endsWith(".Switch") ||
+            name.endsWith(".CheckBox") || name.endsWith(".Tab") ||
+            // Chromium/WebView and custom native controls commonly expose
+            // clickable accessibility nodes as android.view.View. The
+            // clickable/enabled/visible and safe-label checks still apply.
+            name == "android.view.View"
+    }
+
+    /** Attach only a complete fresh snapshot from the same third-party app. */
+    internal fun matchingAssistantSnapshot(observation:String,
+                                           rawSnapshot:String?):JSONObject? {
+        val observedPackage=Regex(
+            "^Visible non-sensitive controls in ([A-Za-z][A-Za-z0-9_.]{2,150}): "
+        ).find(observation)?.groupValues?.getOrNull(1) ?: return null
+        if(rawSnapshot.isNullOrBlank() || rawSnapshot.length>60_000)return null
+        val snapshot=try{JSONObject(rawSnapshot)}catch(_:Exception){return null}
+        val snapshotId=snapshot.optString("snapshotId")
+        val targets=snapshot.optJSONArray("targets") ?: return null
+        if(snapshot.optString("packageId")!=observedPackage ||
+            snapshot.optBoolean("truncated",true) ||
+            !snapshotId.matches(Regex(
+                "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                RegexOption.IGNORE_CASE)) || targets.length()>40)return null
+        return snapshot
     }
 
     private fun zone(control:Rect,window:Rect):String {

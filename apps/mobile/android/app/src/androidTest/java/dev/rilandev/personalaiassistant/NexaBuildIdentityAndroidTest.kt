@@ -26,7 +26,8 @@ class NexaBuildIdentityAndroidTest {
             assertTrue("Physical QA may not run against a release or regular debug app",
                 BuildConfig.APPLICATION_ID in setOf(
                     "dev.rilandev.personalaiassistant.physicalqa",
-                    "dev.rilandev.personalaiassistant.physicalqa2"))
+                    "dev.rilandev.personalaiassistant.physicalqa2",
+                    "dev.rilandev.personalaiassistant.debug"))
         }
         assertEquals(BuildConfig.APPLICATION_ID,
             InstrumentationRegistry.getInstrumentation().targetContext.packageName)

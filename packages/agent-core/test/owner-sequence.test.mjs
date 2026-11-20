@@ -24,6 +24,15 @@ test("exact owner sequence parses six bounded steps and preserves quoted text",(
     'please then and after');
 });
 
+test("leaves semantic control descriptions to the screen-aware planner",()=>{
+  assert.equal(parseOwnerMultiToolRequest(
+    "Open Calculator then tap its decimal point once"
+  ),null);
+  assert.equal(parseOwnerMultiToolRequest(
+    "Open Calculator then tap the decimal point in Calculator one time"
+  ),null);
+});
+
 test("entire sequence fails closed if any step could send, grant, transfer or hide approval",()=>{
   for(const request of [
     "Open WhatsApp then tap Send",
@@ -246,6 +255,19 @@ test("recipient evidence is not a generic window-change or a model assertion",as
   assert.equal(stopped.type,"clarify");
 });
 
+test("an owner-reviewed tap accepts same-window content evidence without a task claim",()=>{
+  const call={callId:"tap-content",toolId:"screen.tap_observed",input:{label:"Open details"}};
+  const checked=evidenceForOwnerStep(call,{status:"success",data:{
+    verification:"content_change_observed",actionAccepted:true,
+    businessOutcomeVerified:false
+  }},true);
+  assert.equal(checked.safe,true);
+  assert.match(checked.reason,/screen change/i);
+  assert.equal(evidenceForOwnerStep(call,{status:"success",data:{
+    verification:"content_change_observed",actionAccepted:false
+  }},true).safe,false);
+});
+
 test("Send evidence requires the exact recipient, exact text, and no delivery claim",()=>{
   const call={callId:"send-1",toolId:"screen.send_whatsapp",input:{
     recipientHint:"Mom",exactText:"I will call later"
@@ -304,4 +326,22 @@ test("WhatsApp's full live Search label is treated as one recipient-search field
   ]);
   assert.deepEqual(steps?.[1].input,{label:"Search"});
   assert.deepEqual(steps?.[2].input,{targetLabel:"Search",exactText:"Amma"});
+});
+
+test("owner sequence recognizes native scroll-event and structural-change evidence",()=>{
+  for(const direction of ["up","down","left","right"]){
+    const call={callId:"scroll-step",toolId:"screen.scroll",input:{direction}};
+    for(const verification of [
+      "scroll_event_observed","structural_change_observed","observed_change"
+    ]){
+      const result=evidenceForOwnerStep(call,{status:"success",data:{
+        actionAccepted:true,verification
+      }},false);
+      assert.equal(result.safe,true,`${direction}: ${verification}`);
+    }
+    const missing=evidenceForOwnerStep(call,{status:"success",data:{
+      actionAccepted:true,verification:"not_observed"
+    }},false);
+    assert.equal(missing.safe,false,direction);
+  }
 });

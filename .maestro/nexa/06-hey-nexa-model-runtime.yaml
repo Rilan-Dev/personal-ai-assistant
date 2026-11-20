@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa wake model download opt-in listening and stop
 tags:
   - nexa

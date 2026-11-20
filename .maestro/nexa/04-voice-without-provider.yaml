@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa voice screen safe unconfigured provider state
 tags:
   - nexa

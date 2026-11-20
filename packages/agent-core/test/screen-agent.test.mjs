@@ -44,6 +44,17 @@ test('unrelated actions use original policy while explicit menu plan is non-exec
  assert.equal((await absent.next('Where is the search icon?',[])).type,'clarify');
 });
 
+test('bare open settings reaches app-launch policy while menu-specific request stays read-only',async()=>{
+ const grant=createOwnerScreenGrant();grant.release(snapshot,2000);
+ let calls=0;
+ const base={next:async()=>{calls++;return {type:'done',response:'BASE'}}};
+ const p=createScreenAwarePlanner(base,grant,resolver,()=>2001);
+ assert.deepEqual(await p.next('Open Settings',[]),{type:'done',response:'BASE'});
+ assert.equal(calls,1);
+ assert.equal((await p.next('Open Settings from menu',[])).call.toolId,'screen.suggest_navigation');
+ assert.equal(calls,1);
+});
+
 test('old or wrong-request screen observations cannot be replayed into current conversation',async()=>{
  const grant=createOwnerScreenGrant();grant.release(snapshot,2000);
  const base={next:async()=>({type:'done',response:'BASE'})};

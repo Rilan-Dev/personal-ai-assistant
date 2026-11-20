@@ -39,8 +39,15 @@ export function resolveAcaApiOrigin(
 }
 
 export function getAcaApiOrigin(): string {
+  const configuredOrigin = process.env.EXPO_PUBLIC_ACA_API_ORIGIN;
+  // React Native's embedded Android bundle is optimized with __DEV__ = false
+  // even for debug APKs. An omitted optional origin must therefore stay
+  // fail-closed without aborting app startup; release Gradle tasks separately
+  // require and validate an explicit origin.
+  if (configuredOrigin === undefined) return UNCONFIGURED_ACA_API_ORIGIN;
+
   const development = typeof __DEV__ !== "undefined"
     ? __DEV__
     : process.env.NODE_ENV !== "production";
-  return resolveAcaApiOrigin(process.env.EXPO_PUBLIC_ACA_API_ORIGIN, development);
+  return resolveAcaApiOrigin(configuredOrigin, development);
 }

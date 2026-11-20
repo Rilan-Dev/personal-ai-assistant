@@ -12,9 +12,9 @@ const readyCheck = read('.maestro/physical-qa/02-ready-check.yaml');
 const runner = read('scripts/test/run-physical-qa-preflight.ps1');
 const flows = [appPermissions, accessibility, readyCheck];
 
-test('physical preflight is split into short QA2-only Maestro stages', () => {
+test('physical preflight is split into short single-debug-app Maestro stages', () => {
   for (const flow of flows) {
-    assert.match(flow, /^appId: dev\.rilandev\.personalaiassistant\.physicalqa2/m);
+    assert.match(flow, /^appId: dev\.rilandev\.personalaiassistant\.debug/m);
     assert.match(flow, /- physical\n/);
     assert.match(flow, /- no-external-action\n/);
     assert.doesNotMatch(flow, /Send message|WhatsApp|SMS|tap.*Submit/i);
@@ -40,26 +40,37 @@ test('app and overlay stage grants requested runtime permissions and enables QA 
     'the expand control scrolls out of view when optional permission rows appear');
 });
 
-test('Accessibility stage enables both isolated QA2 services through Android Settings', () => {
-  assert.match(accessibility, /Nexa Screen Assist QA2/);
-  assert.match(accessibility, /Nexa Launcher Navigation QA2/);
-  const resetToolsScroll = accessibility.indexOf('- tapOn: "Chat"');
-  const reopenTools = accessibility.indexOf('- tapOn: "Tools"', resetToolsScroll + 1);
+test('Accessibility stage enables both debug services through Android Settings', () => {
+  assert.match(accessibility, /Nexa Screen Assist \(Debug\)/);
+  assert.match(accessibility, /Nexa Launcher Navigation \(Debug\)/);
+  const openTools = accessibility.indexOf('- tapOn: "Tools"');
   const openSettings = accessibility.indexOf('- tapOn: "Open Android Accessibility Settings button"');
-  assert.ok(resetToolsScroll >= 0 && reopenTools > resetToolsScroll && openSettings > reopenTools,
-    'remount Tools after a persistent deep scroll before searching for Screen Assist');
+  assert.ok(openTools >= 0 && openSettings > openTools,
+    'keep the existing Tools route focused before opening Screen Assist settings');
+  assert.doesNotMatch(accessibility, /tapOn: "Chat"[\s\S]{0,120}visible: "Nexa AI"/,
+    'do not navigate away from Tools and block the Settings preflight on a stale Chat header');
   assert.match(accessibility, /id: "android:id\/switch_widget"[\s\S]*?checked: true/);
-  assert.match(accessibility, /tapOn: "Allow"/);
+  assert.match(accessibility, /tapOn:\s*"\^Allow\$"/,
+    'confirm the exact Android Allow action without matching a longer consent sentence');
 });
 
 test('Accessibility recovery restarts services that are enabled but marked crashed', () => {
-  for (const label of ['Nexa Screen Assist QA2', 'Nexa Launcher Navigation QA2']) {
+  for (const label of ['Nexa Screen Assist (Debug)', 'Nexa Launcher Navigation (Debug)']) {
     const start = accessibility.indexOf(`- tapOn: "${label}"`);
     const end = accessibility.indexOf('- pressKey: BACK', start);
     const serviceFlow = accessibility.slice(start, end < 0 ? undefined : end);
     assert.ok(start >= 0, `missing Settings selection for ${label}`);
     assert.match(serviceFlow, /id: "android:id\/switch_widget"[\s\S]*?checked: true[\s\S]*?tapOn:\s*\n\s+id: "android:id\/switch_widget"\s*\n\s+checked: true[\s\S]*?checked: false/,
       `${label} must be explicitly stopped before recovery can clear Android's crashed-service state`);
+    assert.match(serviceFlow, /visible: "Turn off\.\*"[\s\S]{0,100}tapOn: "\^Turn off\$"/,
+      `${label} must confirm Android's current Turn off dialog before it can be re-enabled`);
+    assert.ok(serviceFlow.includes('visible: "Stop Nexa ' +
+      (label.startsWith('Nexa Screen') ? 'Screen Assist' : 'Launcher Navigation') +
+      ' \\\\(Debug\\\\).*"'),
+      `${label} must escape literal parentheses in Maestro's Stop confirmation regex`);
+    assert.doesNotMatch(serviceFlow,
+      /visible:\s*"[^"\r\n]*(?<!\\)\(Debug(?<!\\)\)[^"\r\n]*"/,
+      `${label} must escape literal parentheses in all Maestro visible regex selectors`);
   }
 });
 
@@ -90,7 +101,7 @@ test('Accessibility grant runs after every other Maestro stage so teardown canno
     'Android state must be verified only after the final Maestro session releases UiAutomation');
 });
 
-test('ready check returns the QA2 app to its Screen Assistant tools without sampling connection mid-Maestro', () => {
+test('ready check returns the debug app to its Screen Assistant tools without sampling connection mid-Maestro', () => {
   assert.match(readyCheck, /Nexa · Tools/);
   assert.match(readyCheck, /Screen assistant/);
   assert.match(readyCheck, /Open Android Accessibility Settings button/);

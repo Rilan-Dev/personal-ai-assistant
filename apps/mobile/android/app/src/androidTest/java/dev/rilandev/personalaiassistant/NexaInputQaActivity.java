@@ -62,6 +62,16 @@ public final class NexaInputQaActivity extends Activity {
         title.setText("Nexa synthetic input and icon fixture");
         title.setTextSize(22f);
         container.addView(title);
+        TextView decorativeAccessibleControl = new TextView(this);
+        decorativeAccessibleControl.setText("● Nexa AI");
+        decorativeAccessibleControl.setContentDescription("Nexa AI");
+        decorativeAccessibleControl.setOnClickListener(v -> { });
+        container.addView(decorativeAccessibleControl);
+        TextView unsafeTextWithGenericDescription = new TextView(this);
+        unsafeTextWithGenericDescription.setText("Confirm");
+        unsafeTextWithGenericDescription.setContentDescription("Archive");
+        unsafeTextWithGenericDescription.setOnClickListener(v -> { });
+        container.addView(unsafeTextWithGenericDescription);
         status = new TextView(this);
         container.addView(status);
 
@@ -75,13 +85,27 @@ public final class NexaInputQaActivity extends Activity {
         container.addView(searchIcon, new LinearLayout.LayoutParams(90,90));
 
         ImageButton unknownIcon = new ImageButton(this);
-        unknownIcon.setContentDescription("Unknown widget");
         unknownIcon.setImageResource(android.R.drawable.ic_menu_help);
         unknownIcon.setOnClickListener(v -> {
             unknownClicks++;
             renderStatus();
         });
         container.addView(unknownIcon, new LinearLayout.LayoutParams(90,90));
+
+        ImageButton newChatIcon = new ImageButton(this);
+        newChatIcon.setContentDescription("New chat");
+        newChatIcon.setImageResource(android.R.drawable.ic_input_add);
+        newChatIcon.setOnClickListener(v -> { });
+        container.addView(newChatIcon, new LinearLayout.LayoutParams(90,90));
+
+        Button digitOne = new Button(this);
+        digitOne.setText("1");
+        digitOne.setOnClickListener(v -> { });
+        container.addView(digitOne);
+        Button longNumber = new Button(this);
+        longNumber.setText("123456");
+        longNumber.setOnClickListener(v -> { });
+        container.addView(longNumber);
 
         searchField = field("Search", InputType.TYPE_CLASS_TEXT);
         container.addView(searchField);

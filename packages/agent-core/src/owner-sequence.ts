@@ -71,8 +71,17 @@ function parseClause(raw:string):Pick<ToolCall,"toolId"|"input">|null {
   const scroll=text.match(/^(?:scroll|swipe) (up|down|left|right)(?: on (?:the|this) screen)?$/i);
   if(scroll)return {toolId:"screen.scroll",input:{direction:scroll[1].toLowerCase()}};
   const tap=text.match(/^(?:tap|click|press) (?:on )?(?:the )?([\p{L}\p{N} _.-]{2,45})$/iu);
-  if(tap&&safeLabel(tap[1].trim()))
-    return {toolId:"screen.tap_label",input:{label:tap[1].trim()}};
+  const tapLabel=tap?.[1].trim();
+  const describedControl=!!tapLabel&&
+    /\s+(?:in|on)\s+(?:the\s+)?[\p{L}\p{N}][\p{L}\p{N} _.-]*$/iu.test(tapLabel);
+  const repeatedTap=!!tapLabel&&/\s+(?:once|one\s+time|twice|two\s+times)$/i.test(tapLabel);
+  // A possessive or a gesture modifier usually describes a control by
+  // meaning rather than quoting its current UI label. Leave those requests
+  // to the screen-aware planner so it observes controls before selecting one.
+  if(tapLabel&&safeLabel(tapLabel)&&
+      !/^(?:its|my|their|his|her|this)\s+/i.test(tapLabel)&&
+      !repeatedTap&&!describedControl)
+    return {toolId:"screen.tap_label",input:{label:tapLabel}};
   const compose=original.match(/^(?:prepare|compose|draft) (?:a |an )?(whatsapp|imo|botim) message (?:for|to) ([\p{L}][\p{L}\p{N} '-]{1,49}) (?:saying|that says) ["“]([^"”\r\n]{1,500})["”]$/iu);
   if(compose&&recipientHint(compose[2].trim())&&compose[3].trim())
     return {toolId:"screen.compose_message",input:{
@@ -250,9 +259,17 @@ export function evidenceForOwnerStep(call:ToolCall,outcome:ToolOutcome,
   if(call.toolId==="device.set_flashlight")
     return {safe:x.verification==="observed"&&typeof x.enabled==="boolean"&&
         x.enabled===call.input.enabled,reason:"Flashlight state was not verified"};
-  if(call.toolId==="screen.tap_label"||call.toolId==="screen.scroll")
-    return {safe:x.verification==="observed_change"&&x.actionAccepted===true,
-      reason:"The screen change was not verified; no next step executed"};
+  if(call.toolId==="screen.tap_label"||call.toolId==="screen.tap_observed"){
+    const changed=["observed_change","structural_change_observed",
+      "window_change_observed","content_change_observed"].includes(String(x.verification));
+    const finalTapEvent=isLast&&x.verification==="tap_event_observed";
+    return {safe:(changed||finalTapEvent)&&x.actionAccepted===true,
+      reason:"The approved tap or its resulting screen change was not verified; no next step executed"};
+  }
+  if(call.toolId==="screen.scroll")
+    return {safe:["observed_change","structural_change_observed",
+      "scroll_event_observed"].includes(String(x.verification))&&x.actionAccepted===true,
+      reason:"The approved scroll event or its resulting screen change was not verified; no next step executed"};
   if(call.toolId==="screen.open_whatsapp_chat")
     return {safe:x.verification==="verified_chat_header" &&
       x.recipientMatched===true&&x.messageComposerVisible===true &&

@@ -20,7 +20,9 @@ internal object NexaOverlayChatRelay {
     private const val MAX_REPLY=1200
     private const val RESPONSE_TTL_MS=60_000L
     private const val REVIEW_TTL_MS=120_000L
-    private const val EXECUTION_TTL_MS=60_000L
+        // Keep the owner-approved planner/tool round trip bounded while allowing
+        // slower external-app launches and post-action observations to finish.
+        private const val EXECUTION_TTL_MS=180_000L
     private const val CHAT_TIMEOUT_EVENT="NexaOverlayChatTimeout"
     private enum class Phase { PLANNING, REVIEW, EXECUTING }
     private val lock=Any()
@@ -41,7 +43,7 @@ internal object NexaOverlayChatRelay {
             "\\b(send|submit|pay|purchase|buy|delete|remove|call|dial|transfer|confirm|allow|grant|install|uninstall|post|share|password|passcode|pin|otp|logout|sign out|payment|bank|security|verify)\\b",
             RegexOption.IGNORE_CASE
         )
-        val tap=Regex("^screen\\.tap_label label=([A-Za-z0-9][A-Za-z0-9 _.-]{1,44})$")
+        val tap=Regex("^screen\\.tap_label label=([0-9]|[A-Za-z][A-Za-z0-9 _.-]{1,44})$")
             .matchEntire(summary)
         if(tap!=null)return !blocked.containsMatchIn(tap.groupValues[1])
 
@@ -53,9 +55,10 @@ internal object NexaOverlayChatRelay {
         fun safeApp(value:Any?):Boolean {
             val app=value as? String?:return false
             return app.length in 2..56&&app.trim()==app&&
-                Regex("^[a-z0-9][a-z0-9 ._+\\-]*$").matches(app)&&
-                !Regex("\\s{2}|\\b(and|then|send|text|message|call|dial|delete|install|uninstall)\\b")
-                    .containsMatchIn(app)&&app !in setOf("app","an app","the app")
+                Regex("^[a-z0-9][a-z0-9 ._+\\-]*$",RegexOption.IGNORE_CASE).matches(app)&&
+                !Regex("\\s{2}|\\b(and|then|send|text|message|call|dial|delete|install|uninstall)\\b",
+                    RegexOption.IGNORE_CASE).containsMatchIn(app)&&
+                app.lowercase(java.util.Locale.ROOT) !in setOf("app","an app","the app")
         }
         fun safeRecipient(value:Any?):Boolean {
             val name=value as? String?:return false
@@ -70,13 +73,24 @@ internal object NexaOverlayChatRelay {
         }
         fun safeLabel(value:Any?):Boolean {
             val label=value as? String?:return false
-            return label.length in 2..45&&label.trim()==label&&
-                Regex("^[A-Za-z0-9][A-Za-z0-9 _.-]{1,44}$").matches(label)&&
+            val singleDigit=label.length==1&&label[0] in '0'..'9'
+            return (singleDigit || label.length in 2..45&&label.trim()==label&&
+                Regex("^[A-Za-z][A-Za-z0-9 _.-]{1,44}$").matches(label))&&
                 !blocked.containsMatchIn(label)
+        }
+        fun safeObservedTap():Boolean {
+            if(!exactKeys("snapshotId","index","label"))return false
+            val snapshotId=input.opt("snapshotId") as? String?:return false
+            val index=input.opt("index") as? Number?:return false
+            val value=index.toDouble()
+            return Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                RegexOption.IGNORE_CASE).matches(snapshotId)&&
+                value.isFinite()&&value%1.0==0.0&&value in 0.0..39.0&&
+                safeLabel(input.opt("label"))
         }
         fun safeField(value:Any?):Boolean {
             val label=value as? String?:return false
-            return safeLabel(label)&&!Regex(
+            return label.length>=2&&safeLabel(label)&&!Regex(
                 "\\b(recipient|account|email address|phone number|amount|address|checkout|password|security|payment)\\b",
                 RegexOption.IGNORE_CASE).containsMatchIn(label)
         }
@@ -88,6 +102,7 @@ internal object NexaOverlayChatRelay {
             "screen.scroll"->exactKeys("direction")&&
                 input.opt("direction") in setOf("up","down","left","right")
             "screen.tap_label"->exactKeys("label")&&safeLabel(input.opt("label"))
+            "screen.tap_observed"->safeObservedTap()
             "screen.open_whatsapp_chat"->exactKeys("recipientHint")&&
                 safeRecipient(input.opt("recipientHint"))
             "screen.fill_text"->exactKeys("targetLabel","exactText")&&

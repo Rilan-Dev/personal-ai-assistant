@@ -89,7 +89,8 @@ internal class NexaGuidedNavigation {
         if(token!=original) return "waiting"
         return when(status) {
             "claimed","android_accepted" -> "waiting"
-            "window_change_observed","structural_change_observed","observed_change" -> {
+            "window_change_observed","structural_change_observed","observed_change",
+            "content_change_observed" -> {
                 pendingToken=null
                 pendingUntil=0L
                 next++

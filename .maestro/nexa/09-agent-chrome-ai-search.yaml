@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa agent performs owner-approved Chrome AI search
 tags:
   - nexa
@@ -12,6 +12,13 @@ tags:
     link: https://www.google.com
     autoVerify: false
     browser: true
+- runFlow:
+    when:
+      visible: "Chrome isn't responding"
+    commands:
+      # Chrome is only prewarmed to settle its first-run UI. Close it if the
+      # emulator's browser startup hangs so the Nexa permission flow can continue.
+      - tapOn: "Close app"
 - runFlow:
     when:
       visible: "Close"

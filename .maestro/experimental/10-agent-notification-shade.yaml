@@ -1,4 +1,4 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
+appId: dev.rilandev.personalaiassistant.debug
 name: Nexa grants Screen Assist through Android Settings
 tags:
   - nexa
@@ -8,8 +8,8 @@ tags:
 ---
 # Maestro's active UI automation session suppresses Android Accessibility
 # services. This flow grants the real Android setting; the separate post-run
-# device check verifies the service is bound after Maestro exits. The live
-# notification action is tested only after the runner has released the service.
+# device check verifies the service is bound after Maestro exits. Restart Nexa
+# so the Setup path does not inherit a deep Tools scroll position from QA flows.
 - launchApp:
     stopApp: true
     clearState: false
@@ -19,7 +19,7 @@ tags:
     commands:
       - tapOn: "Wait"
 - extendedWaitUntil:
-    visible: "(?s).*(?:Make your assistant yours\\.|Don.t allow).*"
+    visible: "(?s).*(?:How can I help today\\?|Make your assistant yours\\.|Don.t allow|Nexa · Tools).*"
     timeout: 180000
 - runFlow:
     when:
@@ -36,10 +36,16 @@ tags:
       visible: "Don.t allow"
     commands:
       - tapOn: "Don.t allow"
-- extendedWaitUntil:
-    visible: "Make your assistant yours."
-    timeout: 180000
-- tapOn: "Tools"
+- runFlow:
+    when:
+      visible: "How can I help today\\?"
+    commands:
+      - tapOn: "Tools"
+- runFlow:
+    when:
+      visible: "Make your assistant yours\\."
+    commands:
+      - tapOn: "Tools"
 - extendedWaitUntil:
     visible: "Nexa · Tools"
     timeout: 30000
@@ -60,6 +66,10 @@ tags:
 - tapOn:
     text: "Show optional permissions and features"
     point: "50%,50%"
+- scrollUntilVisible:
+    element: "One-time screen assistance"
+    direction: DOWN
+    timeout: 30000
 - assertVisible: "One-time screen assistance"
 # Overlay permission is checked separately after Maestro, because OEMs expose
 # different system grant surfaces.
@@ -74,20 +84,22 @@ tags:
 # app's one-time accessibility shortcut is selected. Confirm it when shown.
 - runFlow:
     when:
-      visible: "Allow Nexa Screen Assist QA2 to have full control of your device\\?"
+      visible: "Allow Nexa Screen Assist (Debug) to have full control of your device\\?"
     commands:
       - tapOn: "Allow"
 - runFlow:
     when:
-      notVisible: "Use Nexa Screen Assist QA2"
+      notVisible: "Use Nexa Screen Assist (Debug)"
     commands:
       - scrollUntilVisible:
-          element: "Nexa Screen Assist QA2"
+          element: "Nexa Screen Assist (Debug)"
+          # The physical Infinix lists downloaded services alphabetically;
+          # Nexa appears below the initial page of accessibility apps.
           direction: DOWN
           timeout: 30000
-      - tapOn: "Nexa Screen Assist QA2"
+      - tapOn: "Nexa Screen Assist (Debug)"
 - extendedWaitUntil:
-    visible: "Use Nexa Screen Assist QA2"
+    visible: "Use Nexa Screen Assist (Debug)"
     timeout: 25000
 - runFlow:
     when:
@@ -100,12 +112,12 @@ tags:
           checked: true
 - runFlow:
     when:
-      visible: "Turn off Nexa Screen Assist QA2\\?"
+      visible: "Turn off Nexa Screen Assist (Debug)\\?"
     commands:
       - tapOn: "Turn off"
 - runFlow:
     when:
-      visible: "Stop Nexa Screen Assist QA2\\?"
+      visible: "Stop Nexa Screen Assist (Debug)\\?"
     commands:
       - tapOn: "Stop"
 - runFlow:
@@ -119,7 +131,7 @@ tags:
           checked: false
 - runFlow:
     when:
-      visible: "Allow Nexa Screen Assist QA2 to have full control of your device\\?"
+      visible: "Allow Nexa Screen Assist (Debug) to have full control of your device\\?"
     commands:
       - tapOn: "Allow"
 # Android confirms the accessibility grant in a separate system-owned dialog.
@@ -170,7 +182,7 @@ tags:
           point: "50%,50%"
       - runFlow:
           when:
-            visible: "Allow Nexa Screen Assist QA2 to have full control of your device\\?"
+            visible: "Allow Nexa Screen Assist (Debug) to have full control of your device\\?"
           commands:
             - tapOn: "Allow"
       - runFlow:
@@ -184,10 +196,10 @@ tags:
           commands:
             - tapOn: "Installed apps"
       - scrollUntilVisible:
-          element: "Nexa Screen Assist QA2"
+          element: "Nexa Screen Assist (Debug)"
           direction: DOWN
           timeout: 30000
-      - tapOn: "Nexa Screen Assist QA2"
+      - tapOn: "Nexa Screen Assist (Debug)"
       - runFlow:
           when:
             visible:
