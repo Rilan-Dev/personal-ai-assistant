@@ -31,7 +31,7 @@ class NexaVoiceTaskPlanAndroidTest {
     }
     @Test fun persistentGrantsNeverAuthorizeSensitiveActions() {
         val context=ApplicationProvider.getApplicationContext<Context>()
-        try {
+        NexaTestPermissionPreferences.withIsolatedVoicePermissionPolicy(context) {
             NexaVoicePermissionPolicy.clearGrants(context)
             assertEquals(NexaVoicePermissionPolicy.ASK_EVERY_TIME,
                 NexaVoicePermissionPolicy.mode(context))
@@ -45,6 +45,32 @@ class NexaVoiceTaskPlanAndroidTest {
             assertFalse(NexaVoicePermissionPolicy.alwaysAllowed(context,"send_message"))
             assertTrue(NexaVoicePermissionPolicy.denyCategory(context,"screen.scroll"))
             assertFalse(NexaVoicePermissionPolicy.alwaysAllowed(context,"scroll_screen:left"))
-        } finally {NexaVoicePermissionPolicy.clearGrants(context)}
+        }
+    }
+
+    @Test fun permissionPolicyInstrumentationRestoresFullAccessAndExistingGrants() {
+        val context=ApplicationProvider.getApplicationContext<Context>()
+        val preferences=context.getSharedPreferences(
+            "nexa_voice_action_permissions_v1",Context.MODE_PRIVATE)
+        NexaTestPermissionPreferences.withIsolatedVoicePermissionPolicy(context) {
+            assertTrue(NexaVoicePermissionPolicy.setMode(
+                context,NexaVoicePermissionPolicy.FULL_ACCESS))
+            assertTrue(NexaVoicePermissionPolicy.alwaysAllow(
+                context,"scroll_screen:right"))
+            val selected=preferences.all.mapValues { (_, value) ->
+                if (value is Set<*>) value.filterIsInstance<String>().toSet() else value
+            }
+            NexaTestPermissionPreferences.withIsolatedVoicePermissionPolicy(context) {
+                assertTrue(NexaVoicePermissionPolicy.setMode(
+                    context,NexaVoicePermissionPolicy.TRUST_NAVIGATION))
+                assertTrue(NexaVoicePermissionPolicy.alwaysAllow(
+                    context,"scroll_screen:left"))
+            }
+            val restored=preferences.all.mapValues { (_, value) ->
+                if (value is Set<*>) value.filterIsInstance<String>().toSet() else value
+            }
+            assertEquals("Temporary test choices must restore Full Access and the owner's grants",
+                selected,restored)
+        }
     }
 }

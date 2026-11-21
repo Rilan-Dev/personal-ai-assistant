@@ -11,6 +11,7 @@ export type PowerShellRequest =
   | { kind: "tap"; snapshotId: string; index: number }
   | { kind: "scroll"; snapshotId: string; direction: "up" | "down" | "left" | "right" }
   | { kind: "key"; name: "back" | "home" | "notifications" }
+  | { kind: "readArm" | "readReview" }
   | { kind: "invoke"; toolId: string; input: Record<string, unknown>; confirmed: boolean }
   | { kind: "error"; error: string };
 
@@ -94,6 +95,11 @@ export function parsePowerShellRequest(value: unknown): PowerShellRequest {
     if (!["back", "home", "notifications"].includes(String(body.name)))
       return bad("INVALID_KEY");
     return { kind: "key", name: body.name as "back" | "home" | "notifications" };
+  }
+  if (value.path === "/v1/readarm" || value.path === "/v1/readreview") {
+    if (body.confirmed !== true) return bad("CONFIRM_REQUIRED");
+    if (Object.keys(body).length !== 1) return bad("INVALID_BODY");
+    return { kind: value.path === "/v1/readarm" ? "readArm" : "readReview" };
   }
   if (value.path === "/v1/invoke") {
     if (typeof body.toolId !== "string" || !safeTools.has(body.toolId) ||

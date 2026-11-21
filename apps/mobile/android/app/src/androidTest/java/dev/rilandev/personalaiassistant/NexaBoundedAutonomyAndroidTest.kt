@@ -34,7 +34,7 @@ class NexaBoundedAutonomyAndroidTest {
     }
 
     @Test fun trustedModeReusesOnlyNavigationApprovalsAndRespectsRevocations() {
-        try {
+        NexaTestPermissionPreferences.withIsolatedVoicePermissionPolicy(ctx) {
             NexaVoicePermissionPolicy.clearGrants(ctx)
             assertTrue(NexaVoicePermissionPolicy.setMode(ctx,NexaVoicePermissionPolicy.TRUST_NAVIGATION))
             for(command in listOf("open Chrome","scroll_screen:down","tap_safe_icon:search")) {
@@ -56,8 +56,6 @@ class NexaBoundedAutonomyAndroidTest {
             }
             assertTrue(NexaVoicePermissionPolicy.denyCategory(ctx,"screen.navigate"))
             assertFalse(NexaVoicePermissionPolicy.alwaysAllowed(ctx,"tap_safe_icon:search"))
-        } finally {
-            NexaVoicePermissionPolicy.clearGrants(ctx)
         }
     }
 

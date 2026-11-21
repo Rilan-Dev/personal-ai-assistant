@@ -4,9 +4,11 @@
   Calls Nexa's debug-only PowerShell bridge through Nexa app tools.
 .DESCRIPTION
   ADB is used only for TCP port forwarding to the Nexa app's local abstract
-  socket. This script does not invoke adb shell, adb input, am, uiautomator,
-  arbitrary keycodes, or host-side UI automation. Nexa performs validation
-  and dispatch through its registered Android tools and secure action journal.
+  socket. Screen observations, gestures, named navigation and app actions are
+  dispatched through Nexa's registered Android tools. The debug-only armread
+  and reviewread QA commands call the native one-shot Screen Assist arm/consume
+  APIs and return only capture metadata. This script does not invoke adb shell,
+  adb input, am, uiautomator, arbitrary keycodes, or host-side UI automation.
   The Nexa app must be open at least once so its debug bridge is running.
 .EXAMPLE
   .\nexa.ps1 status -Serial 099344034S003788
@@ -28,7 +30,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true, Position = 0)]
-  [ValidateSet('status', 'tools', 'observe', 'tree', 'tap', 'scroll', 'key', 'invoke')]
+  [ValidateSet('status', 'tools', 'observe', 'tree', 'tap', 'scroll', 'key', 'invoke', 'armread', 'reviewread')]
   [string]$Command,
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$PackageId = 'dev.rilandev.personalaiassistant.debug',
@@ -55,7 +57,7 @@ if (-not $Serial -or $Serial -notmatch '^[A-Za-z0-9._:-]{1,80}$') {
 if ($PackageId -ne 'dev.rilandev.personalaiassistant.debug') {
   throw 'The Nexa QA bridge accepts only dev.rilandev.personalaiassistant.debug.'
 }
-if ($Command -in @('observe', 'tree', 'tap', 'scroll', 'key') -and -not $Confirm) {
+if ($Command -in @('observe', 'tree', 'tap', 'scroll', 'key', 'armread', 'reviewread') -and -not $Confirm) {
   throw "$Command requires -Confirm."
 }
 if ($Command -in @('tap', 'scroll') -and
@@ -193,6 +195,16 @@ try {
     'key' {
       $result = Send-NexaRequest -Method Post -Path '/key' -Body @{
         name = $Name; confirmed = $true
+      }
+    }
+    'armread' {
+      $result = Send-NexaRequest -Method Post -Path '/readarm' -Body @{
+        confirmed = $true
+      }
+    }
+    'reviewread' {
+      $result = Send-NexaRequest -Method Post -Path '/readreview' -Body @{
+        confirmed = $true
       }
     }
     'invoke' {

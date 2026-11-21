@@ -1,9 +1,24 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <testsuites>
-  <testsuite name="Test Suite" device="099344034S003788" tests="1" failures="0" time="117.199" timestamp="2026-11-20T19:14:45">
-    <testcase id="Enable only Nexa Screen Assist for physical QA" name="Enable only Nexa Screen Assist for physical QA" classname="Enable only Nexa Screen Assist for physical QA" file=".maestro\physical-qa\17-enable-screen-assist-only.yaml" time="117.163" timestamp="2026-11-20T19:14:45" status="SUCCESS">
+  <testsuite name="Nexa-Screen-Assist-Ordered-QA" device="Nexa_QA_20261119" tests="4" failures="0" time="222.263" timestamp="2026-11-21T01:13:24">
+    <testcase id="Debug screen assistant controls are reachable from Tools" name="Debug screen assistant controls are reachable from Tools" classname="Debug screen assistant controls are reachable from Tools" file=".maestro\nexa\16-qa2-screen-assist-reachable.yaml" time="45.316" timestamp="2026-11-21T01:13:24" status="SUCCESS">
       <properties>
-        <property name="tags" value="nexa, physical, qa-preflight, no-external-action"/>
+        <property name="tags" value="nexa, screen-assist, debug"/>
+      </properties>
+    </testcase>
+    <testcase id="Debug Screen Assist accessibility preflight enables the service" name="Debug Screen Assist accessibility preflight enables the service" classname="Debug Screen Assist accessibility preflight enables the service" file=".maestro\nexa\19-qa2-screen-assist-settings-entry.yaml" time="91.166" timestamp="2026-11-21T01:14:10" status="SUCCESS">
+      <properties>
+        <property name="tags" value="nexa, screen-assist, debug, setup"/>
+      </properties>
+    </testcase>
+    <testcase id="Open debug AI provider settings without stopping Nexa" name="Open debug AI provider settings without stopping Nexa" classname="Open debug AI provider settings without stopping Nexa" file=".maestro\nexa\23-qa2-open-ai-provider-settings.yaml" time="48.587" timestamp="2026-11-21T01:15:41" status="SUCCESS">
+      <properties>
+        <property name="tags" value="nexa, provider, debug, setup"/>
+      </properties>
+    </testcase>
+    <testcase id="Prepare the installed debug floating chat from visible Setup controls" name="Prepare the installed debug floating chat from visible Setup controls" classname="Prepare the installed debug floating chat from visible Setup controls" file=".maestro\nexa\27-qa2-floating-chat-setup.yaml" time="37.108" timestamp="2026-11-21T01:16:30" status="SUCCESS">
+      <properties>
+        <property name="tags" value="nexa, overlay, debug, setup"/>
       </properties>
     </testcase>
   </testsuite>

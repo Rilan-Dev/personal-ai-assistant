@@ -14,11 +14,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /** End-to-end one-shot Screen Assist check without UiAutomation/Accessibility takeover. */
 @RunWith(AndroidJUnit4::class)
+@Ignore("AndroidJUnitRunner holds UiAutomation and disconnects Screen Assist; use scripts/qa/test-screen-assist-live.ps1 for live acceptance")
 class NexaScreenAssistLiveAndroidTest {
     private val context: Context get() = ApplicationProvider.getApplicationContext()
 

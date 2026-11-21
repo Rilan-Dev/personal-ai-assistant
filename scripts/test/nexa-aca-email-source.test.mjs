@@ -38,6 +38,11 @@ test('ACA login has no hardcoded credentials and uses Android Keystore storage',
   assert.doesNotMatch(api, /AsyncStorage|hardcoded_password|demo_password/);
 });
 
+test('Android Keystore persists only a same-scope ACA chat conversation checkpoint', () => {
+  assert.match(bridge, /validateAcaDeviceSessionPayload/);
+  assert.match(bridge, /require\(validateAcaDeviceSessionPayload\(\s*data, BuildConfig\.NEXA_ACA_API_ORIGIN, System\.currentTimeMillis\(\)\)\)/);
+});
+
 test('ACA settings do not promise email excerpts will be sent to Nexa BYOK', () => {
   assert.doesNotMatch(app, /Connect an AI provider for email-content summaries/);
   assert.doesNotMatch(app, /selected saved provider.*email/i);

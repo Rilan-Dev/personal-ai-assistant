@@ -51,3 +51,7 @@ export function getAcaApiOrigin(): string {
     : process.env.NODE_ENV !== "production";
   return resolveAcaApiOrigin(configuredOrigin, development);
 }
+
+export function isAcaApiOriginConfigured(): boolean {
+  return getAcaApiOrigin() !== UNCONFIGURED_ACA_API_ORIGIN;
+}

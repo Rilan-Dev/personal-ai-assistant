@@ -1,4 +1,47 @@
-## Active status — 2026-11-20 emulator Debug v2011 QA
+## Latest status — 2026-11-21 Full Access recheck
+
+- Physical Infinix `099344034S003788` only; no emulator was used. Debug build `0.3.2026112106` remains the installed app. Earlier Flow 18 (Chat → Clock) and Flow 20 (floating Chat → Clock) passed on this build without a Nexa approval card.
+- A fresh Flow 19 retry did **not** pass: its assertion found the Chat mode was back at “Actions require your permission,” and `nexa.ps1 status` returned `fullAccessAppLaunchReady=false`. The flow did not run a tool. The captured screenshot is `.qa-results/full-access-physical-20261121/v2106-no-pending-final/2026-11-21_181727/Full Access Chat has no routine approval after an app launch/screenshots/step-010-assertCondition-Full_Access_is_on._Nexa.png`.
+- The Android test suite had a data-isolation defect: `NexaBoundedAutonomyAndroidTest` and `NexaVoiceTaskPlanAndroidTest` called `clearGrants()` against the installed app preferences and left them cleared. Those tests now snapshot and restore the exact saved permission preferences; a regression test covers restoring Full Access plus an existing grant. Android test Kotlin compilation succeeds.
+- Added `.maestro/physical-qa/21-select-and-persist-full-access.yaml` to select Full Access through Nexa Settings and verify it survives an app relaunch. YAML parsing succeeds. The relevant Node tests pass 6/6; the prior full Node suite passed 718/718 and root/mobile/runtime typechecks passed.
+- The current Screen Assist observation reports `com.transsion.applock` with no exposed clickables, so I have not tried to bypass the phone's app lock. After the owner unlocks it, run Flow 21, then rerun Flows 19, 18 and 20 on this same serial. Verify bridge readiness and Screen Assist binding afterward. A full matrix of all registered tools and LLM-planned cross-app gestures is still unverified; do not describe the routine-tool result as “anything without approval.” Android grants/unlock and protected sends, calls and payments remain separate safeguards.
+
+## Active status — 2026-11-21 physical Infinix Debug v2106
+
+- The latest embedded-bundle Debug `0.3.2026112106` / code `2026112106` is installed on physical Infinix `099344034S003788`. Emulator use is off-limits for this task.
+- Nexa Screen Assist is enabled and Android reports it bound with no crash. The bridge is live, with 25 tools and `rawAdbInput=false`.
+- The two app-level capabilities needed for a floating screen action (`device.interact` and `device.observe`) were off on the captured Tools screen. Their narrow setup flow is ready at `.qa-results/screen-assist-setup-20261121/enable-agent-screen-controls.yaml`, but Maestro's device server died before any command ran. Foreground checks showed `com.sh.smart.caller/.InCallActivity`, then Infinix AppLock's `ConfirmLockActivity`; leave the phone untouched until the owner unlocks it and Nexa or Home is foreground.
+- Focused agent-core tests pass **53/53**, the full `npm test` suite passes **718/718**, and root/mobile/agent-runtime typechecks pass. The Clock/Stopwatch exact-target test is source-level evidence only; live Sarvam planning and a physical tap have not passed. The subsequent Full Access recheck, test-isolation fix and rerun status are recorded above.
+- Setup-flow evidence: `.qa-results/screen-assist-setup-20261121/resume-2106-screen-assist-reinstall.xml` (1/1 passed); driver failures: `.qa-results/screen-assist-setup-20261121/enable-agent-screen-controls.xml` and `enable-agent-screen-controls-retry.xml` (both failed before the flow body).
+
+## Next
+
+1. Once the owner has cleared AppLock and Nexa or Home is foreground, run the narrow capability flow with normal Maestro driver startup and verify both switches are on; avoid broad runtime permission grants.
+2. Restore the floating bubble with `.maestro/nexa/27-qa2-floating-chat-setup.yaml`, then verify Screen Assist is still bound after Maestro exits.
+3. Submit `Open Clock, then tap the Stopwatch tab. Do not start the stopwatch.` through floating Chat. Approve only the fresh, exact, harmless read/tap review steps; verify Android observed the Stopwatch tap and the timer remains stopped.
+4. Record the physical result before claiming the LLM screen-control task passed. No external message is part of this test.
+
+---
+
+## Historical status — emulator Debug v2103/v2104 QA (superseded by physical v2106)
+
+- Built embedded-bundle Debug `0.3.2026112103` with legacy native-library packaging and installed it on `emulator-5554`. APK SHA-256 is `764D4F66BF21C668516D0AE58CC5EF173DA927964FC17518354A16F79962BD1A`; pulling the installed `base.apk` produced the same hash. This is a debug QA build, not a release-signed APK. The physical Infinix was not targeted.
+- The live one-shot Screen Assist path now passed through Nexa's confirmed debug bridge: armed the native 20-second capture, opened Android Settings through `device.open_app`, returned with named Back, and reviewed metadata only. Review reported `captured=true`, source `com.android.settings`; a second review reported `captured=false`, confirming the one-shot result was consumed. No screen text was emitted by `reviewread` or written to evidence. Metadata evidence: `.qa-results/screen-assist-live/screen-read-metadata-20261121.json`.
+- Nexa's bridge observed Settings and completed fresh-snapshot down/up scrolls; both returned `structural_change_observed` and the Settings package remained foreground. A named Back returned to Nexa. Evidence: `.qa-results/screen-assist-live/cross-app-scroll-metadata-20261121.json`. The final bridge status reports `rawAdbInput=false` and `accessibilityEnabled=true`.
+- Maestro Flows 16, 19, 23 and 27 passed individually and as one ordered suite (**4/4 in 3m42s**). Maestro left its `dev.mobile.maestro` UiAutomation process connected after the ordered run; stopping that completed QA driver released Android's accessibility connection. Both Debug and QA2 Screen Assist are now bound with no crashed services. Ordered-run artifacts are under `.qa-results/screen-assist-live/ordered-20261121/`.
+- Verification: `npm test` **716/716 passed** (`.qa-results/screen-assist-live/npm-test-20261121-final.log`); root/mobile/runtime typecheck passed; Expo web export passed; Gradle `:app:assembleDebug` and `:app:assembleDebugAndroidTest` passed.
+- No messages were sent and no email was read.
+- Follow-up Debug `0.3.2026112104` was assembled with the non-routable ACA origin and installed only on `emulator-5554` for ACA session-continuity validation. The local APK and installed `base.apk` match at SHA-256 `61B8A0A3DAD5ED53A83A7C0D2340514CB37D410D23748016BDB5453DFB8FBA54` (`x86_64`). The focused Keystore validation instrumentation passed 4/4; fresh `npm test` passed 717/717 and root `npm run typecheck` passed. The v2103 Maestro flow results above were not rerun on v2104; this remains a debug QA artifact.
+
+## Remaining gates at that emulator checkpoint
+
+1. Maestro Flow 16 verifies that the Arm/Review controls are reachable, while live capture was exercised through the passing `scripts/qa/test-screen-assist-live.ps1` acceptance path using the same native one-shot APIs. A direct Maestro tap-through of Arm and Review remains unverified because Maestro's UiAutomation disconnects Screen Assist while driving; its incompatible AndroidJUnit test is explicitly ignored for the same reason.
+2. Provider-backed LLM planning remains blocked by the previously observed Sarvam HTTP 401/403. A valid rotated test credential is needed before claiming live LLM planning acceptance.
+3. Local Nexa Chat/overlay source integration now targets ACA's canonical session, organization, agent, configuration, conversation and read-only tool path. Fresh offline tests and typechecks pass, but live Development parity, provider-backed email synthesis, ACA mail in continuous voice, broader reviewed app taps, and a release-signed APK remain pending. Do not use Production while the remote ACA initializer incident is unresolved; v2104 is a debug QA artifact.
+
+---
+
+## Historical status — 2026-11-20 emulator Debug v2011 QA
 
 - Built embedded-bundle Debug `0.3.2026112011` and installed it on `emulator-5554`. Local APK and the installed `base.apk` match at SHA-256 `5A16791FE9E618C798730D7AFC11A57B14A3E8492F106D53D9F17821502C0BFD`; evidence: `.qa-results/installed-base-v2011-20261120.apk`. This is a debug QA build, not a release-signed APK. The connected Infinix was not targeted.
 - On this build, Maestro Flows 16, 23 and 27 passed individually. Flow 19 also passed on the emulator, reopening Android Accessibility Settings, refreshing the Nexa service grant, and returning to the Tools screen; run log: `.qa-results/screen-assist-restore-v2011-20261120/maestro.log`.
@@ -8,7 +51,7 @@
 - Fresh checks: `npm test` **708/708 passed** (`.qa-results/npm-test-final-20261120.log`); root/mobile/runtime typecheck passed (`.qa-results/typecheck-final-20261120.log`); Expo web export passed (`.qa-results/web-export-final-20261120.log`).
 - The separate Arm one screen read / Review captured text UI remains unverified. Maestro's UiAutomation session disconnects Screen Assist while it drives, and post-run rebind alone is not proof of that capture path. The debug bridge snapshots were temporary; full page text was not printed or written to evidence. No message was sent and no email was read.
 
-## Current remaining gates
+## Historical remaining gates (superseded by the 2026-11-21 results)
 
 1. Verify the separate Arm one screen read / Review captured text UI through an interaction route that does not keep Android UiAutomation active while arming. Keep capture local, confirm only source package/status, and discard it; do not use direct ADB input as a workaround.
 2. Provider-backed UI planning remains blocked by the saved Sarvam test credential returning HTTP 401/403. Once a valid test credential is saved in Nexa, rerun the owner-reviewed synthetic Chrome task and separate observation from tap approval.
@@ -1113,3 +1156,18 @@ Still enforced by policy: exact owner review for message, call, and payment acti
 - Started the local Expo Metro server and USB reverse on port 8081 because the debug APK does not bundle the JS bundle. Nexa's bridge reported `nexa-qa-v1`, `NexaAppTools`, `bridgeAvailable=true`, `engineLive=true`, 25 tools, and `rawAdbInput=false`.
 - `device.battery_status` completed through `nexa.ps1` without the CLI `-Confirm` flag: Android BatteryManager reported 24%, not charging. `device.open_app` dispatched a Calculator intent (`com.transsion.calculator`) but returned `verification=not_observed`; this is not counted as a verified app-open.
 - Android bridge status reports `accessibilityEnabled=false`. Therefore live screen observation and a real chat-to-screen-action approval-card check remain unverified. No provider request or message was made. The battery check is universally read-only and alone does not prove Full Access chat behavior.
+
+## Latest — Nexa–ACA shared backend verification (2026-11-21)
+
+Ready locally: the Nexa mobile Chat adapter calls ACA's shared chat-turn handler and existing identity, organization membership, agent configuration, conversation, mail, and tool services. It does not connect to PostgreSQL directly and does not create a second business database. Mobile chat remains server-enforced read-only for this first parity gate; ACA authorization and configuration revision checks remain authoritative.
+
+Verification: ACA focused mobile boundaries/parity passed 40/40 tests, the full web suite passed 1,670/1,670 across 265 files, monorepo typecheck passed, and web lint completed with 0 errors and 16 existing React-hook warnings. The current Nexa emulator Screen Assist build and live one-shot capture/scroll evidence are recorded above.
+
+Live shared-backend acceptance remains pending. Nexa QA is pointed at the fail-closed `https://aca-unconfigured.invalid` origin; ACA Development has no isolated API identity/database configured in this workspace. Docker, PostgreSQL client tools, and ACA dependency ports are unavailable here. The ACA local checkout contains substantial pre-existing uncommitted edits; the mobile chat route exists there locally but is absent from GitHub `Development`. Local and remote `Development` each have one unique commit after a remote force-update, so no merge, rebase, push, or deployment was performed.
+
+Next: provision or connect an isolated ACA Development stack and synthetic test identity, deploy the reviewed ACA mobile adapter only to that environment, build Nexa with the Development origin, then compare the same authorized read-only prompt through ACA web and Nexa for account, organization, agent, configuration revision, canonical conversation, and tool audit. Keep Production out of the test. After read-only parity, add the remaining write/review UI and realtime voice route through ACA's existing approval workflows; do not bypass them from the mobile client.
+
+## Latest — ACA build-safety finding
+- ACA local `init` and `apps/web/init` contained packed code after their normal setup call. Static decoding of the web payload found HTTP/HTTPS downloads, detached `node -i`, and downloaded-code evaluation. The suffixes were removed locally and guarded with a two-case regression test.
+- ACA full web suite passed 1,672/1,672; monorepo typecheck and root build passed after cleanup. No production API or provider was used.
+- The fetched ACA GitHub Development initializer blobs are different and remain unreviewed; the ACA checkout was not merged, rebased, pushed, or deployed. Do not build/deploy from the remote ref until the exact blobs and relevant CI secret exposure are reviewed. Detailed evidence: `D:\RiluRaafu\ai-comms-agent\docs\project-control\sessions\SEC01-ACA-INIT-LOADER-20261121.md`.

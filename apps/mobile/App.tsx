@@ -53,6 +53,7 @@ import type {WakeStatus} from './src/native/androidWakeWord';
 import { nativeFlashlightAvailable, hasHardwareFlashlight, requestCameraForFlashlight } from './src/native/androidFlashlight';
 import { providerVaultAvailable, loadProviderFromVault, saveProviderToVault, clearProviderFromVault } from './src/native/providerVault';
 import { ACA_ORIGIN, acaVaultAvailable, loadAcaSession, connectAca, acaTargets, disconnectAca, storeAcaSession, authorizedAcaSelection } from './src/native/acaEmail';
+import { isAcaApiOriginConfigured } from './src/native/acaConfig';
 import { classifyAcaBusinessIntent } from './src/native/acaBusinessIntent';
 import { AcaChatRequestError, streamAcaChatTurn } from './src/native/acaChat';
 import type { AcaSession, AcaOrganization } from './src/native/acaEmail';
@@ -297,6 +298,24 @@ export default function App() {
             response=await runPowerShellTool(engine,'screen.key_action',{
               name:request.name
             },true,event.requestId);
+          }else if(request.kind==='readArm'){
+            try{
+              await armScreenReadOnce();
+              response={ok:true,data:{armed:true,windowMs:20_000}};
+            }catch{
+              response={ok:false,error:'SCREEN_READ_ARM_FAILED'};
+            }
+          }else if(request.kind==='readReview'){
+            try{
+              const capture=await takeScreenReadOnce();
+              const captured=Boolean(capture?.text && capture.packageName);
+              const packageName=captured?capture?.packageName??null:null;
+              await clearScreenRead().catch(()=>{});
+              response={ok:true,data:{captured,packageName}};
+            }catch{
+              await clearScreenRead().catch(()=>{});
+              response={ok:false,error:'SCREEN_READ_REVIEW_FAILED'};
+            }
           }else if(request.kind==='invoke'){
             response=await runPowerShellTool(engine,request.toolId,request.input,
               request.confirmed,event.requestId);
@@ -3338,7 +3357,9 @@ export default function App() {
             <Text style={[styles.sectionTag,acaSession&&acaVerified&&styles.sectionTagActive]}>{!acaSession?'Not connected':acaVerified?'Connected':'Needs verification'}</Text>
           </View>
           <Text style={styles.cardText}>Use the same ACA login, organization, selected agent, saved provider configuration, business data and agent conversation. Nexa calls ACA’s server for its permitted read tools, including email, schedules, WhatsApp Business and knowledge when configured. Business writes stay disabled in this release; Nexa’s Android device tools and local AI settings remain separate.</Text>
-          <Text style={styles.settingHelp}>{ACA_ORIGIN} · Read-only access · Android Keystore session</Text>
+          <Text style={styles.settingHelp}>{isAcaApiOriginConfigured()
+            ? `${ACA_ORIGIN} · Read-only access · Android Keystore session`
+            : 'ACA Development API origin is not configured for this build. Use a build pointed at your ACA Development server before connecting an account.'}</Text>
           {!acaSession && <>
             <Text style={styles.fieldLabel}>ACA ACCOUNT EMAIL</Text>
             <TextInput accessibilityLabel="AI Comms Agent account email" style={styles.settingInput}
@@ -3351,7 +3372,7 @@ export default function App() {
               autoCapitalize="none" autoCorrect={false} autoComplete="off"
               secureTextEntry editable={!acaBusy} placeholder="Not stored on the phone"
               placeholderTextColor="#8190a8"/>
-            <Pressable accessibilityRole="button" disabled={acaBusy||!acaVaultAvailable()}
+            <Pressable accessibilityRole="button" disabled={acaBusy||!acaVaultAvailable()||!isAcaApiOriginConfigured()}
               onPress={()=>void connectAcaAccount()} style={styles.primaryInline}>
               <Text style={styles.primaryInlineText}>{acaBusy?'Connecting…':'Connect ACA account'}</Text>
             </Pressable>

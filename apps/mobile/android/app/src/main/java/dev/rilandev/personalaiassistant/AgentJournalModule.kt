@@ -26,6 +26,43 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
     // Multi-process mode is intentionally not supported.
     internal companion object {
         val lock = Any()
+        internal fun validateAcaDeviceSessionPayload(
+            data: String, expectedOrigin: String, nowMillis: Long
+        ): Boolean = try {
+            require(data.toByteArray(StandardCharsets.UTF_8).size <= 1200)
+            val obj = JSONObject(data)
+            val required = setOf("version", "origin", "token", "expiresAt", "organizationId", "agentId")
+            val allowed = required + "chatConversation"
+            val keys = obj.keys().asSequence().toSet()
+            require(keys.size in 6..7 && keys.containsAll(required) && keys.all { it in allowed })
+            require(obj.optInt("version") == 1)
+            require(obj.optString("origin") == expectedOrigin)
+            require(obj.optString("token").matches(Regex("nexa_m1_[A-Za-z0-9_-]{43}")))
+            // Avoid java.time APIs that require Android API 26 on older phones.
+            val expires = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+                isLenient = false
+            }.parse(obj.getString("expiresAt"))
+            require(expires != null && expires.time > nowMillis)
+            val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+            val organizationId = obj.getString("organizationId")
+            val agentId = obj.getString("agentId")
+            require(organizationId.isEmpty() || uuid.matches(organizationId))
+            require(agentId.isEmpty() || uuid.matches(agentId))
+            if (obj.has("chatConversation")) {
+                val checkpoint = obj.optJSONObject("chatConversation")
+                    ?: throw IllegalArgumentException("Invalid ACA chat checkpoint")
+                val checkpointKeys = checkpoint.keys().asSequence().toSet()
+                require(checkpointKeys == setOf("organizationId", "agentId", "conversationId"))
+                require(uuid.matches(organizationId) && uuid.matches(agentId))
+                require(checkpoint.getString("organizationId") == organizationId)
+                require(checkpoint.getString("agentId") == agentId)
+                require(uuid.matches(checkpoint.getString("conversationId")))
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
         /** Keystore-only access to the owner-selected chat provider for live voice. */
         internal data class VoiceCredentials(
             val provider: String, val apiKey: String, val orgId: String = "",
@@ -185,21 +222,8 @@ class AgentJournalModule(context: ReactApplicationContext) : ReactContextBaseJav
      */
     @ReactMethod fun saveAcaSession(data: String, p: Promise) {
         try {
-            require(data.toByteArray(StandardCharsets.UTF_8).size <= 1200)
-            val obj = JSONObject(data)
-            require(obj.length() == 6 && obj.optInt("version") == 1)
-            require(obj.optString("origin") == BuildConfig.NEXA_ACA_API_ORIGIN)
-            require(obj.optString("token").matches(Regex("nexa_m1_[A-Za-z0-9_-]{43}")))
-            // Avoid java.time APIs that require Android API 26 on older phones.
-            val expires = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply {
-                timeZone = java.util.TimeZone.getTimeZone("UTC")
-                isLenient = false
-            }.parse(obj.getString("expiresAt"))
-            require(expires != null && expires.time > System.currentTimeMillis())
-            for (field in listOf("organizationId", "agentId")) {
-                val value = obj.getString(field)
-                require(value.isEmpty() || value.matches(Regex("[0-9a-fA-F-]{36}")))
-            }
+            require(validateAcaDeviceSessionPayload(
+                data, BuildConfig.NEXA_ACA_API_ORIGIN, System.currentTimeMillis()))
             synchronized(lock) { write(name("private", "aca-device-session"), data) }
             p.resolve(true)
         } catch (e: Exception) { rejectSafe(p, "ACA_DEVICE_SESSION_SAVE", e) }

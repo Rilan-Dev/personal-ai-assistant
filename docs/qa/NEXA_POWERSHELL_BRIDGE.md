@@ -1,9 +1,11 @@
 # Nexa PowerShell screen and tool bridge
 
 `nexa.ps1` sends requests to the debug Nexa app over an ADB port forward. The
-script uses ADB only for `forward` and its cleanup; all screen reads, taps,
-scrolls, named navigation keys, and app actions execute through Nexa's Android
-tool registry and `AgentHarness`.
+script uses ADB only for `forward` and its cleanup. Screen observations,
+gestures, named navigation and app actions execute through Nexa's Android tool
+registry and `AgentHarness`. The debug-only `armread` and `reviewread` QA
+commands call the same native one-shot Screen Assist arm/consume APIs and
+return only capture metadata.
 
 ## Setup
 
@@ -51,7 +53,15 @@ reference. `tap` accepts the snapshot ID and index, never hard-coded x/y.
 .\nexa.ps1 tap -Serial 099344034S003788 -SnapshotId <fresh-snapshot-id> -Index <observed-index> -Format json -Confirm
 .\nexa.ps1 scroll -Serial 099344034S003788 -SnapshotId <fresh-snapshot-id> -Direction down -Format json -Confirm
 .\nexa.ps1 key -Serial 099344034S003788 -Name back -Format json -Confirm
+.\nexa.ps1 armread -Serial 099344034S003788 -Format json -Confirm
+.\nexa.ps1 reviewread -Serial 099344034S003788 -Format json -Confirm
 ```
+
+`armread` and `reviewread` are debug-build QA commands. Each requires its own
+`-Confirm`. `armread` calls the same 20-second native arm used by the Tools
+screen. After opening a harmless external app, `reviewread` consumes the
+one-shot result and returns only capture status and source package; captured
+screen text is never serialized to the host or written to a QA log.
 
 Pass `-Confirm` separately to every observation or action. It confirms that
 single command only; it does not authorize a batch. Re-observe after every

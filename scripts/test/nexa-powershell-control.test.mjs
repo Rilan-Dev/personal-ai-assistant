@@ -29,6 +29,49 @@ test('screen read and interactions require explicit one-command confirmation', (
   }
 });
 
+test('one-shot screen read QA bridge commands require explicit confirmation and reject extra fields', () => {
+  assert.ok(control, 'nexaPowerShellControl.ts should exist');
+  const base = {
+    requestId:'12345678-1234-4123-8123-123456789abc',
+    method:'POST',
+    body:{confirmed:true}
+  };
+  assert.deepEqual(control.parsePowerShellRequest({...base,path:'/v1/readarm'}),
+    {kind:'readArm'});
+  assert.deepEqual(control.parsePowerShellRequest({...base,path:'/v1/readreview'}),
+    {kind:'readReview'});
+  for (const path of ['/v1/readarm','/v1/readreview']) {
+    assert.equal(control.parsePowerShellRequest({...base,path,body:{}}).error,'CONFIRM_REQUIRED');
+    assert.equal(control.parsePowerShellRequest({...base,path,
+      body:{confirmed:true,text:'must not be accepted'}}).error,'INVALID_BODY');
+  }
+});
+
+test('screen read QA review returns capture metadata without serializing captured text', async () => {
+  const source = await readFile(new URL('../../apps/mobile/App.tsx', import.meta.url), 'utf8');
+  const start = source.indexOf("request.kind==='readReview'");
+  const end = source.indexOf("request.kind==='invoke'", start);
+  assert.notEqual(start, -1, 'the debug bridge should implement one-shot review');
+  assert.notEqual(end, -1, 'review branch should end before generic tool dispatch');
+  const review = source.slice(start, end);
+  assert.match(review, /const captured=Boolean\(capture\?\.text && capture\.packageName\)/);
+  assert.match(review, /data:\{captured,packageName\}/,
+    'the response must contain status and package only');
+  assert.doesNotMatch(review, /data:\s*capture|data:\s*\{[^}]*text\s*:/,
+    'captured screen text must never be returned by the QA bridge');
+});
+
+test('live one-shot capture QA runner uses confirmed Nexa bridge commands and keeps text private', async () => {
+  const runner = await readFile(new URL('../../scripts/qa/test-screen-assist-live.ps1', import.meta.url), 'utf8');
+  for (const marker of ['armread','device.open_app','com.android.settings','Name back','reviewread'])
+    assert.ok(runner.includes(marker), `live QA runner should include ${marker}`);
+  assert.match(runner, /-Confirm/g);
+  assert.match(runner, /capturedTextReturned\s*=\s*\$false/);
+  assert.doesNotMatch(runner, /adb\s+[^\r\n]*shell|input\s+(?:tap|swipe)|uiautomator/i);
+  assert.doesNotMatch(runner, /capture\?*\.text|screenText/i,
+    'the live QA runner must never print or persist captured screen text');
+});
+
 test('PowerShell tool allowlist excludes outbound sends and exposes app read/control tools', () => {
   assert.ok(control, 'nexaPowerShellControl.ts should exist');
   assert.equal(control.isPowerShellToolAllowed('screen.scroll'),true);
@@ -74,7 +117,7 @@ test('named-key refusal preserves a safe native reason instead of hiding the fai
 
 test('PowerShell client advertises the full command set and contains no shell/raw-input dispatch', async () => {
   const script = await readFile(new URL('../../nexa.ps1', import.meta.url), 'utf8');
-  for (const command of ['status','tools','observe','tree','tap','scroll','key','invoke']) {
+  for (const command of ['status','tools','observe','tree','tap','scroll','key','invoke','armread','reviewread']) {
     assert.match(script, new RegExp('\\b' + command + '\\b'));
   }
   const code = script.replace(/<#[\s\S]*?#>/g, '').replace(/^\s*#.*$/gm, '');

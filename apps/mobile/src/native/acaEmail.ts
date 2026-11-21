@@ -1,5 +1,5 @@
 import { NativeModules, Platform } from "react-native";
-import { getAcaApiOrigin } from "./acaConfig";
+import { getAcaApiOrigin, isAcaApiOriginConfigured } from "./acaConfig";
 
 /** First-party, feature-gated ACA read-only email client. Device credentials
  * are separate from BYOK AI keys and never enter the Android tool planner.
@@ -82,6 +82,8 @@ export async function clearAcaSession():Promise<void> {
   if (!await nativeVault().clearAcaSession())throw new Error("Secure session removal failed");
 }
 async function requestJson(path:string,options:RequestInit = {}):Promise<unknown> {
+  if (!isAcaApiOriginConfigured())
+    throw new Error("ACA Development API origin is not configured in this build.");
   const response=await fetch(ACA_ORIGIN+path,{...options,headers:{
     "Accept":"application/json",
     ...(options.body ? {"Content-Type":"application/json"} : {}),

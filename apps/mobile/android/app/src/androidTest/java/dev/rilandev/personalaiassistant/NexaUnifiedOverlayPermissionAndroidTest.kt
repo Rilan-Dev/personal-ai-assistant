@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.EditText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -20,9 +21,12 @@ class NexaUnifiedOverlayPermissionAndroidTest {
     private val ctx=ApplicationProvider.getApplicationContext<Context>()
 
     @Test fun floatingChatComposerExposesStableAccessibleName() {
-        val input=EditText(ctx)
-        NexaToolOverlayService.configureSharedChatInputAccessibility(input)
-        assertEquals("Ask the same Nexa AI as main Chat",input.contentDescription)
+        lateinit var input: EditText
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            input=EditText(ctx)
+            NexaToolOverlayService.configureSharedChatInputAccessibility(input)
+        }
+        assertEquals("Ask the same Nexa AI as main Chat…",input.contentDescription)
         assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_YES,input.importantForAccessibility)
     }
 

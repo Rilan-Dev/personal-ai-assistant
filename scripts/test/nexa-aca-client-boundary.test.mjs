@@ -45,7 +45,10 @@ function harness(overrides={}) {
       if(name==='react-native')
         return {NativeModules:{PAAAgentJournal:vault},Platform:{OS:'android'}};
       if(name==='./acaConfig')
-        return {getAcaApiOrigin:()=>overrides.origin??apiOrigin};
+        return {
+          getAcaApiOrigin:()=>overrides.origin??apiOrigin,
+          isAcaApiOriginConfigured:()=> (overrides.origin??apiOrigin)!=='https://aca-unconfigured.invalid'
+        };
       if(name==='./acaMailIntent')
         return {parseAcaMailSummaryIntent:()=>null};
       throw new Error('Unexpected import '+name);
@@ -112,6 +115,12 @@ test('bad credentials are rejected locally without contacting ACA',async()=>{
   const h=harness();
   await assert.rejects(h.client.connectAca('bad-address','abc'),/email and password/);
   await assert.rejects(h.client.connectAca('owner@example.invalid',''),/email and password/);
+  assert.equal(h.calls.length,0);
+});
+test('unconfigured development origin explains the missing server without making a DNS request',async()=>{
+  const h=harness({origin:'https://aca-unconfigured.invalid'});
+  await assert.rejects(h.client.connectAca('owner@example.invalid','test-only-password'),
+    /ACA Development API origin is not configured/i);
   assert.equal(h.calls.length,0);
 });
 test('the ACA identity client has no alternate mail-summary endpoint',()=>{
