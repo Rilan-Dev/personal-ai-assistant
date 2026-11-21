@@ -49,6 +49,10 @@ class NexaToolOverlayService : Service() {
 
         const val ACTION_SHOW = "dev.rilandev.personalaiassistant.OVERLAY_SHOW"
         const val ACTION_HIDE = "dev.rilandev.personalaiassistant.OVERLAY_HIDE"
+        internal fun configureSharedChatInputAccessibility(input: EditText) {
+            input.contentDescription = "Ask the same Nexa AI as main Chat…"
+            input.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+        }
         @Volatile var visible = false
             private set
         @Volatile private var activeOverlay:NexaToolOverlayService?=null
@@ -1088,7 +1092,10 @@ class NexaToolOverlayService : Service() {
                 elevation=dp(12).toFloat()
                 addView(text("✦  NEXA  ·  QUICK ASSISTANT",12f,true))
                 addView(text("How can I help?",19f))
-                addView(text("On-device actions need your approval",11f,true))
+                addView(text(
+                    NexaToolOverlayPermissionCopy.note(NexaVoicePermissionPolicy.mode(this@NexaToolOverlayService)),
+                    11f,true
+                ))
                 addView(row(
                     button("Chat") { showSection("chat") },
                     button("Tools") { showSection("tools") },
@@ -1138,6 +1145,7 @@ class NexaToolOverlayService : Service() {
                         }
                         val input = EditText(this@NexaToolOverlayService).apply {
                             hint = "Ask the same Nexa AI as main Chat…"
+                            configureSharedChatInputAccessibility(this)
                             setHintTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).secondary)
                             setTextColor(NexaOverlayTheme.palette(this@NexaToolOverlayService).title)
                             textSize=13f

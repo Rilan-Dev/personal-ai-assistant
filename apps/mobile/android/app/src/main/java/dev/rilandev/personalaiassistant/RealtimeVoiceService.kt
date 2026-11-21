@@ -981,18 +981,34 @@ class RealtimeVoiceService : Service() {
         if(NexaVoiceScreenBinding.requires(tool.command))
             tool.screenBinding=NexaVoiceScreenBinding.capture(this)
         expirePendingTool(tool)
-        // An app discovered by fuzzy launcher label matching may be wrong.
-        // Always show its exact target for review, even in trusted navigation.
-        if(tool.command=="open" && tool.installedApp!=null)return
-        if(selectedProvider=="sarvam-api" && NexaVoicePermissionPolicy.canExecute(this,tool.command)) {
-            // Current user request plus persistent low-risk grant, never model-only
-            // arbitrary permission bypass. High-risk classes cannot be whitelisted.
+        val fullAccess=NexaVoicePermissionPolicy.mode(this)==
+            NexaVoicePermissionPolicy.FULL_ACCESS
+        // A fuzzy app match remains review-gated unless the owner explicitly
+        // selected Full Access; the native launcher still verifies uniqueness.
+        if(tool.command=="open" && tool.installedApp!=null && !fullAccess)return
+        if((selectedProvider=="sarvam-api" || fullAccess) &&
+            NexaVoicePermissionPolicy.canExecute(this,tool.command)) {
+            // A saved low-risk policy or explicit Full Access may skip this
+            // review; OS grants and native target checks still run.
+            tool.approvedBySavedPolicy=true
             main.post { if(active.get() && pendingAppTool===tool) {
-                tool.approvedBySavedPolicy=true
                 onStartCommand(Intent(this,RealtimeVoiceService::class.java).apply{
                     action=ACTION_APPROVE_TOOL
                 },0,0)
             } }
+        }
+    }
+
+    private fun setOwnerToolReview(tool:PendingAppTool,summary:String,
+                                   waiting:String,running:String) {
+        if(tool.approvedBySavedPolicy) {
+            pendingApprovalSummary=null
+            val modeLabel=if(NexaVoicePermissionPolicy.mode(this)==
+                NexaVoicePermissionPolicy.FULL_ACCESS) "Full Access" else "Saved navigation permission"
+            message=running.replace("Full Access",modeLabel)
+        }else{
+            pendingApprovalSummary=summary
+            message=waiting
         }
     }
 
@@ -1091,11 +1107,14 @@ class RealtimeVoiceService : Service() {
                 sarvamApiTransport?.toolResult(lastToolResult)
                 return
             }
-            pendingAppTool=PendingAppTool("local-sarvam",
+            val tool=PendingAppTool("local-sarvam",
                 "WhatsApp chat "+whatsappChat,"open_whatsapp_chat:"+whatsappChat)
-            pendingAppTool?.let{offerOwnerTool(it)}
-            pendingApprovalSummary="Open the one uniquely verified WhatsApp chat matching the requested contact? Approve once or Deny. No text will be read or sent."
-            message="Contact navigation is ready for one owner review."
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Open the one uniquely verified WhatsApp chat matching the requested contact? Approve once or Deny. No text will be read or sent.",
+                "Contact navigation is ready for one owner review.",
+                "Full Access is opening the verified WhatsApp chat.")
             return
         }
         val messageIntent=NexaGeneralMessageVoice.parse(transcript)
@@ -1118,26 +1137,33 @@ class RealtimeVoiceService : Service() {
         }
         val chromeQuery=NexaPhoneVoiceTools.chromeSearchQuery(transcript)
         if(chromeQuery!=null) {
-            pendingAppTool=PendingAppTool("local-sarvam","Chrome search for $chromeQuery",
+            val tool=PendingAppTool("local-sarvam","Chrome search for $chromeQuery",
                 "chrome_search:$chromeQuery")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Open Chrome Google search results for '$chromeQuery'? Approve once or Deny. Article selection is a separate request."
-            message="Public Chrome search awaits owner approval."
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Open Chrome Google search results for '$chromeQuery'? Approve once or Deny. Article selection is a separate request.",
+                "Public Chrome search awaits owner approval.",
+                "Full Access is opening the requested Chrome search.")
             return
         }
         if(NexaPhoneVoiceTools.wantsNotificationShade(transcript)) {
-            pendingAppTool=PendingAppTool("local-sarvam","notification shade",
+            val tool=PendingAppTool("local-sarvam","notification shade",
                 "open_notification_shade")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Open Android's notification shade? No notification contents will be read. Approve or Deny."
-            message="Notification shade opening awaits owner approval."
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Open Android's notification shade? No notification contents will be read. Approve or Deny.",
+                "Notification shade opening awaits owner approval.",
+                "Full Access is opening the notification shade without reading its contents.")
             return
         }
         if(NexaPhoneVoiceTools.wantsGoBack(transcript)) {
-            pendingAppTool=PendingAppTool("local-sarvam","back navigation","go_back")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Navigate Back once? Approve or Deny."
-            message="Back navigation awaits owner approval."
+            val tool=PendingAppTool("local-sarvam","back navigation","go_back")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,"Navigate Back once? Approve or Deny.",
+                "Back navigation awaits owner approval.","Full Access is navigating Back.")
             return
         }
         val screenOperation = NexaPhoneVoiceTools.wantsVisibleText(transcript) ||
@@ -1153,46 +1179,57 @@ class RealtimeVoiceService : Service() {
             return
         }
         if(NexaPhoneVoiceTools.wantsInstalledApps(transcript)) {
-            pendingAppTool=PendingAppTool("local-sarvam","installed launcher apps","list_installed_apps")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Share a limited list of installed launcher-app names with your voice provider? Approve once or Deny."
-            message="App-list reading awaits your approval."
+            val tool=PendingAppTool("local-sarvam","installed launcher apps","list_installed_apps")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Share a limited list of installed launcher-app names with your voice provider? Approve once or Deny.",
+                "App-list reading awaits your approval.",
+                "Full Access is checking installed launcher apps.")
             return
         }
         if(NexaPhoneVoiceTools.wantsVisibleText(transcript)) {
-            pendingAppTool=PendingAppTool("local-sarvam","screen text","read_visible_screen_text")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Read visible app labels and share the result with your voice provider? Approve once or Deny."
-            message="Screen reading awaits your approval. Text fields and passwords are excluded."
+            val tool=PendingAppTool("local-sarvam","screen text","read_visible_screen_text")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Read visible app labels and share the result with your voice provider? Approve once or Deny.",
+                "Screen reading awaits your approval. Text fields and passwords are excluded.",
+                "Full Access is reading visible non-editable screen text.")
             return
         }
         val scroll=NexaPhoneVoiceTools.scrollDirection(transcript)
         if(scroll!=null) {
-            pendingAppTool=PendingAppTool("local-sarvam","scroll $scroll","scroll_screen:$scroll")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Scroll $scroll once in the visible app? Approve once or Deny."
-            message="One accessibility scroll request awaits approval."
+            val tool=PendingAppTool("local-sarvam","scroll $scroll","scroll_screen:$scroll")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,"Scroll $scroll once in the visible app? Approve once or Deny.",
+                "One accessibility scroll request awaits approval.","Full Access is scrolling $scroll.")
             return
         }
         val icon=NexaPhoneVoiceTools.clickSafeIcon(transcript)
         if(icon!=null) {
-            pendingAppTool=PendingAppTool("local-sarvam","$icon control","tap_safe_icon:$icon")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Tap the visible $icon navigation icon once? Approve once or Deny."
-            message="A fresh accessibility target will be checked after approval."
+            val tool=PendingAppTool("local-sarvam","$icon control","tap_safe_icon:$icon")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,"Tap the visible $icon navigation icon once? Approve once or Deny.",
+                "A fresh accessibility target will be checked after approval.","Full Access is checking and tapping the visible $icon control.")
             return
         }
         val label=NexaPhoneVoiceTools.tapVisibleLabelIntent(transcript)
         if(label!=null) {
-            pendingAppTool=PendingAppTool("local-sarvam",label,"tap_visible_label:$label")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Tap the uniquely visible control named $label once? Approve or Deny. No raw coordinates are trusted."
-            message="A screen-grounded labeled tap awaits approval."
+            val tool=PendingAppTool("local-sarvam",label,"tap_visible_label:$label")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,
+                "Tap the uniquely visible control named $label once? Approve or Deny. No raw coordinates are trusted.",
+                "A screen-grounded labeled tap awaits approval.",
+                "Full Access is grounding the visible $label control before tapping.")
             return
         }
         if(NexaPhoneVoiceTools.wantsScreenHelp(transcript)) {
             val help=if(ScreenAssistState.connected && ScreenAssistService.active!=null)
-                "Screen Assist is enabled. Say read my screen, scroll left, scroll right, scroll up, scroll down, tap menu, or open a named app. Review each proposed action in the Nexa overlay."
+                "Screen Assist is enabled. Say read my screen, scroll left, scroll right, scroll up, scroll down, tap menu, or open a named app. Nexa follows your selected permission mode."
                 else "Enable Nexa Screen Assist through Tools, then Android Accessibility Settings. After enabling, say read my screen or scroll down and approve the action in the Nexa overlay."
             lastToolResult=help
             message=help
@@ -1225,11 +1262,13 @@ class RealtimeVoiceService : Service() {
             return
         }
         if(NexaPhoneVoiceTools.wantsScreenOverview(transcript)) {
-            pendingAppTool=PendingAppTool("local-sarvam","visible screen controls","observe_screen_icons")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Read labeled icons on the visible screen once? Approve or Deny below."
-            message="Approve screen icon inspection. No screenshot or tap will occur."
-            try {
+            val tool=PendingAppTool("local-sarvam","visible screen controls","observe_screen_icons")
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,"Read labeled icons on the visible screen once? Approve or Deny below.",
+                "Approve screen icon inspection. No screenshot or tap will occur.",
+                "Full Access is inspecting visible icon labels once.")
+            if(!tool.approvedBySavedPolicy)try {
                 getSystemService(NotificationManager::class.java).notify(
                     NOTIFICATION_ID,makeNotification("Screen inspection approval pending"))
             } catch (_: Exception) {}
@@ -1237,12 +1276,14 @@ class RealtimeVoiceService : Service() {
         }
         val requestedIcon=NexaPhoneVoiceTools.locateIconIntent(transcript)
         if(requestedIcon!=null) {
-            pendingAppTool=PendingAppTool("local-sarvam", "$requestedIcon icon",
+            val tool=PendingAppTool("local-sarvam", "$requestedIcon icon",
                 "locate_icon:$requestedIcon")
-            pendingAppTool?.let { offerOwnerTool(it) }
-            pendingApprovalSummary="Locate the $requestedIcon icon on screen once? Approve or Deny."
-            message="Awaiting owner approval for read-only icon lookup. No tap or screenshot."
-            try {
+            pendingAppTool=tool
+            offerOwnerTool(tool)
+            setOwnerToolReview(tool,"Locate the $requestedIcon icon on screen once? Approve or Deny.",
+                "Awaiting owner approval for read-only icon lookup. No tap or screenshot.",
+                "Full Access is locating the $requestedIcon icon once.")
+            if(!tool.approvedBySavedPolicy)try {
                 getSystemService(NotificationManager::class.java).notify(
                     NOTIFICATION_ID,makeNotification("Icon lookup approval pending"))
             } catch (_: Exception) {}
@@ -1268,10 +1309,13 @@ class RealtimeVoiceService : Service() {
         }
         val pending=pendingAppTool ?: return
         expirePendingTool(pending)
+        if(NexaVoicePermissionPolicy.mode(this)==NexaVoicePermissionPolicy.FULL_ACCESS)
+            offerOwnerTool(pending)
         val requested=pending.app
-        pendingApprovalSummary = "Open $requested? Tap Approve once or Deny here."
-        message = "Approval needed to open $requested · no app has been opened yet"
-        try {
+        setOwnerToolReview(pending,"Open $requested? Tap Approve once or Deny here.",
+            "Approval needed to open $requested · no app has been opened yet",
+            "Full Access is opening $requested after the native app check.")
+        if(!pending.approvedBySavedPolicy)try {
             getSystemService(NotificationManager::class.java).notify(
                 NOTIFICATION_ID, makeNotification("App approval pending · tap Nexa overlay"))
         } catch (_: Exception) {}
@@ -1344,8 +1388,14 @@ class RealtimeVoiceService : Service() {
                     sendRealtimeToolOutput(id, decision.result)
                 }
                 is NexaLiveToolPolicy.Decision.NeedsApproval -> {
-                    pendingAppTool = PendingAppTool(id, decision.app, decision.command,decision.installedApp)
-                    pendingAppTool?.let { offerOwnerTool(it) }
+                    val tool=PendingAppTool(id, decision.app, decision.command,decision.installedApp)
+                    pendingAppTool=tool
+                    offerOwnerTool(tool)
+                    if(tool.approvedBySavedPolicy) {
+                        pendingApprovalSummary=null
+                        message="Full Access is running the requested tool after native checks."
+                        break
+                    }
                     pendingApprovalSummary = when {
                         decision.command=="list_installed_apps" ->
                             "Share a limited launcher app list with voice provider? Approve once or Deny."

@@ -4,7 +4,7 @@ import {
   StatusBar, StyleSheet, Text, TextInput, View, PermissionsAndroid, Linking, Image, DeviceEventEmitter, NativeModules
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation, parsePowerShellRequest, isPowerShellToolAllowed, getPowerShellToolMetadata, requiresPowerShellConfirmation } from '@paa/agent-core';
+import { AgentHarness, ToolRegistry, createDemoTools, demoPlanner, androidIntentPlanner, createRemotePlanner, validateAgentEndpoint, approvalFingerprint, PROVIDERS, validateProviderSettings, createDirectProviderPlanner, testDirectProvider, identifyIconCrop, resolveScreenQuestion, summarizeScreenControls, scoreIconEvidence, inspectGuidedScreenPlan, createIconReviewSession, createOwnerScreenGrant, createReadOnlyScreenTools, createScreenAwarePlanner, createTaskAdmissionPlanner, withTrustedOwnerNavigation, withFullAccessApprovals, parsePowerShellRequest, isPowerShellToolAllowed, getPowerShellToolMetadata, requiresPowerShellConfirmation } from '@paa/agent-core';
 import type { Planner, RunOptions } from '@paa/agent-core';
 import {parseReviewedWhatsAppIntent,parseMessageRequest,decideMessageApp,recipientMemoryKey,parseReviewedTextEntry} from "@paa/agent-core";
 import type {MessageRequest,InstalledMessageApp,ReviewedTextEntry} from "@paa/agent-core";
@@ -30,6 +30,7 @@ import {toolOverlayAvailable, requestToolOverlayPermission, showToolOverlay,
   NEXA_SHARED_OVERLAY_CHAT_EVENT, NEXA_SHARED_OVERLAY_CHAT_APPROVAL_EVENT,
   NEXA_SHARED_OVERLAY_CHAT_TIMEOUT_EVENT,
   canAutoApproveTrustedNavigation,
+  canAutoApproveFullAccess,
   consumeSpokenMessageRequest,consumeSpokenTextEntry} from './src/native/androidToolOverlay';
 import {isSafeSharedOverlayActionSummary} from './src/native/overlayActionReview';
 import { whatsAppDraftAvailable, openWhatsAppReviewedDraft } from './src/native/androidWhatsAppDraft';
@@ -146,11 +147,23 @@ async function runPowerShellTool(engine:ReturnType<typeof makeEngine>,toolId:str
   const harness=new AgentHarness(engine.registry,planner);
   const sessionId=await newAndroidSessionId();
   let safeToolErrorCode:string|undefined;
+  // A PowerShell -Confirm is the owner's exact, one-shot approval for this
+  // debug invocation. Commit it in the same durable journal transaction
+  // before dispatch, instead of forcing a second in-app approve/resume cycle.
+  const actionJournal=confirmed?{
+    ...androidActionJournal,
+    async prepareApproval(id:string,call:string,fingerprint:string){
+      const prepared=await androidActionJournal.prepareApproval(id,call,fingerprint);
+      if(!prepared)return false;
+      try{return await androidActionJournal.approveAction(id,call,fingerprint);}
+      catch{return false;}
+    }
+  }:androidActionJournal;
   const options:RunOptions={
     request:`PowerShell action ${toolId}`,
     sessionId,
     grantedCapabilities:new Set(tool.capabilities),
-    journal:androidActionJournal,
+    journal:actionJournal,
     onToolError:(code:string)=>{safeToolErrorCode=code;},
     checkpointObservations:observations=>observations.map(observation=>{
       if(observation.call.toolId!=='screen.accessibility_tree'||
@@ -230,10 +243,15 @@ export default function App() {
               }};
             }else{
               const result=await runPowerShellTool(engine,'device.status',{},false,event.requestId);
+              let ownerActionsPaused:boolean|null=null;
+              let fullAccessAppLaunchReady:boolean|null=null;
+              try{ownerActionsPaused=await readNativeActionsPaused();}catch{/* Status remains useful if the safety module is unavailable. */}
+              try{fullAccessAppLaunchReady=await canAutoApproveFullAccess('device.open_app');}catch{/* Expose unknown rather than guessing. */}
               response=result.ok?{ok:true,data:{
                 protocol:'nexa-qa-v1',executor:'NexaAppTools',debugBuild:true,
                 rawAdbInput:false,bridgeAvailable:true,engineLive:true,
-                registeredToolCount:engine.toolCount,...(result.data as Record<string,unknown>)
+                registeredToolCount:engine.toolCount,ownerActionsPaused,
+                fullAccessAppLaunchReady,...(result.data as Record<string,unknown>)
               }}:result;
             }
           }else if(request.kind==='observe'){
@@ -1768,6 +1786,10 @@ export default function App() {
     setTab('chat');
     const request = value.trim();
     if (!request || running || listening || voiceInProgress.current || activeAbort.current) return;
+    const selectedPermissionMode=engine.live
+      ? await getVoicePermissionMode().catch(()=>'ask_every_time' as VoicePermissionMode)
+      : 'ask_every_time';
+    const fullAccessMode=selectedPermissionMode==='full_access';
     if(sharedOverlayToken){
       overlayApprovalRequestRef.current=null;
       overlayPendingApprovalToken.current=null;
@@ -1991,7 +2013,7 @@ export default function App() {
     }
     // User-named external text inputs require an independent screen-grounded
     // review. The AI never chooses a guessed box or submits the text.
-    if(!restore && engine.live){
+    if(!restore && engine.live && !fullAccessMode){
       const requestedText=parseReviewedTextEntry(request);
       if(requestedText){
         setInput('');setEvents([]);append('user',request);
@@ -2051,21 +2073,26 @@ export default function App() {
               throw Error('Native coordinator refused the proposed plan');
           }
         });
-      // A previously selected persistent mode avoids repetitive IN-APP
-      // approval taps for explicitly requested low-risk navigation only.
-      // It never bypasses Android Accessibility, owner Pause, encrypted
-      // claim/replay checks or review for a consequential device action.
-      const trustedMode=restore ? 'ask_every_time' :
-        await getVoicePermissionMode().catch(()=>'ask_every_time' as VoicePermissionMode);
+      // Full Access applies to registered Chat/overlay tools, including a
+      // resumed unclaimed step. Other saved modes keep their previous resume
+      // behavior and only trust explicitly requested low-risk navigation.
+      const trustedMode=restore && selectedPermissionMode!=='full_access'
+        ? 'ask_every_time' : selectedPermissionMode;
       const localGrants=new Set(capabilities);
-      if(trustedMode!=='ask_every_time'){
+      if(trustedMode==='full_access'){
+        for(const tool of engine.registry.describe())
+          for(const capability of tool.capabilities)localGrants.add(capability);
+      }else if(trustedMode!=='ask_every_time'){
         localGrants.add('apps.launch');
         localGrants.add('device.interact');
       }
-      const sharedJournal=withTrustedOwnerNavigation(
-        androidActionJournal,request,canAutoApproveTrustedNavigation,
-        trustedMode!=='ask_every_time' && !restore
-      );
+      const sharedJournal=trustedMode==='full_access'
+        ? withFullAccessApprovals(androidActionJournal,engine.registry.describe(),
+            canAutoApproveFullAccess,true)
+        : withTrustedOwnerNavigation(
+            androidActionJournal,request,canAutoApproveTrustedNavigation,
+            trustedMode!=='ask_every_time' && !restore
+          );
       const plannerErrorDiagnostics:{code:string|null}={code:null};
       const toolErrorDiagnostics:{code:string|null}={code:null};
       const harness=new AgentHarness(engine.registry,admittedPlanner);
@@ -2632,7 +2659,9 @@ export default function App() {
               <Text style={styles.composerSendText}>{running?'■':'↑'}</Text>
             </Pressable>
           </View>
-          <Text style={styles.composerNote}>Actions require your permission. AI can make mistakes.</Text>
+          <Text style={styles.composerNote}>{voicePermissionMode==='full_access'
+            ? 'Full Access is on. Nexa runs available tools without routine approval; Android permissions and protected sends still apply.'
+            : 'Actions require your permission. AI can make mistakes.'}</Text>
         </View>
       </KeyboardAvoidingView>}
 
@@ -2738,14 +2767,16 @@ export default function App() {
             <Text style={styles.warning}>Muted: only silence is transmitted. Android microphone hardware remains open until you stop the session.</Text>}
         </View>
         <View style={styles.sectionCard}>
-          <Text style={styles.cardHeading}>Permission mode for voice tasks</Text>
-          <Text style={styles.cardText}>Choose whether Nexa can reuse approvals for low-risk navigation: ordinary scrolling, safe icons and app opening. Screen contents, installed-app lists, arbitrary text-label taps, messages, calls, payments and Android system grants still need explicit review. Revoke stored approvals any time.</Text>
+          <Text style={styles.cardHeading}>Permission mode for Nexa tasks</Text>
+          <Text style={styles.cardText}>This mode applies to Chat and floating-overlay tasks, plus supported live-voice actions. Full Access runs registered tools without Nexa approval waits, including screen reading, navigation and text entry. Android permissions, device unlock and the emergency Pause control still apply. Sending messages, calls or payments still requires exact review. Screen content used by cloud AI may be shared with your selected provider. Revoke stored approvals at any time.</Text>
           {([
             ['ask_every_time','Ask every time (default)'],
             ['trusted_safe','Reuse individually approved safe actions'],
             ['trusted_navigation','Allow routine navigation without repeated prompts'],
+            ['full_access','Full Access (skip routine tool approvals)'],
           ] as [VoicePermissionMode,string][]).map(([mode,label])=>
             <Pressable key={mode} accessibilityRole="button"
+              accessibilityState={{selected:voicePermissionMode===mode}}
               style={styles.outlineAction} onPress={()=>void choosePermissionMode(mode)}>
               <Text style={styles.outlineActionText}>{voicePermissionMode===mode?'◉ ':'○ '}{label}</Text>
             </Pressable>)}
@@ -2755,7 +2786,7 @@ export default function App() {
           </Pressable>
           {voicePermissionNotice!==''&&<Text style={styles.settingHelp}>{voicePermissionNotice}</Text>}
           <Text style={styles.cardHeading}>Live session permissions and limitations</Text>
-          <Text style={styles.cardText}>Nexa live voice can request one-time approved Accessibility screen reading, safe visible-control taps, four-direction scrolling, icon detection and app opening. Enable Screen Assist in Tools → Accessibility Settings and review each action in the floating overlay. Unavailable Accessibility permissions never grant themselves. Live conversation uses the saved Sarvam Model API or OpenAI provider key. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
+          <Text style={styles.cardText}>Nexa live voice supports Accessibility screen reading, safe visible-control taps, four-direction scrolling, icon detection and app opening. In Full Access, supported non-outbound actions run without Nexa approval waits; other modes may request review. Enable Screen Assist in Tools → Accessibility Settings. Unavailable Android permissions never grant themselves. Live conversation uses the saved Sarvam Model API or OpenAI provider key; Screen Assist text may be sent to that provider when needed for your request. A Sarvam session requires separate streaming consent, and Hey Nexa can invoke only the currently authorized provider. There is no Samvaad workspace requirement or silent provider fallback. The separate opt-in offline Hey Nexa listener uses a local model and may remain active in the background; Android shows a microphone indicator and Stop notification. Network, permissions and device power policies can interrupt listening.</Text>
         </View>
         <View style={styles.sectionCard}>
           <Text style={styles.cardHeading}>Private conversation history · custom.db</Text>

@@ -9,13 +9,13 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class NexaKeyActionSurfacePolicyAndroidTest {
     @Test fun ownerWindowCanUseNamedHomeAndNotificationsWithoutExternalAppRoot() {
-        assertEquals("dev.rilandev.personalaiassistant.physicalqa2",
+        assertEquals("dev.rilandev.personalaiassistant.debug",
             NexaKeyActionSurfacePolicy.fallbackPackage(
-                "home", "dev.rilandev.personalaiassistant.physicalqa2",
+                "home", "dev.rilandev.personalaiassistant.debug",
                 ownerWindowFocused=true, notificationShadeVisible=false))
         assertEquals("com.android.systemui",
             NexaKeyActionSurfacePolicy.fallbackPackage(
-                "notifications", "dev.rilandev.personalaiassistant.physicalqa2",
+                "notifications", "dev.rilandev.personalaiassistant.debug",
                 ownerWindowFocused=true, notificationShadeVisible=false))
     }
 
@@ -23,22 +23,22 @@ class NexaKeyActionSurfacePolicyAndroidTest {
         for (name in listOf("home", "back")) {
             assertEquals(name, "com.android.systemui",
                 NexaKeyActionSurfacePolicy.fallbackPackage(
-                    name, "dev.rilandev.personalaiassistant.physicalqa2",
+                    name, "dev.rilandev.personalaiassistant.debug",
                     ownerWindowFocused=false, notificationShadeVisible=true))
         }
         assertNull(NexaKeyActionSurfacePolicy.fallbackPackage(
-            "notifications", "dev.rilandev.personalaiassistant.physicalqa2",
+            "notifications", "dev.rilandev.personalaiassistant.debug",
             ownerWindowFocused=false, notificationShadeVisible=false))
     }
 
     @Test fun noFallbackExistsForUnknownKeysOrUnverifiedSurfaces() {
         for (name in listOf("enter", "delete", "raw_keycode_3", "")) {
             assertNull(NexaKeyActionSurfacePolicy.fallbackPackage(
-                name, "dev.rilandev.personalaiassistant.physicalqa2",
+                name, "dev.rilandev.personalaiassistant.debug",
                 ownerWindowFocused=true, notificationShadeVisible=true))
         }
         assertNull(NexaKeyActionSurfacePolicy.fallbackPackage(
-            "home", "dev.rilandev.personalaiassistant.physicalqa2",
+            "home", "dev.rilandev.personalaiassistant.debug",
             ownerWindowFocused=false, notificationShadeVisible=false))
     }
 

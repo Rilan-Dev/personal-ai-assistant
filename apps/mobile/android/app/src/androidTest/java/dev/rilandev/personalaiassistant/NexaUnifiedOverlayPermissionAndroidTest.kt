@@ -1,6 +1,8 @@
 package dev.rilandev.personalaiassistant
 
 import android.content.Context
+import android.view.View
+import android.widget.EditText
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.json.JSONObject
@@ -16,6 +18,13 @@ import java.util.UUID
 @RunWith(AndroidJUnit4::class)
 class NexaUnifiedOverlayPermissionAndroidTest {
     private val ctx=ApplicationProvider.getApplicationContext<Context>()
+
+    @Test fun floatingChatComposerExposesStableAccessibleName() {
+        val input=EditText(ctx)
+        NexaToolOverlayService.configureSharedChatInputAccessibility(input)
+        assertEquals("Ask the same Nexa AI as main Chat",input.contentDescription)
+        assertEquals(View.IMPORTANT_FOR_ACCESSIBILITY_YES,input.importantForAccessibility)
+    }
 
     @Test fun trustedNavigationNeverEscalatesToCallsMessagesOrPrivateContent() {
         val previous=NexaVoicePermissionPolicy.mode(ctx)

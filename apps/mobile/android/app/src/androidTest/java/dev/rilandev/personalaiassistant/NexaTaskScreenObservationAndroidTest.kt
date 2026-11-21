@@ -77,7 +77,7 @@ class NexaTaskScreenObservationAndroidTest {
         assertNotNull(NexaTaskScreenObservation.matchingAssistantSnapshot(
             observation,matching))
 
-        val ownerWindow=JSONObject().put("packageId", "dev.rilandev.personalaiassistant.physicalqa2")
+        val ownerWindow=JSONObject().put("packageId", "dev.rilandev.personalaiassistant.debug")
             .put("snapshotId","123e4567-e89b-42d3-a456-426614174001")
             .put("targets",JSONArray()).put("truncated",false).toString()
         assertNull("a focused Nexa window cannot ground a third-party control",

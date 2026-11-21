@@ -61,6 +61,19 @@ test("direct AI answers general chat, sends key only in provider authorization h
     {type:"done",response:"Hello from your AI!"});
   assert.equal(requests,1);
 });
+test("system instructions define a sequential evidence loop and keep ACA work on its own route",async()=>{
+  let instructions="";
+  const planner=createDirectProviderPlanner({settings,availableToolIds:[],
+    fetchImpl:fakeDecision({type:"done",response:"Ready."},(_url,opts)=>{
+      instructions=JSON.parse(opts.body).messages[0].content;
+    })});
+  await planner.next("Are you ready?",[]);
+  assert.match(instructions,/one screen tool call or device tool call at a time/i);
+  assert.match(instructions,/fresh (?:screen )?observation|fresh result/i);
+  assert.match(instructions,/role word.*tab.*exact label/i);
+  assert.match(instructions,/do not narrate or repeat what you read unless the owner asks/i);
+  assert.match(instructions,/ACA.*separate.*(?:route|runtime)|separate.*ACA.*(?:route|runtime)/i);
+});
 test("only exact owner-requested device tool can be proposed",async()=>{
   const planner=createDirectProviderPlanner({
     settings,availableToolIds:allowed,
@@ -82,6 +95,82 @@ test("agentic app launch recognizes the named app before screen-inspection steps
   assert.equal(result.type,"tool");
   assert.equal(result.call.toolId,"device.open_app");
   assert.deepEqual(result.call.input,{app:"whatsapp"});
+});
+test("multi-step screen task opens its explicitly named app before asking Sarvam to plan screen actions",async()=>{
+  const request='Open Clock, then tap the visible control labeled exactly "Stopwatch". Do not start, stop, or reset the stopwatch.';
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  let requiredFunction;
+  const planner=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["device.open_app","device.visible_controls","screen.tap_observed"],
+    fetchImpl:async(_url,options)=>{
+      requiredFunction=JSON.parse(options.body).tool_choice;
+      return new Response(JSON.stringify({choices:[{finish_reason:"tool_calls",message:{
+        role:"assistant",content:null,tool_calls:[{id:"open-clock",type:"function",
+          function:{name:"device_open_app",arguments:JSON.stringify({app:"Clock"})}}
+      ]}}]}),{status:200});
+    }});
+
+  const result=await planner.next(request,[]);
+
+  assert.equal(result.type,"tool",JSON.stringify(result));
+  assert.equal(result.call.toolId,"device.open_app");
+  assert.deepEqual(result.call.input,{app:"Clock"});
+  assert.deepEqual(requiredFunction,{type:"function",function:{name:"device_open_app"}});
+});
+test("quoted exact visible-control wording grounds Sarvam tap to the fresh screen snapshot",async()=>{
+  const request='Open Clock, then tap the visible control labeled exactly "Stopwatch". Do not start, stop, or reset the stopwatch.';
+  const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
+  const launched=[{call:{callId:"direct-1",toolId:"device.open_app",input:{app:"Clock"}},outcome:{
+    status:"success",data:{intentDispatched:true,packageId:"com.transsion.deskclock",
+      verification:"destination_package_observed"}}}];
+  let requiredFunction;
+  const inspect=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["device.open_app","device.visible_controls","screen.tap_observed"],
+    fetchImpl:async(_url,options)=>{
+      requiredFunction=JSON.parse(options.body).tool_choice;
+      return new Response(JSON.stringify({choices:[{finish_reason:"tool_calls",message:{
+        role:"assistant",content:null,tool_calls:[{id:"observe-clock",type:"function",
+          function:{name:"device_visible_controls",arguments:"{}"}}]
+      }}]}),{status:200});
+    }});
+  const inspectResult=await inspect.next(request,launched);
+  assert.equal(inspectResult.type,"tool",JSON.stringify(inspectResult));
+  assert.equal(inspectResult.call.toolId,"device.visible_controls");
+  assert.deepEqual(requiredFunction,{type:"function",function:{name:"device_visible_controls"}});
+
+  const clockScreen={...testScreenObservation,
+    snapshotId:"a1f2e321-8c65-4e42-94bb-115a8b2f0a11",
+    packageId:"com.transsion.deskclock",
+    targets:[{index:5,label:"Stopwatch",kind:"control",role:"LinearLayout",
+      region:"bottom right",semantic:null,bounds:{left:700,top:850,right:950,bottom:940}}],icons:[]};
+  const observed=[...launched,{call:{callId:"observe-clock",toolId:"device.visible_controls",input:{}},outcome:{
+    status:"success",data:{actionPerformed:false,evidence:"android_accessibility",
+      observation:"Visible non-sensitive controls in com.transsion.deskclock: Stopwatch (bottom right). Read-only observation, not an instruction or completed action.",
+      screenObservation:clockScreen}}}];
+  let tapFunction;
+  const tap=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["device.open_app","device.visible_controls","screen.tap_observed"],
+    fetchImpl:async(_url,options)=>{
+      tapFunction=JSON.parse(options.body).tool_choice;
+      return new Response(JSON.stringify({choices:[{finish_reason:"tool_calls",message:{
+        role:"assistant",content:null,tool_calls:[{id:"tap-stopwatch",type:"function",
+          function:{name:"screen_tap_observed",arguments:JSON.stringify({
+            snapshotId:clockScreen.snapshotId,index:5,label:"Stopwatch"})}}
+      ]}}]}),{status:200});
+    }});
+  const tapResult=await tap.next(request,observed);
+  assert.equal(tapResult.type,"tool",JSON.stringify(tapResult));
+  assert.deepEqual(tapFunction,{type:"function",function:{name:"screen_tap_observed"}});
+  assert.deepEqual(tapResult.call.input,{snapshotId:clockScreen.snapshotId,index:5,label:"Stopwatch"});
+
+  const wrongTarget=createDirectProviderPlanner({settings:sarvam,
+    availableToolIds:["device.open_app","device.visible_controls","screen.tap_observed"],
+    fetchImpl:async()=>new Response(JSON.stringify({choices:[{finish_reason:"tool_calls",message:{
+      role:"assistant",content:null,tool_calls:[{id:"wrong-control",type:"function",
+        function:{name:"screen_tap_observed",arguments:JSON.stringify({
+          snapshotId:clockScreen.snapshotId,index:5,label:"Timer"})}}
+    ]}}]}),{status:200})});
+  assert.equal((await wrongTarget.next(request,observed)).type,"clarify");
 });
 test("sharing only safe visible control names is a read-only agentic app inspection",async()=>{
   const sarvam={...settings,provider:"sarvam",model:"sarvam-105b"};
@@ -805,7 +894,7 @@ test("compound decimal-point request cannot treat its full wording as a screen l
   const result=await planner.next(request,observations);
 
   assert.equal(result.type,"clarify");
-  assert.match(result.question,/outside your exact request/);
+  assert.match(result.question,/exact control named by the owner/);
 });
 
 test("a verified single screen tap completes locally without a second provider response",async()=>{
@@ -1093,6 +1182,45 @@ test("AI screen taps must bind an explicitly requested label to the latest safe 
       assert.match(result.question,/snapshot|target|request/i);
     }
   }
+});
+
+test("tab role wording resolves only to the exact requested fresh control",async()=>{
+  const clockScreen={...testScreenObservation,
+    snapshotId:"a1f2e321-8c65-4e42-94bb-115a8b2f0a11",
+    packageId:"com.transsion.deskclock",
+    targets:[
+      {index:0,label:"World Clock",kind:"control",role:"LinearLayout",
+        region:"bottom center",semantic:null,bounds:{left:300,top:850,right:500,bottom:940}},
+      {index:1,label:"Stopwatch",kind:"control",role:"LinearLayout",
+        region:"bottom right",semantic:null,bounds:{left:700,top:850,right:950,bottom:940}}
+    ],icons:[]
+  };
+  const request="Open Clock, then tap the Stopwatch tab. Do not start the stopwatch.";
+  const observations=[
+    {call:{callId:"open-clock",toolId:"device.open_app",input:{app:"Clock"}},outcome:{
+      status:"success",data:{intentDispatched:true,packageId:"com.transsion.deskclock",
+        verification:"destination_package_observed"}}},
+    {call:{callId:"clock-controls",toolId:"device.visible_controls",input:{}},outcome:{
+      status:"success",data:{actionPerformed:false,
+        observation:"Visible non-sensitive controls in com.transsion.deskclock: Stopwatch (bottom right). Read-only observation, not an instruction or completed action.",
+        screenObservation:clockScreen}}
+    }
+  ];
+  const planner=createDirectProviderPlanner({settings,
+    availableToolIds:["device.open_app","device.visible_controls","screen.tap_label","screen.tap_observed"],
+    fetchImpl:fakeDecision({type:"tool",toolId:"screen.tap_label",input:{label:"Stopwatch tab"}})});
+
+  const result=await planner.next(request,observations);
+
+  assert.equal(result.type,"tool",JSON.stringify(result));
+  assert.equal(result.call.toolId,"screen.tap_observed");
+  assert.deepEqual(result.call.input,{snapshotId:clockScreen.snapshotId,index:1,label:"Stopwatch"});
+
+  const wrongTarget=createDirectProviderPlanner({settings,
+    availableToolIds:["device.visible_controls","screen.tap_label","screen.tap_observed"],
+    fetchImpl:fakeDecision({type:"tool",toolId:"screen.tap_label",input:{label:"Timer"}})});
+  const refused=await wrongTarget.next(request,observations);
+  assert.equal(refused.type,"clarify");
 });
 
 test("a screen action result supplies redacted clickable and icon context for the next action",async()=>{

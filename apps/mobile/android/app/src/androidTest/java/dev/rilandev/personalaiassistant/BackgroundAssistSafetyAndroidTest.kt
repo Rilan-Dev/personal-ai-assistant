@@ -74,6 +74,7 @@ class BackgroundAssistSafetyAndroidTest {
     @Test fun ownerArmedVisibleTextSnapshotIsOneTimeAndOnlyInMemory() {
         // Simulated owner enabling the service. No Android screen or outside
         // application is read during this test.
+        val initialConnection = ScreenAssistState.connected
         try {
             ScreenAssistState.clear()
             ScreenAssistState.connected = true
@@ -87,12 +88,13 @@ class BackgroundAssistSafetyAndroidTest {
             assertFalse(first.first.contains("Never collect"))
             assertNull("Repeated snapshot read must be empty", ScreenAssistState.consume())
         } finally {
-            ScreenAssistState.connected = false
             ScreenAssistState.clear()
+            ScreenAssistState.connected = initialConnection
         }
     }
 
     @Test fun screenSnapshotIsBoundedAndOwnerCanDiscardWithoutReading() {
+        val initialConnection = ScreenAssistState.connected
         try {
             ScreenAssistState.clear()
             ScreenAssistState.connected = true
@@ -107,8 +109,8 @@ class BackgroundAssistSafetyAndroidTest {
             assertNull("Owner discard must purge memory",ScreenAssistState.consume())
             assertFalse(ScreenAssistState.isArmed())
         } finally {
-            ScreenAssistState.connected = false
             ScreenAssistState.clear()
+            ScreenAssistState.connected = initialConnection
         }
     }
 

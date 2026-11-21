@@ -22,15 +22,19 @@ test('one isolated .debug app supports Metro Fast Refresh and source identity ch
   assert.ok(gradle.includes('paaLiveDebug'), 'Gradle needs the explicit live-debug property');
   assert.ok(/liveDebugBuild[\s\S]*?debuggableVariants = \["debug"\]/.test(gradle),
     'live debug builds must use Metro/Fast Refresh');
-  assert.ok(/PAA_USE_EMBEDDED_JS_BUNDLE[\s\S]*?useEmbeddedPhysicalQaBundle/.test(gradle),
-    'live debug config must flow into the runtime bundle setting');
+  assert.ok(/PAA_USE_EMBEDDED_JS_BUNDLE[\s\S]*?useEmbeddedDebugBundle/.test(gradle),
+    'debug build mode must flow into the runtime bundle setting');
   assert.ok(/liveDebugBuild[\s\S]*?applicationIdSuffix '\.debug'/.test(gradle),
     'live debug must resolve to the single isolated .debug package');
-  assert.ok(/liveDebugBuild[\s\S]*?installDebugAlongsideRelease[\s\S]*?GradleException/.test(gradle),
-    'live debug must refuse to overwrite the release package');
+  assert.match(gradle,/applicationIdSuffix '\.debug'/,
+    'every debug build must use the one isolated .debug identity');
+  assert.doesNotMatch(gradle,/physicalqa2?|paaIsolatedPhysicalQa/,
+    'no additional Nexa QA application identity may be built');
   assert.ok(runner.includes('personalaiassistant.debug'), 'physical live runner must target .debug');
   assert.ok(cli.includes("PackageId = 'dev.rilandev.personalaiassistant.debug'"),
     'Nexa CLI must default to the single .debug package');
+  assert.match(cli,/PackageId -ne 'dev\.rilandev\.personalaiassistant\.debug'/,
+    'Nexa CLI must reject other package identities');
   assert.ok(identity.includes('dev.rilandev.personalaiassistant.debug'),
     'source identity checks must permit the isolated .debug package');
 });

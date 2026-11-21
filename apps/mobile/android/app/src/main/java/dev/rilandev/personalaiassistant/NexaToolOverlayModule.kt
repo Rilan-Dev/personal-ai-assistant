@@ -89,6 +89,10 @@ class NexaToolOverlayModule(private val context: ReactApplicationContext) :
         p.resolve(NexaVoicePermissionPolicy.canExecute(context,command))
     }
 
+    @ReactMethod fun canAutoApproveFullAccess(toolId:String,p:Promise) {
+        p.resolve(NexaVoicePermissionPolicy.canExecuteFullAccess(context,toolId))
+    }
+
     @ReactMethod fun getStatus(p: Promise) {
         val result = Arguments.createMap()
         result.putBoolean("granted", Settings.canDrawOverlays(context))

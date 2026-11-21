@@ -10,7 +10,7 @@ const transport=readFileSync(root+'SarvamApiVoiceTransport.kt','utf8');
 const scroll=readFileSync(root+'NexaScreenScroll.kt','utf8');
 const ui=readFileSync(root+'NexaToolOverlayService.kt','utf8');
 
-test('Sarvam voice routes explicit screen request to native visible single-use owner approval',()=>{
+test('Sarvam voice routes explicit screen requests through Full Access policy and the native one-use gate',()=>{
   assert.match(service,/NexaPhoneVoiceTools\.wantsVisibleText\(text\)/);
   assert.match(service,/NexaPhoneVoiceTools\.scrollDirection\(text\)/);
   assert.match(service,/NexaPhoneVoiceTools\.clickSafeIcon\(text\)/);
@@ -19,7 +19,10 @@ test('Sarvam voice routes explicit screen request to native visible single-use o
   assert.match(service,/Screen Assist is disabled/);
   assert.match(service,/scroll_screen:/);
   assert.match(service,/tap_safe_icon:/);
-  assert.match(service,/pendingApprovalSummary="Read visible app labels and share the result with your voice provider/);
+  assert.match(service,/mode\(this\)==\s*NexaVoicePermissionPolicy\.FULL_ACCESS/);
+  assert.match(service,/NexaVoicePermissionPolicy\.canExecute\(this,tool\.command\)/);
+  assert.match(service,/setOwnerToolReview\(tool,\s*"Read visible app labels and share the result with your voice provider/);
+  assert.match(service,/pendingApprovalSummary=summary/);
   assert.match(service,/NexaScreenVoiceOverview\.readVisibleTextApproved\(\)/);
   assert.match(service,/NexaScreenVoiceOverview\.scrollApproved/);
   assert.match(service,/NexaScreenVoiceOverview\.tapSafeApproved/);

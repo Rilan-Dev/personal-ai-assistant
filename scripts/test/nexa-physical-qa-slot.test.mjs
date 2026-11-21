@@ -4,53 +4,28 @@ import {readFileSync} from 'node:fs';
 
 const gradle=readFileSync('apps/mobile/android/app/build.gradle','utf8');
 const identity=readFileSync('apps/mobile/android/app/src/androidTest/java/dev/rilandev/personalaiassistant/NexaBuildIdentityAndroidTest.kt','utf8');
+const cli=readFileSync('nexa.ps1','utf8');
 
-test('second QA identity is explicitly opt-in and cannot downgrade an existing app',()=>{
-  assert.match(gradle,/findProperty\('paaIsolatedPhysicalQaV2'\)/);
-  assert.match(gradle,/applicationIdSuffix '\.physicalqa2'/);
-  assert.match(gradle,/findProperty\('paaIsolatedPhysicalQa'\)/);
-  assert.match(gradle,/applicationIdSuffix '\.physicalqa'/);
-  assert.match(gradle,/findProperty\('paaInstallDebugAlongsideRelease'\)/);
+test('only the isolated .debug app can be used for physical Nexa QA',()=>{
   assert.match(gradle,/applicationIdSuffix '\.debug'/);
-  assert.match(gradle,/findProperty\('paaLiveDebug'\)/);
-  assert.match(gradle,/liveDebugBuild[\s\S]*?applicationIdSuffix '\.debug'/);
-  const reactBlock=gradle.slice(gradle.indexOf('react {'),gradle.indexOf('enableBundleCompression'));
-  assert.match(reactBlock,/else if \([\s\S]*?isolatedPhysicalQaV2\)\s*\{\s*debuggableVariants = \[\]/,
-    'isolated QA2 must bundle JS; never require a Metro server on the device');
-  assert.match(gradle,/paaLivePhysicalQaV2/,
-    'live mode must be a separate explicit build opt-in');
-  assert.match(gradle,/livePhysicalQaV2[\s\S]*?debuggableVariants = \["debug"\]/,
-    'live QA2 must connect its debug variant to Metro');
-  assert.match(gradle,/PAA_USE_EMBEDDED_JS_BUNDLE[\s\S]*?useEmbeddedPhysicalQaBundle/,
-    'only explicit live QA2 may disable the embedded bundle');
-  assert.match(gradle,/livePhysicalQaV2[\s\S]*?isolatedPhysicalQaV2[\s\S]*?GradleException/,
-    'live mode must refuse to build without the isolated QA2 identity');
-  const debugBlock=gradle.slice(gradle.indexOf('buildTypes {'));
-  assert.ok(debugBlock.indexOf("findProperty('paaIsolatedPhysicalQaV2')")<
-    debugBlock.indexOf("findProperty('paaIsolatedPhysicalQa')"),
-    'the new test-only slot must have a deterministic applicationId priority');
+  assert.doesNotMatch(gradle,/paaIsolatedPhysicalQa|paaLivePhysicalQaV2|physicalqa2?/i,
+    'obsolete physical QA packages must not be buildable');
+  assert.match(identity,/assertEquals\("Physical QA must use the single isolated debug app",\s*"dev\.rilandev\.personalaiassistant\.debug",\s*BuildConfig\.APPLICATION_ID\)/);
+  assert.doesNotMatch(identity,/personalaiassistant\.physicalqa2?/);
+  assert.match(cli,/\[string\]\$PackageId = 'dev\.rilandev\.personalaiassistant\.debug'/);
+  assert.match(cli,/PackageId -ne 'dev\.rilandev\.personalaiassistant\.debug'/,
+    'the Nexa bridge must not silently connect to another QA package');
 });
 
-test('reviewed revision instrumentation accepts only explicit disposable QA app IDs',()=>{
-  assert.match(identity,/assertEquals\("USB QA APK was not assembled from the selected source"/);
-  assert.match(identity,/expected,actual/);
-  assert.match(identity,/"dev\.rilandev\.personalaiassistant\.physicalqa"/);
-  assert.match(identity,/"dev\.rilandev\.personalaiassistant\.physicalqa2"/);
-  assert.match(identity,/"dev\.rilandev\.personalaiassistant\.debug"/);
-});
-
-test('separate-process AndroidTest fixtures use self-contained Java, without relying on Kotlin runtime',()=>{
-  const {existsSync}=requireFixtureFs();
+test('separate-process AndroidTest fixtures remain self-contained Java',()=>{
   for(const name of ['NexaChatListQaActivity','NexaInputQaActivity']) {
     const base='apps/mobile/android/app/src/androidTest/java/dev/rilandev/personalaiassistant/'+name;
-    assert.equal(existsSync(base+'.kt'),false,
+    let kotlinExists=true;
+    try { readFileSync(base+'.kt'); } catch { kotlinExists=false; }
+    assert.equal(kotlinExists,false,
       'No Kotlin fixture may crash in the independent test-app process');
-    assert.equal(existsSync(base+'.java'),true);
     const text=readFileSync(base+'.java','utf8');
     assert.match(text,/extends Activity/);
   }
   assert.doesNotMatch(gradle,/androidTestImplementation\("org\.jetbrains\.kotlin:kotlin-stdlib:/);
 });
-function requireFixtureFs() {return {existsSync: (name) => {
-  try { readFileSync(name); return true; } catch { return false; }
-}}; }

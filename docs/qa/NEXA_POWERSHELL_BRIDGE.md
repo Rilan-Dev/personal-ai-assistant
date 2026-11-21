@@ -7,12 +7,11 @@ tool registry and `AgentHarness`.
 
 ## Setup
 
-1. Install the QA2 debug APK on the selected phone. The isolated QA2 package is
-   `dev.rilandev.personalaiassistant.physicalqa2` and can sit beside the normal
-   Nexa app.
-2. Open **Nexa Screen Assist QA2** in Android Accessibility settings and enable
+1. Install the Nexa debug APK on the selected phone. All Android debug and QA
+   flows use the single isolated package `dev.rilandev.personalaiassistant.debug`.
+2. Open **Nexa Screen Assist (Debug)** in Android Accessibility settings and enable
    its service. Keep the phone unlocked.
-3. Open the QA2 Nexa app once. Its debug bridge starts with the app process.
+3. Open the Nexa debug app once. Its local bridge starts with the app process.
 4. From the repository root in PowerShell:
 
 ```powershell
@@ -21,10 +20,8 @@ tool registry and `AgentHarness`.
 .\nexa.ps1 tree -Serial 099344034S003788 -Format json -Confirm
 ```
 
-Each app ID receives its own local socket, so another installed Nexa debug
-variant cannot reserve the QA2 bridge name. `-PackageId` defaults to
-`dev.rilandev.personalaiassistant.physicalqa2`; set it explicitly when using a
-different Nexa debug variant.
+The bridge accepts only the `.debug` package to avoid routing a test action to
+an older or parallel Nexa installation.
 The script selects an available local port automatically; `-LocalPort` is an
 optional override.
 
@@ -175,11 +172,9 @@ Nexa's own window. Bring up the target app with `device.open_app`, then observe.
   returning a Nexa response. Open the selected QA app, or bring it forward once
   if it was already open, then retry `status`; the detailed inner exception is included
   so transport failures are distinguishable from Nexa tool refusals.
-- ACCESSIBILITY_DISABLED: enable the Screen Assist entry for the exact QA
-  package selected with `-PackageId` (the QA2 app is a separate Android
-  service from the older `.debug` app), reopen that Nexa variant, and check
-  `status` again. Android may show a different Nexa variant as enabled; that
-  does not make the selected package's Screen Assist ready.
+- ACCESSIBILITY_DISABLED: enable the **Nexa Screen Assist (Debug)** entry,
+  reopen the `.debug` app, and check `status` again. Android may show another
+  app's service as enabled; that does not make Nexa's service ready.
 - SCROLL_CONTAINER_UNAVAILABLE: the current app hierarchy exposes no unique,
   visible scroll container. Do not repeat the action against the same
   snapshot or substitute a guessed swipe. Navigate to a screen with a visible

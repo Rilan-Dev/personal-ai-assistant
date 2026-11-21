@@ -881,6 +881,8 @@ class DeviceControlModule(
     @ReactMethod
     fun performReviewedScreenScroll(direction:String,sessionId:String,callId:String,
                                     fingerprint:String,promise:Promise) {
+        if(BuildConfig.DEBUG)android.util.Log.w("NexaScrollBridge",
+            "scroll begin direction=$direction")
         if(direction !in setOf("up","down","left","right")){
             promise.reject("INVALID_SCROLL","Unsupported scroll direction")
             return
@@ -895,6 +897,8 @@ class DeviceControlModule(
         }
         try{
             val preflight=NexaScreenScroll.prepare(service,direction)
+            if(BuildConfig.DEBUG)android.util.Log.w("NexaScrollBridge",
+                "scroll preflight direction=$direction result=${preflight.take(140)}")
             if(!preflight.startsWith("Confirm scroll ") &&
                 !preflight.startsWith("Confirm one ")){
                 val code=when {
@@ -917,6 +921,8 @@ class DeviceControlModule(
             val outcome=NexaScreenScroll.confirm(service,origin="chat",
                 claimedToken={receipt=it})
             val token=receipt
+            if(BuildConfig.DEBUG)android.util.Log.w("NexaScrollBridge",
+                "scroll review direction=$direction claimed=${token!=null} result=${outcome.take(140)}")
             if(token==null ||
                 (!outcome.startsWith("Android accepted one scroll") &&
                  !outcome.startsWith("Android queued one"))){

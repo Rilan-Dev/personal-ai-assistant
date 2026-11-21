@@ -1,12 +1,17 @@
-appId: dev.rilandev.personalaiassistant.physicalqa2
+appId: dev.rilandev.personalaiassistant.debug
 name: Debug screen assistant controls are reachable from Tools
 tags:
   - nexa
   - screen-assist
-  - qa2
+  - debug
 ---
 - launchApp:
     stopApp: false
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - runFlow:
     when:
       visible: "System UI isn't responding"
@@ -24,15 +29,42 @@ tags:
       - tapOn: "Wait"
 - runFlow:
     when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
       visible: "Continue to Nexa.*"
     commands:
       - tapOn: "Continue to Nexa.*"
 - runFlow:
     when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
+- runFlow:
+    when:
       visible: "Collapse"
     commands:
       - tapOn: "Collapse"
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
+- extendedWaitUntil:
+    visible: "Tools"
+    timeout: 120000
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
 - tapOn: "Tools"
+- scrollUntilVisible:
+    element: "Device controls"
+    direction: UP
+    timeout: 20000
 - assertVisible: "Device controls"
 # Keep app launching disabled for this focused screen-control test. The test
 # needs only visible-control observation and approved named UI actions.

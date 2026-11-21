@@ -16,6 +16,7 @@ type OverlayNative = {
   completeChatRequest(id:string,response:string):Promise<boolean>;
   requestChatApproval(id:string,summary:string):Promise<boolean>;
   canAutoApproveNavigation(command:string):Promise<boolean>;
+  canAutoApproveFullAccess?(toolId:string):Promise<boolean>;
 };
 function bridge(): OverlayNative {
   const value = NativeModules.PAANexaToolOverlay;
@@ -61,6 +62,15 @@ export async function canAutoApproveTrustedNavigation(
   const value=bridge();
   if(typeof value.canAutoApproveNavigation!=='function')return false;
   return value.canAutoApproveNavigation(command);
+}
+
+/** Rechecks the locally selected Full Access mode plus native pause/unlock
+ * safeguards before the one-use action journal is auto-approved. */
+export async function canAutoApproveFullAccess(toolId:string):Promise<boolean>{
+  if(!/^[a-z][a-z0-9_.-]{2,80}$/.test(toolId))return false;
+  const value=bridge();
+  if(typeof value.canAutoApproveFullAccess!=='function')return false;
+  return value.canAutoApproveFullAccess(toolId);
 }
 
 export const toolOverlayAvailable = () => Platform.OS === 'android' &&

@@ -46,7 +46,8 @@ test('continuous voice memory stays bounded, no transcript UI or file writes, no
   assert.match(direct,/modelCall\?\.cancel\(\)/);
   assert.match(direct,/60\*60\*1000L|generation\.incrementAndGet\(\)/);
   assert.doesNotMatch(direct,/Log\.|println\(|SharedPreferences|FileOutputStream|openFileOutput|device\.open_app|NexaHub/);
-  assert.match(runtime,/pendingAppTool = PendingAppTool/);
+  assert.match(runtime,/pendingAppTool=tool/);
+  assert.match(runtime,/offerOwnerTool\(tool\)/);
   assert.match(ui,/Enable realtime voice streaming/);
   assert.match(ui,/Zero|retention|vendor/i);
 });

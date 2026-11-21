@@ -52,8 +52,8 @@ $ErrorActionPreference = 'Stop'
 if (-not $Serial -or $Serial -notmatch '^[A-Za-z0-9._:-]{1,80}$') {
   throw 'Provide an authorized ADB serial with -Serial (for example emulator-5554).'
 }
-if ($PackageId -notmatch '^dev\.rilandev\.personalaiassistant(?:\.[A-Za-z0-9_]+)?$') {
-  throw 'PackageId must be the Nexa app ID or its isolated QA variant.'
+if ($PackageId -ne 'dev.rilandev.personalaiassistant.debug') {
+  throw 'The Nexa QA bridge accepts only dev.rilandev.personalaiassistant.debug.'
 }
 if ($Command -in @('observe', 'tree', 'tap', 'scroll', 'key') -and -not $Confirm) {
   throw "$Command requires -Confirm."

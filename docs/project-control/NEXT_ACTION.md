@@ -1,3 +1,62 @@
+## Active status — 2026-11-20 emulator Debug v2011 QA
+
+- Built embedded-bundle Debug `0.3.2026112011` and installed it on `emulator-5554`. Local APK and the installed `base.apk` match at SHA-256 `5A16791FE9E618C798730D7AFC11A57B14A3E8492F106D53D9F17821502C0BFD`; evidence: `.qa-results/installed-base-v2011-20261120.apk`. This is a debug QA build, not a release-signed APK. The connected Infinix was not targeted.
+- On this build, Maestro Flows 16, 23 and 27 passed individually. Flow 19 also passed on the emulator, reopening Android Accessibility Settings, refreshing the Nexa service grant, and returning to the Tools screen; run log: `.qa-results/screen-assist-restore-v2011-20261120/maestro.log`.
+- Post-Maestro Android state lists Debug and QA2 Screen Assist as enabled and bound, with no crashed or pending bindings. Evidence: `.qa-results/screen-assist-bound-v2011-post-maestro-20261120.txt`. Two synthetic in-memory Android tests passed: `ownerArmedVisibleTextSnapshotIsOneTimeAndOnlyInMemory` and `screenSnapshotIsBoundedAndOwnerCanDiscardWithoutReading`.
+- Nexa's debug bridge then verified live cross-app observation and dynamic actions: it observed the launcher, opened Chrome from a fresh indexed snapshot, observed Chrome, opened Android Settings from another fresh snapshot, and completed fresh-snapshot vertical down/up scrolls with structural UI changes. Full page text was filtered; only package/control metadata and target labels were surfaced. Evidence: `.qa-results/nexa-bridge-cross-app-v2011-20261120.txt`. This verifies the reviewed native screen tools, not LLM planning.
+- A follow-up tap on the Android Settings Apps row was not verified: Android Settings ANR'd on its subpage, and Nexa correctly returned `not_observed`/no snapshot while the ANR dialog was present. Closing the hung Settings task restored the main Settings snapshot; no setting changed. This tap is recorded as failed, not passed.
+- Fresh checks: `npm test` **708/708 passed** (`.qa-results/npm-test-final-20261120.log`); root/mobile/runtime typecheck passed (`.qa-results/typecheck-final-20261120.log`); Expo web export passed (`.qa-results/web-export-final-20261120.log`).
+- The separate Arm one screen read / Review captured text UI remains unverified. Maestro's UiAutomation session disconnects Screen Assist while it drives, and post-run rebind alone is not proof of that capture path. The debug bridge snapshots were temporary; full page text was not printed or written to evidence. No message was sent and no email was read.
+
+## Current remaining gates
+
+1. Verify the separate Arm one screen read / Review captured text UI through an interaction route that does not keep Android UiAutomation active while arming. Keep capture local, confirm only source package/status, and discard it; do not use direct ADB input as a workaround.
+2. Provider-backed UI planning remains blocked by the saved Sarvam test credential returning HTTP 401/403. Once a valid test credential is saved in Nexa, rerun the owner-reviewed synthetic Chrome task and separate observation from tap approval.
+3. ACA live email/voice parity and a release-signed APK remain separate workstreams. The v2011 APK is a debug QA artifact only.
+
+---
+
+## Current status — 2026-11-20 emulator Debug v2010 QA
+
+- Built and installed embedded-bundle Debug `0.3.2026112010` on `emulator-5554`. Local APK and installed `base.apk` SHA-256 match: `935011CCB28EED549EDD086742A7E476D871A8A1AB077BF04C3A016901BC13B1`. This is a debug QA APK, not a release-signed build. The connected Infinix was not targeted.
+- Fixed Flow 16's restored-scroll-position assumption. After selecting Tools, it now scrolls UP until `Device controls` is visible before asserting it. The exact flow passed on the emulator with JUnit `1 test / 0 failures`; artifact: `.qa-results/debug-screen-assist-reachability-v2010-20261120/report.xml`.
+- Post-Maestro ADB verification reports Accessibility enabled, Debug and QA2 Screen Assist enabled and bound, and no crashed or pending binding services. Flow 16 verified the reviewed-action and safe visible-control switches plus the Arm/Review control availability; it did not arm a capture or interact with another app.
+- On v2010, Flow 27 (floating-bubble setup) passed after its dynamic scroll fix, and Flow 23 (provider settings navigation) passed after handling the collapsed optional-features card. Flow 30 staged a synthetic Chrome screen-read review, but the Chat request timed out and the action journal showed no owner-confirmed UI action. Artifacts are `.qa-results/debug-floating-chat-setup-v2010-20261120-r2/report.xml`, `.qa-results/debug-provider-settings-state-v2010-r3/report.xml`, `.qa-results/debug-overlay-screen-read-stage-v2010-20261120/report.xml`, and `.qa-results/debug-action-journal-after-screen-read-timeout-v2010/report.xml`.
+- Fresh full `npm test`: **706/706 passed** (`.qa-results/npm-test-resume-20261120.log`); root/mobile/runtime typecheck and Expo web export passed. Android `:app:assembleDebugAndroidTest` compiled successfully, and two synthetic in-memory Screen Assist tests passed on `emulator-5554`; evidence: `.qa-results/native-screen-assist-synthetic-v2010-20261120.log`.
+- The live one-shot capture is still unverified on v2010. The synthetic Chrome Maestro attempt reached the Arm button, but Maestro's Accessibility driver made the service report `connected=false`; Nexa correctly rejected arming and showed Screen Assist Off. After Maestro exited the service rebound. Failure artifacts are under `.qa-results/debug-screen-assist-capture-v2010-20261120/`. No capture text was obtained. A desktop-controller attempt could not activate the emulator window; the earlier direct ADB input tap was rejected by automatic review and was not retried.
+
+## Remaining live QA gates
+
+- Physical Infinix `099344034S003788` was also tested on Debug v2009 without targeting the emulator: fresh observe/indexed tap, vertical down/up and launcher left/right passed with new post-action snapshots; horizontal scroll on Nexa's vertical-only Tools page correctly refused without dispatch. A real Sarvam Chat request generated and, after owner review/resume, opened Clock; Screen Assist snapshots verified `com.transsion.deskclock` and safe controls. The later `device.visible_controls` review was not completed. An unrelated ChatGPT draft appeared during final phone observation, so no further device actions were taken. Continue only after the phone is back on a safe Nexa/Home screen, preferably by starting the next test in the floating overlay. No messages or alarms were changed.
+- QA2's saved Sarvam credential is configured as `sarvam-105b`, but Test connection and the owner-approved floating Chat planning request returned HTTP 401/403. The synthetic Chrome task stopped before any target tap. A valid rotated provider credential is required for provider-backed tap acceptance; no credential should be printed in QA artifacts.
+- After provider connection succeeds, clear/retry the timed-out synthetic floating-Chat task, approve the fresh visible-control observation, verify the model proposes the exact observed `Open QA details` button, separately approve the tap, and verify the UI change. Then continue the ordered directional/cross-app acceptance. For live Screen Assist capture, use an interaction route that does not hold Android UiAutomation while arming; do not count a bound-service check or the synthetic state-unit tests as a live capture pass.
+- ACA live email/voice parity and a release-signed APK remain separate pending gates. No message was sent and no mailbox was read.
+
+---
+
+## Previous status — 2026-11-20 emulator QA2 provider gate
+
+- QA2 `0.3.2026112006` is installed on `emulator-5554`. The Infinix was not targeted. Android retained the Nexa Screen Assist enabled-service setting after a cold boot but left it unbound; toggling emulator Accessibility off/on restored the bound QA2 service.
+- Floating chat and one-shot visible-control review were verified over Android Clock. The “Tap the stopwatch tab” task reached the saved-provider planner after owner-approved observation, then stopped with the provider auth error. No target tap occurred.
+- A QA2 Settings flow used the saved Keystore credential without entering or exposing it. The app displayed the Sarvam `sarvam-105b` provider as configured, but Test connection returned HTTP 401/403. The saved credential/account must be made valid before live LLM task execution can pass.
+- Verification: Maestro QA2 provider flow completed and captured `.qa-results/qa2-provider-connection-20261120-r3/`; focused agent/screen/provider/flow tests 82/82; full `npm test` 702/702; root/mobile/runtime typecheck, Expo web export, and `git diff --check` passed. The one-off QA2 flow lives in `.qa-results/maestro/`, outside the tracked debug-only Maestro suite.
+- Current limitations: a provider-planned screen tap is still unverified; ACA live mail synthesis/voice routing and public release signing remain separate pending gates. No message was sent and no mailbox content was read.
+
+## Next
+
+1. Save a working Sarvam Model API credential in Nexa’s Android Keystore, then rerun the connection check and the approved safe Clock tap flow. Keep observation and the tap as separate one-time approvals.
+2. After the live tap passes, continue ordered cross-app and directional-scroll acceptance on the same current app build.
+3. Continue ACA mail/voice parity and release APK checks as separate gates; do not treat mocked tests as live service acceptance.
+
+---
+
+## Previous status — 2026-11-20 physical Infinix Debug v2009
+
+- Built `dev.rilandev.personalaiassistant.debug` from current local source as version `0.3.2026112009` / code `2026112009`; `:app:assembleDebug` succeeded. APK: `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`, SHA-256 `24759890BDAEF4CA117B2181895039C2B1450CC0E4932F41CEA4C83E4D8FAD22`. Installed and verified on Infinix `099344034S003788`. Removed `.physicalqa2` and the `.physicalqa.test`/`.physicalqa2.test` instrumentation packages; did not use `emulator-5554`.
+- Restored live JS delivery without stopping the existing but non-responsive Metro process on 8081: started a second Expo Metro on 8082 and mapped device port 8081 to host 8082. `/status` returned `packager-status:running`; `nexa.ps1 status` returned `bridgeAvailable=true`, `engineLive=true`, 25 tools, and `rawAdbInput=false`.
+- Focused tests for the sequential tool loop, Sarvam tool-call contract, ACA routing/email boundary and static multi-messenger fixture passed 63/63. Fresh full `npm test` passed 702/702 after correcting Flow 33, which still referenced `.physicalqa2`; root/mobile/runtime typecheck and web export passed. These message-fixture tests use mocked tools; no real message was sent.
+- Physical screen setup is pending. `.maestro/physical-qa/17-enable-screen-assist-only.yaml` failed at its `Nexa · Tools` assertion; `nexa.ps1 observe` returned `ACCESSIBILITY_DISABLED`. Android currently reports no enabled or bound accessibility services, and `topResumedActivity` is BOTIM's call activity. Stopped device interaction to avoid disturbing the active call. Maestro artifacts: `%USERPROFILE%\.maestro\tests\2026-11-20_140616`.
+- Do not bypass Android accessibility consent or Nexa per-action review. After the call ends, rerun Flow 17 on the Infinix, verify Screen Assist is enabled and bound, then run fresh-observation tap and each directional scroll separately. Only after those pass should the safe bounded multi-step tool loop be exercised on-device. Do not send a message as part of the navigation test.
 ## Current QA status — 2026-11-19 emulator QA2 v1904 dynamic scroll acceptance
 
 Only `emulator-5554` was targeted in this continuation; the connected physical phone was not used. QA2 package `dev.rilandev.personalaiassistant.physicalqa2` v`0.3.2026111904` / code `2026111904` is installed. Local `app-debug.apk` and the pulled installed `base.apk` have matching SHA-256 `2F6457C715754F2EF6CD7A6398694CB572C70C1ECA0B615636B92A971F4024A2`. This is a debug QA build, not a release APK.
@@ -1042,3 +1101,15 @@ Pending: the physical serial `099344034S003788` disappeared during the live run 
 The Infinix is online and the prior phone call ended. The static overlay request reached the local owner-sequence planner, WhatsApp Search opened, and text entry failed; no chat was opened and no message was sent. Nexa's safe field scan found no named empty input. A read-only UI hierarchy check found the WhatsApp Search `EditText` focused and enabled, with the `com.whatsapp:id/search_input` resource; screen text was not emitted. Focused local checks pass 44/44 and mobile typecheck passes.
 
 Next: build the existing isolated Live QA2 debug variant (`paaIsolatedPhysicalQaV2=true`, `paaLivePhysicalQaV2=true`) from the current local source and install only to serial `099344034S003788` using `adb -s`. Metro is already running locally on 8081 with reverse forwarding. Confirm the live bundle is loaded, rerun the exact static WhatsApp sequence once, and use the newly surfaced safe native error category to fix field matching. Then verify the full recipient/draft/send flow one app at a time for WhatsApp, IMO, and BOTIM; confirm each visible sent bubble and never infer delivery. Keep emulator untouched.
+
+## Current — Full Access approvals mode (2026-11-20)
+Ready and verified: Chat, floating overlay, and supported live voice can use persisted Full Access to skip routine Nexa tool-approval waits for registered tools after native authorization. Android instrumentation passed 2/2 on `emulator-5554`, including outbound-action blocking and Pause/mode checks; Node suite 708/708, typecheck, and web export pass. Debug APK: `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk` (x86_64 only, code `2026112011`, SHA-256 `6F7F9672548D1F66A036227A0184D402D1319E9A553E2B38ADB7113E75CB0E00`). Physical phone was untouched.
+
+Still enforced by policy: exact owner review for message, call, and payment actions; Android runtime permissions, Screen Assist consent, unlocked state, and owner Pause. Remaining outside this feature check: no public/release-signed APK was made, and no live provider-backed cross-app task was exercised.
+
+## 2026-11-20 — Physical Infinix Full Access install and smoke test
+- Built and installed the current ARM64 debug APK on physical serial `099344034S003788`: version `0.3.2026112012`, code `2026112012`, SHA-256 `195CD5B9E530C87D7538840ADDC89035AAA914EEAD57A9AB4ADC9BDC30EAA0B6`. Android reports `primaryCpuAbi=arm64-v8a`; no emulator was targeted for these steps.
+- Ran `NexaFullAccessPermissionAndroidTest` on the physical phone: `OK (2 tests)`. It verifies Full Access auto-approves routine device actions, keeps send/call/payment fenced, and respects Pause and the selected mode.
+- Started the local Expo Metro server and USB reverse on port 8081 because the debug APK does not bundle the JS bundle. Nexa's bridge reported `nexa-qa-v1`, `NexaAppTools`, `bridgeAvailable=true`, `engineLive=true`, 25 tools, and `rawAdbInput=false`.
+- `device.battery_status` completed through `nexa.ps1` without the CLI `-Confirm` flag: Android BatteryManager reported 24%, not charging. `device.open_app` dispatched a Calculator intent (`com.transsion.calculator`) but returned `verification=not_observed`; this is not counted as a verified app-open.
+- Android bridge status reports `accessibilityEnabled=false`. Therefore live screen observation and a real chat-to-screen-action approval-card check remain unverified. No provider request or message was made. The battery check is universally read-only and alone does not prove Full Access chat behavior.

@@ -59,7 +59,7 @@ test("Flow 10 restarts its transient tab and scroll state without clearing owner
   assert.ok(/launchApp:\n\s+stopApp: true\n\s+clearState: false/.test(flow),
     "reopen the live debug runtime at its default tab without wiping owner data or permission grants");
   assert.ok(/extendedWaitUntil:\n\s+visible: "Make your assistant yours\."\n\s+timeout: 90000/.test(flow),
-    "Flow 10 must wait for the QA2 JS bundle and explicitly opened Setup screen before querying it");
+    "Flow 10 must wait for the live debug JS bundle and explicitly opened Setup screen before querying it");
   assert.ok(flow.includes('element: "Show optional permissions and features"'));
   assert.ok(flow.includes('- tapOn:\n    text: "Show optional permissions and features"\n    point: "50%,50%"'));
   assert.ok(/takeScreenshot: nexa-screen-assist-owner-setting-enabled[\s\S]*?launchApp:\n\s+stopApp: false/.test(flow));
@@ -76,7 +76,7 @@ test("Flow 10 restarts its transient tab and scroll state without clearing owner
     "OEM Accessibility settings may require an explicit Stop confirmation before restarting the service");
 });
 
-test("Flow 10 enters Setup explicitly from any already-open QA2 tab",()=>{
+test("Flow 10 enters Setup explicitly from any already-open debug tab",()=>{
   assert.match(flow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
   assert.match(flow,/visible: "Pixel Launcher\.\*responding"[\s\S]*?tapOn: "Wait"/,
     "recover the Android launcher only when its boot-time ANR dialog is actually visible");
@@ -134,10 +134,10 @@ test("Setup clips offscreen permission cards so Android accessibility queries st
     "the setup list must detach offscreen cards instead of exposing every optional card in one accessibility tree");
 });
 
-test("QA2 Screen Assist has a distinct Settings label and Flow 10 selects it",()=>{
+test("the single debug Screen Assist Settings label is selected by Flow 10",()=>{
   assert.match(debugManifest,/service android:name="\.ScreenAssistService"[\s\S]*?android:label="\$\{screenAssistServiceLabel\}"/);
   assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist \(Debug\)'/);
-  assert.match(gradle,/screenAssistServiceLabel:[\s\S]*?'Nexa Screen Assist QA2'/);
+  assert.doesNotMatch(gradle,/Nexa Screen Assist QA2/);
   assert.ok(flow.includes('element: "Nexa Screen Assist (Debug)"'));
   const serviceSelection=flow.slice(flow.indexOf('notVisible: "Use Nexa Screen Assist (Debug)"'),
     flow.indexOf('visible: "Use Nexa Screen Assist (Debug)"'));
@@ -148,7 +148,7 @@ test("QA2 Screen Assist has a distinct Settings label and Flow 10 selects it",()
   assert.ok(flow.includes('id: "android:id/switch_widget"\n    checked: true'));
 });
 
-test("the ordered experimental suite targets the same current isolated QA2 APK in every flow",()=>{
+test("the ordered experimental suite targets the same current .debug APK in every flow",()=>{
   for(const reviewFlow of reviewFlows) {
     assert.match(reviewFlow,/^appId: dev\.rilandev\.personalaiassistant\.debug$/m);
     assert.doesNotMatch(reviewFlow,/clearState:\s*true/,

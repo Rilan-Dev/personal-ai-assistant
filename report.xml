@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <testsuites>
-  <testsuite name="Test Suite" device="099344034S003788" tests="1" failures="0" time="89.911" timestamp="2026-11-14T01:22:21">
-    <testcase id="Nexa grants Screen Assist through Android Settings" name="Nexa grants Screen Assist through Android Settings" classname="Nexa grants Screen Assist through Android Settings" file=".qa-results\maestro-physicalqa2-flows\10-agent-notification-shade.yaml" time="89.872" timestamp="2026-11-14T01:22:21" status="SUCCESS">
+  <testsuite name="Test Suite" device="099344034S003788" tests="1" failures="0" time="117.199" timestamp="2026-11-20T19:14:45">
+    <testcase id="Enable only Nexa Screen Assist for physical QA" name="Enable only Nexa Screen Assist for physical QA" classname="Enable only Nexa Screen Assist for physical QA" file=".maestro\physical-qa\17-enable-screen-assist-only.yaml" time="117.163" timestamp="2026-11-20T19:14:45" status="SUCCESS">
       <properties>
-        <property name="tags" value="nexa, agent, notification, experimental"/>
+        <property name="tags" value="nexa, physical, qa-preflight, no-external-action"/>
       </properties>
     </testcase>
   </testsuite>

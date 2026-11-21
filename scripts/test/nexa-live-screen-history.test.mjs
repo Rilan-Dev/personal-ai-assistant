@@ -25,7 +25,8 @@ test('voice exposes and approves real screen inspection, gestures, app discovery
   assert.match(voice,/NexaScreenLabelTap\.approved/);
   assert.match(voice,/NexaPhoneVoiceTools\.installedAppsApproved/);
   assert.match(voice,/assistantPanelEnabled && pending != null/);
-  assert.match(voice,/pendingApprovalSummary="Scroll/);
+  assert.match(voice,/setOwnerToolReview\(tool,"Scroll \$scroll once/);
+  assert.match(voice,/pendingApprovalSummary=summary/);
   assert.match(actions,/NexaUiActionJournal\.claim/);
   assert.match(actions,/targets\.size!=1/);
   assert.match(actions,/targets\[key\]=candidate/);

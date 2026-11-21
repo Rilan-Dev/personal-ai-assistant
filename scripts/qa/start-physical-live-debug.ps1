@@ -24,7 +24,7 @@ if (-not $attached) {
 
 $installedPath = @(& $adbCommand.Source -s $Serial shell pm path $packageName)
 if ($LASTEXITCODE -ne 0 -or -not ($installedPath -match '^package:')) {
-    throw "The isolated QA app $packageName is not installed on $Serial. Build/install the live QA2 variant once first."
+    throw "The single isolated debug app $packageName is not installed on $Serial. Build and install the debug app first."
 }
 
 & $adbCommand.Source -s $Serial reverse tcp:8081 tcp:8081

@@ -7,7 +7,15 @@ import {delimiter,join} from "node:path";
 import {python3Command} from "./python-command.mjs";
 
 const script="scripts/acceptance/android_build_preflight.py";
+const androidGradle=readFileSync("apps/mobile/android/app/build.gradle","utf8");
 const python3=python3Command();
+
+test("Android APK version code can be supplied as an explicit Gradle property",()=>{
+  assert.ok(
+    androidGradle.includes("findProperty('paaBuildVersionCode')"),
+    "local builds need a project-property override when their parent environment is not propagated"
+  );
+});
 
 test("Android build preflight is read-only and reports actionable results",()=>{
   const src=readFileSync(script,"utf8");

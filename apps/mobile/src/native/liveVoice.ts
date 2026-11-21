@@ -1,6 +1,6 @@
 import {NativeModules,PermissionsAndroid,Platform} from 'react-native';
 
-export type VoicePermissionMode='ask_every_time'|'trusted_safe'|'trusted_navigation';
+export type VoicePermissionMode='ask_every_time'|'trusted_safe'|'trusted_navigation'|'full_access';
 export type SarvamVoiceAuthorization = { ready:boolean; code:string; message:string };
 
 export type LiveVoiceStatus={

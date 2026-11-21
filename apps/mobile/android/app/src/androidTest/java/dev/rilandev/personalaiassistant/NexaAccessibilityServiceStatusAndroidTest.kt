@@ -19,7 +19,7 @@ class NexaAccessibilityServiceStatusAndroidTest {
             "$appId/dev.rilandev.personalaiassistant.ScreenAssistService",
             expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled(
-            "dev.rilandev.personalaiassistant.physicalqa2/dev.rilandev.personalaiassistant.ScreenAssistService",
+            "dev.rilandev.personalaiassistant/dev.rilandev.personalaiassistant.ScreenAssistService",
             expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled("", expected))
         assertFalse(NexaAccessibilityServiceStatus.isEnabled(null, expected))

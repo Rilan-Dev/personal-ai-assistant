@@ -15,14 +15,16 @@ test('Sarvam official SDK transcript event is used without trusting bot speech',
   assert.match(realtime,/selectedProvider=="sarvam" && role=="user"/);
   assert.doesNotMatch(transport,/client\.action\.tool_result|client\.event\.tool_result/);
 });
-test('user transcriptions are validated and require a visible owner approval before launch',()=>{
+test('user transcriptions are validated and app launch follows the selected owner permission mode',()=>{
   assert.match(gate,/appRequest\(raw: String\)/);
   assert.match(gate,/whatsapp business\|whatsapp\|github\|brave/);
   assert.match(gate,/and\|then\|or\|also\|after\|before\|send\|text\|message/);
   assert.match(realtime,/NexaVoiceIntentGate\.appRequest\(transcript\)/);
   assert.match(realtime,/!assistantPanelEnabled \|\| pendingAppTool != null/);
   assert.match(realtime,/PendingAppTool\("local-sarvam"/);
-  assert.match(realtime,/pendingApprovalSummary = "Open/);
+  assert.match(realtime,/setOwnerToolReview\(pending,"Open \$requested\? Tap Approve once or Deny here\."/);
+  assert.match(realtime,/pendingApprovalSummary=summary/);
+  assert.match(realtime,/NexaVoicePermissionPolicy\.FULL_ACCESS/);
   assert.match(realtime,/if \(active\.get\(\) && assistantPanelEnabled && pending != null && !activeToolOperation\)/);
   assert.match(realtime,/if \(selectedProvider == "openai"\) \{/);
   assert.match(assistant,/Approve once/);
